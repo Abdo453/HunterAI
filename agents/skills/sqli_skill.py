@@ -658,9 +658,9 @@ class SQLiDetector:
                     boolean_differential = True
 
             if error_found or boolean_differential:
-                proof_type = "SQL Error Triggered" if error_found else "Boolean Differential Confirmed"
+                proof_type = "SQL Error Triggered" if error_found else "Boolean Differential Signal"
                 ctx.log(
-                    f"[DETECT] SQLi confirmed ({proof_type}) | payload={probe_payload!r} "
+                    f"[DETECT] SQLi signal detected ({proof_type}) | payload={probe_payload!r} "
                     f"| probe_len={probe_len} control_len={control_len}"
                 )
                 ctx.evidence.append({
@@ -1628,8 +1628,11 @@ class SQLiSkill:
                 ctx.evidence.append({"stage": "fallback", "engine": "sqlmap", "details": fb_res})
                 ctx.log(f"[SQLiSkill] ✅ Fallback sqlmap confirmed vulnerability: {ctx.extracted_data[:120]}")
 
+        is_verified = (ctx.state == SQLiState.COMPLETE and bool(ctx.extracted_data or ctx.objective_met))
         return {
             "state":            ctx.state.name,
+            "status":           "CONFIRMED" if is_verified else "UNVERIFIED",
+            "verified":         is_verified,
             "objective_met":    ctx.objective_met,
             "dbms":             ctx.dbms.value,
             "col_count":        ctx.col_count,
@@ -1839,16 +1842,23 @@ class SQLiSkill:
             log.info("[SQLiSkill/Fallback] sqlmap binary not found on PATH.")
             return None
 
+        # Fast-fail for UI navigation parameters
+        UI_PARAMS = {"modal", "slide", "ampslide", "tab", "page", "step", "view", "theme", "lang", "layout", "nav"}
+        if param_name.lower() in UI_PARAMS:
+            log.info(f"[SQLiSkill/Fallback] Skipping sqlmap on UI parameter {param_name!r}")
+            return None
+
         log.info(f"[SQLiSkill/Fallback] Launching sqlmap fallback on {target_url} (param={param_name})...")
         cmd = [
             sqlmap_bin,
             "-u", target_url,
             "-p", param_name,
             "--batch",
-            "--level=2",
-            "--risk=2",
+            "--level=1",
+            "--risk=1",
             "--threads=2",
-            "--timeout=15",
+            "--timeout=5",
+            "--retries=1",
             "--banner",
             "--current-db",
         ]
@@ -1861,7 +1871,7 @@ class SQLiSkill:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=75.0)
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=25.0)
             output = (stdout_bytes or b"").decode("utf-8", errors="replace")
 
             is_vuln = False
@@ -1896,7 +1906,7 @@ class SQLiSkill:
                 log.info("[SQLiSkill/Fallback] sqlmap scan finished: target clean.")
                 return None
         except asyncio.TimeoutError:
-            log.warning("[SQLiSkill/Fallback] sqlmap timed out after 75s.")
+            log.warning("[SQLiSkill/Fallback] sqlmap timed out after 25s fast-fail window.")
             try:
                 proc.kill()
             except Exception:

@@ -18,7 +18,10 @@ import time
 import logging
 from copy import deepcopy
 from typing import Dict, Any, List, Optional, Callable, Tuple
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urljoin
+from core.evidence_court import EvidenceCourt, CourtVerdict
+from core.code_intel import CodeIntelligenceAgent
+from core.attack_surface_graph import AttackSurfaceGraph, ThirdPartyDependencyFirewall
 
 log = logging.getLogger("autonomous_brain")
 
@@ -1238,6 +1241,34 @@ class AutonomousBrain:
             except Exception:
                 log.debug("Tech stack detection non-critical failure", exc_info=True)
 
+        # ── PHASE 0.3: CODE INTELLIGENCE (Client-side Page & JS Analysis) ────
+        try:
+            target_host_sanitized = (urlparse(target).hostname or "target").replace(":", "_").replace(".", "_")
+            code_intel_agent = CodeIntelligenceAgent(output_dir=f"data/scans/{target_host_sanitized}")
+            code_intel_res = await code_intel_agent.analyze_page(
+                target_url=target,
+                raw_html=html,
+                headers=headers
+            )
+            # Merge in-scope discovered endpoints
+            for ep in code_intel_res.get("endpoints", []):
+                ep_path = ep.get("url_or_path", "")
+                if ep_path and self._is_in_scope(ep_path, target):
+                    full_ep_url = urljoin(target, ep_path)
+                    discovered_endpoints.append({"url": full_ep_url, "param": ep.get("parameters", [None])[0] if ep.get("parameters") else None})
+                    for p in ep.get("parameters", []):
+                        if p and p not in params_from_page:
+                            params_from_page.append(p)
+            m = code_intel_res.get("manifest", {})
+            await self._log(
+                f"[CODE_INTEL] Analyzed {m.get('js_analyzed', 0)} scripts | "
+                f"Discovered {m.get('endpoints_discovered', 0)} API endpoints | "
+                f"Secrets validated: {m.get('secrets_discovered', 0)}"
+            )
+            self._audit("code_intelligence_done", manifest=m)
+        except Exception as e:
+            log.debug(f"CodeIntelligenceAgent non-critical error: {e}")
+
         # ── PHASE 0.5: ORIENT (Security Intelligence Layer) ──────────────────
         si_context = None
         si_hypotheses = []
@@ -1456,50 +1487,59 @@ class AutonomousBrain:
                     self._audit("finding_rejected", reason="xploiter_false_positive",
                                 param=param)
                     continue
-                # Qwen writes remediation text only
+
                 qwen = await self.artifact.analyze_tool_output(
                     "SmartPoC", json.dumps(poc_result), target
                 )
                 vt = poc_result.get("vuln_type", primary_focus)
 
-                # ── Severity floor override ──────────────────────────────────
-                # When xploiter confirms a finding as real, Qwen's severity is
-                # used as a hint only. Critical vuln types (sqli, rce, ssrf,
-                # xxe, idor) must be at least High — they can never be Low/Info.
-                _SEVERITY_FLOORS = {
-                    "sqli": "Critical", "sql_injection": "Critical",
-                    "rce": "Critical", "command_injection": "Critical",
-                    "xxe": "High", "ssrf": "High",
-                    "idor": "High", "bola": "High", "bfla": "High",
-                    "xss": "Medium", "csrf": "Medium",
-                    "open_redirect": "Medium",
-                }
-                _ORDER = ["Info", "Low", "Medium", "High", "Critical"]
-                raw_sev = qwen.get("severity", "High")
-                floor_sev = _SEVERITY_FLOORS.get(vt.lower().replace("-", "_"), None)
-                if floor_sev:
-                    # promote if Qwen ranked below the floor
-                    if _ORDER.index(raw_sev) < _ORDER.index(floor_sev):
-                        raw_sev = floor_sev
-                        await self._log(
-                            f"   -> [SEVERITY CORRECTED] {vt.upper()} promoted to {raw_sev} "
-                            f"(Qwen said Low/Info but xploiter confirmed as real)"
-                        )
-                # ─────────────────────────────────────────────────────────────
+                # ── Evidence Court Adjudication ──────────────────────────────
+                # No single agent or LLM alone can declare CONFIRMED.
+                # Must provide deterministic proof (arithmetic, dbms data, auth bypass)
+                # and reject literal DOM / script reflections.
+                p_reason = str(poc_result.get("proof_reason", ""))
+                is_reflection = ("reflection" in p_reason.lower() or "Reflection != Execution" in p_reason)
+                has_arith = bool("72" in p_reason and "53+19" not in p_reason)
+
+                judgment = EvidenceCourt.adjudicate(
+                    target_url=target,
+                    parameter=param,
+                    vuln_class=vt,
+                    finder_claim={"poc_result": poc_result, "xploiter": classify, "qwen": qwen},
+                    verifier_result={
+                        "reproduced": poc_result.get("reproduced", False),
+                        "arithmetic_proof_confirmed": has_arith,
+                        "is_reflection": is_reflection,
+                        "waf_blocked": ("403" in p_reason or "cloudflare" in p_reason.lower()),
+                        "confidence": 0.95 if has_arith else (0.30 if is_reflection else 0.50),
+                        "proof_detail": p_reason
+                    },
+                    is_in_scope=self._is_in_scope(target, target)
+                )
+
+                if not judgment.reportable or judgment.verdict != CourtVerdict.CONFIRMED:
+                    await self._log(
+                        f"   -> [COURT: {judgment.verdict.value}] param={param!r} vt={vt} "
+                        f"| {judgment.adjudication_rationale}"
+                    )
+                    self._audit("finding_rejected", reason=judgment.verdict.value,
+                                param=param, rationale=judgment.adjudication_rationale)
+                    continue
 
                 finding = {
                     "type": vt,
                     "param_name": param,
                     "title": f"{vt.upper()} in parameter {param!r}",
-                    "severity": raw_sev,
-                    "evidence": poc_result.get("proof_reason", ""),
+                    "severity": judgment.calibrated_severity,
+                    "evidence": p_reason or judgment.adjudication_rationale,
                     "payload_used": poc_result.get("payload_used", "N/A"),
                     "remediation": qwen.get("remediation_code", ""),
-                    "confidence": 0.9,
+                    "confidence": judgment.confidence_score,
                     "tool": "AutonomousBrain/SmartPoC",
+                    "lifecycle_verdict": judgment.verdict.value,
                 }
                 findings.append(finding)
-                self._audit("finding_added", title=finding["title"], severity=finding["severity"])
+                self._audit("finding_added", title=finding["title"], severity=finding["severity"], verdict=judgment.verdict.value)
                 await self._emit("finding", **finding)
                 # ── Feedback Loop: save confirmed finding to Knowledge Base ──
                 if self.knowledge:

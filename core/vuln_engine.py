@@ -29,6 +29,9 @@ from agents.skills.lfi_skill import LFISkill
 from agents.skills.cmd_injection_skill import CmdInjectionSkill
 from agents.skills.ssrf_skill import SSRFSkill
 from agents.skills.idor_skill import IDORSkill
+from core.risk_scheduler import RiskScheduler
+from core.evidence_court import EvidenceCourt, CourtVerdict
+from core.target_memory import TargetMemory
 
 log = logging.getLogger("vuln_engine")
 
@@ -205,6 +208,9 @@ class VulnerabilityEngine:
                 full_cand = urljoin(target_url, c_path)
                 all_targets.append((full_cand, c_param))
 
+        target_host = (urlparse(target_url).hostname or "target").lower().strip()
+        memory = TargetMemory(target_host)
+
         await self._log(f"[VULN_ENGINE] Starting multi-vector assessment across {len(all_targets)} parameter targets...")
         findings: List[Dict[str, Any]] = []
 
@@ -213,8 +219,13 @@ class VulnerabilityEngine:
             await self._log(f"[VULN_ENGINE] Target: {probe_url} | param={param_name!r} | Priority order: {[s[0] for s in ordered_skills[:3]]}")
 
             for skill_key, score in ordered_skills:
-                # If score is too low and we are in focused mode, skip
-                if score < 0.35 and primary_focus and primary_focus.lower() not in skill_key:
+                # Risk-based schedule filter
+                risk_priority = RiskScheduler.calculate_priority(probe_url, param_name, skill_key)
+                if risk_priority < 0.35:
+                    continue
+
+                if memory.should_skip_param(param_name, skill_key):
+                    await self._log(f"[VULN_ENGINE] Skipping {param_name!r} ({skill_key}): recorded in TargetMemory do_not_repeat")
                     continue
 
                 skill = self.skills.get(skill_key)
@@ -339,19 +350,37 @@ class VulnerabilityEngine:
                             }
 
                     if res_dict:
-                        findings.append(res_dict)
-                        await self._log(f"[VULN_ENGINE] 🔥 VULNERABILITY CONFIRMED: {res_dict.get('title')}")
-                        if self.cb:
-                            try:
-                                if asyncio.iscoroutinefunction(self.cb):
-                                    await self.cb({"event": "finding", **res_dict})
-                                else:
-                                    self.cb({"event": "finding", **res_dict})
-                            except Exception:
-                                pass
-                        # If a critical vulnerability like SQLi or RCE is confirmed on this parameter, move to next parameter
-                        if res_dict.get("severity") in ("Critical",):
-                            break
+                        # Adjudicate via Evidence Court
+                        judgment = EvidenceCourt.adjudicate(
+                            target_url=probe_url,
+                            parameter=param_name,
+                            vuln_class=skill_key,
+                            finder_claim=res_dict,
+                            verifier_result={"reproduced": res_dict.get("verified", True), **res_dict},
+                            is_in_scope=_is_url_in_scope(probe_url)
+                        )
+
+                        if judgment.reportable and judgment.verdict == CourtVerdict.CONFIRMED:
+                            res_dict["severity"] = judgment.calibrated_severity
+                            res_dict["confidence"] = judgment.confidence_score
+                            res_dict["lifecycle_verdict"] = judgment.verdict.value
+                            res_dict["adjudication_rationale"] = judgment.adjudication_rationale
+                            findings.append(res_dict)
+                            await self._log(f"[VULN_ENGINE] 🔥 VULNERABILITY CONFIRMED: {res_dict.get('title')} (Court: {judgment.verdict.value})")
+                            if self.cb:
+                                try:
+                                    if asyncio.iscoroutinefunction(self.cb):
+                                        await self.cb({"event": "finding", **res_dict})
+                                    else:
+                                        self.cb({"event": "finding", **res_dict})
+                                except Exception:
+                                    pass
+                            if res_dict.get("severity") in ("Critical",):
+                                break
+                        else:
+                            await self._log(f"[VULN_ENGINE] ⚖️ Evidence Court: {skill_key} on {param_name!r} -> {judgment.verdict.value} ({judgment.adjudication_rationale})")
+                            if judgment.verdict == CourtVerdict.FALSE_POSITIVE:
+                                memory.record_benign_param(param_name, skill_key, reason=judgment.adjudication_rationale)
 
                 except Exception as e:
                     log.exception(f"Error evaluating {skill_key} on {param_name}")
