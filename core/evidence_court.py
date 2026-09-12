@@ -141,7 +141,13 @@ class EvidenceCourt:
             verifier_result.get("arithmetic_proof_confirmed") or
             verifier_result.get("extracted_data") or
             verifier_result.get("auth_bypass_confirmed") or
-            verifier_result.get("file_content_confirmed")
+            verifier_result.get("file_content_confirmed") or
+            verifier_result.get("boolean_branch_confirmed") or
+            verifier_result.get("canary_confirmed") or
+            verifier_result.get("template_eval_confirmed") or
+            verifier_result.get("dom_breakout_confirmed") or
+            verifier_result.get("token_bypass_confirmed") or
+            verifier_result.get("deterministic_proof")
         )
 
         if has_deterministic_proof:

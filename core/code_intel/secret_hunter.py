@@ -89,11 +89,15 @@ class SecretHunter:
         if any(ph in match_str.lower() for ph in cls.PLACEHOLDERS):
             status = SecretStatus.REJECTED
             notes = "Rejected: Placeholder value"
-        elif entropy < 2.8:
+        elif s_type == "generic_credential" and entropy < 3.2:
             status = SecretStatus.REJECTED
-            notes = f"Rejected: Low entropy ({entropy:.2f})"
+            notes = f"Rejected: Low entropy for generic credential ({entropy:.2f})"
         else:
             status = SecretStatus.VALIDATED
+            if s_type != "generic_credential":
+                notes = f"Validated: High-confidence deterministic signature ({s_type})"
+            else:
+                notes = f"Validated: High entropy generic token ({entropy:.2f})"
 
         redacted = match_str[:4] + "*" * (len(match_str) - 8) + match_str[-4:] if len(match_str) > 8 else "***"
 
