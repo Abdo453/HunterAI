@@ -78,12 +78,18 @@ class BurpAgent(BaseAgent):
         self.ai_reasoner = AIReasoner(ollama_client=ollama_client, memory=self.memory)
         self.ai_pipe = AIPipeline(self.db, self.bus, self.ai_reasoner)
 
-        # Live Traffic Listener
-        self.listener = BurpTrafficListener(
+        # Live Traffic Listener & REST Gateway Bridge (PentesterFlow-inspired architecture)
+        from core.burp_gateway.gateway import BurpGateway
+        from core.burp_gateway.capture_store import CaptureStore
+
+        self.capture_store = CaptureStore(target="burp_agent")
+        self.gateway = BurpGateway(
             host="127.0.0.1",
             port=port,
+            capture_store=self.capture_store,
             on_traffic_cb=self.ingest_raw_traffic
         )
+        self.listener = self.gateway
 
         # Level 3.5 Security Intelligence Layer Integration
         self.security_intelligence = None
@@ -118,6 +124,8 @@ class BurpAgent(BaseAgent):
             self.attack_graph.update_from_request(req)
 
     async def _on_finding_created(self, finding_data: Dict[str, Any]):
+        if hasattr(self, "gateway") and self.gateway:
+            self.gateway.register_confirmed_finding(finding_data)
         await self.emit("finding", finding_data)
 
     async def ingest_raw_traffic(self, payload: Dict[str, Any]):

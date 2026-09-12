@@ -51,35 +51,31 @@ Every finding must survive a multi-party **Evidence Court** and satisfy determin
 
 ## 🏗️ Architecture
 
-HunterAI couples an **Autonomous OODA Loop** with a **3-Sensor Triad** (`Browser Sensor`, `HTTP Sensor`, `Code Sensor`) and an **Evidence Court**:
+HunterAI couples an **Autonomous OODA Loop** with a **Sensory Triad** (`Browser Sensor`, `Burp Sensor`, `Code Sensor`) and an **Evidence Court**:
 
 ```mermaid
 flowchart TD
     Target[🎯 In-Scope Target] --> ScopeGuard{🛡️ Scope Firewall}
     ScopeGuard -->|Blocked| Firewalled[🚫 Out-of-Scope Dropped]
-    ScopeGuard -->|Allowed| Sensors[🧠 Continuous 3-Sensor Triad]
+    ScopeGuard -->|Allowed| Sensors[🧠 Continuous Sensory Triad]
 
-    subgraph Continuous 3-Sensor Triad
-        Sensors --> BrowserSensor[🌐 Stateful Browser Sensor: Playwright + StateGraph]
-        Sensors --> HttpSensor[⚡ Fast HTTP Sensor: Headers & Raw Probing]
-        Sensors --> CodeSensor[🔬 Code Intelligence: JS Decompilation & Shannon Secrets]
+    subgraph Continuous Sensory Triad
+        Sensors --> BrowserSensor[🌐 Browser Sensor: Application Behavior, DOM & State]
+        Sensors --> BurpSensor[⚡ Burp Sensor: HTTP Ground Truth, Proxy & Repeater 127.0.0.1:8085]
+        Sensors --> CodeSensor[🔬 Code Sensor: JS Decompilation & Shannon Secrets]
     end
 
-    BrowserSensor --> EventBus{📡 Browser Event Bus}
-    HttpSensor --> EventBus
-    CodeSensor --> EventBus
+    BrowserSensor --> Normalizer[⚙️ Normalization & Context Layer]
+    BurpSensor --> Normalizer
+    CodeSensor --> Normalizer
 
-    EventBus --> SurfaceGraph[🗺️ Attack Surface Graph & Exploration Memory]
-    SurfaceGraph --> Brain[🤖 Autonomous Brain OODA Loop]
+    Normalizer --> SurfaceGraph[🗺️ Attack Surface Graph & Capture Store]
+    SurfaceGraph --> EvidenceGraph[🧬 Multi-Entity Evidence Graph]
+    EvidenceGraph --> HypoEngine[💡 Hypothesis Engine: IDOR, SQLi, SSRF]
+    HypoEngine --> TestPlanner[📋 Test Planner & IG Ranker]
+    TestPlanner --> Brain[🤖 Autonomous Brain: Controlled Probing]
 
-    subgraph Autonomous OODA Loop
-        Brain --> Observe[Phase 0: 3-Sensor Surface Observation & Coverage Check]
-        Brain --> Orient[Phase 0.5: Security Intelligence & Hypotheses]
-        Brain --> Decide[Phase 1: Multi-Model Attack Plan & IG Ranking]
-        Brain --> Act[Phase 2: Live-Session Probing & Exploitation]
-    end
-
-    Act --> Claims[Candidate Vulnerability Claims]
+    Brain --> Claims[Candidate Vulnerability Claims]
 
     subgraph Evidence Court
         Claims --> FinderAgent[Finder Agent Claim]
@@ -92,6 +88,8 @@ flowchart TD
     end
 
     Confirmed --> Dashboard[📊 Interactive Dark-Mode Dashboard]
+    Confirmed --> BurpIssues[🎯 Burp Suite Target Issues Exporter]
+    Confirmed --> KnowledgeBase[🧠 Continuous Knowledge Base]
     FalsePos --> TargetMemory[💾 Target Memory: Do Not Repeat]
 ```
 
@@ -101,6 +99,9 @@ flowchart TD
 
 | Capability | Module | Description |
 |---|---|---|
+| **Burp Gateway & Bridge** | `core/burp_gateway/` | Local REST bridge (`127.0.0.1:8085`) ingesting live Proxy/Repeater traffic and exporting confirmed findings to Burp Target tab. |
+| **Capture Store** | `core/burp_gateway/capture_store.py` | Persistent engagement memory (`data/engagements/<target>/`) tracking requests, endpoints, identities, hypotheses, and timeline. |
+| **Enhanced Burp Extension** | `agents/burp_agent/integrations/burp_extension/` | Jython extension with context menu (`Send to Brain`, `Queue Scan`, `Add Scope`, `Import Issues`) and auto-forwarding. |
 | **Persistent Browser Sensor** | `core/browser/session.py` | Maintains an active, authenticated browser session with full state persistence (cookies, storage, DOM snapshots, network events) across all scan phases. |
 | **Browser Event Bus** | `core/browser/browser_event_bus.py` | Real-time publish/subscribe routing for DOM mutations, form discoveries, API calls, and auth transitions. |
 | **Exploration Coverage Engine**| `core/browser/coverage_engine.py` | Quantifies completeness across Pages, States, Forms, APIs, and JS scripts with terminal coverage tables. |
