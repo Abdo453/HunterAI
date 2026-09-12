@@ -87,8 +87,23 @@ async def run_scan(target: str, mode: str = "web", browser: bool = False, proxy:
         result = await brain.run_scan(target=target, mode=mode, use_browser=browser, proxy=proxy)
 
     findings = result.get("findings", [])
+    code_intel = result.get("code_intelligence", {})
+    manifest = code_intel.get("manifest", {})
+
     if RICH:
-        t = Table(title=f"PentestAI Results ({len(findings)} Confirmed Findings)", border_style="red")
+        if manifest:
+            techs = ", ".join(manifest.get("technologies", [])) or "None detected"
+            summary_text = (
+                f"[bold cyan]Client-Side Code & API Inventory:[/bold cyan]\n"
+                f"• Detected Technologies: [bold]{techs}[/bold]\n"
+                f"• JavaScript Bundles Analyzed: [yellow]{manifest.get('js_analyzed', 0)}[/yellow]\n"
+                f"• In-Scope Endpoints Discovered: [green]{manifest.get('endpoints_discovered', 0)}[/green]\n"
+                f"• Validated Hardcoded Secrets: [red]{manifest.get('secrets_discovered', 0)}[/red]"
+            )
+            console.print(Panel(summary_text, title="🧠 Code Intelligence Summary", border_style="cyan"))
+
+        t = Table(title=f"PentestAI Results ({len(findings)} Findings Adjudicated)", border_style="red")
+        t.add_column("Verdict", justify="center")
         t.add_column("Severity", justify="center")
         t.add_column("Vulnerability Title")
         t.add_column("Target Param / Path")
@@ -97,11 +112,14 @@ async def run_scan(target: str, mode: str = "web", browser: bool = False, proxy:
         for f in findings:
             sev = f.get("severity", "Info")
             c = {"Critical": "red", "High": "orange1", "Medium": "yellow", "Low": "green"}.get(sev, "white")
+            verdict = f.get("lifecycle_verdict", "CONFIRMED")
+            vc = "bold green" if verdict == "CONFIRMED" else "bold yellow"
             tool_str = f.get("tool", "")
             if f.get("fallback_used"):
                 tool_str += f" (⚙️ {f.get('fallback_engine')})"
             evidence_str = str(f.get("evidence", ""))[:60].replace("\n", " ")
             t.add_row(
+                f"[{vc}]{verdict}[/{vc}]",
                 f"[{c}]{sev}[/{c}]",
                 f.get("title", ""),
                 str(f.get("param_name") or f.get("endpoint") or "-"),
@@ -110,10 +128,15 @@ async def run_scan(target: str, mode: str = "web", browser: bool = False, proxy:
             )
         console.print(t)
     else:
+        if manifest:
+            print(f"\n--- Code Intelligence Summary ---")
+            print(f"  Technologies: {', '.join(manifest.get('technologies', []))}")
+            print(f"  JS Analyzed: {manifest.get('js_analyzed', 0)} | Endpoints: {manifest.get('endpoints_discovered', 0)} | Secrets: {manifest.get('secrets_discovered', 0)}")
         print(f"\nDone! Total Findings: {len(findings)}")
         for f in findings:
             fb = f" [Fallback: {f.get('fallback_engine')}]" if f.get("fallback_used") else ""
-            print(f"  [{f.get('severity')}] {f.get('title')} | param={f.get('param_name')}{fb} | tool={f.get('tool')}")
+            verdict = f.get("lifecycle_verdict", "CONFIRMED")
+            print(f"  [{verdict}] [{f.get('severity')}] {f.get('title')} | param={f.get('param_name')}{fb} | tool={f.get('tool')}")
 
     return result
 
@@ -124,7 +147,7 @@ def main():
     parser.add_argument("-b", "--browser", action="store_true", help="Enable browser agent")
     parser.add_argument("-p", "--proxy", default=None, help="Proxy URL")
     parser.add_argument("--max-concurrent", type=int, default=8, help="Maximum concurrent probes")
-    parser.add_argument("--output", choices=["json", "html", "csv"], default="json", help="Report output format")
+    parser.add_argument("--output", choices=["json", "html", "csv", "dashboard"], default="dashboard", help="Report output format")
     args = parser.parse_args()
 
     if RICH:
@@ -142,7 +165,7 @@ def main():
     ))
     findings = findings_result.get("findings", [])
     # Export reports
-    from core.exporters import export_json, export_html, export_csv
+    from core.exporters import export_json, export_html, export_csv, export_interactive_dashboard
     reports_dir = os.path.abspath(os.path.join("reports"))
     os.makedirs(reports_dir, exist_ok=True)
     if args.output == "json":
@@ -151,6 +174,16 @@ def main():
         export_html(findings, os.path.join(reports_dir, "scan.html"))
     elif args.output == "csv":
         export_csv(findings, os.path.join(reports_dir, "scan.csv"))
+    elif args.output == "dashboard":
+        export_interactive_dashboard(args.target, findings_result, os.path.join(reports_dir, "dashboard.html"))
+
+    # Always generate interactive dashboard for visual review
+    dashboard_file = os.path.join(reports_dir, "dashboard.html")
+    export_interactive_dashboard(args.target, findings_result, dashboard_file)
+    if RICH:
+        console.print(f"[bold green]📊 Interactive Dashboard exported to: {dashboard_file}[/bold green]")
+    else:
+        print(f"Interactive Dashboard exported to: {dashboard_file}")
 
 if __name__ == "__main__":
     main()

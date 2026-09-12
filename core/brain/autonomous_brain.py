@@ -1242,6 +1242,8 @@ class AutonomousBrain:
                 log.debug("Tech stack detection non-critical failure", exc_info=True)
 
         # ── PHASE 0.3: CODE INTELLIGENCE (Client-side Page & JS Analysis) ────
+        code_intel_res: Dict[str, Any] = {}
+        spa_detected = False
         try:
             target_host_sanitized = (urlparse(target).hostname or "target").replace(":", "_").replace(".", "_")
             code_intel_agent = CodeIntelligenceAgent(output_dir=f"data/scans/{target_host_sanitized}")
@@ -1250,6 +1252,12 @@ class AutonomousBrain:
                 raw_html=html,
                 headers=headers
             )
+            self._last_code_intel = code_intel_res
+            fw = code_intel_res.get("framework", {})
+            techs = code_intel_res.get("manifest", {}).get("technologies", [])
+            if fw.get("detected") or any(t.lower() in ("next.js", "react", "vue", "angular", "spa") for t in techs):
+                spa_detected = True
+
             # Merge in-scope discovered endpoints
             for ep in code_intel_res.get("endpoints", []):
                 ep_path = ep.get("url_or_path", "")
@@ -1323,6 +1331,15 @@ class AutonomousBrain:
         )
         if tech_info.get("detected_technologies"):
             plan["detected_technologies"] = tech_info["detected_technologies"]
+
+        # Automatically schedule BrowserAgent exploration if a modern SPA (Next.js/React/Vue) is detected
+        if spa_detected or any("next" in str(t).lower() or "react" in str(t).lower() for t in tech_info.get("detected_technologies", [])):
+            if mode in ("full", "web", "auto", "ctf") and not plan.get("use_browser"):
+                plan["use_browser"] = True
+                tools_list = plan.setdefault("needed_tools", ["SmartPoC"])
+                if "BrowserAgent" not in tools_list:
+                    tools_list.append("BrowserAgent")
+                await self._log("[DECIDE] Modern SPA / Next.js detected -> Automatically activated BrowserAgent for dynamic client-side exploration")
 
         # Guide plan with SecurityIntelligence hypotheses
         if si_hypotheses:
@@ -1733,6 +1750,7 @@ class AutonomousBrain:
             "attack_graph": self.attack_graph.to_dict() if self.attack_graph else None,
             "audit_log": self._audit_log,
             "objective_result": objective_result,   # Finding ≠ Completion tracking
+            "code_intelligence": getattr(self, "_last_code_intel", code_intel_res),
         }
 
     @property
