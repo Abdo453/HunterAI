@@ -1,0 +1,4 @@
+=== Skill: Server-Side Request Forgery (SSRF) ===
+- Patterns: URL or Hostname parameters (?url=, ?redirect=, ?dest=, ?webhook=, ?target=, ?fetch=, ?image_url=, ?api_url=).
+- Attack Vectors: Internal loopback access (127.0.0.1, localhost, [::1], 0.0.0.0, 169.254.169.254 metadata endpoint), cloud metadata theft, alternative IP formats, DNS rebinding.
+- Verification: Confirm if the server makes an outbound request to internal network or exposes cloud credentials (AWS IAM, GCP, Azure).

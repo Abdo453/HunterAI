@@ -1,0 +1,21 @@
+{
+  "id": "a35a5149",
+  "timestamp": "1787183384.2165487",
+  "user_input": "hello",
+  "task_type": "CODING",
+  "route": "CODING",
+  "models_used": [],
+  "final_answer": "",
+  "duration_seconds": 1.9,
+  "metadata": {
+    "gpu_status": {
+      "locked": false,
+      "current_model": null,
+      "elapsed_seconds": 0,
+      "queue_length": 0,
+      "total_runs": 1,
+      "total_unloads": 1
+    },
+    "selected_model": "auto"
+  }
+}

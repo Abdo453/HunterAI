@@ -1,0 +1,128 @@
+[
+  {
+    "id": "intel_portswigger_union_null",
+    "topic": "sqli",
+    "title": "PortSwigger UNION Attack: NULL Column Count & Data Type Enumeration",
+    "source_url": "https://portswigger.net/web-security/learning-paths/sql-injection",
+    "prerequisites": ["sql_syntax", "union_operator_rules"],
+    "signals": [
+      "union_based_surface",
+      "tabular_response",
+      "column_count_probe",
+      "order_by_boundary"
+    ],
+    "verification_strategy": "Determine the exact number of projected columns by systematically appending NULLs (' UNION SELECT NULL, NULL -- -) until the RDBMS executes without a column count mismatch exception (e.g. ORA-01789 or PostgreSQL 42601). Next, test each column position with a benign string probe ('a', NULL) to identify data type compatibility.",
+    "evidence_requirements": [
+      "column_boundary_match",
+      "successful_union_reflection",
+      "data_type_compatibility_proof"
+    ],
+    "remediation": "Enforce parameterized prepared statements across all search and listing endpoints. Never interpolate user-supplied order or filter clauses directly into query strings.",
+    "description": "PortSwigger curriculum standard for UNION-based SQL injection. Two mandatory conditions for UNION injection: (1) The injected query must return the exact same number of columns as the original query. (2) The data types in corresponding columns must be compatible between original and injected SELECT statements. Using NULL satisfies almost all data types across Oracle, MySQL, PostgreSQL, and SQLite without type casting errors."
+  },
+  {
+    "id": "intel_hackerone_top_sqli",
+    "topic": "sqli",
+    "title": "HackerOne Disclosed Top SQLi: Header-Based & Second-Order Injection Vectors",
+    "source_url": "https://github.com/reddelexc/hackerone-reports/blob/master/docs/tops_by_bug_type/TOPSQLI.md",
+    "prerequisites": ["http_headers", "sql_concatenation", "second_order_execution"],
+    "signals": [
+      "x_forwarded_for",
+      "user_agent_logging",
+      "client_ip_header",
+      "json_extract_operator",
+      "second_order_deferred_execution"
+    ],
+    "verification_strategy": "Probe non-standard HTTP request headers (X-Forwarded-For, Client-IP, User-Agent) utilized in audit logging scripts with non-destructive boolean expressions or sleep probes. For second-order vectors, submit stored profile data and monitor subsequent administrative reporting endpoints.",
+    "evidence_requirements": [
+      "header_dependent_differential",
+      "audit_log_sql_syntax_error",
+      "deferred_execution_divergence"
+    ],
+    "remediation": "Treat all HTTP request headers as untrusted user input. Bind client IP, User-Agent, and session telemetry using parameterized queries before inserting into security audit logs.",
+    "description": "Analysis of high-bounty HackerOne disclosed reports reveals that SQLi frequently exists outside ordinary GET/POST query parameters. Common enterprise vectors include background analytics logging headers, JSON operators in PostgreSQL (->>) or MySQL (JSON_EXTRACT) concatenated without sanitization, and second-order injections where data stored during registration triggers an injection when batch administrative jobs run."
+  },
+  {
+    "id": "intel_cypher_graph_injection",
+    "topic": "sqli",
+    "title": "Cypher Graph Database Injection (Neo4j / GraphDB)",
+    "source_url": "https://pentester.land/blog/cypher-injection-cheatsheet/#what-is-cypher",
+    "prerequisites": ["graph_databases", "cypher_query_syntax", "nosql_injection"],
+    "signals": [
+      "neo4j_backend",
+      "graph_traversal",
+      "cypher_syntax_error",
+      "match_clause"
+    ],
+    "verification_strategy": "Inject Cypher boolean escape sequences (e.g. ' OR 1=1 OR ''=') or quote delimiters into graph search queries. Look for Cypher-specific syntax errors (SyntaxException, Invalid input) or full node collection disclosure via RETURN clause manipulation.",
+    "evidence_requirements": [
+      "cypher_syntax_error_signature",
+      "graph_node_differential_count",
+      "unauthorized_node_property_leak"
+    ],
+    "remediation": "Utilize parameterized Cypher queries through official Neo4j drivers ($param syntax). Never concatenate untrusted strings into MATCH, WHERE, or CALL clauses.",
+    "description": "Cypher is the declarative graph query language used by Neo4j. Similar to SQL injection, Cypher injection occurs when untrusted user input is directly concatenated into Cypher query strings. Attackers can alter graph traversals, bypass authentication nodes, or extract sensitive graph database properties using clauses like ' OR 1=1 RETURN u-- or UNION MATCH."
+  },
+  {
+    "id": "intel_tryhackme_fundamentals",
+    "topic": "sqli",
+    "title": "TryHackMe SQLi Fundamentals: In-Band, Inferential & Out-of-Band Mechanics",
+    "source_url": "https://tryhackme.com/room/sqlinjectionlm",
+    "prerequisites": ["sql_basics", "network_protocols"],
+    "signals": [
+      "in_band_union",
+      "blind_boolean_differential",
+      "time_delay_pg_sleep",
+      "out_of_band_dns_lookup"
+    ],
+    "verification_strategy": "Classify injection surface into three distinct tiers: (1) In-band (direct reflection/error in response), (2) Inferential / Blind (boolean content differential or statistical time delay), (3) Out-of-band / OAST (triggering external DNS/HTTP lookups via database built-ins like utl_http or xp_dirtree).",
+    "evidence_requirements": [
+      "injection_tier_classification",
+      "reproducible_inferential_delta",
+      "dns_interaction_id"
+    ],
+    "remediation": "Apply defense-in-depth: Parameterized queries, restrictive database user permissions, and egress network filtering to block database servers from initiating outbound DNS/HTTP requests.",
+    "description": "TryHackMe educational taxonomy divides SQL Injection into In-Band, Blind/Inferential, and Out-of-Band (OAST). Provides foundational methodology for selecting the appropriate experiment based on observable response characteristics."
+  },
+  {
+    "id": "intel_secbyte_interview_architecture",
+    "topic": "sqli",
+    "title": "SecByte Architectural Core: Prepared Statements, Stored Procedures & ORM Security",
+    "source_url": "https://learn.secbyte.org/blog/as2ilat-sql-muqabalat-shughl",
+    "prerequisites": ["rdbms_architecture", "orm_internals"],
+    "signals": [
+      "prepared_statement_binding",
+      "dynamic_stored_procedure",
+      "orm_raw_query",
+      "order_by_clause"
+    ],
+    "verification_strategy": "Assess architectural implementation: Verify if ORM uses parameter binding or exposes raw query methods (e.g. Django .extra() or raw SQL). Check if dynamic ORDER BY clauses are validated against a strict property allowlist, as ORDER BY cannot be parameterized using standard prepared statement placeholders.",
+    "evidence_requirements": [
+      "dynamic_order_by_divergence",
+      "orm_raw_fragment_exception"
+    ],
+    "remediation": "Validate dynamic sorting/ordering parameters against a strict whitelist of known column names. Use parameterized prepared statements for all filter values. Avoid dynamic SQL concatenation inside stored procedures.",
+    "description": "Comprehensive engineering analysis of SQL mechanics: Stored procedures do NOT inherently prevent SQL injection if dynamic SQL (e.g. EXECUTE IMMEDIATE or sp_executesql) is concatenated inside them. Prepared statements compile the query AST first and treat user inputs strictly as literal values. Critical architectural limitation: Prepared statements cannot parameterize table names or column identifiers in ORDER BY clauses, requiring strict allowlist validation."
+  },
+  {
+    "id": "intel_bugbounty_attack_surface",
+    "topic": "sqli",
+    "title": "Bug Bounty Attack Surface: GraphQL, JSON APIs & WAF Filter Evasion",
+    "source_url": "https://bugbounty.info/Attack-Surface/Web/Injection/SQLi/",
+    "prerequisites": ["graphql_queries", "waf_evasion", "parameter_pollution"],
+    "signals": [
+      "graphql_variable_injection",
+      "comment_inline_bypass",
+      "case_manipulation",
+      "double_url_encoding",
+      "whitespace_alternatives"
+    ],
+    "verification_strategy": "When standard spaces or comments trigger WAF blocks (HTTP 403), substitute alternative whitespace characters (inline comments /**/, tabs %09, line feeds %0A) or test HTTP Parameter Pollution (HPP) across duplicate query parameters. In GraphQL endpoints, inject within variables rather than query strings.",
+    "evidence_requirements": [
+      "waf_bypass_status_200",
+      "differential_behavior_with_encoded_probe"
+    ],
+    "remediation": "Never rely solely on Web Application Firewalls (WAFs) for security. Implement parameterized queries at the application tier as the primary defense.",
+    "description": "Bug bounty writeups and field research emphasize that modern web targets are protected by WAFs. Identifying SQLi requires understanding WAF normalization quirks: comment insertion (/*test*/), alternate whitespace (%09, %0a, %0d), case alteration (uNiOn SeLeCt), and HPP parameter splitting. GraphQL variables and REST JSON bodies frequently bypass perimeter regex rules."
+  }
+]

@@ -1,0 +1,43 @@
+{
+  "project": "HunterAI-Unified",
+  "version": "2.5.0-pre-kali-certified",
+  "python_min_version": "3.10.0",
+  "recommended_python": "3.11",
+  "components": {
+    "ollama": {
+      "required": true,
+      "port": 11434,
+      "protocol": "http",
+      "expected_models": [
+        "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
+        "xploiter/pentester:latest",
+        "qwen2.5-coder:14b"
+      ]
+    },
+    "playwright": {
+      "required": true,
+      "browsers": ["chromium", "firefox"],
+      "headless_default": true
+    },
+    "burp_suite": {
+      "required": false,
+      "default_proxy": "http://127.0.0.1:8080",
+      "fallback_mode": "direct_browser"
+    },
+    "sqlite3": {
+      "required": true,
+      "traffic_db": "data/traffic.db"
+    }
+  },
+  "required_kali_tools": [
+    "nmap",
+    "subfinder",
+    "httpx",
+    "katana",
+    "nuclei",
+    "ffuf",
+    "sqlmap",
+    "wpscan",
+    "curl"
+  ]
+}

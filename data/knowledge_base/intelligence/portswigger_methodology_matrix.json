@@ -1,0 +1,1150 @@
+[
+  {
+    "id": "portswigger_sqli",
+    "item_type": "methodology",
+    "topic": "sqli",
+    "category": "PortSwigger Web Security: SQL Injection (SQLi)",
+    "name": "SQL Injection Detection & Differential Verification Methodology",
+    "cwe": "CWE-89",
+    "owasp_category": "A03:2021 - Injection",
+    "signals": [
+      "sql_syntax_error",
+      "database_error_reflection",
+      "numeric_parameter_variation",
+      "boolean_differential_response",
+      "time_delay_execution",
+      "order_by_boundary"
+    ],
+    "verification_strategy": "Conduct safe boolean differential probing (e.g. AND 1=1 vs AND 1=2), test ORDER BY column position boundaries to determine column projection size without extracting user data, and verify UNION NULL column compatibility safely.",
+    "evidence_requirements": [
+      "response_delta_length",
+      "status_code_invariance",
+      "syntax_error_snippet",
+      "null_column_count_proof"
+    ],
+    "tools": [
+      {
+        "tool": "SQLiSkill",
+        "cmd": "run_sqli_skill(url, param, objective='version')",
+        "desc": "Autonomous state machine: DETECT -> CLASSIFY -> COUNT_COLS -> VERIFY"
+      },
+      {
+        "tool": "sqlmap (safe audit)",
+        "cmd": "sqlmap -u 'https://example.com/item?id=1' --batch --banner --level=2 --risk=1",
+        "desc": "Differential SQLi audit engine verifying injection points"
+      },
+      {
+        "tool": "SmartPoC (SQLi)",
+        "cmd": "SmartPoC.execute_and_verify(target, param, vuln_type='sqli')",
+        "desc": "Zero-weaponized boolean & error reflection validator"
+      }
+    ],
+    "remediation": "Mandate parameterized queries and prepared statements (e.g., PreparedStatement in Java, PDO with emulation turned off in PHP). Never concatenate untrusted parameters into SQL queries.",
+    "description": "PortSwigger curriculum for SQL Injection covers in-band UNION attacks, error-based exploitation, blind boolean inference, blind time delays, and out-of-band application interactions (DNS/HTTP via Collaborator)."
+  },
+  {
+    "id": "portswigger_xss",
+    "item_type": "methodology",
+    "topic": "xss",
+    "category": "PortSwigger Web Security: Cross-Site Scripting (XSS)",
+    "name": "Cross-Site Scripting (Reflected, Stored, DOM) Methodology",
+    "cwe": "CWE-79",
+    "owasp_category": "A03:2021 - Injection",
+    "signals": [
+      "unescaped_input_reflection",
+      "html_attribute_reflection",
+      "script_context_reflection",
+      "dom_sink_flow",
+      "csp_header_missing",
+      "content_type_text_html"
+    ],
+    "verification_strategy": "Submit unique alphanumeric canary tokens (e.g. z9x8w7v6) across query parameters and form fields, evaluate reflection contexts (HTML text, HTML attribute, JS string), and verify character encoding for <, >, \", ', and backticks.",
+    "evidence_requirements": [
+      "canary_reflection_context",
+      "raw_response_snippet",
+      "csp_policy_analysis"
+    ],
+    "tools": [
+      {
+        "tool": "XSSSkill",
+        "cmd": "run_xss_skill(url, param)",
+        "desc": "Context-aware AST reflection & breakout analyzer"
+      },
+      {
+        "tool": "dalfox",
+        "cmd": "dalfox url 'https://example.com/search?q=test' --skip-bavl --mining-dict",
+        "desc": "High-performance parameter analysis and DOM XSS scanner"
+      },
+      {
+        "tool": "BrowserAgent (Firefox)",
+        "cmd": "BrowserAgent.run(target, mode='xss_dom_check')",
+        "desc": "Headless/GUI browser execution auditing DOM sinks (eval, innerHTML)"
+      }
+    ],
+    "remediation": "Apply context-sensitive output encoding before rendering user input into HTML, attributes, or JavaScript contexts. Deploy a rigorous Content Security Policy (CSP) with nonce-based or hash-based script execution.",
+    "description": "PortSwigger XSS covers Reflected XSS into HTML contexts, attribute contexts, JavaScript templates, Stored XSS, and DOM-based XSS traversing execution sinks like location.href, innerHTML, document.write, and jQuery selectors."
+  },
+  {
+    "id": "portswigger_csrf",
+    "item_type": "methodology",
+    "topic": "csrf",
+    "category": "PortSwigger Web Security: Cross-Site Request Forgery (CSRF)",
+    "name": "Cross-Site Request Forgery Token & SameSite Validation Methodology",
+    "cwe": "CWE-352",
+    "owasp_category": "A01:2021 - Broken Access Control",
+    "signals": [
+      "missing_csrf_token",
+      "static_predictable_token",
+      "csrf_token_not_tied_to_session",
+      "samesite_none_or_absent",
+      "method_override_post_to_get",
+      "referer_header_validation_flaw"
+    ],
+    "verification_strategy": "Test state-changing requests (POST, PUT, DELETE) by omitting the anti-CSRF token, supplying an empty token, using a token from an alternate session, and testing HTTP method flipping (POST to GET). Inspect session cookie SameSite flags.",
+    "evidence_requirements": [
+      "successful_state_change_without_token",
+      "cookie_samesite_flags",
+      "csrf_poc_html_form"
+    ],
+    "tools": [
+      {
+        "tool": "CSRFSkill",
+        "cmd": "run_csrf_skill(url, param='csrf')",
+        "desc": "Differential state-changing endpoint token omission checker"
+      },
+      {
+        "tool": "BurpAgent / CSRF PoC Generator",
+        "cmd": "generate_csrf_poc(endpoint, post_body)",
+        "desc": "Creates standard HTML PoC forms demonstrating unauthorized submission capability"
+      }
+    ],
+    "remediation": "Enforce cryptographically random anti-CSRF tokens tied uniquely to user sessions. Configure session cookies with SameSite=Lax or SameSite=Strict, and verify custom headers (e.g. X-Requested-With) for AJAX requests.",
+    "description": "PortSwigger CSRF labs demonstrate vulnerabilities where applications fail to validate tokens, accept duplicate tokens from cookie to parameter, bypass token check when omitted, or rely on easily spoofed Referer headers."
+  },
+  {
+    "id": "portswigger_clickjacking",
+    "item_type": "methodology",
+    "topic": "clickjacking",
+    "category": "PortSwigger Web Security: Clickjacking (UI Redressing)",
+    "name": "Clickjacking & Frame Framing Resistance Audit Methodology",
+    "cwe": "CWE-1021",
+    "owasp_category": "A05:2021 - Security Misconfiguration",
+    "signals": [
+      "missing_x_frame_options",
+      "missing_frame_ancestors_csp",
+      "frame_options_allow_all",
+      "frame_bust_script_bypassable",
+      "sensitive_action_prefilled"
+    ],
+    "verification_strategy": "Audit HTTP response headers of authenticated endpoints for X-Frame-Options (DENY/SAMEORIGIN) and Content-Security-Policy (frame-ancestors 'none'/'self'). Construct a benign framing iframe in Firefox to verify whether rendering is blocked.",
+    "evidence_requirements": [
+      "header_inspection_log",
+      "iframe_render_proof",
+      "dom_element_position_map"
+    ],
+    "tools": [
+      {
+        "tool": "BrowserAgent (Firefox)",
+        "cmd": "BrowserAgent.check_frameable(url)",
+        "desc": "Loads URL within cross-origin iframe inside Firefox-esr to verify framing denial"
+      },
+      {
+        "tool": "httpx",
+        "cmd": "httpx -u 'https://example.com/account' -probe-headers 'X-Frame-Options,Content-Security-Policy'",
+        "desc": "Checks presence of defensive framing control headers"
+      }
+    ],
+    "remediation": "Configure Content-Security-Policy: frame-ancestors 'self'; or X-Frame-Options: DENY. Protect sensitive workflows with re-authentication or multi-factor confirmation.",
+    "description": "PortSwigger Clickjacking labs explore basic iframe UI overlays, clickjacking with prefilled form inputs, frame-busting script bypasses via sandbox attributes, and multi-step clickjacking exploiting drag-and-drop mechanics."
+  },
+  {
+    "id": "portswigger_dom_vulns",
+    "item_type": "methodology",
+    "topic": "dom_vulnerabilities",
+    "category": "PortSwigger Web Security: DOM-Based Vulnerabilities & DOM Clobbering",
+    "name": "DOM-Based Sinks, Sources & DOM Clobbering Methodology",
+    "cwe": "CWE-79",
+    "owasp_category": "A03:2021 - Injection",
+    "signals": [
+      "window_location_source",
+      "document_referrer_source",
+      "innerhtml_sink",
+      "eval_function_sink",
+      "web_message_listener",
+      "dom_clobbering_named_elements"
+    ],
+    "verification_strategy": "Audit client-side JavaScript execution paths tracing data flows from tainted DOM sources (location.search, location.hash, postMessage) into execution sinks (innerHTML, eval, document.write, location.href). Test DOM clobbering using named HTML tags (id / name attributes on form, img, a tags).",
+    "evidence_requirements": [
+      "source_to_sink_trace",
+      "clobbered_variable_name",
+      "browser_js_callstack"
+    ],
+    "tools": [
+      {
+        "tool": "BrowserAgent (DOM Inspector)",
+        "cmd": "BrowserAgent.trace_dom_dataflow(url)",
+        "desc": "Hooks DOM execution sinks and monitors taint propagation from URL parameters"
+      },
+      {
+        "tool": "katana",
+        "cmd": "katana -u url -jc -kf all -headless",
+        "desc": "Headless JS endpoint and script extraction engine"
+      }
+    ],
+    "remediation": "Avoid dangerous sinks like innerHTML and eval(). Use textContent, document.createElement, and safe DOM APIs. For postMessage listeners, strictly validate event.origin and event.source.",
+    "description": "PortSwigger DOM vulnerability curriculum analyzes DOM XSS, DOM open redirection, DOM cookie manipulation, DOM clobbering overriding JavaScript global objects, and insecure Web Message (postMessage) handling."
+  },
+  {
+    "id": "portswigger_cors",
+    "item_type": "methodology",
+    "topic": "cors",
+    "category": "PortSwigger Web Security: Cross-Origin Resource Sharing (CORS)",
+    "name": "CORS Misconfiguration & Trust Verification Methodology",
+    "cwe": "CWE-942",
+    "owasp_category": "A01:2021 - Broken Access Control",
+    "signals": [
+      "origin_reflection_in_acao",
+      "wildcard_acao_with_credentials",
+      "null_origin_trusted",
+      "prefix_suffix_origin_trust",
+      "intranet_origin_trust"
+    ],
+    "verification_strategy": "Send HTTP requests containing arbitrary Origin headers (e.g. Origin: https://evil.com, Origin: null, Origin: https://example.com.attacker.com) with Access-Control-Request-Method, and observe Access-Control-Allow-Origin (ACAO) and Access-Control-Allow-Credentials (ACAC).",
+    "evidence_requirements": [
+      "arbitrary_acao_header",
+      "acac_true_flag",
+      "sensitive_api_response_body"
+    ],
+    "tools": [
+      {
+        "tool": "httpx",
+        "cmd": "httpx -u url -H 'Origin: https://attacker.com' -probe-headers 'Access-Control-Allow-Origin,Access-Control-Allow-Credentials'",
+        "desc": "Differential header probing testing origin reflection"
+      },
+      {
+        "tool": "corsy",
+        "cmd": "corsy -u url -d 1",
+        "desc": "Automated CORS misconfiguration scanner validating reflection and null origin"
+      }
+    ],
+    "remediation": "Never reflect arbitrary Origin headers. Maintain an explicit allowlist of authorized origin domains. Avoid Access-Control-Allow-Origin: null and do not set Access-Control-Allow-Credentials: true with wildcards.",
+    "description": "PortSwigger CORS labs illustrate insecure CORS configurations where applications reflect arbitrary origins, trust null origins generated by sandboxed iframes, or utilize flawed regex matching susceptible to subdomain or prefix bypasses."
+  },
+  {
+    "id": "portswigger_xxe",
+    "item_type": "methodology",
+    "topic": "xxe",
+    "category": "PortSwigger Web Security: XML External Entity (XXE) Injection",
+    "name": "XML External Entity (XXE) Injection & Parser Hardening Methodology",
+    "cwe": "CWE-611",
+    "owasp_category": "A05:2021 - Security Misconfiguration",
+    "signals": [
+      "content_type_xml",
+      "xml_in_post_body",
+      "soap_endpoint",
+      "svg_upload",
+      "entity_resolution_error",
+      "xinclude_feature_enabled"
+    ],
+    "verification_strategy": "Transmit safe XML payloads declaring standard internal entities (e.g. <!ENTITY test 'probe'>) to confirm entity expansion without requesting external network resources. For blind XXE, check for parser exceptions or OOB DNS interaction through safe callback listeners.",
+    "evidence_requirements": [
+      "entity_expansion_reflection",
+      "parser_doctype_error",
+      "content_type_delta"
+    ],
+    "tools": [
+      {
+        "tool": "WebTools (Safe XML Probe)",
+        "cmd": "WebTools.probe_xml_entity(url, body)",
+        "desc": "Constructs benign XML entity declarations testing parser resolution"
+      },
+      {
+        "tool": "nuclei (XXE Templates)",
+        "cmd": "nuclei -u url -t /nuclei-templates/http/vulnerabilities/generic/xxe-probe.yaml",
+        "desc": "Differential XML parsing detection without external exfiltration"
+      }
+    ],
+    "remediation": "Completely disable external entity resolution (DTD processing) in XML parsers (e.g. setFeature('http://apache.org/xml/features/disallow-doctype-decl', True)). Use modern data formats like JSON wherever feasible.",
+    "description": "PortSwigger XXE labs cover retrieving system files via file://, exploiting SSRF via XXE, blind XXE using out-of-band techniques, repurposing local DTD files to trigger error messages, and abusing XML parsers in image (SVG) uploads."
+  },
+  {
+    "id": "portswigger_ssrf",
+    "item_type": "methodology",
+    "topic": "ssrf",
+    "category": "PortSwigger Web Security: Server-Side Request Forgery (SSRF)",
+    "name": "Server-Side Request Forgery (SSRF) & Cloud Metadata Defense Methodology",
+    "cwe": "CWE-918",
+    "owasp_category": "A10:2021 - Server-Side Request Forgery",
+    "signals": [
+      "url_parameter_input",
+      "webhook_creation_endpoint",
+      "image_fetch_from_url",
+      "pdf_generator_url_parameter",
+      "proxy_forwarding_parameter"
+    ],
+    "verification_strategy": "Test input parameters accepting URLs against loopback variations (127.0.0.1, 2130706433, [::1], 127.1), cloud metadata representations (169.254.169.254, 0xA9FEA9FE), and alternative URI schemes. Validate if the server follows redirects to internal network addresses.",
+    "evidence_requirements": [
+      "internal_service_response_banner",
+      "response_timing_differential",
+      "cloud_metadata_token_signature"
+    ],
+    "tools": [
+      {
+        "tool": "SSRFSkill",
+        "cmd": "SSRFSkill.run(url, param)",
+        "desc": "Multi-tier IP encoding & cloud metadata matrix probe"
+      },
+      {
+        "tool": "SSRFFilterBypasser",
+        "cmd": "SSRFFilterBypasser.get_all_bypasses('http://127.0.0.1/admin')",
+        "desc": "Generates 15+ canonical IP representations (decimal, octal, hex, DNS rebinding)"
+      }
+    ],
+    "remediation": "Enforce strict allowlists of permissible target domains and IP ranges. Explicitly drop connections to RFC 1918 private subnets and link-local 169.254.169.254. Disable following redirects, and resolve DNS once before connecting (preventing DNS rebinding).",
+    "description": "PortSwigger SSRF labs investigate basic SSRF against local administrative interfaces, SSRF bypassing blacklist filters using alternative IP encodings, whitelist filter bypasses using URL credentials (@), and SSRF via Open Redirection."
+  },
+  {
+    "id": "portswigger_http_smuggling",
+    "item_type": "methodology",
+    "topic": "http_request_smuggling",
+    "category": "PortSwigger Web Security: HTTP Request Smuggling",
+    "name": "HTTP Request Smuggling (CL.TE, TE.CL, TE.TE & HTTP/2) Methodology",
+    "cwe": "CWE-444",
+    "owasp_category": "A04:2021 - Insecure Design",
+    "signals": [
+      "front_end_reverse_proxy",
+      "dual_content_length_transfer_encoding",
+      "obfuscated_transfer_encoding",
+      "http2_downgrade_to_http11",
+      "backend_request_timeout"
+    ],
+    "verification_strategy": "Transmit differential non-destructive HTTP requests with both Content-Length and Transfer-Encoding: chunked headers. Observe backend timeout delays (e.g. 5-10s) indicating parsing divergence between frontend proxy and backend server.",
+    "evidence_requirements": [
+      "differential_timeout_delay",
+      "pipelined_prefix_response_mutation",
+      "http_version_downgrade_log"
+    ],
+    "tools": [
+      {
+        "tool": "smuggler",
+        "cmd": "python3 smuggler.py -u https://example.com -m POST",
+        "desc": "Audits CL.TE, TE.CL, and header obfuscation smuggling variations"
+      },
+      {
+        "tool": "httpx",
+        "cmd": "httpx -u url -http2 -probe",
+        "desc": "Verifies HTTP/2 protocol support and proxy downgrade characteristics"
+      }
+    ],
+    "remediation": "Prioritize end-to-end HTTP/2 without protocol downgrade. If HTTP/1.1 is required, configure frontend and backend servers to reject requests containing both Content-Length and Transfer-Encoding headers.",
+    "description": "PortSwigger HTTP Request Smuggling curriculum explores CL.TE and TE.CL desynchronization vulnerabilities, obfuscating Transfer-Encoding headers (TE.TE), weaponizing smuggling for cache poisoning, credential theft, and HTTP/2 request tunneling."
+  },
+  {
+    "id": "portswigger_cmd_injection",
+    "item_type": "methodology",
+    "topic": "os_command_injection",
+    "category": "PortSwigger Web Security: OS Command Injection",
+    "name": "OS Command Injection & Safe Time-Delay Verification Methodology",
+    "cwe": "CWE-78",
+    "owasp_category": "A03:2021 - Injection",
+    "signals": [
+      "ip_ping_parameter",
+      "system_tool_wrapper",
+      "file_conversion_endpoint",
+      "shell_metacharacter_echo",
+      "time_delay_execution"
+    ],
+    "verification_strategy": "Inject benign shell command delimiters (;, |, &, `) paired with safe time-delay instructions (e.g., sleep 5, ping -c 5 127.0.0.1) across suspected parameters. Compare response execution duration against baseline latency.",
+    "evidence_requirements": [
+      "differential_time_delay_metric",
+      "baseline_vs_probe_duration",
+      "shell_execution_proof"
+    ],
+    "tools": [
+      {
+        "tool": "CmdInjectionSkill",
+        "cmd": "CmdInjectionSkill.run(url, param)",
+        "desc": "Differential latency auditor using non-destructive time delays and benign echoes"
+      },
+      {
+        "tool": "commix (safe mode)",
+        "cmd": "commix -u 'https://example.com/status?host=127.0.0.1' --batch --time-sec=5",
+        "desc": "Automated command injection auditor validating execution pathways"
+      }
+    ],
+    "remediation": "Avoid invoking operating system shell commands via system(), exec(), or Runtime.getRuntime().exec(). Utilize native language APIs (e.g., standard file and network libraries) or apply strict alphanumeric parameter allowlists.",
+    "description": "PortSwigger OS Command Injection covers simple injections returning command output, blind command injection with time delays, out-of-band data redirection, and output redirection to web-accessible directories."
+  },
+  {
+    "id": "portswigger_ssti",
+    "item_type": "methodology",
+    "topic": "ssti",
+    "category": "PortSwigger Web Security: Server-Side Template Injection (SSTI)",
+    "name": "Server-Side Template Injection (SSTI) Engine Fingerprinting Methodology",
+    "cwe": "CWE-1336",
+    "owasp_category": "A03:2021 - Injection",
+    "signals": [
+      "template_expression_reflection",
+      "curly_brace_processing",
+      "math_expression_evaluation",
+      "freemarker_syntax_error",
+      "jinja2_twig_syntax_error"
+    ],
+    "verification_strategy": "Inject deterministic benign arithmetic expressions inside template markers: e.g. {{7*7}}, ${7*7}, <%= 7*7 %>, #{7*7}. If the rendered output evaluates to '49' instead of literal text, follow the template decision tree (Jinja2, Twig, Freemarker, Velocity, Smarty, Pebble).",
+    "evidence_requirements": [
+      "arithmetic_evaluation_reflection",
+      "template_engine_fingerprint",
+      "syntax_error_callstack"
+    ],
+    "tools": [
+      {
+        "tool": "tplmap",
+        "cmd": "python3 tplmap.py -u 'https://example.com/profile?name=john'",
+        "desc": "Automated SSTI detector and template engine identifier"
+      },
+      {
+        "tool": "SmartPoC (SSTI)",
+        "cmd": "SmartPoC.execute_and_verify(url, param, vuln_type='ssti')",
+        "desc": "Verifies arithmetic expression evaluation (49 reflection) without payload execution"
+      }
+    ],
+    "remediation": "Do not interpolate user-controlled input directly into template source code before compilation. Pass user input strictly as data model parameters into templates. Utilize sandboxed template engines.",
+    "description": "PortSwigger SSTI covers identifying template syntax across popular frameworks, distinguishing between client and server rendering, sandbox escapes in Jinja2 and Twig, and leveraging Java reflection in Freemarker to demonstrate code execution."
+  },
+  {
+    "id": "portswigger_path_traversal",
+    "item_type": "methodology",
+    "topic": "path_traversal",
+    "category": "PortSwigger Web Security: Directory Traversal & LFI",
+    "name": "Directory Traversal & Local File Inclusion (LFI) Methodology",
+    "cwe": "CWE-22",
+    "owasp_category": "A01:2021 - Broken Access Control",
+    "signals": [
+      "filename_parameter",
+      "filepath_parameter",
+      "image_load_handler",
+      "dot_dot_slash_filtering",
+      "null_byte_processing",
+      "absolute_path_retrieval"
+    ],
+    "verification_strategy": "Probe file loading parameters with traversal sequences (../../../../etc/passwd or C:\\Windows\\win.ini), URL-encoded variants (%2e%2e%2f, %252e%252e%252f), nested traversal (....//....//), and absolute path references. Look for known standard system markers (e.g. root:x:0:0 or [fonts]).",
+    "evidence_requirements": [
+      "known_system_marker_reflection",
+      "status_200_with_file_length",
+      "path_normalization_evidence"
+    ],
+    "tools": [
+      {
+        "tool": "LFISkill",
+        "cmd": "LFISkill.run(url, param)",
+        "desc": "Deterministic path traversal validator testing canonical and encoded sequences"
+      },
+      {
+        "tool": "dotdotpwn",
+        "cmd": "dotdotpwn -m http -h example.com -k 'root:'",
+        "desc": "Traversal fuzzer assessing operating system path traversal sanitization"
+      }
+    ],
+    "remediation": "Avoid passing user input directly to filesystem APIs. Resolve canonical paths using functions like realpath() or Path.toRealPath() and assert that the resulting path begins with the designated base storage directory.",
+    "description": "PortSwigger Directory Traversal labs explore simple traversals, traversals blocked by absolute path requirements, stripped traversal sequences, URL encoding bypasses, expected prefix validation, and null byte truncation."
+  },
+  {
+    "id": "portswigger_access_control",
+    "item_type": "methodology",
+    "topic": "access_control",
+    "category": "PortSwigger Web Security: Broken Access Control & IDOR",
+    "name": "Broken Access Control & Insecure Direct Object Reference (IDOR) Methodology",
+    "cwe": "CWE-639",
+    "owasp_category": "A01:2021 - Broken Access Control",
+    "signals": [
+      "horizontal_privilege_escalation",
+      "vertical_privilege_escalation",
+      "unprotected_admin_panel",
+      "role_header_tampering",
+      "insecure_direct_object_reference",
+      "verb_tampering"
+    ],
+    "verification_strategy": "Perform dual-session differential testing: request protected resource of User A using session token of User B (horizontal escalation), and request administrative functionality using unauthenticated or low-privilege tokens (vertical escalation). Test HTTP verb tampering (GET vs POST vs PUT).",
+    "evidence_requirements": [
+      "cross_tenant_data_disclosure",
+      "unauthorized_admin_access_proof",
+      "status_200_under_low_privilege"
+    ],
+    "tools": [
+      {
+        "tool": "IDORSkill",
+        "cmd": "IDORSkill.run(url, param='user_id')",
+        "desc": "Cross-tenant identity permutation and matrix differential evaluator"
+      },
+      {
+        "tool": "BurpAgent (AuthMatrix / Autorize)",
+        "cmd": "Autorize.audit_endpoint(request, session_b)",
+        "desc": "Automated dual-context HTTP request replaying and response comparison"
+      }
+    ],
+    "remediation": "Adopt a 'deny by default' access control policy. Enforce object-level access control checks on every server request verifying that the authenticated user owns or has explicit permission for the requested entity.",
+    "description": "PortSwigger Access Control labs analyze unlinked admin URLs, header-based role overrides (X-Original-URL, X-Rewrite-URL), insecure IDOR parameters in profile endpoints, and multi-step workflow authorization flaws."
+  },
+  {
+    "id": "portswigger_authentication",
+    "item_type": "methodology",
+    "topic": "authentication",
+    "category": "PortSwigger Web Security: Authentication Vulnerabilities",
+    "name": "Authentication Mechanics, Username Enumeration & MFA Bypass Methodology",
+    "cwe": "CWE-287",
+    "owasp_category": "A07:2021 - Identification and Authentication Failures",
+    "signals": [
+      "username_enumeration_via_subtle_errors",
+      "response_time_discrepancy",
+      "missing_rate_limiting",
+      "password_reset_poisoning",
+      "2fa_flawed_logic",
+      "remember_me_cookie_flaw"
+    ],
+    "verification_strategy": "Analyze login endpoint error responses for subtle text discrepancies ('Invalid username' vs 'Incorrect password') or response time variations. Evaluate 2FA workflows for step skipping, brute-force limits on OTP tokens, and predictable password reset tokens.",
+    "evidence_requirements": [
+      "error_message_divergence",
+      "time_differential_distribution",
+      "mfa_step_bypass_proof"
+    ],
+    "tools": [
+      {
+        "tool": "ffuf (Enum)",
+        "cmd": "ffuf -u 'https://example.com/login' -d 'user=FUZZ&pass=test' -w users.txt -mr 'Invalid password'",
+        "desc": "Audits username enumeration via differential response matching"
+      },
+      {
+        "tool": "AutonomousBrain (Auth Auditor)",
+        "cmd": "AutonomousBrain.audit_auth_flow(login_url)",
+        "desc": "Assesses lockout thresholds, rate limiting, and password reset logic"
+      }
+    ],
+    "remediation": "Return generic error messages for all authentication failures (e.g. 'Invalid username or password'). Enforce rate limiting, account lockouts, and robust time-constant cryptographic comparison for password verification.",
+    "description": "PortSwigger Authentication vulnerabilities encompass username enumeration via different responses, password brute-forcing bypassing IP checks via X-Forwarded-For, 2FA bypass via broken logic, and remember-me cookie tampering."
+  },
+  {
+    "id": "portswigger_websockets",
+    "item_type": "methodology",
+    "topic": "websockets",
+    "category": "PortSwigger Web Security: WebSockets Security",
+    "name": "Cross-Site WebSocket Hijacking (CSWSH) & Message Tampering Methodology",
+    "cwe": "CWE-1385",
+    "owasp_category": "A01:2021 - Broken Access Control",
+    "signals": [
+      "ws_upgrade_without_csrf_protection",
+      "origin_header_not_validated_in_ws",
+      "unencrypted_ws_protocol",
+      "unsanitized_ws_message_rendering",
+      "ws_sql_or_xss_injection"
+    ],
+    "verification_strategy": "Inspect WebSocket handshake requests (GET /chat with Upgrade: websocket). Verify whether the handshake checks the Origin header or includes anti-CSRF tokens. Audit bidirectional frames for SQL injection, XSS, or unauthorized message manipulation.",
+    "evidence_requirements": [
+      "cross_origin_handshake_acceptance",
+      "origin_reflection_in_ws",
+      "tainted_ws_frame_trace"
+    ],
+    "tools": [
+      {
+        "tool": "BrowserAgent (WebSocket Audit)",
+        "cmd": "BrowserAgent.monitor_websockets(url)",
+        "desc": "Interprets client-side WebSocket messages and evaluates origin validation"
+      },
+      {
+        "tool": "wscat",
+        "cmd": "wscat -c 'wss://example.com/chat' -H 'Origin: https://attacker.com'",
+        "desc": "Tests cross-origin WebSocket handshake acceptance"
+      }
+    ],
+    "remediation": "Validate the Origin header strictly during the WebSocket upgrade handshake. Implement anti-CSRF tokens in the initial handshake request or require unique authentication tokens per session.",
+    "description": "PortSwigger WebSockets labs cover intercepting and modifying WebSocket messages, Cross-Site WebSocket Hijacking (CSWSH) to exfiltrate private conversation history, and exploiting XSS via WebSocket message rendering."
+  },
+  {
+    "id": "portswigger_cache_poisoning",
+    "item_type": "methodology",
+    "topic": "web_cache_poisoning",
+    "category": "PortSwigger Web Security: Web Cache Poisoning",
+    "name": "Web Cache Poisoning via Unkeyed Inputs & Headers Methodology",
+    "cwe": "CWE-444",
+    "owasp_category": "A05:2021 - Security Misconfiguration",
+    "signals": [
+      "x_cache_hit_miss_header",
+      "age_header_incrementing",
+      "unkeyed_header_reflection",
+      "x_forwarded_host_reflection",
+      "fat_get_parameter_handling",
+      "normalized_cache_key"
+    ],
+    "verification_strategy": "Identify cache keys and caching status via headers (X-Cache: HIT/MISS, CF-Cache-Status). Inject non-standard headers (X-Forwarded-Host, X-Forwarded-Scheme, X-Original-URL) with benign markers to verify if the server reflects them and caches the resulting response for subsequent standard requests.",
+    "evidence_requirements": [
+      "cached_response_with_injected_header",
+      "x_cache_hit_confirmation",
+      "unkeyed_input_identification"
+    ],
+    "tools": [
+      {
+        "tool": "Param Miner",
+        "cmd": "param_miner.guess_headers(target_url)",
+        "desc": "Automated unkeyed header and unkeyed cookie discovery engine"
+      },
+      {
+        "tool": "httpx",
+        "cmd": "httpx -u url -probe-headers 'X-Cache,CF-Cache-Status,Age'",
+        "desc": "Monitors cache header states across repeated requests"
+      }
+    ],
+    "remediation": "Do not incorporate unkeyed inputs into HTTP responses without encoding. Include necessary request headers in the cache key or disable caching for dynamically generated or personalized pages.",
+    "description": "PortSwigger Web Cache Poisoning labs explore unkeyed header exploitation (X-Forwarded-Host), unkeyed cookies, DOM-based cache poisoning, multiple header coordination, and fat GET requests poisoning resource paths."
+  },
+  {
+    "id": "portswigger_insecure_deserialization",
+    "item_type": "methodology",
+    "topic": "insecure_deserialization",
+    "category": "PortSwigger Web Security: Insecure Deserialization",
+    "name": "Object Deserialization & Gadget Chain Inspection Methodology",
+    "cwe": "CWE-502",
+    "owasp_category": "A08:2021 - Software and Data Integrity Failures",
+    "signals": [
+      "base64_serialized_java_object",
+      "magic_bytes_ac_ed_00_05",
+      "php_serialize_format_o_colon",
+      "python_pickle_markers",
+      "net_binary_formatter_stream",
+      "ruby_marshal_format"
+    ],
+    "verification_strategy": "Inspect cookies and session parameters for serialized object signatures: Java serialization magic bytes (0xAC ED / rO0), PHP serialize format ('O:4:\"User\":2:...'), Python pickle opcodes. Test safe differential object state tampering (e.g. flipping boolean isAdmin: true) before testing gadget chains.",
+    "evidence_requirements": [
+      "serialized_object_signature_match",
+      "tampered_attribute_state_change",
+      "deserialization_error_snippet"
+    ],
+    "tools": [
+      {
+        "tool": "AutonomousBrain (Deserialization Analyzer)",
+        "cmd": "AutonomousBrain.inspect_serialized_token(cookie)",
+        "desc": "Identifies serialization language format and decodes object graphs"
+      },
+      {
+        "tool": "ysoserial (audit guidance)",
+        "cmd": "ysoserial -g URLDNS -a 'http://callback.host'",
+        "desc": "Safe out-of-band DNS verification of Java gadget execution without command execution"
+      }
+    ],
+    "remediation": "Do not accept serialized objects from untrusted sources. Use standard structured data formats like JSON or Protocol Buffers. If deserialization is unavoidable, implement cryptographic integrity signing (HMAC) and strict type allowlists.",
+    "description": "PortSwigger Insecure Deserialization covers modifying serialized objects in cookies, modifying object data types, using gadget chains (Java ysoserial, PHP POP chains), and injecting arbitrary object attributes to subvert logic."
+  },
+  {
+    "id": "portswigger_information_disclosure",
+    "item_type": "methodology",
+    "topic": "information_disclosure",
+    "category": "PortSwigger Web Security: Information Disclosure",
+    "name": "Information Disclosure, Debug Endpoints & Repository Exposure Methodology",
+    "cwe": "CWE-200",
+    "owasp_category": "A05:2021 - Security Misconfiguration",
+    "signals": [
+      "stack_trace_in_500_response",
+      "exposed_git_directory",
+      "debug_page_accessible",
+      "backup_file_extensions",
+      "phpinfo_accessible",
+      "verbose_error_messages"
+    ],
+    "verification_strategy": "Fuzz common sensitive files (.git/HEAD, .env, server-status, phpinfo.php, backup.sql, .DS_Store). Induce intentional 400/500 errors via malformed HTTP methods or parameters to inspect whether verbose error traces leak framework versions, source code, or internal database schemas.",
+    "evidence_requirements": [
+      "exposed_file_content_signature",
+      "stack_trace_file_paths",
+      "internal_ip_or_version_leak"
+    ],
+    "tools": [
+      {
+        "tool": "gobuster (Sensitive files)",
+        "cmd": "gobuster dir -u url -w /wordlists/sensitive_files.txt -x env,git,bak,sql",
+        "desc": "Fuzzes sensitive administrative and source artifact paths"
+      },
+      {
+        "tool": "nuclei (Exposures)",
+        "cmd": "nuclei -u url -t /nuclei-templates/http/exposures/ -silent",
+        "desc": "Automated detection of exposed configuration files, private keys, and git repos"
+      }
+    ],
+    "remediation": "Disable detailed error messages and debug mode in production environments. Configure web servers to block access to hidden files and directories (e.g. .git, .env) and enforce custom generic error pages.",
+    "description": "PortSwigger Information Disclosure explores source code leaks in backup files, verbose error messages revealing database table structures, debug pages exposing API keys, and exploiting exposed Git directories to rebuild source trees."
+  },
+  {
+    "id": "portswigger_business_logic",
+    "item_type": "methodology",
+    "topic": "business_logic",
+    "category": "PortSwigger Web Security: Business Logic Vulnerabilities",
+    "name": "Business Logic & State Machine Subversion Methodology",
+    "cwe": "CWE-840",
+    "owasp_category": "A04:2021 - Insecure Design",
+    "signals": [
+      "negative_numeric_quantities",
+      "integer_overflow_wrapping",
+      "multi_step_workflow_skipping",
+      "reusable_one_time_coupon",
+      "client_side_price_tampering",
+      "inconsistent_unit_pricing"
+    ],
+    "verification_strategy": "Analyze multi-step workflows (e.g. cart -> checkout -> payment -> confirmation) for step skipping. Test numerical boundary conditions including negative values, zero, fractional inputs, and large numbers susceptible to 32-bit integer truncation or rounding errors. Test concurrent coupon redemption.",
+    "evidence_requirements": [
+      "workflow_step_skipped_proof",
+      "negative_total_transaction",
+      "unauthorized_discount_calculation"
+    ],
+    "tools": [
+      {
+        "tool": "TemporalLogicVerifier (HunterAI)",
+        "cmd": "TemporalLogicVerifier.audit_workflow_transitions(trace)",
+        "desc": "Applies Linear Temporal Logic (LTL) to verify required state machine steps"
+      },
+      {
+        "tool": "BurpAgent (Workflow Replay)",
+        "cmd": "BurpAgent.tamper_workflow_params(step_data)",
+        "desc": "Systematically tests parameter tampering across checkout workflows"
+      }
+    ],
+    "remediation": "Enforce all business logic rules strictly on the server side. Enforce monotonic progression through multi-step transactions using server-side session state. Validate numerical quantities for positive integer constraints.",
+    "description": "PortSwigger Business Logic vulnerabilities cover excessive trust in client-side controls, negative quantity cart manipulation, bypassing authentication flow via status step skipping, integer truncation in high-value transactions, and infinite money logic."
+  },
+  {
+    "id": "portswigger_host_header",
+    "item_type": "methodology",
+    "topic": "host_header_attacks",
+    "category": "PortSwigger Web Security: HTTP Host Header Attacks",
+    "name": "HTTP Host Header Injection & Password Reset Poisoning Methodology",
+    "cwe": "CWE-601",
+    "owasp_category": "A01:2021 - Broken Access Control",
+    "signals": [
+      "host_header_reflection_in_links",
+      "x_forwarded_host_reflection",
+      "duplicate_host_headers",
+      "password_reset_url_poisoning",
+      "host_header_ssrf",
+      "port_injection_in_host"
+    ],
+    "verification_strategy": "Inject modified Host headers (Host: attacker.com, Host: target.com:attacker.com, duplicate Host headers) and proxy headers (X-Forwarded-Host: attacker.com). Observe if the server reflects the untrusted Host value into generated absolute links (such as password reset links or script imports).",
+    "evidence_requirements": [
+      "injected_host_reflection_in_dom",
+      "poisoned_password_reset_token",
+      "virtual_host_routing_delta"
+    ],
+    "tools": [
+      {
+        "tool": "httpx",
+        "cmd": "httpx -u url -H 'Host: canary.host.com' -probe-headers 'Location'",
+        "desc": "Audits server redirect behavior when supplied an alternative Host header"
+      },
+      {
+        "tool": "ffuf (VHost)",
+        "cmd": "ffuf -u url -w wordlist.txt -H 'Host: FUZZ.target.com'",
+        "desc": "Fuzzes internal virtual hosts routed through Host header handling"
+      }
+    ],
+    "remediation": "Configure web servers to reject requests with unrecognized Host headers. Utilize server-side configuration settings (e.g. SERVER_NAME) rather than the HTTP Host header to construct absolute links and password reset URLs.",
+    "description": "PortSwigger Host Header attacks investigate basic password reset poisoning, web cache poisoning via Host header, routing-based SSRF via Host header, and bypassing connection state defenses via duplicate Host headers."
+  },
+  {
+    "id": "portswigger_oauth",
+    "item_type": "methodology",
+    "topic": "oauth",
+    "category": "PortSwigger Web Security: OAuth 2.0 & OpenID Connect",
+    "name": "OAuth 2.0 Authentication & Token Flow Vulnerability Methodology",
+    "cwe": "CWE-287",
+    "owasp_category": "A07:2021 - Identification and Authentication Failures",
+    "signals": [
+      "missing_state_parameter",
+      "weak_redirect_uri_validation",
+      "implicit_grant_token_leak",
+      "authorization_code_reuse",
+      "unverified_email_linking"
+    ],
+    "verification_strategy": "Inspect OAuth authorization URLs for presence of the 'state' parameter. Test open redirection or domain bypasses on 'redirect_uri' (e.g. redirect_uri=https://example.com.attacker.com or path traversal). Test linking third-party OAuth accounts with pre-existing email accounts without verification.",
+    "evidence_requirements": [
+      "authorization_code_exfiltration",
+      "state_parameter_omission_proof",
+      "account_takeover_link_evidence"
+    ],
+    "tools": [
+      {
+        "tool": "BrowserAgent (OAuth Flow)",
+        "cmd": "BrowserAgent.audit_oauth_dance(url)",
+        "desc": "Audits OAuth redirect_uri matching, state token presence, and authorization code lifecycle"
+      },
+      {
+        "tool": "BurpAgent (OAuth)",
+        "cmd": "BurpAgent.replay_oauth_callback(code, state)",
+        "desc": "Tests authorization code replay and cross-account code consumption"
+      }
+    ],
+    "remediation": "Enforce strict redirect_uri exact matching on the authorization server. Always require and cryptographically validate the state parameter to prevent CSRF in OAuth handshakes. Use PKCE (Proof Key for Code Exchange).",
+    "description": "PortSwigger OAuth labs demonstrate stealing OAuth access tokens via open redirect in redirect_uri, OAuth CSRF through state parameter omission, and account hijacking via unverified email address linking."
+  },
+  {
+    "id": "portswigger_file_upload",
+    "item_type": "methodology",
+    "topic": "file_upload",
+    "category": "PortSwigger Web Security: File Upload Vulnerabilities",
+    "name": "File Upload Restrictions & Execution Resistance Methodology",
+    "cwe": "CWE-434",
+    "owasp_category": "A03:2021 - Injection",
+    "signals": [
+      "unrestricted_file_extension",
+      "client_side_validation_only",
+      "mime_type_spoofing_accepted",
+      "path_traversal_in_filename",
+      "polyglot_file_accepted",
+      "uploaded_file_directly_executable"
+    ],
+    "verification_strategy": "Upload benign non-executable test files with varied extensions (.php5, .phtml, .shtml, .jpg.php), test Content-Type header spoofing (e.g. Content-Type: image/jpeg for text file), and test path traversal in the filename attribute (filename='../../test.txt'). Check if files are served from an isolated domain with execution disabled.",
+    "evidence_requirements": [
+      "uploaded_file_url_resolution",
+      "mime_type_override_acceptance",
+      "executable_handler_trigger"
+    ],
+    "tools": [
+      {
+        "tool": "AutonomousBrain (Upload Probe)",
+        "cmd": "AutonomousBrain.probe_upload_endpoint(url, file_field)",
+        "desc": "Safely assesses MIME-type, extension blacklists, and path sanitization without webshells"
+      },
+      {
+        "tool": "ffuf (Upload Fuzzing)",
+        "cmd": "ffuf -u url -F 'file=@test.FUZZ' -w extensions.txt",
+        "desc": "Fuzzes acceptable file extension policies on upload endpoints"
+      }
+    ],
+    "remediation": "Validate file extensions against a strict allowlist. Store uploaded files in an isolated object store or dedicated non-executable domain (e.g. AWS S3). Re-encode uploaded images to strip metadata and prevent polyglots.",
+    "description": "PortSwigger File Upload labs explore basic remote code execution via webshell upload, bypassing Content-Type checks, bypassing extension blacklists via secondary extensions or null bytes, and path traversal to place scripts in web roots."
+  },
+  {
+    "id": "portswigger_jwt",
+    "item_type": "methodology",
+    "topic": "jwt",
+    "category": "PortSwigger Web Security: JSON Web Token (JWT) Attacks",
+    "name": "JSON Web Token (JWT) Cryptographic & Header Flaws Methodology",
+    "cwe": "CWE-1270",
+    "owasp_category": "A07:2021 - Identification and Authentication Failures",
+    "signals": [
+      "none_algorithm_accepted",
+      "weak_hmac_secret",
+      "jwk_header_injection",
+      "jku_header_injection",
+      "kid_path_traversal_or_sqli",
+      "algorithm_confusion_rs256_to_hs256"
+    ],
+    "verification_strategy": "Decode JWT header and payload. Test changing alg to 'none' and stripping signature. Test embedding an attacker-controlled public key using the JWK header. Test algorithm confusion by signing the token using the server's public key with HMAC-SHA256 (HS256). Audit the 'kid' (Key ID) header for path traversal.",
+    "evidence_requirements": [
+      "none_alg_acceptance_proof",
+      "tampered_claims_accepted",
+      "jwt_cracked_secret_evidence"
+    ],
+    "tools": [
+      {
+        "tool": "jwt_tool",
+        "cmd": "python3 jwt_tool.py <TOKEN> -X a",
+        "desc": "Comprehensive JWT vulnerability auditor testing alg:none, JWK injection, and key confusion"
+      },
+      {
+        "tool": "AutonomousBrain (JWT Auditor)",
+        "cmd": "AutonomousBrain.audit_jwt(token)",
+        "desc": "Decodes tokens and audits header parameters (kid, jku, jwk, alg) for insecure defaults"
+      }
+    ],
+    "remediation": "Do not trust the 'alg' header provided by the client. Explicitly enforce the expected signature algorithm on the server. Reject tokens with alg='none' and use strong, unpredictable signing keys.",
+    "description": "PortSwigger JWT labs cover bypassing signature verification via alg:none, cracking weak HMAC secrets, header parameter injections (JWK, JKU, KID), and algorithm confusion attacks converting RS256 to HS256."
+  },
+  {
+    "id": "portswigger_prototype_pollution",
+    "item_type": "methodology",
+    "topic": "prototype_pollution",
+    "category": "PortSwigger Web Security: Prototype Pollution",
+    "name": "Client-Side & Server-Side Prototype Pollution Methodology",
+    "cwe": "CWE-1321",
+    "owasp_category": "A03:2021 - Injection",
+    "signals": [
+      "proto_property_in_json",
+      "constructor_prototype_in_query",
+      "recursive_object_merge",
+      "client_side_prototype_pollution_sink",
+      "server_side_nodejs_child_process"
+    ],
+    "verification_strategy": "Inject benign property mutations (__proto__[canary]=true or constructor[prototype][canary]=true) into query strings, hash fragments, or JSON POST bodies. In client-side testing, evaluate if Object.prototype.canary evaluates to true in the console. In server-side Node.js testing, observe differential response or status.",
+    "evidence_requirements": [
+      "polluted_property_reflection",
+      "object_prototype_canary_proof",
+      "dom_gadget_trigger_trace"
+    ],
+    "tools": [
+      {
+        "tool": "BrowserAgent (Prototype Pollution)",
+        "cmd": "BrowserAgent.probe_prototype_pollution(url)",
+        "desc": "Fuzzes query parameters for prototype injection and audits Object.prototype for new properties"
+      },
+      {
+        "tool": "DOM Invader (Burp Suite)",
+        "cmd": "DOMInvader.scan_prototype_pollution(target)",
+        "desc": "Discovers client-side prototype pollution sources and gadget flows in DOM"
+      }
+    ],
+    "remediation": "Use Object.create(null) for dictionary objects without prototypes. Freeze Object.prototype using Object.freeze(). Validate and sanitize user keys to block '__proto__', 'constructor', and 'prototype'.",
+    "description": "PortSwigger Prototype Pollution curriculum covers client-side pollution leading to DOM XSS, prototype pollution gadgets in third-party libraries, and server-side prototype pollution in Node.js applications triggering remote code execution."
+  },
+  {
+    "id": "portswigger_graphql",
+    "item_type": "methodology",
+    "topic": "graphql",
+    "category": "PortSwigger Web Security: GraphQL API Vulnerabilities",
+    "name": "GraphQL API Introspection, Batching & Authorization Methodology",
+    "cwe": "CWE-200",
+    "owasp_category": "A01:2021 - Broken Access Control",
+    "signals": [
+      "graphql_endpoint_exposed",
+      "schema_introspection_enabled",
+      "batching_query_supported",
+      "circular_relation_dos",
+      "missing_field_level_authorization",
+      "alias_overload"
+    ],
+    "verification_strategy": "Send a standard introspection query ({__schema{types{name}}}) to map available queries, mutations, and hidden fields. Test query batching (sending multiple operations in a single request array) to test for rate-limit bypasses on authentication mutations. Test object-level authorization on exposed mutations.",
+    "evidence_requirements": [
+      "introspection_schema_dump",
+      "batch_execution_response",
+      "unauthorized_field_disclosure"
+    ],
+    "tools": [
+      {
+        "tool": "clairvoyance",
+        "cmd": "clairvoyance -o schema.json https://example.com/graphql",
+        "desc": "Recovers GraphQL API schemas even when introspection is partially restricted"
+      },
+      {
+        "tool": "httpx",
+        "cmd": "httpx -u url/graphql -probe -d '{\"query\":\"{__typename}\"}'",
+        "desc": "Detects active GraphQL endpoints and schema reflection"
+      }
+    ],
+    "remediation": "Disable schema introspection in production environments. Enforce query depth and complexity limits to prevent resource exhaustion. Apply rigorous object-level access control checks within resolver functions.",
+    "description": "PortSwigger GraphQL labs explore uncovering hidden GraphQL endpoints, dumping schema documentation via introspection, bypassing brute-force defenses using query batching, and exploiting CSRF over GraphQL."
+  },
+  {
+    "id": "portswigger_race_conditions",
+    "item_type": "methodology",
+    "topic": "race_conditions",
+    "category": "PortSwigger Web Security: Race Conditions & Concurrency",
+    "name": "Race Conditions & Concurrent Request State Subversion Methodology",
+    "cwe": "CWE-362",
+    "owasp_category": "A04:2021 - Insecure Design",
+    "signals": [
+      "limit_overrun_vulnerability",
+      "multi_endpoint_race_window",
+      "time_of_check_time_of_use_toctou",
+      "single_use_token_reuse_under_load",
+      "partial_state_subversion"
+    ],
+    "verification_strategy": "Synchronize a burst of identical state-changing requests (e.g. 20-30 requests) using HTTP/2 single-packet multiplexing or TCP packet alignment. Measure if the application processes multiple transactions concurrently before the database commit or balance check finalizes.",
+    "evidence_requirements": [
+      "concurrent_status_200_cluster",
+      "balance_deficit_proof",
+      "multiple_redemption_evidence"
+    ],
+    "tools": [
+      {
+        "tool": "Turbo Intruder",
+        "cmd": "turbo_intruder.race_single_packet_engine(request, count=30)",
+        "desc": "High-speed concurrent request engine sending requests within a single TCP packet"
+      },
+      {
+        "tool": "AutonomousBrain (Concurrency)",
+        "cmd": "AutonomousBrain.probe_race_window(url, post_data)",
+        "desc": "Audits atomic locking mechanisms on sensitive transaction endpoints"
+      }
+    ],
+    "remediation": "Use atomic database operations (e.g. UPDATE ... WHERE balance >= amount) or apply row-level locking (SELECT ... FOR UPDATE). Enforce distributed locks (e.g. Redis Redlock) during critical transaction sections.",
+    "description": "PortSwigger Race Conditions labs cover limit overrun vulnerabilities (redeeming gift cards multiple times), multi-endpoint race conditions subverting email verification flows, and time-of-check time-of-use (TOCTOU) file race conditions."
+  },
+  {
+    "id": "portswigger_nosql_injection",
+    "item_type": "methodology",
+    "topic": "nosql_injection",
+    "category": "PortSwigger Web Security: NoSQL Injection",
+    "name": "NoSQL Injection (MongoDB, Document Stores) Methodology",
+    "cwe": "CWE-943",
+    "owasp_category": "A03:2021 - Injection",
+    "signals": [
+      "mongodb_query_operator_injection",
+      "json_request_body",
+      "boolean_nosql_differential",
+      "regex_search_operator",
+      "where_javascript_clause_execution"
+    ],
+    "verification_strategy": "In JSON requests, inject MongoDB query operators: {\"user\": {\"$ne\": \"\"}, \"pass\": {\"$ne\": \"\"}} or {\"username\": {\"$regex\": \"^admin\"}}. In URL parameters, test PHP/Node array syntax: user[$ne]=invalid. Compare response authentication status against standard probes.",
+    "evidence_requirements": [
+      "authentication_bypass_without_password",
+      "regex_differential_leak",
+      "nosql_syntax_error"
+    ],
+    "tools": [
+      {
+        "tool": "nosqlmap",
+        "cmd": "nosqlmap -u 'https://example.com/api/login' --attack 1",
+        "desc": "Automated NoSQL database injection and authentication bypass tester"
+      },
+      {
+        "tool": "AutonomousBrain (NoSQL Probe)",
+        "cmd": "AutonomousBrain.probe_nosql_operators(url, params)",
+        "desc": "Tests $ne, $gt, $regex operator injection across JSON and query string fields"
+      }
+    ],
+    "remediation": "Do not pass user-supplied JSON or object keys directly into NoSQL query methods. Use strict type validation (ensuring parameters are primitive strings, not objects) and use parameterized query builders or ODMs with schema validation.",
+    "description": "PortSwigger NoSQL Injection labs cover bypassing authentication using $ne and $regex operators, extracting data character-by-character via conditional regex evaluations, and exploiting MongoDB $where clauses executing JavaScript."
+  },
+  {
+    "id": "portswigger_api_testing",
+    "item_type": "methodology",
+    "topic": "api_testing",
+    "category": "PortSwigger Web Security: API Testing & Mass Assignment",
+    "name": "API Testing, OpenAPI Schema Inconsistencies & Mass Assignment Methodology",
+    "cwe": "CWE-915",
+    "owasp_category": "A01:2021 - Broken Access Control",
+    "signals": [
+      "openapi_swagger_json_exposed",
+      "hidden_api_parameters",
+      "mass_assignment_object_binding",
+      "http_method_override_accepted",
+      "unsupported_media_type_bypass"
+    ],
+    "verification_strategy": "Discover undocumented endpoints and schema definitions (/swagger.json, /openapi.json, /api/v1/docs). Fuzz for hidden administrative parameters (e.g. isAdmin, role, approved) using mass assignment in PUT/PATCH requests. Test HTTP verb overriding (X-HTTP-Method-Override: PUT) to bypass access filters.",
+    "evidence_requirements": [
+      "swagger_schema_definition",
+      "mass_assignment_privilege_mutation",
+      "method_override_response_delta"
+    ],
+    "tools": [
+      {
+        "tool": "kiterunner",
+        "cmd": "kr scan https://api.example.com -A=apiroutes-260227:10000 -x 8",
+        "desc": "Fast API routing & hidden endpoint brute-force based on asset wordlists"
+      },
+      {
+        "tool": "arjun",
+        "cmd": "arjun -u 'https://api.example.com/users/update' -m JSON",
+        "desc": "Discovers hidden HTTP request parameters across REST APIs"
+      }
+    ],
+    "remediation": "Do not bind HTTP request bodies directly to internal database domain models (mass assignment). Use explicit Data Transfer Objects (DTOs) defining allowed fields. Require authorization on all API routes.",
+    "description": "PortSwigger API Testing curriculum addresses discovering hidden API documentation, identifying unpublished endpoints, exploiting mass assignment to grant administrative privileges, and bypassing server-side input filters."
+  },
+  {
+    "id": "portswigger_web_llm",
+    "item_type": "methodology",
+    "topic": "web_llm_attacks",
+    "category": "PortSwigger Web Security: Web LLM Attacks",
+    "name": "Web LLM & AI Agent Prompt Injection & Agency Audit Methodology",
+    "cwe": "CWE-1426",
+    "owasp_category": "LLM01:2025 - Prompt Injection",
+    "signals": [
+      "llm_agent_with_tool_calling",
+      "direct_prompt_injection",
+      "indirect_prompt_injection",
+      "excessive_agency_in_tools",
+      "insecure_output_handling_xss"
+    ],
+    "verification_strategy": "Audit AI chat and automated agent workflows for prompt injection vulnerabilities: test direct injection overriding system prompts, and test indirect injection where untrusted external content (e.g. user profile, reviews, email) instructs the LLM to invoke tool functions unexpectedly.",
+    "evidence_requirements": [
+      "unauthorized_tool_execution_trace",
+      "system_prompt_disclosure_snippet",
+      "output_handling_xss_proof"
+    ],
+    "tools": [
+      {
+        "tool": "AutonomousBrain (LLM Agency Auditor)",
+        "cmd": "AutonomousBrain.audit_llm_flow(endpoint)",
+        "desc": "Probes LLM tool-calling boundaries and evaluates input/output sanitization"
+      },
+      {
+        "tool": "garak",
+        "cmd": "python3 -m garak --model_type rest --endpoint https://example.com/api/chat",
+        "desc": "Automated LLM vulnerability scanner assessing prompt injection and hallucination bounds"
+      }
+    ],
+    "remediation": "Treat all LLM inputs and retrieved context as untrusted. Restrict LLM tool agency (e.g. requiring explicit human-in-the-loop authorization for sensitive actions). Sanitize and contextually encode LLM outputs before rendering in web views.",
+    "description": "PortSwigger Web LLM attacks cover direct prompt injection manipulating assistant behavior, indirect prompt injection hiding instructions in web pages to trigger tool actions, and exploiting excessive agency where LLMs execute SQL or shell commands."
+  },
+  {
+    "id": "portswigger_cache_deception",
+    "item_type": "methodology",
+    "topic": "web_cache_deception",
+    "category": "PortSwigger Web Security: Web Cache Deception",
+    "name": "Web Cache Deception via Path & Delimiter Confusion Methodology",
+    "cwe": "CWE-444",
+    "owasp_category": "A05:2021 - Security Misconfiguration",
+    "signals": [
+      "path_confusion_static_extension",
+      "delimiter_discrepancy_semicolon",
+      "cdn_caching_authenticated_page",
+      "differing_path_normalization",
+      "cache_control_private_missing"
+    ],
+    "verification_strategy": "Append static asset extensions to dynamic authenticated endpoints (e.g. /my-account/profile.css, /my-account/profile;test.js, /my-account/profile%23test.png). Check if the origin web server serves private user data while intermediate caches (CDNs) store the response as a public static asset.",
+    "evidence_requirements": [
+      "unauthenticated_cache_hit_of_private_data",
+      "cache_header_hit_proof",
+      "delimiter_normalization_log"
+    ],
+    "tools": [
+      {
+        "tool": "httpx",
+        "cmd": "httpx -u 'https://example.com/account/settings.css' -probe-headers 'X-Cache,CF-Cache-Status'",
+        "desc": "Evaluates CDN caching behavior on dynamic routes with static extensions"
+      },
+      {
+        "tool": "BurpAgent (Cache Deception Probe)",
+        "cmd": "BurpAgent.audit_cache_deception(url)",
+        "desc": "Tests delimiter variations (; # ? / %00) on authenticated endpoints"
+      }
+    ],
+    "remediation": "Explicitly set Cache-Control: no-store, private on all authenticated dynamic responses. Ensure the web server and CDN use consistent path normalization rules and do not cache based solely on file extension.",
+    "description": "PortSwigger Web Cache Deception labs explore path confusion where reverse proxies cache responses based on .js or .css extensions appended to user profile URLs, exposing private account information and API tokens to anonymous users."
+  },
+  {
+    "id": "portswigger_essential_skills",
+    "item_type": "methodology",
+    "topic": "recon",
+    "category": "PortSwigger Web Security: Essential Skills & Burp Suite Techniques",
+    "name": "PortSwigger Essential Skills: Request Interception, Macros & Recon Methodology",
+    "cwe": "CWE-699",
+    "owasp_category": "A05:2021 - Security Misconfiguration",
+    "signals": [
+      "http_interception_flow",
+      "macro_session_management",
+      "dynamic_token_extraction",
+      "content_discovery_fuzzing",
+      "browser_devtools_profiling"
+    ],
+    "verification_strategy": "Utilize Burp Suite Proxy and Repeater to dissect request structure, configure macros to maintain active sessions across anti-CSRF token rotations, and conduct structured content discovery across hidden directories and administrative interfaces.",
+    "evidence_requirements": [
+      "session_macro_trace",
+      "http_transaction_log",
+      "discovered_asset_inventory"
+    ],
+    "tools": [
+      {
+        "tool": "BurpAgent",
+        "cmd": "BurpAgent.intercept_and_inspect()",
+        "desc": "Autonomous proxy interception and traffic analysis engine"
+      },
+      {
+        "tool": "ffuf",
+        "cmd": "ffuf -u https://example.com/FUZZ -w /wordlists/raft-medium-directories.txt",
+        "desc": "High-speed directory and file brute-force engine"
+      },
+      {
+        "tool": "BrowserAgent (Firefox)",
+        "cmd": "BrowserAgent.run(target, mode='auto')",
+        "desc": "Automated Firefox-esr browser exploration and session token extraction"
+      }
+    ],
+    "remediation": "Enforce defense-in-depth: strict input validation, principle of least privilege, centralized access control, and comprehensive audit logging across all application surfaces.",
+    "description": "PortSwigger Essential Skills curriculum teaches mastering Burp Suite Proxy, Repeater, Intruder, Match and Replace rules, macro session management, and systematically profiling target web applications."
+  }
+]

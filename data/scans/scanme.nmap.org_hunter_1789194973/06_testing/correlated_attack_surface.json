@@ -1,0 +1,28 @@
+[
+  {
+    "endpoint": "http://scanme.nmap.org/shared/css/nst.css?v=2",
+    "parameter": "v",
+    "potential_classes": [
+      "GeneralFuzz"
+    ],
+    "relevance_score": 1.8,
+    "reasons": [
+      "Endpoint is verified alive (HTTP 200)",
+      "Mapped to high-risk classes: GeneralFuzz"
+    ],
+    "is_live": true
+  },
+  {
+    "endpoint": "http://scanme.nmap.org/shared/css/nst-foot.css?v=2",
+    "parameter": "v",
+    "potential_classes": [
+      "GeneralFuzz"
+    ],
+    "relevance_score": 1.8,
+    "reasons": [
+      "Endpoint is verified alive (HTTP 200)",
+      "Mapped to high-risk classes: GeneralFuzz"
+    ],
+    "is_live": true
+  }
+]

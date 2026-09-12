@@ -1,0 +1,19 @@
+name: perimeter_matrix
+category: analysis
+description: "Map and analyze enterprise perimeter, identity gateways (Okta, Entra), SSL-VPNs, and cloud metadata posture"
+version: "1.0"
+input:
+  - live_hosts.txt
+  - technologies.txt
+output:
+  - enterprise_perimeter_analysis.txt
+depends_on:
+  - tech_detection
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 60
+max_retries: 2
+enabled: true

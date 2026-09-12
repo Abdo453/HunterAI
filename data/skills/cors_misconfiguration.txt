@@ -1,0 +1,4 @@
+=== Skill: CORS Misconfiguration ===
+- Patterns: API endpoints handling sensitive user data, Origin headers reflected in Access-Control-Allow-Origin with Access-Control-Allow-Credentials: true.
+- Attack Vectors: Arbitrary Origin reflection, null origin trust, sub-domain wildcards (*.target.com), trust on attacker origin.
+- Verification: Sending Origin: https://evil.com and receiving Access-Control-Allow-Origin: https://evil.com with Access-Control-Allow-Credentials: true.

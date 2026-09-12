@@ -1,0 +1,19 @@
+name: cloud_metadata_audit
+category: analysis
+description: "Audit target for multi-cloud metadata endpoints (AWS, GCP, Azure, DO, Alibaba) and SSRF risks"
+version: "1.0"
+input:
+  - live_hosts.txt
+  - urls.txt
+output:
+  - cloud_metadata_audit.txt
+depends_on:
+  - tech_detection
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 60
+max_retries: 2
+enabled: true

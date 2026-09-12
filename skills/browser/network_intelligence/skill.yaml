@@ -1,0 +1,23 @@
+name: network_intelligence
+category: browser
+description: "Intercept live browser XHR, Fetch, and background API requests to build dynamic API surface maps"
+version: "1.0"
+input:
+  - live_hosts.txt
+  - target_domain: str
+output:
+  - requests.txt
+  - api_endpoints.txt
+  - parameters.txt
+  - responses.txt
+depends_on:
+  - browser_recon
+next_skills:
+  - api_surface_audit
+  - form_intelligence
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 120
+max_retries: 2
+enabled: true

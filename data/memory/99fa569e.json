@@ -1,0 +1,21 @@
+{
+  "id": "99fa569e",
+  "timestamp": "1787124383.0193043",
+  "user_input": "هاى",
+  "task_type": "CODING",
+  "route": "CODING",
+  "models_used": [],
+  "final_answer": "I'm sorry, but I didn't understand your request. Could you please provide more details or clarify what you need help with?",
+  "duration_seconds": 20.83,
+  "metadata": {
+    "gpu_status": {
+      "locked": false,
+      "current_model": null,
+      "elapsed_seconds": 0,
+      "queue_length": 0,
+      "total_runs": 1,
+      "total_unloads": 1
+    },
+    "selected_model": "auto"
+  }
+}

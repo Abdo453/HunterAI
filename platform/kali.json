@@ -1,0 +1,43 @@
+{
+  "os": "linux",
+  "distribution": "kali",
+  "shell": "/bin/bash",
+  "path_separator": "/",
+  "default_ollama_host": "http://192.168.1.3:11434",
+  "default_tools_path": "/usr/bin",
+  "go_tools_path": "$HOME/go/bin",
+  "tool_locations": {
+    "nmap": "/usr/bin/nmap",
+    "subfinder": "$HOME/go/bin/subfinder",
+    "httpx": "$HOME/go/bin/httpx",
+    "katana": "$HOME/go/bin/katana",
+    "nuclei": "$HOME/go/bin/nuclei",
+    "ffuf": "$HOME/go/bin/ffuf",
+    "sqlmap": "/usr/bin/sqlmap",
+    "wpscan": "/usr/bin/wpscan",
+    "curl": "/usr/bin/curl"
+  },
+  "browser_preferences": ["firefox-esr", "chromium"],
+  "wordlist_roots": [
+    "/home/kali/wordlist/SecLists",
+    "/home/kali/wordlist",
+    "/usr/share/wordlists/seclists",
+    "/usr/share/wordlists"
+  ],
+  "wordlists": {
+    "dns_deep": "/home/kali/wordlist/SecLists/Discovery/DNS/subdomains-top1million-110000.txt",
+    "dns_quick": "/home/kali/wordlist/SecLists/Discovery/DNS/subdomains-top1million-5000.txt",
+    "dns_trickest": "/home/kali/wordlist/SecLists/Discovery/DNS/bug-bounty-program-subdomains-trickest-inventory.txt",
+    "dns_bitquark": "/home/kali/wordlist/SecLists/Discovery/DNS/bitquark-subdomains-top100000.txt",
+    "dns_jhaddix": "/home/kali/wordlist/SecLists/Discovery/DNS/dns-Jhaddix.txt",
+    "web_common": "/home/kali/wordlist/SecLists/Discovery/Web-Content/common.txt",
+    "web_medium": "/home/kali/wordlist/SecLists/Discovery/Web-Content/directory-list-2.3-medium.txt",
+    "web_raft_dirs": "/home/kali/wordlist/SecLists/Discovery/Web-Content/raft-large-directories.txt",
+    "web_raft_files": "/home/kali/wordlist/SecLists/Discovery/Web-Content/raft-large-files.txt",
+    "parameters": "/home/kali/wordlist/SecLists/Discovery/Web-Content/burp-parameter-names.txt",
+    "fuzzing": "/home/kali/wordlist/SecLists/Fuzzing",
+    "payloads": "/home/kali/wordlist/SecLists/Payloads",
+    "passwords": "/home/kali/wordlist/SecLists/Passwords"
+  },
+  "notes": "Execution host for autonomous network reconnaissance and penetration testing."
+}

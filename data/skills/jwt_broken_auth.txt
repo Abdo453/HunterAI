@@ -1,0 +1,4 @@
+=== Skill: Broken Authentication & JWT Vulnerabilities ===
+- Patterns: Authorization: Bearer eyJ..., session cookies, reset password endpoints, OTP/2FA forms, login/registration fields.
+- Attack Vectors: None algorithm (alg: none), weak HMAC secrets, jku/jwks_uri header tampering, token replay, privilege escalation via role claim (admin: true).
+- Verification: Successfully forged JWT token accepted by API resulting in elevated privileges or session hijack.

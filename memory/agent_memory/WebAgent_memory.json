@@ -1,0 +1,10 @@
+{
+  "sqli_success_api.testtarget.local_id": {
+    "timestamp": 1789175288.4687045,
+    "data": {
+      "technique": "boolean_differential",
+      "param": "id",
+      "confidence": 0.98
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "manifest_version": "1.0.0",
+  "inference_backend": "ollama",
+  "default_host": "http://127.0.0.1:11434",
+  "models": [
+    {
+      "id": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
+      "alias": "WhiteRabbitNeo",
+      "role": "Master Offensive Strategist & Security Reasoning",
+      "parameters": "8B",
+      "context_window": 8192,
+      "responsibilities": [
+        "Business logic analysis",
+        "Authorization boundaries and IDOR hypothesis formulation",
+        "Differential verification planning",
+        "WAF evasion strategy"
+      ],
+      "requires_gpu": true
+    },
+    {
+      "id": "xploiter/pentester:latest",
+      "alias": "xploiter",
+      "role": "Rapid Recon Scout & Noise Filtering",
+      "parameters": "1.6GB",
+      "context_window": 4096,
+      "responsibilities": [
+        "Mass tool output parsing and noise triage",
+        "Host reachability assessment",
+        "Fast reconnaissance prioritization"
+      ],
+      "requires_gpu": false
+    },
+    {
+      "id": "qwen2.5-coder:14b",
+      "alias": "qwen-coder",
+      "role": "Code Intelligence & Context Compressor",
+      "parameters": "14B",
+      "context_window": 16384,
+      "responsibilities": [
+        "JavaScript AST auditing",
+        "Hidden endpoint and parameter extraction",
+        "Client-side secret identification",
+        "Context compression into standardized knowledge schemas"
+      ],
+      "requires_gpu": true
+    }
+  ]
+}

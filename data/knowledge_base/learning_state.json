@@ -1,0 +1,15 @@
+{
+  "last_run": {
+    "cisa_kev": "2026-09-08T23:09:13.816965",
+    "nvd": "2026-09-08T23:09:18.684626",
+    "medium": "2026-09-08T23:09:21.837499",
+    "payloads": "2026-09-08T23:09:28.222448",
+    "portswigger": "2026-09-03T17:10:24.964324",
+    "exploit_db": "2026-09-08T23:09:31.057185"
+  },
+  "total_articles_learned": 0,
+  "total_cves_indexed": 60,
+  "total_payloads_saved": 264,
+  "last_full_run": "2026-09-08T23:09:33.075945",
+  "learning_cycles": 2
+}

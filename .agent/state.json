@@ -1,0 +1,13 @@
+{
+  "mission_id": "mission_1789172339",
+  "target": "https://example.com/products?category=1",
+  "status": "COMPLETED",
+  "current_step": 2,
+  "max_steps": 2,
+  "current_focus_endpoint": "https://example.com/products?category=1",
+  "auth_state": "NONE",
+  "waf_detected": false,
+  "tokens_estimated": 0,
+  "created_at": 1789172339.9545128,
+  "updated_at": 1789172929.1992126
+}

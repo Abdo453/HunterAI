@@ -1,0 +1,27 @@
+name: browser_recon
+category: browser
+description: "Deep headless browser inspection of live DOM, links, forms, scripts, cookies, storage, and visual screenshot"
+version: "1.0"
+input:
+  - live_hosts.txt
+  - target_domain: str
+output:
+  - pages.txt
+  - links.txt
+  - forms.txt
+  - inputs.txt
+  - scripts.txt
+  - cookies.txt
+  - storage.txt
+depends_on:
+  - live_host_detection
+next_skills:
+  - network_intelligence
+  - form_intelligence
+  - crawling
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 120
+max_retries: 2
+enabled: true

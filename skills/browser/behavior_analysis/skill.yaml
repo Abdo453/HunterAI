@@ -1,0 +1,20 @@
+name: behavior_analysis
+category: browser
+description: "Simulate real user behavior (clicking tabs, load more, pagination) to discover dynamic client-side state transitions and unlinked endpoints"
+version: "1.0"
+input:
+  - links.txt
+  - forms.txt
+output:
+  - behavior_actions.json
+  - state_graph.txt
+depends_on:
+  - form_intelligence
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 120
+max_retries: 2
+enabled: true

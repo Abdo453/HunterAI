@@ -1,0 +1,35 @@
+-Bug Bounty Program (BBP): is when a company offers monetary rewards for valid security vulnerabilities.
+
+You Get:
+
+1-Money
+2-Hall of Fame
+3-Reputation
+4-Sometimes swag
+
+-Vulnerability Disclosure Program (VDP): allows you to report vulnerabilities, but No guaranteed payment
+
+You Get:
+
+1-Hall of Fame
+2-Sometimes swag
+3-Sometimes discretionary rewards
+----------------------------------------------------------------------------------------------------------------------
+
+-Platforms Programs: hosted on platforms like:
+
+1-HackerOne
+2-Bugcrowd
+3-Intigriti
+
+-External  Programs/Self-Hosted Programs: These are programs NOT on HackerOne/Bugcrowd.
+
+They run on:
+
+1-Company website --> https://t.me/ForBugHunters/13
+2-security@company.com --> https://mailmeteor.com/email-checker
+----------------------------------------------------------------------------------------------------------------------
+
+-Public Program: Anyone can hack.
+
+-Private Program: Invitation only.

@@ -1,0 +1,30 @@
+[
+  {
+    "pattern": "/api/users/123 user_id",
+    "vuln_type": "BOLA",
+    "reason": "Public endpoint confirmed",
+    "endpoint": "/api/users/123",
+    "recorded_at": 1788373537.6400821
+  },
+  {
+    "pattern": "/api/users/123 user_id",
+    "vuln_type": "BOLA",
+    "reason": "Public endpoint confirmed",
+    "endpoint": "/api/users/123",
+    "recorded_at": 1788373709.5801938
+  },
+  {
+    "pattern": "/api/users/123 user_id",
+    "vuln_type": "BOLA",
+    "reason": "Public endpoint confirmed",
+    "endpoint": "/api/users/123",
+    "recorded_at": 1788373839.8781476
+  },
+  {
+    "pattern": "/api/users/123 user_id",
+    "vuln_type": "BOLA",
+    "reason": "Public endpoint confirmed",
+    "endpoint": "/api/users/123",
+    "recorded_at": 1788380729.511807
+  }
+]

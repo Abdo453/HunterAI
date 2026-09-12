@@ -1,0 +1,25 @@
+{
+  "job_id": "job_1788961778",
+  "target": "api.testtarget.local",
+  "generated_at": 1788961778.1095486,
+  "summary_tags": [
+    "API found",
+    "Login page found",
+    "Laravel detected"
+  ],
+  "evidence_count": 1,
+  "findings": [
+    {
+      "title": "SQL Injection in id",
+      "cwe": "SQL Injection",
+      "cwe_details": {
+        "name": "SQL Injection",
+        "category": "Injection",
+        "severity": "High"
+      },
+      "url": "https://api.testtarget.local/api/v1/items",
+      "evidence": "Boolean differential confirmed: 1 AND 1=1 returns active record (200 OK, 62 bytes); 1 AND 1=2 returns empty null (200 OK, 38 bytes).",
+      "remediation": "Use prepared statements with parameterized inputs."
+    }
+  ]
+}

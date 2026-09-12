@@ -1,0 +1,24 @@
+name: subdomain_enum
+category: recon
+description: "Enumerate subdomains using subfinder, assetfinder, findomain, and crt.sh"
+version: "1.0"
+input:
+  - target_domain: str
+output:
+  - subdomains.txt
+  - subdomains_unique.txt
+depends_on: []
+next_skills:
+  - live_host_detection
+  - dns_enum
+fallback_skills:
+  - dns_enum
+tools_required:
+  - subfinder
+fallback_tools:
+  - assetfinder
+  - findomain
+  - crt.sh
+timeout_seconds: 180
+max_retries: 2
+enabled: true

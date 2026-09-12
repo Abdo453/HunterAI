@@ -1,0 +1,27 @@
+name: crawling
+category: web
+description: "Crawl all URLs using katana, gospider, and gau"
+version: "1.0"
+input:
+  - live_hosts.txt
+  - target_domain: str
+output:
+  - urls.txt
+  - urls_alive.txt
+depends_on:
+  - live_host_detection
+next_skills:
+  - parameter_discovery
+  - endpoint_discovery
+  - js_analysis
+fallback_skills:
+  - endpoint_discovery
+tools_required:
+  - katana
+fallback_tools:
+  - gospider
+  - gau
+  - waybackurls
+timeout_seconds: 180
+max_retries: 2
+enabled: true

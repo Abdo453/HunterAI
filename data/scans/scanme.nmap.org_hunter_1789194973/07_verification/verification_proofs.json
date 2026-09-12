@@ -1,0 +1,30 @@
+[
+  {
+    "id": "55a43fa7",
+    "finding": "Open Network Services (2 ports)",
+    "asset": "scanme.nmap.org",
+    "endpoint": "scanme.nmap.org",
+    "parameter": null,
+    "vuln_type": "OpenPorts",
+    "status": "CONFIRMED",
+    "severity": "Info",
+    "confidence": 0.95,
+    "cvss_score": 0.0,
+    "cvss_vector": null,
+    "cwe": "CWE-20",
+    "owasp_top10": "A03:2021-Injection",
+    "evidence": [
+      {
+        "type": "controlled_execution",
+        "description": "Port scan confirmed 2 open TCP services",
+        "proof_snippet": "22/tcp open  ssh     OpenSSH 6.6.1p1 Ubuntu 2ubuntu2.13 (Ubuntu Linux; protocol 2.0)\n80/tcp open  http    Apache httpd 2.4.7 ((Ubuntu))",
+        "verified": true
+      }
+    ],
+    "reproduction": null,
+    "false_positive_checks": {},
+    "remediation": "Validate and sanitize all user input.",
+    "tool": "nmap",
+    "created_at": 1789194997.306594
+  }
+]

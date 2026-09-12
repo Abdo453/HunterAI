@@ -1,0 +1,4 @@
+=== Skill: Business Logic & Race Conditions ===
+- Patterns: Checkout flows, quantity/price parameters (?price=, ?qty=-1, ?discount=), coupon redemption, balance transfer, voting endpoints.
+- Attack Vectors: Negative values, fractional amounts, price tampering, simultaneous concurrent requests (Race Condition / TOCTOU), skipping checkout steps.
+- Verification: State inconsistency, unintended monetary/credit increase, or bypassing verification checks.

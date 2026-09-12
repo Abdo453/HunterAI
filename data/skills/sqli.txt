@@ -1,0 +1,4 @@
+=== Skill: SQL Injection (SQLi) ===
+- Patterns: Input fields, search bars, filter parameters (?id=, ?cat=, ?search=, ?sort=, ?order=, ?page=), HTTP headers (User-Agent, X-Forwarded-For).
+- Attack Vectors: Error-based payloads (' OR '1'='1), UNION-based extraction (UNION SELECT NULL,NULL), Boolean-blind, Time-based (SLEEP(5), pg_sleep(5), WAITFOR DELAY '0:0:5').
+- Verification: Database error messages in response, timing delay differences (e.g. 5+ seconds), or altered query output.

@@ -1,0 +1,26 @@
+{
+  "cve-2024-1234": {
+    "cached_at": 1789175281.8437467,
+    "report": {
+      "id": "RES-469b27d2",
+      "query": "CVE-2024-1234",
+      "topic": "CVE-2024-1234",
+      "cve_id": "CVE-2024-1234",
+      "summary": "Security Vulnerability identified under CVE-2024-1234.",
+      "affected_components": [],
+      "root_cause_analysis": "Specific input validation or logic flaw documented in CVE-2024-1234.",
+      "detection_heuristics": [],
+      "mitigation": "",
+      "sources": [
+        {
+          "source_name": "NVD NIST Database / CVE Project (CVE-2024-1234)",
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-1234",
+          "confidence": 0.9,
+          "retrieved_at": 1789175281.8437467
+        }
+      ],
+      "arabic_summary": "ثغرة أمنية مسجلة برقم CVE-2024-1234، تؤثر على المكونات المعنية وتتطلب تحديث الإصدار أو تطبيق الترقيع الأمني.",
+      "cached": false
+    }
+  }
+}

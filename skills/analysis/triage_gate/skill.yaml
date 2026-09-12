@@ -1,0 +1,17 @@
+name: triage_gate
+category: analysis
+description: "Run the 7-Question Gate and VRT / CWE taxonomy validation on all mission findings"
+version: "1.0"
+input:
+  - all_mission_findings
+output:
+  - triage_gate_report.md
+depends_on: []
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 60
+max_retries: 2
+enabled: true

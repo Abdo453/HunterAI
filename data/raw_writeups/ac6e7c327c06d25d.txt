@@ -1,0 +1,1 @@
+XSS in search parameter q with reflected output unencoded

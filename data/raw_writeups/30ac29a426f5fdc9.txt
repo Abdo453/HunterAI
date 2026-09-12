@@ -1,0 +1,2 @@
+How a decades-old ambiguity in the HTTP specification still lets attackers hijack sessions, poison caches, and bypass security controls.
+Continue reading on Medium » CVEs:  Techniques:

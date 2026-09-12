@@ -1,0 +1,1874 @@
+{
+  "target.local": {
+    "host": "target.local",
+    "created_at": 1788367547.396336,
+    "endpoints": [],
+    "confirmed_findings": [
+      {
+        "finding_id": "FND-fe7a2692",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788367547.397974
+      },
+      {
+        "finding_id": "FND-da25a1a3",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788367577.670638
+      },
+      {
+        "finding_id": "FND-1198e403",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788368639.905988
+      },
+      {
+        "finding_id": "FND-fbe71247",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788368697.0401704
+      },
+      {
+        "finding_id": "FND-dfd1cd65",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369449.966906
+      },
+      {
+        "finding_id": "FND-568471e0",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369492.005953
+      },
+      {
+        "finding_id": "FND-75f92882",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369561.2141435
+      },
+      {
+        "finding_id": "FND-6c390fe9",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369685.6376545
+      },
+      {
+        "finding_id": "FND-3db7f44a",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369857.0934608
+      },
+      {
+        "finding_id": "FND-4d9b4cc2",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788371021.4856756
+      },
+      {
+        "finding_id": "FND-7d5f6881",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788371294.10562
+      },
+      {
+        "finding_id": "FND-5609bd79",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788371726.4435518
+      },
+      {
+        "finding_id": "FND-343ea950",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788373568.583064
+      },
+      {
+        "finding_id": "FND-ed4cbcc9",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788373740.2102423
+      },
+      {
+        "finding_id": "FND-2d71a8f7",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788373870.5749962
+      },
+      {
+        "finding_id": "FND-92ad544f",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788380761.080213
+      },
+      {
+        "finding_id": "FND-349b31a8",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788381092.2220385
+      },
+      {
+        "finding_id": "FND-2a04bea8",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788383449.3939009
+      },
+      {
+        "finding_id": "FND-2f42625c",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788384218.8929381
+      },
+      {
+        "finding_id": "FND-d80e2342",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788386247.4032993
+      },
+      {
+        "finding_id": "FND-89b3dd0b",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788441366.8069825
+      },
+      {
+        "finding_id": "FND-b970f853",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788442613.9283943
+      },
+      {
+        "finding_id": "FND-908a0493",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788443112.7494392
+      },
+      {
+        "finding_id": "FND-07411265",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788443404.113578
+      },
+      {
+        "finding_id": "FND-a2800003",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788443892.0284202
+      },
+      {
+        "finding_id": "FND-97ea30a6",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788444247.9689126
+      },
+      {
+        "finding_id": "FND-21c56cff",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788444765.774208
+      },
+      {
+        "finding_id": "FND-e91b5be8",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788445191.149838
+      },
+      {
+        "finding_id": "FND-83828097",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788445492.3450089
+      },
+      {
+        "finding_id": "FND-c473619b",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788445791.3110838
+      },
+      {
+        "finding_id": "FND-676eb959",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788446004.6238425
+      },
+      {
+        "finding_id": "FND-a73408f5",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788446187.9303062
+      },
+      {
+        "finding_id": "FND-abd169bb",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788446446.6936705
+      },
+      {
+        "finding_id": "FND-b796d9e5",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788449959.913604
+      },
+      {
+        "finding_id": "FND-abe7ee9f",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788451039.4533906
+      },
+      {
+        "finding_id": "FND-f043ec33",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788453787.3741896
+      },
+      {
+        "finding_id": "FND-c12d6c29",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788470832.9434767
+      },
+      {
+        "finding_id": "FND-1270e96a",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788522048.806475
+      },
+      {
+        "finding_id": "FND-fe5c9842",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788730357.3797216
+      },
+      {
+        "finding_id": "FND-98ae6750",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788892460.5121028
+      },
+      {
+        "finding_id": "FND-d91c911f",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788899457.072321
+      },
+      {
+        "finding_id": "FND-b3c79239",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788954985.5506535
+      },
+      {
+        "finding_id": "FND-4d6128fa",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788959741.1713808
+      },
+      {
+        "finding_id": "FND-0d47f888",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788965925.8864226
+      },
+      {
+        "finding_id": "FND-5b619149",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1789175524.3392806
+      }
+    ],
+    "suspected_weaknesses": [],
+    "auth_patterns": {},
+    "waf_detected": null
+  },
+  "app.testlab.local": {
+    "host": "app.testlab.local",
+    "created_at": 1788367547.6985877,
+    "endpoints": [],
+    "confirmed_findings": [
+      {
+        "finding_id": "FND-5456233a",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788367547.6991248
+      },
+      {
+        "finding_id": "FND-8f5dfaa1",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788367577.7339985
+      },
+      {
+        "finding_id": "FND-ea0b8d4f",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788368639.9694395
+      },
+      {
+        "finding_id": "FND-bda7e523",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788368697.0976274
+      },
+      {
+        "finding_id": "FND-2540b410",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369450.0318518
+      },
+      {
+        "finding_id": "FND-658b3aa0",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369492.0668805
+      },
+      {
+        "finding_id": "FND-74f8434c",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369561.2761629
+      },
+      {
+        "finding_id": "FND-5b48fea5",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369685.698393
+      },
+      {
+        "finding_id": "FND-abb0d477",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788369857.1495912
+      },
+      {
+        "finding_id": "FND-f9e955be",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788371021.5423737
+      },
+      {
+        "finding_id": "FND-5782c8e7",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788371294.1607978
+      },
+      {
+        "finding_id": "FND-0736cefd",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788371726.5048673
+      },
+      {
+        "finding_id": "FND-a75c44f8",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788373568.6422122
+      },
+      {
+        "finding_id": "FND-e1df8282",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788373740.2815964
+      },
+      {
+        "finding_id": "FND-c1ac71f1",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788373870.6575942
+      },
+      {
+        "finding_id": "FND-02b6405f",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788380761.2469425
+      },
+      {
+        "finding_id": "FND-82312e1f",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788381092.3779662
+      },
+      {
+        "finding_id": "FND-524741b0",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788383449.4523346
+      },
+      {
+        "finding_id": "FND-d1606f5e",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788384218.9566486
+      },
+      {
+        "finding_id": "FND-1407a590",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788386247.4641345
+      },
+      {
+        "finding_id": "FND-381e44a2",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788441366.859475
+      },
+      {
+        "finding_id": "FND-d802344a",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788442613.9890099
+      },
+      {
+        "finding_id": "FND-b8172e21",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788443112.8017066
+      },
+      {
+        "finding_id": "FND-0087497b",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788443404.1657543
+      },
+      {
+        "finding_id": "FND-44173ead",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788443892.101867
+      },
+      {
+        "finding_id": "FND-0b7e6110",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788444248.0242157
+      },
+      {
+        "finding_id": "FND-e28ecd87",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788444765.8481805
+      },
+      {
+        "finding_id": "FND-25a62e06",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788445191.2181768
+      },
+      {
+        "finding_id": "FND-8fe26f53",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788445492.398873
+      },
+      {
+        "finding_id": "FND-5d8c416b",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788445791.369579
+      },
+      {
+        "finding_id": "FND-6ba3db2d",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788446004.6790805
+      },
+      {
+        "finding_id": "FND-f3a7981d",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788446187.98126
+      },
+      {
+        "finding_id": "FND-0001ae84",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788446446.7540984
+      },
+      {
+        "finding_id": "FND-3765b0b1",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788449959.971011
+      },
+      {
+        "finding_id": "FND-55374829",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788451039.505218
+      },
+      {
+        "finding_id": "FND-369da2aa",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788453787.4442458
+      },
+      {
+        "finding_id": "FND-e7e56d0b",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788470833.0237908
+      },
+      {
+        "finding_id": "FND-73bb2867",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788522048.8661408
+      },
+      {
+        "finding_id": "FND-880b85d6",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788730357.431638
+      },
+      {
+        "finding_id": "FND-1b3709e2",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788892460.6000144
+      },
+      {
+        "finding_id": "FND-0a13e79e",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788899457.1818352
+      },
+      {
+        "finding_id": "FND-7f8422e3",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788954985.6056068
+      },
+      {
+        "finding_id": "FND-ea1e9fc8",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788959741.2411525
+      },
+      {
+        "finding_id": "FND-1544db1d",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1788965925.9554298
+      },
+      {
+        "finding_id": "FND-9940926e",
+        "vuln_type": "BOLA",
+        "confidence": 0.777,
+        "timestamp": 1789175524.4121718
+      }
+    ],
+    "suspected_weaknesses": [],
+    "auth_patterns": {},
+    "waf_detected": null
+  },
+  "api.payments.local": {
+    "host": "api.payments.local",
+    "created_at": 1788368639.5381799,
+    "endpoints": [],
+    "confirmed_findings": [
+      {
+        "finding_id": "FND-411e4bca",
+        "vuln_type": "Info_Disclosure",
+        "confidence": 0.792,
+        "timestamp": 1788368639.5381799
+      },
+      {
+        "finding_id": "FND-c7d68431",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788368696.9367173
+      },
+      {
+        "finding_id": "FND-293b446b",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369449.4680507
+      },
+      {
+        "finding_id": "FND-95676ec8",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369449.5538363
+      },
+      {
+        "finding_id": "FND-09a43720",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369449.5565782
+      },
+      {
+        "finding_id": "FND-a74dd915",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369449.5592988
+      },
+      {
+        "finding_id": "FND-49cf9d5e",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369449.5615494
+      },
+      {
+        "finding_id": "FND-8e49fc12",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369491.5420227
+      },
+      {
+        "finding_id": "FND-b4d92667",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369491.6238213
+      },
+      {
+        "finding_id": "FND-eabbb7fd",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369491.6266434
+      },
+      {
+        "finding_id": "FND-abb08980",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369491.6289232
+      },
+      {
+        "finding_id": "FND-2f7c5a11",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369491.6315572
+      },
+      {
+        "finding_id": "FND-c5f224ca",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369560.7524173
+      },
+      {
+        "finding_id": "FND-54c785b0",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369560.8424554
+      },
+      {
+        "finding_id": "FND-08e64d9d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369560.8459845
+      },
+      {
+        "finding_id": "FND-41f1e23e",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369560.8493176
+      },
+      {
+        "finding_id": "FND-c3afbdad",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369560.8514075
+      },
+      {
+        "finding_id": "FND-44abe941",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369685.1913183
+      },
+      {
+        "finding_id": "FND-d3cafb60",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369685.2858171
+      },
+      {
+        "finding_id": "FND-870da1bd",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369685.2888947
+      },
+      {
+        "finding_id": "FND-641381e3",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369685.291721
+      },
+      {
+        "finding_id": "FND-a4050fa5",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369685.294819
+      },
+      {
+        "finding_id": "FND-315c0bc8",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369856.9003932
+      },
+      {
+        "finding_id": "FND-0f6ca828",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369856.990316
+      },
+      {
+        "finding_id": "FND-9feba8d6",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369856.9932613
+      },
+      {
+        "finding_id": "FND-394fdd18",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369856.9960444
+      },
+      {
+        "finding_id": "FND-e085ffe2",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788369856.9981186
+      },
+      {
+        "finding_id": "FND-eb519ce6",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371021.1746793
+      },
+      {
+        "finding_id": "FND-7406aef4",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371021.3812056
+      },
+      {
+        "finding_id": "FND-3a4d942a",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371021.3844724
+      },
+      {
+        "finding_id": "FND-07cff2ee",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371021.38719
+      },
+      {
+        "finding_id": "FND-6d44f203",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371021.391276
+      },
+      {
+        "finding_id": "FND-691c9c12",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371263.883216
+      },
+      {
+        "finding_id": "FND-f5285004",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371263.9684923
+      },
+      {
+        "finding_id": "FND-7b0e1d06",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371263.9719594
+      },
+      {
+        "finding_id": "FND-6ac7390f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371263.9748104
+      },
+      {
+        "finding_id": "FND-3eb69b7a",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371263.977383
+      },
+      {
+        "finding_id": "FND-25338d83",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371696.198097
+      },
+      {
+        "finding_id": "FND-44798790",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371696.2846167
+      },
+      {
+        "finding_id": "FND-2f38fa75",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371696.2874818
+      },
+      {
+        "finding_id": "FND-c6f4c02d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371696.290551
+      },
+      {
+        "finding_id": "FND-13e08f29",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788371696.293746
+      },
+      {
+        "finding_id": "FND-3b3175a4",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373538.344773
+      },
+      {
+        "finding_id": "FND-5529425f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373538.43357
+      },
+      {
+        "finding_id": "FND-1f804a30",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373538.4380207
+      },
+      {
+        "finding_id": "FND-cb08379b",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373538.44161
+      },
+      {
+        "finding_id": "FND-2b350c6d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373538.4446712
+      },
+      {
+        "finding_id": "FND-6f4be002",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373710.0047443
+      },
+      {
+        "finding_id": "FND-3df049ab",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373710.0973043
+      },
+      {
+        "finding_id": "FND-1dac24ff",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373710.1005855
+      },
+      {
+        "finding_id": "FND-2c8275ea",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373710.1038082
+      },
+      {
+        "finding_id": "FND-2f0008c3",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373710.106369
+      },
+      {
+        "finding_id": "FND-73364183",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373840.3010511
+      },
+      {
+        "finding_id": "FND-a66790be",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373840.4407623
+      },
+      {
+        "finding_id": "FND-e01d3f78",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373840.4449694
+      },
+      {
+        "finding_id": "FND-90cf0ebc",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373840.4493346
+      },
+      {
+        "finding_id": "FND-3cc0bc5c",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788373840.4523373
+      },
+      {
+        "finding_id": "FND-3cdb4897",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788380730.4231586
+      },
+      {
+        "finding_id": "FND-317af726",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788380730.7598295
+      },
+      {
+        "finding_id": "FND-a8d1503f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788380730.7663965
+      },
+      {
+        "finding_id": "FND-cc2db0e6",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788380730.7754364
+      },
+      {
+        "finding_id": "FND-37762c3f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788380730.784433
+      },
+      {
+        "finding_id": "FND-38c0f27a",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788381061.6828384
+      },
+      {
+        "finding_id": "FND-73efd244",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788381061.8908658
+      },
+      {
+        "finding_id": "FND-b5ca1d44",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788381061.8992572
+      },
+      {
+        "finding_id": "FND-149af2f9",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788381061.9081464
+      },
+      {
+        "finding_id": "FND-85146d15",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788381061.9167135
+      },
+      {
+        "finding_id": "FND-40130189",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788383419.1850874
+      },
+      {
+        "finding_id": "FND-404b180d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788383419.2617476
+      },
+      {
+        "finding_id": "FND-efd754c4",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788383419.265543
+      },
+      {
+        "finding_id": "FND-2ed0623d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788383419.2688508
+      },
+      {
+        "finding_id": "FND-b370f6c6",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788383419.2718627
+      },
+      {
+        "finding_id": "FND-a433c5a5",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788384188.6757772
+      },
+      {
+        "finding_id": "FND-9c8f3390",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788384188.7423425
+      },
+      {
+        "finding_id": "FND-cf82bd16",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788384188.7463434
+      },
+      {
+        "finding_id": "FND-606c9f71",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788384188.7493422
+      },
+      {
+        "finding_id": "FND-8e9eb75c",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788384188.753351
+      },
+      {
+        "finding_id": "FND-e1fb2e4f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788386231.2028966
+      },
+      {
+        "finding_id": "FND-8267a55c",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788386231.2709622
+      },
+      {
+        "finding_id": "FND-223d88aa",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788386231.2748573
+      },
+      {
+        "finding_id": "FND-0c84b946",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788386231.281038
+      },
+      {
+        "finding_id": "FND-9b13debc",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788386231.285006
+      },
+      {
+        "finding_id": "FND-0aae80da",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788441336.5947878
+      },
+      {
+        "finding_id": "FND-c4917f78",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788441336.6548223
+      },
+      {
+        "finding_id": "FND-67934a6f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788441336.658695
+      },
+      {
+        "finding_id": "FND-081d9f97",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788441336.6619625
+      },
+      {
+        "finding_id": "FND-e3fa8f1d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788441336.6659827
+      },
+      {
+        "finding_id": "FND-111e40e7",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788442583.6818075
+      },
+      {
+        "finding_id": "FND-0528191f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788442583.7540412
+      },
+      {
+        "finding_id": "FND-75ef9f42",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788442583.7578652
+      },
+      {
+        "finding_id": "FND-7fe8a010",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788442583.7611933
+      },
+      {
+        "finding_id": "FND-b0f8530f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788442583.7647512
+      },
+      {
+        "finding_id": "FND-c78b8f25",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443081.9218318
+      },
+      {
+        "finding_id": "FND-d2b4ce66",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443081.9887342
+      },
+      {
+        "finding_id": "FND-5342d4c2",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443081.9929285
+      },
+      {
+        "finding_id": "FND-8f4fc762",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443081.9964025
+      },
+      {
+        "finding_id": "FND-0d3535db",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443082.0004056
+      },
+      {
+        "finding_id": "FND-32c5f54a",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443373.331659
+      },
+      {
+        "finding_id": "FND-5872e08f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443373.3918166
+      },
+      {
+        "finding_id": "FND-3bc5e715",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443373.3957982
+      },
+      {
+        "finding_id": "FND-5e7900e8",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443373.3990488
+      },
+      {
+        "finding_id": "FND-cbb345ea",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443373.4030483
+      },
+      {
+        "finding_id": "FND-017f31f5",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443861.0640213
+      },
+      {
+        "finding_id": "FND-010a38f2",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443861.138134
+      },
+      {
+        "finding_id": "FND-d60036ff",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443861.1443934
+      },
+      {
+        "finding_id": "FND-2f8468e4",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443861.1504984
+      },
+      {
+        "finding_id": "FND-80c72c93",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788443861.1575062
+      },
+      {
+        "finding_id": "FND-0b2257ac",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444217.1477094
+      },
+      {
+        "finding_id": "FND-fc9fffd2",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444217.207215
+      },
+      {
+        "finding_id": "FND-448d0fa7",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444217.2114317
+      },
+      {
+        "finding_id": "FND-6cfd5cef",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444217.2153804
+      },
+      {
+        "finding_id": "FND-4678a398",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444217.2193244
+      },
+      {
+        "finding_id": "FND-3008edea",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444734.8392859
+      },
+      {
+        "finding_id": "FND-4821209b",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444734.901714
+      },
+      {
+        "finding_id": "FND-cbf5a921",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444734.9066143
+      },
+      {
+        "finding_id": "FND-2c6dfb42",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444734.91067
+      },
+      {
+        "finding_id": "FND-fc11d918",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788444734.9150062
+      },
+      {
+        "finding_id": "FND-83e9e5aa",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445160.1340027
+      },
+      {
+        "finding_id": "FND-dc974c4d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445160.2134619
+      },
+      {
+        "finding_id": "FND-1b1a3e0a",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445160.220467
+      },
+      {
+        "finding_id": "FND-af24532f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445160.2254798
+      },
+      {
+        "finding_id": "FND-04d72fcb",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445160.2334754
+      },
+      {
+        "finding_id": "FND-cf6da63f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445461.5446744
+      },
+      {
+        "finding_id": "FND-3e37f4ee",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445461.6091547
+      },
+      {
+        "finding_id": "FND-c10a896e",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445461.615211
+      },
+      {
+        "finding_id": "FND-ed694133",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445461.6198175
+      },
+      {
+        "finding_id": "FND-285e120d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445461.6238067
+      },
+      {
+        "finding_id": "FND-1f4c6ad7",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445760.0408967
+      },
+      {
+        "finding_id": "FND-aa2ee7bd",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445760.1026812
+      },
+      {
+        "finding_id": "FND-1caed286",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445760.106922
+      },
+      {
+        "finding_id": "FND-5adca03f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445760.1126094
+      },
+      {
+        "finding_id": "FND-1c2ce6b0",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445760.1173792
+      },
+      {
+        "finding_id": "FND-4f6b8045",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445989.18716
+      },
+      {
+        "finding_id": "FND-ee89d18a",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445989.2657177
+      },
+      {
+        "finding_id": "FND-3d64c59c",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445989.2700698
+      },
+      {
+        "finding_id": "FND-456c2fa4",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445989.274783
+      },
+      {
+        "finding_id": "FND-6f76dcd5",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788445989.2797914
+      },
+      {
+        "finding_id": "FND-62d02787",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446169.1059492
+      },
+      {
+        "finding_id": "FND-0a1f28d8",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446169.1690595
+      },
+      {
+        "finding_id": "FND-035c97aa",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446169.175008
+      },
+      {
+        "finding_id": "FND-a089707b",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446169.1790912
+      },
+      {
+        "finding_id": "FND-b4087443",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446169.1840832
+      },
+      {
+        "finding_id": "FND-81f4acfc",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446414.6149068
+      },
+      {
+        "finding_id": "FND-b7d63cd6",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446415.1177998
+      },
+      {
+        "finding_id": "FND-c51e4017",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446415.1259215
+      },
+      {
+        "finding_id": "FND-8625221e",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446415.133936
+      },
+      {
+        "finding_id": "FND-34a17c4f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788446415.1419358
+      },
+      {
+        "finding_id": "FND-b615320d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449893.1995325
+      },
+      {
+        "finding_id": "FND-f2cb9a2f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449893.3836987
+      },
+      {
+        "finding_id": "FND-567dc097",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449893.3886557
+      },
+      {
+        "finding_id": "FND-493aa4e7",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449893.3932915
+      },
+      {
+        "finding_id": "FND-156aaafa",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449893.3982928
+      },
+      {
+        "finding_id": "FND-3d74d2ab",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449928.5169244
+      },
+      {
+        "finding_id": "FND-06c8a631",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449928.587115
+      },
+      {
+        "finding_id": "FND-ebf442f0",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449928.5920796
+      },
+      {
+        "finding_id": "FND-6919ed94",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449928.5958655
+      },
+      {
+        "finding_id": "FND-53832d78",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788449928.6014092
+      },
+      {
+        "finding_id": "FND-cb7b8d77",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788451008.0592988
+      },
+      {
+        "finding_id": "FND-0247b6ba",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788451008.120628
+      },
+      {
+        "finding_id": "FND-08a3977a",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788451008.12552
+      },
+      {
+        "finding_id": "FND-c7a6b05a",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788451008.1307788
+      },
+      {
+        "finding_id": "FND-3d187555",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788451008.1357696
+      },
+      {
+        "finding_id": "FND-003ca84d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788453771.751903
+      },
+      {
+        "finding_id": "FND-4bd5d6a6",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788453771.8166304
+      },
+      {
+        "finding_id": "FND-27d6d704",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788453771.8222268
+      },
+      {
+        "finding_id": "FND-4e727f51",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788453771.8273358
+      },
+      {
+        "finding_id": "FND-e4f12997",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788453771.832336
+      },
+      {
+        "finding_id": "FND-3d1a21ea",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788470801.3724697
+      },
+      {
+        "finding_id": "FND-c0300727",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788470801.4891798
+      },
+      {
+        "finding_id": "FND-69749466",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788470801.4945734
+      },
+      {
+        "finding_id": "FND-6de24bd0",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788470801.5005949
+      },
+      {
+        "finding_id": "FND-78690d58",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788470801.5056033
+      },
+      {
+        "finding_id": "FND-b5423c78",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788522046.5728812
+      },
+      {
+        "finding_id": "FND-be09ed24",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788522046.6419601
+      },
+      {
+        "finding_id": "FND-293186fb",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788522046.647077
+      },
+      {
+        "finding_id": "FND-ad25f351",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788522046.65209
+      },
+      {
+        "finding_id": "FND-8e381fcd",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788522046.657092
+      },
+      {
+        "finding_id": "FND-bfba527f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788730325.9651046
+      },
+      {
+        "finding_id": "FND-4cfb4f4d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788730326.0324843
+      },
+      {
+        "finding_id": "FND-e68e17fe",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788730326.0381796
+      },
+      {
+        "finding_id": "FND-80ecf51f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788730326.0431998
+      },
+      {
+        "finding_id": "FND-df3752b0",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788730326.0487206
+      },
+      {
+        "finding_id": "FND-a8f31025",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788892248.2699018
+      },
+      {
+        "finding_id": "FND-f61cd39f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788892248.3694522
+      },
+      {
+        "finding_id": "FND-76c7187e",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788892248.3749034
+      },
+      {
+        "finding_id": "FND-b35ff302",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788892248.3794973
+      },
+      {
+        "finding_id": "FND-4c430bb4",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788892248.3855038
+      },
+      {
+        "finding_id": "FND-2a793793",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788899255.0360215
+      },
+      {
+        "finding_id": "FND-b3eef518",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788899255.1276646
+      },
+      {
+        "finding_id": "FND-e1a00837",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788899255.1351657
+      },
+      {
+        "finding_id": "FND-6f4dadf9",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788899255.1421657
+      },
+      {
+        "finding_id": "FND-ba034ea4",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788899255.1501691
+      },
+      {
+        "finding_id": "FND-986c6517",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788954763.959538
+      },
+      {
+        "finding_id": "FND-76d4b372",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788954764.0656798
+      },
+      {
+        "finding_id": "FND-d3407d5c",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788954764.072387
+      },
+      {
+        "finding_id": "FND-5ddf1c95",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788954764.0787032
+      },
+      {
+        "finding_id": "FND-4df0fc19",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788954764.085767
+      },
+      {
+        "finding_id": "FND-b74f94c7",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788959516.045489
+      },
+      {
+        "finding_id": "FND-873aa2cc",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788959516.114046
+      },
+      {
+        "finding_id": "FND-f9266993",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788959516.1196713
+      },
+      {
+        "finding_id": "FND-be658c48",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788959516.1246796
+      },
+      {
+        "finding_id": "FND-655a20b8",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788959516.130679
+      },
+      {
+        "finding_id": "FND-a4886526",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788965701.6966596
+      },
+      {
+        "finding_id": "FND-aadf3dee",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788965701.7622757
+      },
+      {
+        "finding_id": "FND-b07faf2f",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788965701.7679777
+      },
+      {
+        "finding_id": "FND-9b31721d",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788965701.7735364
+      },
+      {
+        "finding_id": "FND-8d3bd013",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788965701.7785423
+      },
+      {
+        "finding_id": "FND-2e291337",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788966080.8946202
+      },
+      {
+        "finding_id": "FND-45e50d70",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788966081.0759003
+      },
+      {
+        "finding_id": "FND-94785ca7",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788966081.0818384
+      },
+      {
+        "finding_id": "FND-42d822cb",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788966081.0878546
+      },
+      {
+        "finding_id": "FND-902bf389",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1788966081.0948572
+      },
+      {
+        "finding_id": "FND-c768d9b5",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1789175289.0606344
+      },
+      {
+        "finding_id": "FND-ba7ae5e2",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1789175289.1430323
+      },
+      {
+        "finding_id": "FND-4a29a559",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1789175289.1521497
+      },
+      {
+        "finding_id": "FND-baf5f483",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1789175289.1627753
+      },
+      {
+        "finding_id": "FND-f30fa324",
+        "vuln_type": "BOLA",
+        "confidence": 0.671,
+        "timestamp": 1789175289.1735158
+      }
+    ],
+    "suspected_weaknesses": [],
+    "auth_patterns": {},
+    "waf_detected": null
+  }
+}

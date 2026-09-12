@@ -1,0 +1,58 @@
+agent:
+  name: "BurpAgent"
+  version: "2.0.0"
+  description: "Enterprise Burp Suite Traffic Ingestion, Context Memory & AI Threat Reasoning Engine"
+
+server:
+  host: "127.0.0.1"
+  port: 8085
+  buffer_queue_size: 10000
+  workers: 4
+
+storage:
+  db_path: "data/traffic.db"
+  cache_size: 50000
+  cache_ttl: 3600
+  save_raw_bodies: true
+  max_body_log_size: 2097152 # 2MB
+
+scope:
+  strict_mode: false
+  default_include:
+    - "*"
+  default_exclude:
+    - "*.google-analytics.com"
+    - "*.doubleclick.net"
+    - "*.googletagmanager.com"
+    - "*.facebook.com"
+    - "*.clarity.ms"
+    - "*.hotjar.com"
+    - "*.sentry.io"
+
+triage:
+  auto_triage: true
+  ai_triage_rate_limit: 10 # max AI queries per minute
+  ai_queue_max_size: 500
+  interesting_status_codes: [200, 201, 302, 401, 403, 500, 502]
+  high_priority_keywords:
+    - "admin"
+    - "api"
+    - "auth"
+    - "token"
+    - "jwt"
+    - "user"
+    - "role"
+    - "upload"
+    - "payment"
+    - "secret"
+    - "password"
+    - "graphql"
+    - "id"
+    - "redirect"
+
+models:
+  ollama_host: "http://127.0.0.1:11434"
+  ai_model: "qwen2.5-coder:14b"
+  strategist_model: "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest"
+  attacker_model: "xploiter/pentester:latest"
+  cloud_fallback: true

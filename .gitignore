@@ -1,0 +1,55 @@
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables & secrets
+.env
+*.env
+.env.local
+.env.*.local
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data & Scan Artifacts (Keep repo lightweight and leak-free)
+data/sessions/
+data/reports/
+data/tool_outputs/
+data/screenshots/
+data/engagements/
+data/traffic.db*
+data/*.log
+data/*.sqlite*
+data/cert_browser_test/
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# OS generated
+.DS_Store
+Thumbs.db

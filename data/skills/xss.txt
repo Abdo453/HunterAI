@@ -1,0 +1,14 @@
+=== Skill: Cross-Site Scripting (XSS) ===
+- Patterns: Reflected parameters (?q=, ?search=, ?msg=, ?name=), form inputs, comment sections, error pages echoing URL parameters.
+- Attack Vectors: Context-aware payloads (HTML tag injection, attribute escape, script tags, JS string breakout, SVG onload, event handlers).
+- Verification: Check if input is reflected unencoded or insufficiently filtered in the response HTML DOM, or executed in JavaScript context.
+
+=== Skill: What is cross-site scripting (XSS) and how to prevent it? | Web Security Academy (url) ===
+Source: https://portswigger.net/web-security/cross-site-scripting
+What is cross-site scripting (XSS) and how to prevent it? | Web Security Academy
+Web Security Academy
+Cross-site scripting
+Cross-site scripting
+In this section, we'll explain what cross-site scripting is, describe the different varieties of cross-site scripting vulnerabilities, and spell out how to find and prevent cross-site scripting.
+What is cross-site scripting (XSS)?
+Cross-site scripting (also known as XSS) is a web security vulnerability that allows an attacker to compromise the interactions that users have with a vulnerable application. It allows an attacker to circumvent the same origi

@@ -1,0 +1,60 @@
+{
+  "PYSEC-2025-19": {
+    "cve_id": "PYSEC-2025-19",
+    "summary": "",
+    "cvss": 0.0,
+    "cwe": "Unknown",
+    "published": "",
+    "references": [
+      {
+        "type": "EVIDENCE",
+        "url": "https://sites.google.com/sonatype.com/vulnerabilities/cve-2025-1889"
+      },
+      {
+        "type": "ADVISORY",
+        "url": "https://github.com/advisories/GHSA-769v-p64c-89pr"
+      }
+    ],
+    "last_updated": 1787132360.2801945
+  },
+  "PYSEC-2024-115": {
+    "cve_id": "PYSEC-2024-115",
+    "summary": "",
+    "cvss": 0.0,
+    "cwe": "Unknown",
+    "published": "",
+    "references": [
+      {
+        "type": "EVIDENCE",
+        "url": "https://huntr.com/bounties/8f4ad910-7fdc-4089-8f0a-b5df5f32e7c5"
+      },
+      {
+        "type": "WEB",
+        "url": "https://huntr.com/bounties/8f4ad910-7fdc-4089-8f0a-b5df5f32e7c5"
+      },
+      {
+        "type": "FIX",
+        "url": "https://github.com/langchain-ai/langchain/commit/c2a3021bb0c5f54649d380b42a0684ca5778c255"
+      }
+    ],
+    "last_updated": 1787132360.2801945
+  },
+  "MAL-2026-14278": {
+    "cve_id": "MAL-2026-14278",
+    "summary": "Malicious code in layer2-sdk (npm)",
+    "cvss": 0.0,
+    "cwe": "Unknown",
+    "published": "",
+    "references": [
+      {
+        "type": "PACKAGE",
+        "url": "https://www.npmjs.com/package/layer2-sdk/v/1.0.0"
+      },
+      {
+        "type": "PACKAGE",
+        "url": "https://www.npmjs.com/package/layer2-sdk/v/1.0.1"
+      }
+    ],
+    "last_updated": 1787132360.2801945
+  }
+}

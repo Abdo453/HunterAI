@@ -1,0 +1,23 @@
+name: js_analysis
+category: web
+description: "Extract secrets, endpoints, and tokens from JavaScript files"
+version: "1.0"
+input:
+  - urls.txt
+  - target_domain: str
+output:
+  - js_secrets.txt
+  - js_endpoints.txt
+depends_on:
+  - crawling
+next_skills:
+  - xss
+  - idor
+fallback_skills: []
+tools_required:
+  - getJS
+fallback_tools:
+  - nuclei
+timeout_seconds: 120
+max_retries: 2
+enabled: true

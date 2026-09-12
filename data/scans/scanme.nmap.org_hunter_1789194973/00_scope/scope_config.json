@@ -1,0 +1,15 @@
+{
+  "target": "scanme.nmap.org",
+  "domain": "scanme.nmap.org",
+  "program_name": "default_scope",
+  "in_scope": [
+    "scanme.nmap.org",
+    "*.scanme.nmap.org"
+  ],
+  "out_of_scope": [],
+  "rate_limit": 15,
+  "authenticated": false,
+  "auth_data": {},
+  "is_authorized": true,
+  "rejection_reason": null
+}

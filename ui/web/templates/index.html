@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PentestAI Unified — Autonomous Cyber OS</title>
+<link rel="stylesheet" href="/static/style.css">
+<script type="text/javascript" src="/static/vis-network.min.js"></script>
+</head>
+<body>
+<div id="app">
+  <!-- ─── SIDEBAR (Right in RTL) ───────────────────────────────── -->
+  <aside id="sidebar">
+    <div class="logo">
+      <span class="logo-icon">⚡</span>
+      <div style="display:flex;flex-direction:column;">
+        <span class="logo-text">PentestAI</span>
+        <span style="font-size:0.62em;color:#888;font-family:monospace;">Autonomous Cyber OS</span>
+      </div>
+      <span class="logo-ver">v2.5 PRO</span>
+    </div>
+
+    <!-- GPU Monitor -->
+    <div class="nav-section">⚡ كرت الشاشة (GPU Monitor)</div>
+    <div id="gpu-panel" class="gpu-panel">
+      <div class="gpu-row"><span class="gpu-label">الحالة (Status)</span><span id="gpu-state" class="gpu-val free">FREE (جاهز)</span></div>
+      <div class="gpu-row"><span class="gpu-label">الموديل النشط</span><span id="gpu-model" class="gpu-val" style="font-size:0.7em;">—</span></div>
+      <div class="gpu-row"><span class="gpu-label">قائمة الانتظار</span><span id="gpu-queue" class="gpu-val">0</span></div>
+      <div class="gpu-row"><span class="gpu-label">العمليات المنفذة</span><span id="gpu-runs" class="gpu-val">0</span></div>
+    </div>
+
+    <!-- Local Models -->
+    <div class="nav-section">💻 الموديلات المحلية (Local AI)</div>
+    <div id="models-list"></div>
+
+    <!-- Cloud APIs -->
+    <div class="nav-section">☁️ المفاتيح والموديلات السحابية</div>
+    <div id="api-list"></div>
+
+    <!-- Sessions -->
+    <div class="nav-section">📁 جلسات الفحص السابقة</div>
+    <div id="sessions-list"></div>
+  </aside>
+
+  <!-- ─── MAIN AREA ────────────────────────────────────────────── -->
+  <main id="main">
+    <header>
+      <div class="header-title-bar">
+        <h1>
+          <span>PentestAI Autonomous Cyber Security Framework</span>
+          <span>🛡️</span>
+        </h1>
+        <div class="sub">منظومة الاختراق الأخلاقي والتقييم الأمني الذاتي المتقدم | Multi-Agent Security OS</div>
+      </div>
+      
+      <!-- Top Navigation Tabs (Unified Views: Agent Mission + Interactive Chat + Split View) -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('scan',this)">🤖 مهمات الـ Agent (Mission Control)</button>
+        <button class="tab" onclick="switchTab('chat',this)">💬 شات وتوجيه الـ Agent (Interactive Chat)</button>
+        <button class="tab" onclick="switchTab('split',this)">⚡ العرض المزدوج (Split: شات + إيجنت)</button>
+        <button class="tab" onclick="switchTab('http',this)">🔍 محلل الترافيك والـ HTTP</button>
+        <button class="tab" onclick="switchTab('learning',this)">🎓 التعلم الذاتي والمهارات</button>
+      </div>
+    </header>
+
+    <!-- ── 1. SCAN & ASSESSMENT TAB (PRIMARY AGENT VIEW) ──────────────── -->
+    <div id="tab-scan" class="tab-content active">
+      <div class="card">
+        <div class="card-hdr">
+          <h2>🎯 مركز قيادة مهمات الـ Agent الذاتي (Autonomous Mission Deck)</h2>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="agent-state-badge" class="header-badge" style="background:#00ff41;color:#000;font-weight:bold;">الـ Agent جاهز</span>
+          </div>
+        </div>
+
+        <!-- Dedicated Agent Toggles Deck: Burp Suite + Browser Automation -->
+        <div class="agent-toggle-bar">
+          <label class="toggle-group">
+            <input type="checkbox" id="use-proxy-chk" checked onchange="onBurpToggleChange()">
+            <span class="toggle-label">🔌 توجيه الترافيك عبر Burp Suite Proxy (127.0.0.1:8080)</span>
+          </label>
+          <span id="burp-live-badge" class="burp-badge online">🟢 Burp متصل</span>
+
+          <label class="toggle-group" style="margin-right:15px;">
+            <input type="checkbox" id="use-browser-chk" checked>
+            <span class="toggle-label">🌐 تصفح تفاعلي بالمتصفح (Browser Automation)</span>
+          </label>
+
+          <div style="margin-right:auto;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:0.75em;color:#ffaa00;">💡 توجيهات المستخدم النشطة:</span>
+            <span id="active-hints-counter" class="header-badge" style="background:#ffaa00;color:#000;font-weight:bold;cursor:pointer;" onclick="switchTab('chat', document.querySelector('button[onclick*=\'chat\']'))" title="انقر لعرض الشات وتقديم نصائح">0 نصيحة</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2.5fr 1.5fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label>رابط الهدف (Target URL / Domain / Lab Link):</label>
+            <input type="text" id="target-inp" placeholder="https://0a9400de...web-security-academy.net أو https://example.com">
+          </div>
+          <div>
+            <label>وضع واستراتيجية الفحص (Scan Mode):</label>
+            <select id="mode-sel">
+              <option value="bugbounty_full" selected>🏆 فحص شامل عميق (Full Bug Bounty: Crawl + Endpoints + Secrets + PoC)</option>
+              <option value="web">🌐 فحص تطبيقات الويب والباراميترات (Web App Audit)</option>
+              <option value="sqli">💉 تدقيق وحقن الثغرات الحرجة (SQLi, XSS, SSRF, IDOR)</option>
+              <option value="recon">🔎 استطلاع سلبي واستخبارات (Passive Recon & OSINT)</option>
+              <option value="understand">🧠 وضع الفهم والاستيعاب المعرفي السلبي (Cognitive Understanding)</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <button onclick="startScan()" id="start-btn" class="btn" style="background:#00ff41;color:#000;font-weight:bold;">🚀 ابدأ مهمة الـ Agent</button>
+          </div>
+        </div>
+
+        <!-- Authentication & Burp Proxy Settings -->
+        <details style="margin-bottom:12px;background:#080b12;border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;">
+          <summary style="cursor:pointer;color:#00ccff;font-weight:bold;font-size:12px;user-select:none;">
+            ⚙️ بيانات المصادقة المتقدمة (Credentials & Custom Session Cookies)
+          </summary>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;">
+            <div>
+              <label style="font-size:11px;color:#aaa;">اسم المستخدم (Username / Email):</label>
+              <input type="text" id="auth-user-inp" placeholder="admin أو user@example.com" style="padding:6px;font-size:12px;">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#aaa;">كلمة المرور (Password):</label>
+              <input type="password" id="auth-pass-inp" placeholder="••••••••" style="padding:6px;font-size:12px;">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#aaa;">الكوكيز (Session Cookie / Token):</label>
+              <input type="text" id="auth-cookie-inp" placeholder="session=xyz... أو Bearer token" style="padding:6px;font-size:12px;">
+            </div>
+          </div>
+        </details>
+
+
+        <!-- Model Council Live Panel -->
+        <div class="card-hdr" style="border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;margin-top:10px;">
+          <h2>🧠 مجلس الذكاء الاصطناعي (Model Council Reasoning)</h2>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;margin-bottom:14px;">
+          <div class="card" style="background:#090d14;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <strong style="color:#00ccff;">WhiteRabbitNeo (Strategist)</strong>
+              <span class="header-badge" id="st-wrn">Waiting</span>
+            </div>
+            <div id="out-wrn" style="font-size:0.75em;color:#888;max-height:85px;overflow-y:auto;">في انتظار الهدف...</div>
+          </div>
+          <div class="card" style="background:#090d14;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <strong style="color:#ff2a4b;">xploiter/pentester (Attacker)</strong>
+              <span class="header-badge" id="st-xpl">Waiting</span>
+            </div>
+            <div id="out-xpl" style="font-size:0.75em;color:#888;max-height:85px;overflow-y:auto;">في انتظار الهدف...</div>
+          </div>
+          <div class="card" style="background:#090d14;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <strong style="color:#00ff41;">qwen2.5-coder (Remediation)</strong>
+              <span class="header-badge" id="st-qwen">Waiting</span>
+            </div>
+            <div id="out-qwen" style="font-size:0.75em;color:#888;max-height:85px;overflow-y:auto;">في انتظار الهدف...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Terminal Console -->
+      <div class="card" id="output-panel">
+        <div class="card-hdr">
+          <h2>📜 شاشة وسجل الفحص الحي (Live Terminal)</h2>
+          <button onclick="clearLog()" class="btn-sm">مسح السجل</button>
+        </div>
+        <div id="terminal"></div>
+      </div>
+
+      <!-- Results & Findings Panel -->
+      <div class="card" id="results-panel" style="display:none;">
+        <div class="card-hdr">
+          <h2>🎯 نتائج وتقرير الفحص المكتشفة</h2>
+          <div id="report-btns" style="display:flex;gap:6px;">
+            <button onclick="exportReport('html')" class="btn-sec">📄 HTML</button>
+            <button onclick="exportReport('md')" class="btn-sec">📝 Markdown</button>
+            <button onclick="exportReport('hackerone')" class="btn-sec" style="color:#ff2a4b;">🚩 HackerOne</button>
+            <button onclick="exportReport('executive')" class="btn-sec" style="color:#00ff41;">📊 Executive</button>
+          </div>
+        </div>
+        <div id="sev-summary" style="display:flex;gap:12px;margin-bottom:12px;"></div>
+        <div id="findings-list"></div>
+      </div>
+
+      <!-- Single Parameter Live PoC (Collapsible) -->
+      <details style="margin-top:14px;background:#090d14;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;">
+        <summary style="cursor:pointer;color:#ffaa00;font-weight:bold;font-size:13px;user-select:none;">
+          🔥 فحص باراميتر مخصص يدوياً (Manual Single Parameter PoC)
+        </summary>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:12px;margin-top:12px;align-items:flex-end;">
+          <div>
+            <label>رابط الهدف مع المسار:</label>
+            <input type="text" id="poc-target-url" placeholder="https://example.com/filter?category=Gifts">
+          </div>
+          <div>
+            <label>اسم الباراميتر:</label>
+            <input type="text" id="poc-param-name" placeholder="category, id, search">
+          </div>
+          <div>
+            <label>نوع الثغرة:</label>
+            <select id="poc-vuln-type">
+              <option value="sqli">💉 SQL Injection (WHERE / Union)</option>
+              <option value="xss">⚡ XSS (Reflection / Unsanitized)</option>
+              <option value="idor">🔓 IDOR / Broken Access Control</option>
+              <option value="ssrf">🌐 SSRF</option>
+            </select>
+          </div>
+          <div>
+            <button onclick="runDifferentialPoC()" id="poc-run-btn" class="btn" style="background:#ff2a4b;color:#fff;">🔥 فحص وإثبات الـ PoC</button>
+          </div>
+        </div>
+        <div id="poc-results-box" style="display:none;margin-top:10px;"></div>
+      </details>
+    </div>
+
+    <!-- ── 2. HTTP & BURP ANALYZER TAB ────────────────────────── -->
+    <div id="tab-http" class="tab-content">
+      <div class="card">
+        <div class="card-hdr">
+          <h2>🔍 محلل حركة المرور والطلبات (Deep HTTP / Burp Suite Traffic Analyzer)</h2>
+          <button onclick="analyzeHTTPTraffic()" class="btn" style="background:#3399ff;color:#fff;">⚡ تحليل الترافيك الآن</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div>
+            <label style="color:#ff2a4b;font-weight:bold;">الصق طلب HTTP الخام (Raw Request - من Burp Suite أو المتصفح):</label>
+            <textarea id="http-raw-req" rows="14" style="font-family:monospace;font-size:12px;" placeholder="GET /filter?category=Gifts HTTP/1.1&#10;Host: target.com&#10;Cookie: session=xyz..."></textarea>
+          </div>
+          <div>
+            <label style="color:#00ff41;font-weight:bold;">الصق رد السيرفر الخام (Raw Response - اختياري):</label>
+            <textarea id="http-raw-resp" rows="14" style="font-family:monospace;font-size:12px;" placeholder="HTTP/1.1 200 OK&#10;Access-Control-Allow-Origin: *&#10;Content-Type: text/html&#10;&#10;..."></textarea>
+          </div>
+        </div>
+        <div id="http-results" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- ── 3. SELF-LEARNING & KNOWLEDGE BASE TAB ──────────────── -->
+    <div id="tab-learning" class="tab-content">
+      <div class="card">
+        <div class="card-hdr">
+          <h2>🎓 مركز التعلم الذاتي وقاعدة المعرفة (Autonomous Model Training & Intel)</h2>
+          <button onclick="loadLearningData()" class="btn-sm">🔄 تحديث</button>
+        </div>
+        <p style="color:#888;font-size:13px;margin-bottom:12px;">
+          يقوم بتدريب الموديلات وتحديث قاعدة البيانات المتجهة (Vector DB) وسحب أحدث ثغرات CVEs والـ Payloads تلقائياً.
+        </p>
+
+        <!-- 1-Click Master Training Buttons -->
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+          <button onclick="startGlobalBrainLearning()" id="learn-global-btn" class="btn" style="background:#00e5ff;color:#000;font-weight:bold;">🧠 بدء دورة التعلم الذاتي التلقائي من كافة المصادر العالمية (11+ مصدراً بضغطة زر واحدة)</button>
+          <button onclick="startAllLearning()" id="learn-all-btn" class="btn-sec" style="background:rgba(0,255,65,0.1);color:#00ff41;border-color:#00ff41;">⚡ تدريب الـ AI على كافة لابات PortSwigger (1-Click)</button>
+        </div>
+
+        <!-- Custom Scraper -->
+        <div style="background:#0b0e14;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:16px;">
+          <h4 style="color:#ffaa00;font-size:13px;margin-bottom:8px;">🌐 سحب وتعلم مخصص من مصدر محدد:</h4>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select id="scrape-source-sel" style="max-width:240px;">
+              <option value="cisa_kev">CISA KEV (الثغرات المستغلة نشطاً)</option>
+              <option value="nvd">NVD CVE 2.0 (أحدث الثغرات الرسمية)</option>
+              <option value="github">GitHub POCs & Exploit Repos</option>
+              <option value="payloads">PayloadsAllTheThings</option>
+              <option value="hackerone">HackerOne Hacktivity (تقارير منشورة)</option>
+              <option value="medium">Medium Bug Bounty Feed</option>
+              <option value="exploitdb">Exploit-DB Security Database</option>
+              <option value="url">Single URL Writeup (رابط مخصص)</option>
+            </select>
+            <input type="text" id="scrape-custom-inp" placeholder="كلمة بحث أو رابط مقال..." style="flex:1;">
+            <button onclick="runLiveScrape()" id="scrape-btn" class="btn-sec" style="background:rgba(255,170,0,0.1);color:#ffaa00;border-color:#ffaa00;">📥 اسحب وتعلّم الآن</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-bottom:16px;">
+          <div>
+            <h3 style="color:#3399ff;font-size:14px;margin-bottom:10px;">📖 لابات ومناهج PortSwigger Academy</h3>
+            <div id="topics-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+          <div>
+            <h3 style="color:#00ff41;font-size:14px;margin-bottom:10px;">📜 سجل وشاشة التعلم الحية</h3>
+            <div id="learning-console" style="background:#05070a;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;font-family:monospace;font-size:12px;color:#00ff41;min-height:220px;max-height:260px;overflow-y:auto;margin-bottom:10px;">
+              <div style="color:#555;">في انتظار بدء دورة التعلم...</div>
+            </div>
+            <h4 style="color:#aaa;font-size:12px;margin-bottom:4px;">🕒 الدورات التعليمية السابقة:</h4>
+            <div id="learning-history-list" style="max-height:100px;overflow-y:auto;font-size:11px;color:#888;"></div>
+          </div>
+        </div>
+
+        <!-- Methodology Search -->
+        <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;">
+          <h3 style="color:#00ccff;font-size:14px;margin-bottom:8px;">📚 موسوعة المنهجيات والبايلودات التفاعلية</h3>
+          <input type="text" id="method-search-inp" placeholder="🔍 ابحث في المنهجيات (مثال: sql injection, 403 bypass, jwt, csrf, subdomain)..." oninput="searchMethodology(this.value)" style="margin-bottom:10px;width:100%;">
+          <div id="methodology-container" style="display:flex;flex-direction:column;gap:10px;max-height:300px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3.5 SECURITY INTELLIGENCE HUB & MULTI-MODE CONTROL ── -->
+    <div id="tab-intelligence" class="tab-content">
+      <!-- Subsystem Nervous System Status -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-hdr">
+          <h2>🛡️ الجهاز العصبي للمنظومة (Unified Subsystems Live Status)</h2>
+          <button onclick="loadIntelligenceHub()" class="btn-sm">🔄 تحديث الحالة</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:10px;margin-top:10px;">
+          <div class="card" style="background:#090d14;border-color:rgba(0,255,65,0.2);text-align:center;padding:10px;">
+            <div style="font-size:11px;color:#aaa;">Autonomous Brain</div>
+            <div id="si-sub-brain" style="color:#00ff41;font-weight:bold;font-size:13px;margin-top:4px;">🟢 متصل (OODA)</div>
+          </div>
+          <div class="card" style="background:#090d14;border-color:rgba(0,204,255,0.2);text-align:center;padding:10px;">
+            <div style="font-size:11px;color:#aaa;">BurpAgent Listener</div>
+            <div id="si-sub-burp" style="color:#00ccff;font-weight:bold;font-size:13px;margin-top:4px;">🎧 Port 8085</div>
+          </div>
+          <div class="card" style="background:#090d14;border-color:rgba(255,170,0,0.2);text-align:center;padding:10px;">
+            <div style="font-size:11px;color:#aaa;">Security Intelligence</div>
+            <div id="si-sub-intel" style="color:#ffaa00;font-weight:bold;font-size:13px;margin-top:4px;">🧠 نشط (Hypotheses)</div>
+          </div>
+          <div class="card" style="background:#090d14;border-color:rgba(255,42,75,0.2);text-align:center;padding:10px;">
+            <div style="font-size:11px;color:#aaa;">Defense-in-Depth Scope</div>
+            <div id="si-sub-scope" style="color:#00ff41;font-weight:bold;font-size:13px;margin-top:4px;">🛡️ حماية صارمة</div>
+          </div>
+          <div class="card" style="background:#090d14;border-color:rgba(180,100,255,0.2);text-align:center;padding:10px;">
+            <div style="font-size:11px;color:#aaa;">Unified EventBus</div>
+            <div id="si-sub-bus" style="color:#b464ff;font-weight:bold;font-size:13px;margin-top:4px;">⚡ جسر موحد</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scope & Policy Control Grid -->
+      <div style="display:grid;grid-template-columns:1.2fr 1.8fr;gap:14px;margin-bottom:14px;">
+        <!-- Left: Scope Guard Config -->
+        <div class="card">
+          <div class="card-hdr">
+            <h2>🎯 إدارة النطاق والتصاريح (Scope Guard & Permissions)</h2>
+          </div>
+          <p style="font-size:12px;color:#888;margin-bottom:10px;">
+            تطبيق مبدأ Defense-in-Depth لمنع أي استهداف خارج النطاق أو المسارات الخطرة تلقائياً.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div>
+              <label style="font-size:11px;color:#ccc;">الهدف الأساسي (Target Domain/Host):</label>
+              <input type="text" id="si-scope-target" placeholder="api.target.local أو target.com">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#ccc;">النطاقات المصرح بها (Allowed Domains - مفصولة بفواصل):</label>
+              <input type="text" id="si-scope-allowed" placeholder="target.com, api.target.com, *.target.com">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#ccc;">المسارات المحظورة أمنياً (Safety Excluded Paths):</label>
+              <input type="text" id="si-scope-excluded" value="/admin/delete, /system/reset, /logout, /billing/charge">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <input type="checkbox" id="si-scope-active-chk">
+              <label for="si-scope-active-chk" style="font-size:12px;color:#00e5ff;cursor:pointer;">
+                السماح بالفحص النشط المرخص (Allow Active Probing / SmartPoC)
+              </label>
+            </div>
+            <button onclick="saveScopePolicy()" class="btn" style="background:#00ff41;color:#000;font-weight:bold;margin-top:6px;">
+              💾 حفظ وتطبيق سياسة النطاق فوراً
+            </button>
+            <div id="si-scope-status-msg" style="font-size:12px;display:none;margin-top:4px;"></div>
+          </div>
+        </div>
+
+        <!-- Right: 4-Level Security Teacher & Explanation -->
+        <div class="card">
+          <div class="card-hdr">
+            <h2>🎓 المعلم الأمني الذكي (4-Level Arabic Security Explanations)</h2>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <input type="text" id="si-explain-subject" placeholder="اكتب اسم الثغرة أو المفهوم (مثال: BOLA, SQL Injection, SSRF, JWT)..." style="flex:1;">
+            <button onclick="generateExplanation()" class="btn" style="background:#00ccff;color:#000;font-weight:bold;">💡 اشرح المفهوم</button>
+          </div>
+          <div id="si-explain-box" style="display:none;background:#05070a;border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:12px;max-height:260px;overflow-y:auto;font-size:13px;line-height:1.6;">
+            <div id="si-explain-content"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Scenario Quiz & Learning Profile -->
+      <div style="display:grid;grid-template-columns:1.8fr 1.2fr;gap:14px;">
+        <!-- Left: Interactive Scenario Quiz -->
+        <div class="card">
+          <div class="card-hdr">
+            <h2>🧪 سيناريوهات واختبارات تفاعلية (Interactive Scenario Quizzes)</h2>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="si-quiz-topic" style="padding:4px 8px;font-size:12px;">
+                <option value="bola">BOLA / IDOR (Broken Object Access)</option>
+                <option value="sqli">SQL Injection</option>
+                <option value="ssrf">Server-Side Request Forgery (SSRF)</option>
+                <option value="xss">Cross-Site Scripting (XSS)</option>
+                <option value="auth_bypass">Authentication & Session Bypass</option>
+              </select>
+              <button onclick="startQuizScenario()" class="btn-sm" style="background:#ffaa00;color:#000;font-weight:bold;">🚀 ابدأ سيناريو جديد</button>
+            </div>
+          </div>
+          <div id="si-quiz-container" style="margin-top:10px;">
+            <div style="color:#777;font-size:13px;padding:20px;text-align:center;">اختر موضوعاً واضغط "ابدأ سيناريو جديد" لاختبار مهاراتك وتقييم تحليلك الأمني.</div>
+          </div>
+        </div>
+
+        <!-- Right: Learning Profile & Research -->
+        <div class="card">
+          <div class="card-hdr">
+            <h2>🏆 ملف التعلم واستخبارات CVE</h2>
+          </div>
+          <div style="background:#090d14;border-radius:6px;padding:10px;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:12px;color:#aaa;">المستوى الأمني الحالي:</span>
+              <span id="si-user-level" class="header-badge" style="background:#00ff41;color:#000;font-weight:bold;">مبتدئ (Beginner)</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+              <span style="font-size:12px;color:#aaa;">النقاط والخبرة:</span>
+              <span id="si-user-xp" style="color:#00ccff;font-weight:bold;font-size:13px;">0 XP</span>
+            </div>
+          </div>
+
+          <h4 style="font-size:12px;color:#ffaa00;margin-bottom:6px;">🔍 بحث استخباراتي مباشر في CVE و OWASP:</h4>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="si-research-input" placeholder="CVE-2024-..., BOLA, CORS..." style="flex:1;font-size:12px;padding:6px;">
+            <button onclick="runThreatResearch()" class="btn-sm" style="background:#3399ff;color:#fff;">بحث</button>
+          </div>
+          <div id="si-research-result" style="display:none;margin-top:8px;font-size:11px;background:#05070a;border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:8px;max-height:140px;overflow-y:auto;color:#ddd;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 2. AI CHAT & CO-PILOT TAB ──────────────────────────── -->
+    <div id="tab-chat" class="tab-content">
+      <div class="card" id="chat-area" style="height:calc(100vh - 120px);display:flex;flex-direction:column;">
+        <!-- Interactive Question Alert Card from Agent -->
+        <div id="agent-question-banner" class="agent-question-card" style="display:none;">
+          <div class="aq-hdr">
+            <span>❓ استشارة وسؤال مباشر من الـ Agent:</span>
+            <span class="aq-badge">بانتظار قرارك</span>
+          </div>
+          <div id="aq-text" class="aq-text">...</div>
+          <div id="aq-buttons" class="aq-btn-row"></div>
+        </div>
+
+        <div class="chat-model-bar">
+          <div class="model-select-group">
+            <span style="font-size:1.2em;">🤖</span>
+            <label for="chat-model-select" style="margin:0;color:#fff;">المساعد الذكي (Co-Pilot):</label>
+            <select id="chat-model-select" onchange="onModelChange()">
+              <option value="auto" selected>HunterAI Auto-Router (توجيه وتفكير متصل بالـ Agent) 🧠</option>
+              <option value="local:WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest">WhiteRabbitNeo:8B (هجوم واستراتيجيات) 💻</option>
+              <option value="local:xploiter/pentester:latest">xploiter/pentester (تقييم ثغرات) 💻</option>
+              <option value="local:qwen2.5-coder:14b">qwen2.5-coder:14b (تحليل أكواد وتطوير الـ Exploits) 💻</option>
+              <option value="api:google/gemini-2.0-flash">Google Gemini 2.0 Flash ☁️</option>
+              <option value="api:anthropic/claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic) 🧠☁️</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div id="selected-model-badge" class="header-badge" style="background:#3399ff;color:#fff;">Agent Co-Pilot Active</div>
+            <button onclick="clearChat()" class="btn-sm">مسح 🗑️</button>
+          </div>
+        </div>
+
+        <!-- Live Route & Reasoning Visualizer Bar -->
+        <div id="route-panel" class="hidden" style="background:#090d14;border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:6px 12px;margin-bottom:8px;font-size:12px;display:flex;align-items:center;gap:10px;">
+          <span style="color:#aaa;font-size:11px;">مسار التوجيه:</span>
+          <span id="route-badge" class="rbadge rb-rtn" style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;">ROUTING...</span>
+          <span id="route-reason" style="color:#888;font-size:11px;flex:1;"></span>
+          <div id="route-flow" style="display:flex;align-items:center;gap:4px;"></div>
+        </div>
+
+        <!-- Hint Chips Row for quick user advice -->
+        <div class="hint-chips-container">
+          <span style="font-size:0.75em;color:#ffaa00;margin-left:4px;font-weight:bold;">💡 نصائح سريعة للـ Agent:</span>
+          <div class="hint-chip" onclick="sendQuickHint('السيرفر شغال Nginx و PostgreSQL')">🐘 PostgreSQL / Nginx</div>
+          <div class="hint-chip" onclick="sendQuickHint('ركز على باراميتر id في الرابط')">🎯 ركز على id</div>
+          <div class="hint-chip" onclick="sendQuickHint('جرب حقن UNION SELECT NULL, NULL -- -')">💉 UNION NULL</div>
+          <div class="hint-chip" onclick="sendQuickHint('الموقع محمي بـ Cloudflare جرب تجاوز الـ WAF')">🛡️ WAF Bypass</div>
+          <div class="hint-chip" onclick="sendQuickHint('تجاهل مسار /logout و /signout')">🚫 استبعاد Logout</div>
+        </div>
+
+        <div id="chat-messages" style="flex:1;overflow-y:auto;padding:10px;"></div>
+        
+        <div class="chat-input-row">
+          <button onclick="sendChat()" id="chat-btn">🚀 إرسال</button>
+          <button onclick="sendAsAgentHint()" id="hint-btn" title="إرسال كنصيحة للـ Agent" style="background:#ffaa00;color:#000;font-weight:bold;border:none;padding:0 14px;border-radius:6px;cursor:pointer;font-family:var(--font-arabic);font-size:0.85em;">💡 نصيحة للـ Agent</button>
+          <input id="chat-input" type="text"
+            placeholder="تحدث مع الـ Agent أو أرسل له نصيحة ومعلومات عن الهدف (مثال: السيرفر شغال PostgreSQL وركز على باراميتر id)..."
+            onkeydown="if(event.key==='Enter') sendChat()">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3. DUAL-CORE SPLIT VIEW (CHAT + AGENT) ──────────────── -->
+    <div id="tab-split" class="tab-content" style="display:none;">
+      <div class="split-view-container">
+        <!-- Left: Co-Pilot Chat & Live Guidance -->
+        <div class="split-col">
+          <div class="card" style="height:100%;display:flex;flex-direction:column;margin-bottom:0;">
+            <div class="card-hdr">
+              <h2>💬 شات وتوجيه الـ Agent الحي (Interactive Co-Pilot)</h2>
+              <span class="header-badge" style="background:#3399ff;color:#fff;">Co-Pilot Ready</span>
+            </div>
+            <!-- Interactive Question in Split View -->
+            <div id="split-question-banner" class="agent-question-card" style="display:none;">
+              <div class="aq-hdr">
+                <span>❓ استشارة من الـ Agent:</span>
+                <span class="aq-badge">بانتظار قرارك</span>
+              </div>
+              <div id="split-aq-text" class="aq-text">...</div>
+              <div id="split-aq-buttons" class="aq-btn-row"></div>
+            </div>
+            <!-- Quick Chips in Split View -->
+            <div class="hint-chips-container">
+              <div class="hint-chip" onclick="sendQuickHint('السيرفر شغال Nginx و PostgreSQL')">🐘 PostgreSQL</div>
+              <div class="hint-chip" onclick="sendQuickHint('ركز على باراميتر id')">🎯 ركز على id</div>
+              <div class="hint-chip" onclick="sendQuickHint('جرب UNION SELECT NULL, NULL -- -')">💉 UNION NULL</div>
+            </div>
+            <div id="split-chat-messages" style="flex:1;overflow-y:auto;padding:8px;background:#05070a;border-radius:6px;margin-bottom:8px;"></div>
+            <div class="chat-input-row">
+              <button onclick="sendSplitChat()" class="btn-sm" style="background:#00ff41;color:#000;font-weight:bold;">🚀 إرسال</button>
+              <button onclick="sendSplitHint()" class="btn-sm" style="background:#ffaa00;color:#000;font-weight:bold;">💡 نصيحة</button>
+              <input id="split-chat-input" type="text" placeholder="اكتب نصيحة أو توجيه للـ Agent أثناء عمله..." onkeydown="if(event.key==='Enter') sendSplitChat()">
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Agent Mission Monitor -->
+        <div class="split-col">
+          <div class="card" style="height:100%;display:flex;flex-direction:column;margin-bottom:0;">
+            <div class="card-hdr">
+              <h2>🤖 شاشة مهمة الـ Agent الحية (Mission Telemetry)</h2>
+              <div style="display:flex;gap:6px;">
+                <button onclick="startScan()" class="btn-sm" style="background:#00ff41;color:#000;font-weight:bold;">🚀 تشغيل</button>
+                <button onclick="clearLog()" class="btn-sm">مسح</button>
+              </div>
+            </div>
+            <div class="agent-toggle-bar" style="padding:6px 10px;margin-bottom:8px;">
+              <span id="split-burp-badge" class="burp-badge online">🟢 Burp متصل</span>
+              <span style="font-size:0.75em;color:#aaa;">الهدف: <strong id="split-target-label" style="color:#00e5ff;">لم يحدد بعد</strong></span>
+            </div>
+            <div id="split-terminal" style="flex:1;background:#020305;border:1px solid rgba(0,255,65,0.2);border-radius:6px;padding:8px;font-family:var(--font-mono);font-size:11px;color:#a3e635;overflow-y:auto;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
+

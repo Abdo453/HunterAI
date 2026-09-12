@@ -1,0 +1,86 @@
+[
+  {
+    "cve_id": "CVE-2023-34362",
+    "software": "Progress MOVEit Transfer",
+    "cvss": 9.8,
+    "vulnerability_type": "SQL_INJECTION",
+    "cwe": "CWE-89",
+    "affected_versions": "Before 2021.0.6, 2021.1.4, 2022.0.4, 2022.1.5, 2023.0.1",
+    "architecture_root_cause": "The web application improperly handled database queries in human.aspx via user-controlled HTTP request headers (specifically the X-siLock-Session-Info header or guestaccess.aspx parameters) which were directly concatenated into dynamic SQL queries without parameterized binding.",
+    "detection_signals": [
+      "moveit_transfer_login",
+      "human.aspx",
+      "guestaccess.aspx",
+      "custom_header_processing",
+      "database_query_header_leak"
+    ],
+    "verification_strategy": "Send controlled, non-destructive probe verifying whether custom session header values alter database lookup behavior or generate differential response timing.",
+    "evidence_requirements": [
+      "header_influence_differential",
+      "unauthenticated_response_anomaly_hash"
+    ],
+    "remediation": "Apply vendor security patch; replace dynamic string interpolation in session handling with strongly-typed parameterized prepared statements; enforce strict header sanitization."
+  },
+  {
+    "cve_id": "CVE-2024-27956",
+    "software": "WordPress Automatic Plugin",
+    "cvss": 9.8,
+    "vulnerability_type": "SQL_INJECTION",
+    "cwe": "CWE-89",
+    "affected_versions": "Versions before 3.92.1",
+    "architecture_root_cause": "The plugin exposed an unauthenticated endpoint at /wp-content/plugins/wp-automatic/inc/csv.php that accepted a query parameter 'q' which was passed directly into $wpdb->query() without escaping or using prepared statements.",
+    "detection_signals": [
+      "wp_automatic_csv_endpoint",
+      "unauthenticated_direct_php_file",
+      "q_parameter",
+      "direct_wpdb_query"
+    ],
+    "verification_strategy": "Test whether providing a harmless SQL boolean expression in the 'q' parameter yields differential CSV output or an empty result versus a syntax exception.",
+    "evidence_requirements": [
+      "csv_differential_content",
+      "unauthenticated_200_with_query_dependency"
+    ],
+    "remediation": "Update to version 3.92.1 or newer; restrict unauthenticated direct access to script files; utilize $wpdb->prepare() for all database interactions."
+  },
+  {
+    "cve_id": "CVE-2023-40028",
+    "software": "Ghost CMS",
+    "cvss": 7.5,
+    "vulnerability_type": "SQL_INJECTION",
+    "cwe": "CWE-89",
+    "affected_versions": "Ghost < 5.59.1",
+    "architecture_root_cause": "The NQL (Not Quite Lucene) filter parser in Ghost backend failed to sanitize nested filter clauses containing specific operators, leading to unescaped query parameter injection into the Knex.js query builder.",
+    "detection_signals": [
+      "ghost_api_posts_filter",
+      "nql_query_parsing",
+      "nested_filter_syntax",
+      "knex_error_anomaly"
+    ],
+    "verification_strategy": "Send differential NQL filter queries with balanced vs unbalanced delimiters and measure response differences.",
+    "evidence_requirements": [
+      "nql_boolean_differential",
+      "ghost_api_response_divergence"
+    ],
+    "remediation": "Upgrade Ghost to 5.59.1 or above; validate NQL AST before generating Knex queries; enforce strict property allowlists in filter parser."
+  },
+  {
+    "cve_id": "CVE-2022-44877",
+    "software": "CentOS Web Panel (CWP)",
+    "cvss": 9.8,
+    "vulnerability_type": "SQL_INJECTION",
+    "cwe": "CWE-89",
+    "affected_versions": "CWP 7 prior to version 0.9.8.1147",
+    "architecture_root_cause": "Unauthenticated access to administrative logging route accepted unescaped input that was concatenated into audit database queries before session validation.",
+    "detection_signals": [
+      "cwp_login_panel",
+      "login_index_audit",
+      "parameter_concatenation"
+    ],
+    "verification_strategy": "Measure differential response codes when supplying valid vs malformed character sequences in authentication audit fields.",
+    "evidence_requirements": [
+      "audit_differential_response",
+      "database_exception_signature"
+    ],
+    "remediation": "Update CWP to the latest release; enforce authentication before database logging; use prepared statements across all administrative logging scripts."
+  }
+]

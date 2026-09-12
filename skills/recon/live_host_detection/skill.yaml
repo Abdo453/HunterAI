@@ -1,0 +1,23 @@
+name: live_host_detection
+category: recon
+description: "Probe which subdomains/hosts are alive using httpx or httprobe"
+version: "1.0"
+input:
+  - subdomains.txt
+output:
+  - live_hosts.txt
+depends_on:
+  - subdomain_enum
+next_skills:
+  - tech_detection
+  - port_scan
+  - crawling
+fallback_skills: []
+tools_required:
+  - httpx
+fallback_tools:
+  - httprobe
+  - curl
+timeout_seconds: 150
+max_retries: 2
+enabled: true

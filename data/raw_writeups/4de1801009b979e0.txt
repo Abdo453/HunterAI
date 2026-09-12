@@ -1,0 +1,2 @@
+Case Study Analysis of how I identified an Error-Based SQL Injection vulnerability in a production environment via (VDP).
+Continue reading on Medium » CVEs:  Techniques: sqli

@@ -1,0 +1,80 @@
+{
+  "technologies": [],
+  "domains": [],
+  "subdomains": [],
+  "api_endpoints": {
+    "GET /api/orders/55": {
+      "method": "GET",
+      "path": "/api/orders/55",
+      "params": [
+        "id"
+      ],
+      "auth_required": false,
+      "first_seen": 1788367547.39412,
+      "times_seen": 45
+    },
+    "GET /api/v2/users/9912": {
+      "method": "GET",
+      "path": "/api/v2/users/9912",
+      "params": [
+        "user_id"
+      ],
+      "auth_required": true,
+      "first_seen": 1788367547.6974797,
+      "times_seen": 45
+    },
+    "GET /api/v1/invoices/9412": {
+      "method": "GET",
+      "path": "/api/v1/invoices/9412",
+      "params": [],
+      "auth_required": true,
+      "first_seen": 1788368639.5361702,
+      "times_seen": 45
+    },
+    "GET /api/v1/invoices/0": {
+      "method": "GET",
+      "path": "/api/v1/invoices/0",
+      "params": [],
+      "auth_required": true,
+      "first_seen": 1788369449.552741,
+      "times_seen": 1
+    },
+    "GET /api/v1/invoices/1": {
+      "method": "GET",
+      "path": "/api/v1/invoices/1",
+      "params": [],
+      "auth_required": true,
+      "first_seen": 1788369449.5554764,
+      "times_seen": 1
+    },
+    "GET /api/v1/invoices/2": {
+      "method": "GET",
+      "path": "/api/v1/invoices/2",
+      "params": [],
+      "auth_required": true,
+      "first_seen": 1788369449.5582023,
+      "times_seen": 1
+    },
+    "GET /api/v1/invoices/3": {
+      "method": "GET",
+      "path": "/api/v1/invoices/3",
+      "params": [],
+      "auth_required": true,
+      "first_seen": 1788369449.560468,
+      "times_seen": 1
+    },
+    "GET /api/v1/invoices/100": {
+      "method": "GET",
+      "path": "/api/v1/invoices/100",
+      "params": [],
+      "auth_required": true,
+      "first_seen": 1788369491.6221008,
+      "times_seen": 168
+    }
+  },
+  "auth_mechanisms": [],
+  "user_roles": [],
+  "attack_paths": [],
+  "architecture_summary": "",
+  "decisions_log": []
+}

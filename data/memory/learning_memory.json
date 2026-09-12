@@ -1,0 +1,513 @@
+{
+  "mastered_concepts": [
+    "Object-Level Access Control"
+  ],
+  "weak_concepts": [],
+  "quiz_history": [
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788371224.9643607
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788371294.1971
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788371726.5450208
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788373538.2313733
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788373568.6734464
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788373709.9064808
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788373740.3212335
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788373840.1967762
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788373870.6934497
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788380730.155488
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788380761.324165
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788381061.4059923
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788381092.4614289
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788383419.0733027
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788383449.4979422
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788384188.4617405
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788384219.0001907
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788386230.9816382
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788386247.5634918
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788441336.3702643
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788441366.9227946
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788442583.445772
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788442614.0560615
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788443081.6182363
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788443112.865344
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788443373.0586288
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788443404.706374
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788443860.644375
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788443893.420151
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788444216.8687947
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788444249.0649102
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788444726.9108846
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788444767.114044
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788445152.1621737
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788445192.4910963
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788445453.6690943
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788445493.7138407
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788445752.237749
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788445793.01838
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788445981.3537576
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788446006.5338027
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788446161.2902293
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788446189.8108218
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788446406.597899
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788446448.969371
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788449916.431911
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788449961.8666892
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788451000.154491
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788451041.403342
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788453760.4235005
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788453789.7341044
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788470783.607657
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788470835.2242746
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788522027.677311
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788522050.7658002
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788730316.2564228
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788730359.3980615
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788892240.2156632
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788892462.762922
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788899246.645535
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788899459.1263747
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788954755.417828
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788954988.2811887
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788959507.3190293
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788959743.890413
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1788965693.1128793
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1788965931.1403215
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1789175281.8297286
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1789175532.3908272
+    }
+  ],
+  "lessons_completed": [
+    "LSN-2da0910c",
+    "LSN-8c2d082a",
+    "LSN-aceddd2f",
+    "LSN-af637b86",
+    "LSN-5857649b",
+    "LSN-ed41897d",
+    "LSN-512fd3ff",
+    "LSN-35d2a08f",
+    "LSN-6e087a4e",
+    "LSN-0c2bd99a",
+    "LSN-23a7dd83",
+    "LSN-e72c6093",
+    "LSN-1ccc48fa",
+    "LSN-0bf507d5",
+    "LSN-d00f0ed8",
+    "LSN-621aa1e7",
+    "LSN-75ee32c8",
+    "LSN-68ea0ea0",
+    "LSN-bd23287f"
+  ],
+  "overall_score": 0.0
+}

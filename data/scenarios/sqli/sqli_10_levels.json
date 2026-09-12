@@ -1,0 +1,523 @@
+[
+  {
+    "scenario_id": "sqli_lvl0_sql_concept",
+    "skill": "sql_fundamentals",
+    "difficulty": 0,
+    "environment": {
+      "type": "mock_catalog",
+      "database": "postgresql"
+    },
+    "initial_state": {
+      "query_template": "SELECT * FROM products WHERE category = 'Books'",
+      "endpoint": "/products?category=Books",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "category=Books",
+        "status": 200,
+        "rows_returned": 15,
+        "type": "valid_category"
+      },
+      {
+        "input": "category=NonExistentCategoryXYZ",
+        "status": 200,
+        "rows_returned": 0,
+        "type": "empty_set"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_understand_where",
+        "action_kind": "DISCOVERY",
+        "tool_name": "query_logic_analyzer",
+        "target": "/products?category=Books",
+        "predicted_outcomes": {"empty_set": 0.5, "rows_returned": 0.5},
+        "rationale": "Verify that WHERE clause filters rows based on evaluated predicate"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "NONE",
+      "root_concept": "WHERE clause predicate evaluation",
+      "is_vulnerable": false
+    },
+    "success_criteria": [
+      "distinguish_query_filter_from_vulnerability",
+      "recognize_empty_result_is_normal_sql_behavior",
+      "avoid_false_positive_on_empty_rows"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": false
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl1_input_reflection",
+    "skill": "reflection_observation",
+    "difficulty": 1,
+    "environment": {
+      "type": "mock_catalog",
+      "database": "mysql"
+    },
+    "initial_state": {
+      "endpoint": "/catalog?search=Widget",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "search=Widget",
+        "status": 200,
+        "response_length": 4820,
+        "reflected": true
+      },
+      {
+        "input": "search=SpecialCharTest",
+        "status": 200,
+        "response_length": 4820,
+        "reflected": true
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_test_reflection",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "reflection_evaluator",
+        "target": "/catalog?search=Widget",
+        "predicted_outcomes": {"reflected": 1.0},
+        "rationale": "Check whether input reflection alters query structure or is merely echoed in HTML"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "NONE",
+      "root_concept": "Reflection != SQL Injection",
+      "is_vulnerable": false
+    },
+    "success_criteria": [
+      "state_observation_distinct_from_finding",
+      "avoid_declaring_sqli_solely_on_input_echo"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl2_boolean_differential",
+    "skill": "boolean_differential",
+    "difficulty": 2,
+    "environment": {
+      "type": "mock_shop",
+      "database": "postgresql"
+    },
+    "initial_state": {
+      "endpoint": "/items?category=tech",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "category=tech' AND 1=1--",
+        "status": 200,
+        "items_count": 12,
+        "response_length": 3410
+      },
+      {
+        "input": "category=tech' AND 1=2--",
+        "status": 200,
+        "items_count": 0,
+        "response_length": 1205
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_boolean_pair",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "boolean_probe_pair",
+        "target": "/items?category=tech",
+        "predicted_outcomes": {"items_count_12": 0.5, "items_count_0": 0.5},
+        "rationale": "Inject boolean true and false predicates to observe conditional database response"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "boolean_differential",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "detect_differential_content_between_true_and_false",
+      "formulate_sqli_hypothesis",
+      "collect_differential_hash_evidence"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl3_auth_logic",
+    "skill": "authentication_logic_bypass",
+    "difficulty": 3,
+    "environment": {
+      "type": "mock_auth",
+      "database": "mysql"
+    },
+    "initial_state": {
+      "endpoint": "/api/v1/login",
+      "method": "POST"
+    },
+    "observations": [
+      {
+        "input": "username=admin'-- & password=dummy",
+        "status": 200,
+        "auth_result": "SUCCESS_TOKEN_ISSUED"
+      },
+      {
+        "input": "username=admin & password=wrongpass",
+        "status": 401,
+        "auth_result": "INVALID_CREDENTIALS"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_auth_bypass_check",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "auth_logic_tester",
+        "target": "/api/v1/login",
+        "predicted_outcomes": {"SUCCESS_TOKEN_ISSUED": 0.5, "INVALID_CREDENTIALS": 0.5},
+        "rationale": "Evaluate query logic alteration in authentication statement"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "auth_query_truncation",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "contrast_valid_token_issuance_against_unauthenticated_baseline",
+      "link_token_issuance_to_sql_comment_truncation"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl4_error_based",
+    "skill": "error_differentiation",
+    "difficulty": 4,
+    "environment": {
+      "type": "mock_db",
+      "database": "postgresql"
+    },
+    "initial_state": {
+      "endpoint": "/products/details?id=50",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "id=50'",
+        "status": 500,
+        "error_leaked": "syntax error at or near '50'' (PostgreSQL error 42601)"
+      },
+      {
+        "input": "id=non_number",
+        "status": 400,
+        "error_leaked": "Validation error: id must be integer"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_error_probe",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "database_error_distinguisher",
+        "target": "/products/details?id=50",
+        "predicted_outcomes": {"syntax_error_42601": 0.5, "app_validation_400": 0.5},
+        "rationale": "Distinguish between application validation errors and underlying RDBMS syntax exceptions"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "error_based_syntax",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "differentiate_app_error_from_database_syntax_error",
+      "identify_postgresql_dialect_from_error_signature"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl5_union_reasoning",
+    "skill": "union_column_enumeration",
+    "difficulty": 5,
+    "environment": {
+      "type": "mock_catalog",
+      "database": "mysql"
+    },
+    "initial_state": {
+      "endpoint": "/search?filter=Gifts",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "filter=Gifts' ORDER BY 1--",
+        "status": 200,
+        "result": "NORMAL"
+      },
+      {
+        "input": "filter=Gifts' ORDER BY 2--",
+        "status": 200,
+        "result": "NORMAL"
+      },
+      {
+        "input": "filter=Gifts' ORDER BY 3--",
+        "status": 500,
+        "result": "ERROR_UNKNOWN_COLUMN"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_order_by_enumeration",
+        "action_kind": "DISCOVERY",
+        "tool_name": "column_count_prober",
+        "target": "/search?filter=Gifts",
+        "predicted_outcomes": {"NORMAL": 0.67, "ERROR_UNKNOWN_COLUMN": 0.33},
+        "rationale": "Deduce exact number of columns returned by original query via ORDER BY boundary"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "union_based",
+      "columns_count": 2,
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "infer_exact_column_count_of_two",
+      "deduce_union_compatibility_preconditions"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl6_blind_inference",
+    "skill": "blind_inference",
+    "difficulty": 6,
+    "environment": {
+      "type": "mock_api",
+      "database": "sqlite"
+    },
+    "initial_state": {
+      "endpoint": "/users/profile?id=100",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "id=100 AND (SELECT 1)=1",
+        "status": 200,
+        "body": "User Profile Found",
+        "visible_db_data": false
+      },
+      {
+        "input": "id=100 AND (SELECT 1)=2",
+        "status": 200,
+        "body": "User Profile Not Found",
+        "visible_db_data": false
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_blind_probe",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "blind_side_effect_analyzer",
+        "target": "/users/profile?id=100",
+        "predicted_outcomes": {"User Profile Found": 0.5, "User Profile Not Found": 0.5},
+        "rationale": "Infer query success via application behavioral side effect despite zero database output in body"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "blind_boolean",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "understand_lack_of_db_output_does_not_preclude_sqli",
+      "exploit_observable_side_effects_consistently"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl7_time_based_noise",
+    "skill": "time_based_statistical_reasoning",
+    "difficulty": 7,
+    "environment": {
+      "type": "mock_backend",
+      "database": "postgresql"
+    },
+    "initial_state": {
+      "endpoint": "/track?click_id=892",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "sample": "baseline_run_1",
+        "latency_ms": 190
+      },
+      {
+        "sample": "baseline_run_2",
+        "latency_ms": 230
+      },
+      {
+        "sample": "baseline_run_3",
+        "latency_ms": 205
+      },
+      {
+        "sample": "time_delay_probe_pg_sleep_5",
+        "latency_ms": 5210
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_time_statistical_test",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "statistical_latency_analyzer",
+        "target": "/track?click_id=892",
+        "predicted_outcomes": {"baseline_200ms": 0.5, "delayed_5000ms": 0.5},
+        "rationale": "Compare delayed probe against network jitter baseline to establish statistical confidence"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "time_based_blind",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "reject_single_slow_request_as_insufficient_proof",
+      "verify_consistent_delta_against_network_latency_baseline"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl8_filtering_normalization",
+    "skill": "filtering_and_transformation",
+    "difficulty": 8,
+    "environment": {
+      "type": "mock_waf_backend",
+      "database": "mysql"
+    },
+    "initial_state": {
+      "endpoint": "/news?tag=sports",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "input": "tag=sports' OR 1=1--",
+        "status": 403,
+        "note": "WAF blocked space character"
+      },
+      {
+        "input": "tag=sports'/**/OR/**/1=1--",
+        "status": 200,
+        "note": "Inline comment bypass succeeded, returning full news list"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_normalization_probe",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "waf_normalization_analyzer",
+        "target": "/news?tag=sports",
+        "predicted_outcomes": {"waf_403": 0.5, "bypass_200": 0.5},
+        "rationale": "Determine if failure was due to application non-vulnerability or WAF input transformation"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "waf_filtered_whitespace",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "distinguish_waf_rejection_from_safe_parameterization",
+      "deduce_alternative_sql_whitespace_syntax"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "sqli_lvl9_multi_hypothesis_investigation",
+    "skill": "multi_hypothesis_epistemic_investigation",
+    "difficulty": 9,
+    "environment": {
+      "type": "mock_complex_enterprise",
+      "database": "postgresql"
+    },
+    "initial_state": {
+      "endpoint": "/api/v2/products/search",
+      "method": "GET"
+    },
+    "observations": [
+      {
+        "endpoint": "/api/v2/products/search?q=phone",
+        "status": 200,
+        "length": 4200
+      },
+      {
+        "endpoint": "/api/v2/products/search?q=phone' and 1=1--",
+        "status": 200,
+        "length": 4200
+      },
+      {
+        "endpoint": "/api/v2/products/search?sort=price",
+        "status": 200,
+        "order": "ascending"
+      },
+      {
+        "endpoint": "/api/v2/products/search?sort=(CASE WHEN (1=1) THEN price ELSE id END)",
+        "status": 200,
+        "order": "sorted_by_price"
+      },
+      {
+        "endpoint": "/api/v2/products/search?sort=(CASE WHEN (1=2) THEN price ELSE id END)",
+        "status": 200,
+        "order": "sorted_by_id"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_sort_differential_probe",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "order_by_case_probe",
+        "target": "/api/v2/products/search?sort=price",
+        "predicted_outcomes": {"sorted_by_price": 0.5, "sorted_by_id": 0.5},
+        "rationale": "Disambiguate whether ?q parameter (safe) or ?sort parameter (vulnerable dynamic clause) is the flaw"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SQL_INJECTION",
+      "variant": "order_by_clause_injection",
+      "vulnerable_param": "sort",
+      "safe_param": "q",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "isolate_vulnerable_sort_parameter_from_safe_q_parameter",
+      "prove_order_by_injection_via_conditional_sorting",
+      "reject_false_hypothesis_on_search_query"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  }
+]

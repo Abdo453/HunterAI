@@ -1,0 +1,23 @@
+{
+  "id": "16594f69",
+  "timestamp": "1788954692.5924692",
+  "user_input": "Scan target for XSS vulnerabilities",
+  "task_type": "SECURITY",
+  "route": "SECURITY",
+  "models_used": [
+    "whiterabbitneo"
+  ],
+  "final_answer": "Autonomous Agent analysis complete. High risk finding.",
+  "duration_seconds": 0.0,
+  "metadata": {
+    "gpu_status": {
+      "locked": false,
+      "current_model": null,
+      "elapsed_seconds": 0,
+      "queue_length": 0,
+      "total_runs": 0,
+      "total_unloads": 0
+    },
+    "selected_model": "auto"
+  }
+}

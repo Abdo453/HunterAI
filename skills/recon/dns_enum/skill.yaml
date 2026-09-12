@@ -1,0 +1,20 @@
+name: dns_enum
+category: recon
+description: "DNS enumeration — A, AAAA, MX, NS, TXT, CNAME records via dig and dnsx"
+version: "1.0"
+input:
+  - target_domain: str
+output:
+  - dns_records.txt
+depends_on: []
+next_skills:
+  - live_host_detection
+fallback_skills: []
+tools_required:
+  - dig
+fallback_tools:
+  - nslookup
+  - dnsx
+timeout_seconds: 90
+max_retries: 2
+enabled: true

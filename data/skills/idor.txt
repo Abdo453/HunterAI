@@ -1,0 +1,4 @@
+=== Skill: Insecure Direct Object References (IDOR) ===
+- Patterns: Numeric IDs in URL path (/api/users/123), query parameters (?user_id=105, ?account_id=982), UUIDs in requests, JSON payload {"userId": "100"}.
+- Attack Vectors: Parameter tampering, changing numeric IDs incrementally, replacing victim ID with attacker ID, method switching (GET to POST/PUT/DELETE).
+- Verification: Differential response analysis (HTTP 200 with another user's private data vs 403 Forbidden). Check for authorization headers bypass.

@@ -1,0 +1,15 @@
+[
+  {
+    "category": "xss",
+    "title": "What is cross-site scripting (XSS) and how to prevent it? | Web Security Academy",
+    "vulnerability_type": "What is cross-site scripting (XSS) and how to prevent it? | Web Security Academy",
+    "attack_vectors": [
+      "What is cross-site scripting (XSS) and how to prevent it? | Web Security Academy\nWeb Security Academy\nCross-site scripting\nCross-site scripting\nIn this section, we'll explain what cross-site scripting is, describe the different varieties of cross-site scripting vulnerabilities, and spell out how to "
+    ],
+    "payloads": [],
+    "source_url": "https://portswigger.net/web-security/cross-site-scripting",
+    "content_hash": "dd8367e944ae",
+    "processed_at": "2026-08-20T04:11:29.284383",
+    "skill_id": "skill_0_dd8367e944ae"
+  }
+]

@@ -1,0 +1,92 @@
+[
+  {
+    "url": "http://scanme.nmap.org/images/sitelogo.png",
+    "path": "/images/sitelogo.png",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  },
+  {
+    "url": "http://scanme.nmap.org/shared/images/nst-icons.svg",
+    "path": "/shared/images/nst-icons.svg",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  },
+  {
+    "url": "http://scanme.nmap.org/shared/css/nst.css?v=2",
+    "path": "/shared/css/nst.css",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  },
+  {
+    "url": "http://scanme.nmap.org/shared/css/nst-foot.css?v=2",
+    "path": "/shared/css/nst-foot.css",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  },
+  {
+    "url": "http://scanme.nmap.org/site.css",
+    "path": "/site.css",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  },
+  {
+    "url": "http://scanme.nmap.org/shared/images/tiny-eyeicon.png",
+    "path": "/shared/images/tiny-eyeicon.png",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  },
+  {
+    "url": "http://scanme.nmap.org#menu",
+    "path": "",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  },
+  {
+    "url": "http://scanme.nmap.org",
+    "path": "",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  },
+  {
+    "url": "http://scanme.nmap.org/",
+    "path": "/",
+    "method": "GET",
+    "category": "WEB",
+    "source": "html_crawl",
+    "status_code": null,
+    "headers": {},
+    "parameters": []
+  }
+]

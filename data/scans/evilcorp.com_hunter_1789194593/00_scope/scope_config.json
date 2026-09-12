@@ -1,0 +1,14 @@
+{
+  "target": "evilcorp.com",
+  "domain": "evilcorp.com",
+  "program_name": "default_scope",
+  "in_scope": [
+    "onlyallowed.com"
+  ],
+  "out_of_scope": [],
+  "rate_limit": 15,
+  "authenticated": false,
+  "auth_data": {},
+  "is_authorized": false,
+  "rejection_reason": "Target evilcorp.com is outside authorized scope"
+}

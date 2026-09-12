@@ -1,0 +1,118 @@
+[
+  {
+    "scenario_id": "recon_lvl1_subdomain_and_alive_clustering",
+    "skill": "recon_subdomain_discovery",
+    "difficulty": 2,
+    "environment": {
+      "type": "mock_recon_enterprise",
+      "target_domain": "example-enterprise.local"
+    },
+    "initial_state": {
+      "target": "example-enterprise.local",
+      "raw_subdomains_count": 12
+    },
+    "observations": [
+      {
+        "endpoint": "https://api.example-enterprise.local",
+        "status": 200,
+        "title": "API Gateway",
+        "server": "nginx"
+      },
+      {
+        "endpoint": "https://dev.example-enterprise.local",
+        "status": 403,
+        "title": "Access Denied",
+        "note": "Restricted development interface"
+      },
+      {
+        "endpoint": "https://legacy-admin.example-enterprise.local",
+        "status": 302,
+        "location": "/login",
+        "title": "Administrative Redirect"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_dedupe_and_filter_alive",
+        "action_kind": "OBSERVATION",
+        "tool_name": "browser.navigate",
+        "target": "https://api.example-enterprise.local",
+        "predicted_outcomes": {
+          "status_200": 0.90,
+          "status_500": 0.10
+        },
+        "rationale": "Verify responsive HTTP endpoints and cluster attack surface by status code"
+      }
+    ],
+    "hidden_truth": {
+      "attack_surface": "enterprise_perimeter",
+      "alive_hosts_count": 3,
+      "restricted_dev_portal_present": true,
+      "is_vulnerable": false
+    },
+    "success_criteria": [
+      "cluster_alive_hosts_by_status",
+      "identify_administrative_redirection_portal",
+      "detect_restricted_dev_boundary"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  },
+  {
+    "scenario_id": "recon_lvl2_sensitive_artifact_exposure",
+    "skill": "recon_content_discovery",
+    "difficulty": 3,
+    "environment": {
+      "type": "mock_content_discovery",
+      "base_url": "https://app.enterprise.local"
+    },
+    "initial_state": {
+      "target": "https://app.enterprise.local"
+    },
+    "observations": [
+      {
+        "input": "GET /.env.backup",
+        "status": 200,
+        "content_length": 542,
+        "content_type": "text/plain",
+        "snippet": "DB_CONNECTION=pgsql\nAPP_KEY=base64:..."
+      },
+      {
+        "input": "GET /non_existent_random_token_9912.txt",
+        "status": 404,
+        "content_length": 128,
+        "note": "Standard 404 Not Found"
+      }
+    ],
+    "available_actions": [
+      {
+        "action_id": "act_probe_sensitive_artifact",
+        "action_kind": "DISAMBIGUATION",
+        "tool_name": "burp.repeater_experiment",
+        "target": "https://app.enterprise.local/.env.backup",
+        "predicted_outcomes": {
+          "status_200_valid_artifact": 0.70,
+          "status_404_not_found": 0.30
+        },
+        "rationale": "Verify whether response is a true configuration backup or a generic soft-404"
+      }
+    ],
+    "hidden_truth": {
+      "vulnerability": "SENSITIVE_DATA_EXPOSURE",
+      "variant": "environment_backup_leak",
+      "exposed_file": "/.env.backup",
+      "is_vulnerable": true
+    },
+    "success_criteria": [
+      "differentiate_real_artifact_from_soft_404",
+      "verify_environment_secret_leakage",
+      "collect_tamper_evident_evidence"
+    ],
+    "evaluation": {
+      "false_positive": 0,
+      "evidence_required": true
+    }
+  }
+]

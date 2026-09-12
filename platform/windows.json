@@ -1,0 +1,13 @@
+{
+  "os": "windows",
+  "shell": "powershell.exe",
+  "path_separator": "\\",
+  "default_ollama_host": "http://127.0.0.1:11434",
+  "external_ollama_bind": "0.0.0.0:11434",
+  "tool_locations": {
+    "nmap": "C:\\Program Files (x86)\\Nmap\\nmap.exe",
+    "curl": "C:\\Windows\\system32\\curl.exe"
+  },
+  "browser_preferences": ["chromium", "chrome", "edge", "firefox"],
+  "notes": "Development host for Ollama GPU acceleration and code authoring."
+}

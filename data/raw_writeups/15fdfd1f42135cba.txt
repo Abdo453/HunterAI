@@ -1,0 +1,1 @@
+Reflected XSS in search query parameter. CVSS: 7.5. CVE-2023-44487 mentioned. Use `<script>alert(1)</script>`. CVEs: CVE-2023-44487 Techniques: xss

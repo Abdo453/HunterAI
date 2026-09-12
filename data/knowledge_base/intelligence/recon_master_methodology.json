@@ -1,0 +1,255 @@
+[
+  {
+    "id": "recon_meth_001",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Passive & Active Subdomain Enumeration Pipeline",
+    "prerequisites": ["dns_architecture", "osint_fundamentals"],
+    "signals": [
+      "domain_name",
+      "wildcard_dns",
+      "certificate_transparency",
+      "apex_domain",
+      "cidr_range"
+    ],
+    "verification_strategy": "Orchestrate multi-source passive discovery (Certificate Transparency logs, DNS aggregators, ASN/CIDR mapping), deduplicate using canonical set comparison, and validate active resolution through trusted resolvers.",
+    "evidence_requirements": [
+      "unique_subdomain_list",
+      "dns_a_record_verification",
+      "cname_chain_mapping"
+    ],
+    "remediation_pattern": "Maintain an updated central asset inventory. Deprecate stale DNS records to prevent subdomain takeover risks, and restrict internal DNS zone transfers.",
+    "description": "Comprehensive attack surface discovery methodology: Combines passive OSINT (crt.sh, SecurityTrails, AlienVault) and active permutation/bruteforce. Enforces strict deduplication to isolate unique responsive fully qualified domain names (FQDNs)."
+  },
+  {
+    "id": "recon_meth_002",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Alive Host Verification & Web Server Fingerprinting",
+    "prerequisites": ["http_protocols", "recon_meth_001"],
+    "signals": [
+      "alive_hosts",
+      "http_status_codes",
+      "content_length_delta",
+      "title_tag_extraction",
+      "server_header"
+    ],
+    "verification_strategy": "Probe discovered subdomains across HTTP/HTTPS ports (80, 443, 8080, 8443), record response status codes (200, 301, 401, 403, 404), extract page titles and technology fingerprints, and cluster responsive targets.",
+    "evidence_requirements": [
+      "status_code_matrix",
+      "web_server_fingerprint",
+      "redirection_chain_log"
+    ],
+    "remediation_pattern": "Remove default server signature headers (Server, X-Powered-By) and decommission unmaintained development or testing web servers.",
+    "description": "Transforms raw domain lists into verified web applications. Differentiates between live endpoints, redirection hops, access-restricted zones (401/403), and decommissioned assets."
+  },
+  {
+    "id": "recon_meth_003",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Historical URL Mining & Web Crawling Architecture",
+    "prerequisites": ["http_methods", "recon_meth_002"],
+    "signals": [
+      "historical_endpoints",
+      "archive_urls",
+      "sitemap_discovery",
+      "robots_txt",
+      "crawled_links"
+    ],
+    "verification_strategy": "Aggregate historical URL indices (Wayback Machine CDX, CommonCrawl) and blend with dynamic headless crawler output (katana, gospider). Normalize query parameters and filter by asset categories.",
+    "evidence_requirements": [
+      "deduplicated_url_catalog",
+      "parameter_bearing_endpoints",
+      "sitemap_endpoint_inventory"
+    ],
+    "remediation_pattern": "Decommission abandoned legacy endpoints. Ensure staging or internal administrative endpoints are not linked in public client-side scripts or indexed in sitemaps.",
+    "description": "Discovers deeply nested application routes, deprecated API versions, and forgotten interfaces by merging historical archive data with real-time DOM spidering."
+  },
+  {
+    "id": "recon_meth_004",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "JavaScript Bundle Analysis & Client-Side Secret Detection",
+    "prerequisites": ["javascript_parsing", "regex_pattern_matching"],
+    "signals": [
+      "javascript_bundles",
+      "source_maps",
+      "hardcoded_api_keys",
+      "developer_comments",
+      "internal_api_routes"
+    ],
+    "verification_strategy": "Inspect publicly served JavaScript assets and unpack available source maps. Apply entropy scanning and regex patterns for hardcoded credentials, cloud access tokens, and private API routing tables.",
+    "evidence_requirements": [
+      "identified_secret_signature",
+      "js_file_line_reference",
+      "exposed_endpoint_path"
+    ],
+    "remediation_pattern": "Never store secrets, private API tokens, or internal credentials in client-side code. Route sensitive operations through backend proxies and disable source map publishing in production.",
+    "description": "Static analysis of client-side application scripts. Recovers hidden REST/GraphQL endpoints, undocumented parameters, and accidentally committed credentials."
+  },
+  {
+    "id": "recon_meth_005",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Sensitive Content Discovery & Backup Artifact Auditing",
+    "prerequisites": ["http_status_codes", "differential_analysis"],
+    "signals": [
+      "sensitive_file_extension",
+      "backup_artifacts",
+      "dot_files",
+      "admin_portal",
+      "git_exposure"
+    ],
+    "verification_strategy": "Conduct dictionary-based probing for high-risk configuration artifacts (.env, .git, .bak, .sql, .dump). Validate true findings using content-length and content-type differentiation to eliminate soft-404 false positives.",
+    "evidence_requirements": [
+      "artifact_status_200_proof",
+      "magic_bytes_or_content_hash",
+      "non_default_response_body"
+    ],
+    "remediation_pattern": "Block public access to hidden dot-files and backup file extensions at the web server / reverse proxy layer (e.g., Nginx deny rules).",
+    "description": "Identification of exposed backup archives, database dumps, environment variable files, and source code control repositories accidentally placed in web roots."
+  },
+  {
+    "id": "recon_meth_006",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Hidden Parameter Discovery & Attack Surface Expansion",
+    "prerequisites": ["differential_behavior", "parameter_fuzzing"],
+    "signals": [
+      "query_parameters",
+      "body_parameters",
+      "hidden_input_fields",
+      "json_body_keys"
+    ],
+    "verification_strategy": "Fuzz candidate GET/POST parameter names against responsive endpoints using differential response analysis (detecting variations in content length, status code, or execution timing).",
+    "evidence_requirements": [
+      "differential_response_on_param",
+      "parameter_reflection_proof",
+      "behavioral_change_evidence"
+    ],
+    "remediation_pattern": "Enforce strict schema validation and parameter whitelisting on all incoming requests. Ignore or reject unmodeled parameter keys.",
+    "description": "Uncovers unlinked and undocumented parameters that control backend business logic, debug flags, or legacy database filter clauses."
+  },
+  {
+    "id": "recon_meth_007",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Virtual Host (VHost) Enumeration & Origin IP Discovery",
+    "prerequisites": ["dns_resolution", "http_headers"],
+    "signals": [
+      "vhost_fuzzing",
+      "host_header_injection",
+      "origin_ip_leak",
+      "ssl_certificate_san"
+    ],
+    "verification_strategy": "Mutate the HTTP Host header against target web servers and analyze differential responses to discover private virtual hosts. Inspect SSL SAN certificates and historical DNS records to identify real origin IPs behind CDNs.",
+    "evidence_requirements": [
+      "host_header_differential_response",
+      "origin_ip_ssl_cert_match"
+    ],
+    "remediation_pattern": "Configure default virtual host catch-all blocks returning HTTP 444/403 for unrecognized Host headers. Restrict origin firewall rules to only accept traffic from designated CDN IP blocks.",
+    "description": "Techniques for discovering hidden virtual host environments sharing physical infrastructure, and determining direct origin server addresses bypassing cloud protection layers."
+  },
+  {
+    "id": "recon_meth_008",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Search Engine Intelligence & GHDB (Google Hacking Database) Dorking",
+    "prerequisites": ["osint_fundamentals", "search_engine_syntax"],
+    "signals": [
+      "ghdb_dork",
+      "google_sheets_leak",
+      "filetype_operator",
+      "inurl_operator",
+      "intext_operator"
+    ],
+    "verification_strategy": "Construct targeted search engine queries using advanced boolean operators (site:, inurl:, intext:, filetype:) to detect exposed configuration spreadsheets, unprotected admin portals, and indexed credentials.",
+    "evidence_requirements": [
+      "search_engine_indexed_url",
+      "exposed_sensitive_document_proof"
+    ],
+    "remediation_pattern": "Deploy restrictive robots.txt with 'Disallow: /' on private paths, enforce 'X-Robots-Tag: noindex, nofollow' HTTP headers, and remove sensitive internal documents from public cloud sharing.",
+    "description": "Passive search engine intelligence leveraging Google, Bing, and DuckDuckGo syntax to identify accidentally indexed corporate documents, database backups, and exposed spreadsheets."
+  },
+  {
+    "id": "recon_meth_009",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Public Repository OSINT & Secret Auditing (GitHub Dorking)",
+    "prerequisites": ["git_architecture", "secret_scanning"],
+    "signals": [
+      "github_code_search",
+      "hardcoded_credentials",
+      "api_key_regex",
+      "trufflehog_verified"
+    ],
+    "verification_strategy": "Search public code hosting platforms (GitHub, GitLab) for company domains paired with high-entropy credential keywords (API_KEY, Credentials, secret, password) using automated tools and tokenized queries.",
+    "evidence_requirements": [
+      "repository_commit_url",
+      "verified_api_token_entropy",
+      "active_secret_verification"
+    ],
+    "remediation_pattern": "Integrate pre-commit git hooks (git-secrets, detect-secrets, TruffleHog) in developer pipelines, rotate leaked credentials immediately, and enforce cloud secret managers.",
+    "description": "Detection of hardcoded secrets, private cryptographic keys, and backend API credentials accidentally published to public version control repositories by developers."
+  },
+  {
+    "id": "recon_meth_010",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Subdomain Takeover & Dangling DNS Record Verification",
+    "prerequisites": ["dns_cname_records", "cloud_hosting_providers"],
+    "signals": [
+      "dangling_cname",
+      "subzy_unclaimed_provider",
+      "404_provider_error_message"
+    ],
+    "verification_strategy": "Analyze DNS CNAME chains of all discovered subdomains to identify pointers to third-party cloud services (AWS S3, GitHub Pages, Heroku, Surge, Azure) where the underlying cloud resource has been deleted but the DNS entry remains active.",
+    "evidence_requirements": [
+      "cname_target_resolution",
+      "cloud_provider_unclaimed_signature"
+    ],
+    "remediation_pattern": "Audit DNS zones regularly to delete orphaned CNAME records before releasing cloud services, and implement DNS verification guards provided by SaaS platforms.",
+    "description": "Verification of dangling DNS pointers enabling attackers to claim abandoned cloud resources and gain unauthorized control of corporate subdomains."
+  },
+  {
+    "id": "recon_meth_011",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "Access Control Header Mutation & 403 Response Differential",
+    "prerequisites": ["reverse_proxy_mechanics", "http_headers"],
+    "signals": [
+      "forbidden_403_status",
+      "x_forwarded_for_bypass",
+      "x_original_url_rewrite",
+      "path_normalization_traversal"
+    ],
+    "verification_strategy": "Test restricted endpoints (HTTP 403) by mutating proxy forwarding headers (X-Forwarded-For: 127.0.0.1, X-Original-URL, X-Rewrite-URL) and applying path normalization tricks (e.g. /admin/./ or /admin%20) to evaluate whether frontend reverse proxy rules desynchronize from backend access logic.",
+    "evidence_requirements": [
+      "status_differential_403_to_200",
+      "authorized_response_body_hash"
+    ],
+    "remediation_pattern": "Enforce authorization logic at the application controller level rather than relying solely on reverse proxy URL filtering rules. Strip untrusted client-supplied forwarding headers at the edge proxy.",
+    "description": "Evaluating discrepancies between reverse proxies and application backends where header manipulation or path normalization allows unauthorized access to restricted interfaces."
+  },
+  {
+    "id": "recon_meth_012",
+    "item_type": "methodology",
+    "topic": "recon",
+    "name": "CMS Architecture & WordPress Endpoint Auditing",
+    "prerequisites": ["cms_internals", "rest_api_principles"],
+    "signals": [
+      "wordpress_rest_api",
+      "wp_json_users_endpoint",
+      "author_sitemap_xml",
+      "plugin_debug_log"
+    ],
+    "verification_strategy": "Probe common Content Management System (CMS) interfaces for unauthenticated user enumeration routes (/wp-json/wp/v2/users, ?author=1), public debug logs, and outdated plugin components.",
+    "evidence_requirements": [
+      "enumerated_username_list",
+      "debug_log_content_proof"
+    ],
+    "remediation_pattern": "Disable public access to the WordPress REST API users endpoint for unauthenticated visitors, disable display of debug logs in production, and keep core/plugins updated.",
+    "description": "Specialized reconnaissance methodology for identifying user enumerations, configuration leaks, and exposed debugging interfaces in popular CMS deployments."
+  }
+]
+

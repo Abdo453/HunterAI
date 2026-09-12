@@ -1,0 +1,28 @@
+[
+  {
+    "parameter": "v",
+    "endpoint": "http://scanme.nmap.org/shared/css/nst.css?v=2",
+    "method": "GET",
+    "source": "url_query",
+    "potential_classes": [
+      "GeneralFuzz"
+    ],
+    "sample_value": "2",
+    "context": {},
+    "tested_skills": [],
+    "status": "DISCOVERED"
+  },
+  {
+    "parameter": "v",
+    "endpoint": "http://scanme.nmap.org/shared/css/nst-foot.css?v=2",
+    "method": "GET",
+    "source": "url_query",
+    "potential_classes": [
+      "GeneralFuzz"
+    ],
+    "sample_value": "2",
+    "context": {},
+    "tested_skills": [],
+    "status": "DISCOVERED"
+  }
+]

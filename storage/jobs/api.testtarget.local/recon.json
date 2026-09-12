@@ -1,0 +1,27 @@
+{
+  "target": "api.testtarget.local",
+  "subdomains": [
+    "api.api.testtarget.local",
+    "admin.api.testtarget.local",
+    "staging.api.testtarget.local"
+  ],
+  "endpoints": [
+    "https://api.testtarget.local/api/v1/items?id=1",
+    "https://api.testtarget.local/api/v1/users/profile",
+    "https://api.testtarget.local/login"
+  ],
+  "technologies": [
+    "PHP 8.2",
+    "Laravel 10",
+    "PostgreSQL",
+    "Nginx"
+  ],
+  "parameters": [
+    {
+      "name": "id",
+      "location": "query",
+      "endpoint": "https://api.testtarget.local/api/v1/items",
+      "suspected": "SQLi"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+name: port_scan
+category: recon
+description: "Port scanning using nmap, rustscan, or masscan with service/version detection"
+version: "1.0"
+input:
+  - target_domain: str
+  - live_hosts.txt
+output:
+  - nmap.txt
+  - nmap_open_ports.txt
+  - nmap_services.txt
+depends_on: []
+next_skills:
+  - tech_detection
+  - crawling
+fallback_skills:
+  - tech_detection
+tools_required:
+  - nmap
+fallback_tools:
+  - rustscan
+  - masscan
+timeout_seconds: 300
+max_retries: 1
+enabled: true

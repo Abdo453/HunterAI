@@ -1,0 +1,23 @@
+name: tech_detection
+category: recon
+description: "Detect web technologies, frameworks, CMS, and WAF using whatweb and httpx"
+version: "1.0"
+input:
+  - live_hosts.txt
+  - target_domain: str
+output:
+  - technologies.txt
+depends_on:
+  - live_host_detection
+next_skills:
+  - crawling
+  - endpoint_discovery
+fallback_skills: []
+tools_required:
+  - whatweb
+fallback_tools:
+  - httpx
+  - wafw00f
+timeout_seconds: 120
+max_retries: 2
+enabled: true

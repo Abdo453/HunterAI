@@ -1,0 +1,16 @@
+name: report_generator
+category: reporting
+description: "Consolidate all mission outputs and findings into a final markdown security audit report"
+version: "1.0"
+input:
+  - all_mission_outputs
+output:
+  - final_report.md
+depends_on: []
+next_skills: []
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 60
+max_retries: 2
+enabled: true

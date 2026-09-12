@@ -1,0 +1,19 @@
+name: api_surface_audit
+category: analysis
+description: "Audit REST, GraphQL, and Swagger/OpenAPI endpoints for introspection and mass assignment risks"
+version: "1.0"
+input:
+  - endpoints.txt
+  - urls.txt
+output:
+  - api_surface_audit.txt
+depends_on:
+  - endpoint_discovery
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 60
+max_retries: 2
+enabled: true

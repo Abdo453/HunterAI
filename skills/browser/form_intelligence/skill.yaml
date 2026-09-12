@@ -1,0 +1,21 @@
+name: form_intelligence
+category: browser
+description: "Map all web application forms (Login, Register, Reset, Search, Upload) and input fields into an interactive Action Matrix"
+version: "1.0"
+input:
+  - forms.txt
+  - inputs.txt
+output:
+  - forms_map.json
+  - auth_surface.txt
+depends_on:
+  - browser_recon
+next_skills:
+  - behavior_analysis
+  - report_generator
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 90
+max_retries: 2
+enabled: true

@@ -1,0 +1,20 @@
+{
+  "id": "20b61f8c",
+  "timestamp": "1787091295.7903802",
+  "user_input": "هاى",
+  "task_type": "CODING",
+  "route": "CODING",
+  "models_used": [],
+  "final_answer": "",
+  "duration_seconds": 0.91,
+  "metadata": {
+    "gpu_status": {
+      "locked": false,
+      "current_model": null,
+      "elapsed_seconds": 0,
+      "queue_length": 0,
+      "total_runs": 1,
+      "total_unloads": 1
+    }
+  }
+}

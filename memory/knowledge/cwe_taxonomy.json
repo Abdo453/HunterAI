@@ -1,0 +1,32 @@
+{
+  "CWE-89": {
+    "name": "SQL Injection",
+    "category": "Injection",
+    "severity": "High"
+  },
+  "CWE-79": {
+    "name": "Cross-Site Scripting",
+    "category": "Input Validation",
+    "severity": "Medium"
+  },
+  "CWE-918": {
+    "name": "Server-Side Request Forgery",
+    "category": "Network",
+    "severity": "High"
+  },
+  "CWE-639": {
+    "name": "Broken Object Level Authorization (IDOR)",
+    "category": "Authorization",
+    "severity": "High"
+  },
+  "CWE-22": {
+    "name": "Path Traversal",
+    "category": "File Access",
+    "severity": "High"
+  },
+  "CWE-94": {
+    "name": "Code Injection / SSTI",
+    "category": "Execution",
+    "severity": "Critical"
+  }
+}

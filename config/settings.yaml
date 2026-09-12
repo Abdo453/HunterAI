@@ -1,0 +1,34 @@
+# ============================================================
+# PentestAI Unified - الإعدادات العامة
+# ============================================================
+
+server:
+  host: "127.0.0.1"
+  port: 7070
+  debug: false
+
+storage:
+  sessions_dir: "data/sessions"
+  reports_dir: "data/reports"
+  wordlists_dir: "data/wordlists"
+
+logging:
+  level: "INFO"
+  file: "data/pentestai.log"
+
+scan:
+  default_timeout: 300
+  max_parallel_tools: 5
+
+report:
+  formats: ["json", "html"]
+  include_raw_output: true
+  cvss_version: "3.1"
+
+permissions:
+  autonomous_full_permissions: true
+  auto_approve_all: true
+  allow_active_probing: true
+  allow_elevated_sudo: true
+  unrestricted_scope: true
+

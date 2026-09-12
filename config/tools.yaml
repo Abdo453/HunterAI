@@ -1,0 +1,80 @@
+# ============================================================
+# PentestAI Unified - أدوات الـ Pentest (150+)
+# ============================================================
+
+network:
+  nmap:         {cmd: nmap,         args: "-sV -sC",    timeout: 300}
+  masscan:      {cmd: masscan,      args: "--rate 1000", timeout: 120}
+  rustscan:     {cmd: rustscan,     args: "-a",          timeout: 60}
+  netexec:      {cmd: netexec,      args: "",            timeout: 120}
+  enum4linux:   {cmd: enum4linux-ng, args: "-A",        timeout: 180}
+  responder:    {cmd: responder,    args: "-I eth0",     timeout: 0}
+  nbtscan:      {cmd: nbtscan,      args: "",            timeout: 60}
+  snmpwalk:     {cmd: snmpwalk,     args: "",            timeout: 60}
+
+web:
+  gobuster:     {cmd: gobuster,     args: "dir",         timeout: 300}
+  ffuf:         {cmd: ffuf,         args: "",            timeout: 300}
+  feroxbuster:  {cmd: feroxbuster,  args: "",            timeout: 300}
+  nuclei:       {cmd: nuclei,       args: "",            timeout: 600}
+  sqlmap:       {cmd: sqlmap,       args: "--batch",     timeout: 300}
+  nikto:        {cmd: nikto,        args: "",            timeout: 300}
+  dalfox:       {cmd: dalfox,       args: "",            timeout: 180}
+  wpscan:       {cmd: wpscan,       args: "",            timeout: 180}
+  httpx:        {cmd: httpx,        args: "",            timeout: 60}
+  wafw00f:      {cmd: wafw00f,      args: "",            timeout: 60}
+  katana:       {cmd: katana,       args: "",            timeout: 120}
+  gau:          {cmd: gau,          args: "",            timeout: 120}
+  arjun:        {cmd: arjun,        args: "",            timeout: 120}
+  paramspider:  {cmd: paramspider,  args: "",            timeout: 120}
+  dirsearch:    {cmd: dirsearch,    args: "",            timeout: 300}
+  hakrawler:    {cmd: hakrawler,    args: "",            timeout: 120}
+  waybackurls:  {cmd: waybackurls,  args: "",            timeout: 60}
+
+recon:
+  subfinder:    {cmd: subfinder,    args: "",            timeout: 120}
+  amass:        {cmd: amass,        args: "enum",        timeout: 600}
+  fierce:       {cmd: fierce,       args: "",            timeout: 120}
+  dnsenum:      {cmd: dnsenum,      args: "",            timeout: 180}
+  theharvester: {cmd: theHarvester, args: "",            timeout: 300}
+  assetfinder:  {cmd: assetfinder,  args: "",            timeout: 60}
+  findomain:    {cmd: findomain,    args: "",            timeout: 60}
+  shodan:       {cmd: shodan,       args: "",            timeout: 60}
+
+password:
+  hydra:        {cmd: hydra,        args: "",            timeout: 600}
+  john:         {cmd: john,         args: "",            timeout: 3600}
+  hashcat:      {cmd: hashcat,      args: "",            timeout: 3600}
+  medusa:       {cmd: medusa,       args: "",            timeout: 600}
+
+binary:
+  gdb:          {cmd: gdb,          args: "",            timeout: 0}
+  radare2:      {cmd: r2,           args: "",            timeout: 0}
+  binwalk:      {cmd: binwalk,      args: "",            timeout: 120}
+  checksec:     {cmd: checksec,     args: "",            timeout: 30}
+  strings:      {cmd: strings,      args: "",            timeout: 30}
+  file:         {cmd: file,         args: "",            timeout: 10}
+
+cloud:
+  prowler:      {cmd: prowler,      args: "",            timeout: 600}
+  trivy:        {cmd: trivy,        args: "",            timeout: 300}
+  kube_hunter:  {cmd: kube-hunter,  args: "",            timeout: 300}
+  checkov:      {cmd: checkov,      args: "",            timeout: 120}
+
+osint:
+  sherlock:     {cmd: sherlock,     args: "",            timeout: 300}
+  recon_ng:     {cmd: recon-ng,     args: "",            timeout: 0}
+  spiderfoot:   {cmd: spiderfoot,   args: "",            timeout: 0}
+
+ctf:
+  volatility:   {cmd: vol,          args: "",            timeout: 600}
+  exiftool:     {cmd: exiftool,     args: "",            timeout: 60}
+  zsteg:        {cmd: zsteg,        args: "",            timeout: 60}
+  steghide:     {cmd: steghide,     args: "",            timeout: 60}
+  foremost:     {cmd: foremost,     args: "",            timeout: 120}
+
+browser:
+  burpsuite_proxy: "127.0.0.1:8080"
+  zap_proxy:       "127.0.0.1:8090"
+  use_proxy:       false
+  headless:        true

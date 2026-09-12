@@ -1,0 +1,36 @@
+{
+  "root_name": "AttackSurface",
+  "next_index": 2,
+  "nodes": {
+    "H1_SQLI_boolea": {
+      "id": "H1_SQLI_boolea",
+      "category": "SQLi",
+      "variant": "boolean_differential",
+      "title": "SQL Injection via parameter 'category'",
+      "description": "Parameter 'category' may be concatenated into a dynamic database query.",
+      "target_endpoint": "https://example.com/products?category=1",
+      "param_name": "category",
+      "confidence": 0.2,
+      "status": "TESTING",
+      "evidence_for": [],
+      "evidence_against": [
+        "No differential behavior between 1=1 and 1=2."
+      ],
+      "alternative_explanations": [],
+      "tests_executed": [
+        {
+          "test_name": "independent_verify",
+          "payload": "3-way boolean probe",
+          "response_summary": "No meaningful differential response detected.",
+          "result": "NEGATIVE",
+          "timestamp": 1789172929.1752067
+        }
+      ],
+      "next_verification_action": "independent_verify",
+      "created_at": 1789172928.61929,
+      "updated_at": 1789172929.1752067,
+      "parent_id": null,
+      "child_ids": []
+    }
+  }
+}

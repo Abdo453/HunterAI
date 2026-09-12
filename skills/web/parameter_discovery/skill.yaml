@@ -1,0 +1,25 @@
+name: parameter_discovery
+category: web
+description: "Discover hidden GET/POST parameters using arjun or paramspider"
+version: "1.0"
+input:
+  - urls.txt
+  - endpoints.txt
+output:
+  - parameters.txt
+depends_on:
+  - crawling
+next_skills:
+  - xss
+  - sqli
+  - ssrf
+  - ssti
+  - lfi
+fallback_skills: []
+tools_required:
+  - arjun
+fallback_tools:
+  - paramspider
+timeout_seconds: 120
+max_retries: 2
+enabled: true

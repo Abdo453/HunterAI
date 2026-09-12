@@ -1,0 +1,12 @@
+[
+  {
+    "asset": "scanme.nmap.org",
+    "domain": "scanme.nmap.org",
+    "type": "subdomain",
+    "sources": [
+      "target_input"
+    ],
+    "confidence": 0.85,
+    "discovered_at": 1789194997.306594
+  }
+]
