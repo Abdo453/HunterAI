@@ -2,11 +2,11 @@
 Human-like Stateful Exploration Engine
 ======================================
 Autonomous browser exploration loop for web applications:
-- Prioritizes high-value security surfaces (Auth > Input > API > Nav)
+- Prioritizes high-value security surfaces using Information Gain (Auth > Input > API > Nav)
 - Interacts with dynamic controls (modals, tabs, buttons)
-- Correlates UI actions with network traffic and DOM diff mutations
-- Detects and halts infinite navigation loops and duplicate requests
-- Produces exploration_manifest.json and exploration_lessons.json
+- Correlates UI actions with network traffic, state transitions, and DOM diff mutations
+- Quantifies exploration coverage across Pages, States, Forms, APIs, and JS
+- Produces exploration_manifest.json, exploration_memory.json, and exploration_lessons.json
 """
 from __future__ import annotations
 
@@ -23,8 +23,13 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 from core.attack_surface_graph import ThirdPartyDependencyFirewall
 from core.browser.action_discovery import ActionCategory, ActionDiscovery, ActionCandidate, RequestDeduplicator
+from core.browser.browser_event_bus import BrowserEvent, BrowserEventBus, BrowserEventType
+from core.browser.coverage_engine import CoverageEngine, ExplorationCoverageMetrics
 from core.browser.dom_diff import DOMDiffEngine, DOMDiffResult
+from core.browser.exploration_memory import ExplorationMemory
+from core.browser.interaction_planner import InteractionPlanner
 from core.browser.session import StatefulBrowserSession
+from core.browser.state_detector import SemanticAppState, StateDetector
 from core.browser.state_graph import ApplicationStateGraph, AppState
 
 logger = logging.getLogger("hunter_ai.explorer")
@@ -39,6 +44,7 @@ class StopReason(str, Enum):
     AUTH_REQUIRED = "AUTH_REQUIRED"
     LOOP_DETECTED = "LOOP_DETECTED"
     BROWSER_ERROR = "BROWSER_ERROR"
+    COVERAGE_MET = "COVERAGE_MET"
 
 
 @dataclass
@@ -55,6 +61,7 @@ class ExplorationManifest:
     external_domains_blocked: bool = True
     stop_reason: str = StopReason.COMPLETED.value
     duration: float = 0.0
+    overall_coverage_pct: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -81,6 +88,7 @@ class HumanLikeExplorationEngine:
         max_pages: int = 10,
         max_depth: int = 2,
         time_budget_sec: float = 120.0,
+        coverage_target_pct: float = 80.0,
         on_progress_cb: Optional[Callable[[str], Any]] = None,
     ):
         self.session = session
@@ -88,10 +96,14 @@ class HumanLikeExplorationEngine:
         self.max_pages = max_pages
         self.max_depth = max_depth
         self.time_budget_sec = time_budget_sec
+        self.coverage_target_pct = coverage_target_pct
         self.on_progress = on_progress_cb
 
         self.state_graph = ApplicationStateGraph(self.base_host)
         self.request_dedup = RequestDeduplicator()
+        self.memory = ExplorationMemory(self.base_host)
+        self.coverage = CoverageEngine(self.session.target_url)
+        self.event_bus = getattr(session, "event_bus", None) or BrowserEventBus()
 
         self.discovered_endpoints: Set[str] = set()
         self.discovered_params: Set[str] = set()
@@ -120,7 +132,7 @@ class HumanLikeExplorationEngine:
         return not ThirdPartyDependencyFirewall.is_external_dependency(url, self.base_host)
 
     async def explore(self) -> Dict[str, Any]:
-        """Main exploration execution loop"""
+        """Main exploration execution loop governed by Information Gain"""
         t0 = time.time()
         await self._emit(f"[EXPLORER] Starting human-like exploration on {self.session.target_url} (Max Pages: {self.max_pages}, Max Depth: {self.max_depth})")
 
@@ -129,6 +141,7 @@ class HumanLikeExplorationEngine:
 
         # Seed queue with target URL
         self._queue.append({"url": self.session.target_url, "depth": 0, "referrer": ""})
+        self.coverage.register_page_discovered(self.session.target_url)
 
         while self._queue:
             # Check limits
@@ -142,6 +155,13 @@ class HumanLikeExplorationEngine:
                 await self._emit(f"[EXPLORER] Exploration time budget ({self.time_budget_sec}s) exhausted.")
                 break
 
+            # Check coverage threshold
+            metrics = self.coverage.calculate_coverage()
+            if metrics.overall_percentage >= self.coverage_target_pct and len(self._visited) >= 3:
+                self._stop_reason = StopReason.COVERAGE_MET
+                await self._emit(f"[EXPLORER] Met coverage target ({metrics.overall_percentage:.1f}% >= {self.coverage_target_pct}%). Concluding exploration.")
+                break
+
             item = self._queue.pop(0)
             url = item["url"]
             depth = item["depth"]
@@ -149,14 +169,18 @@ class HumanLikeExplorationEngine:
             norm_url = ApplicationStateGraph.normalize_url(url)
             if norm_url in self._visited:
                 self._duplicate_patterns_count += 1
+                self.memory.record_duplicate(norm_url)
                 continue
             self._visited.add(norm_url)
+            self.coverage.register_page_visited(url)
+            self.memory.record_seen_url(url)
 
             await self._emit(f"[EXPLORER] Visiting page [{len(self._visited)}/{self.max_pages}] (Depth {depth}): {url}")
 
             # 1. Navigate
             html, status, headers = await self.session.navigate(url)
             if not html:
+                self.memory.record_action(selector="document", action_type="navigate", url=url, success=False, error="Empty HTML")
                 continue
 
             # 2. Extract DOM and compute state
@@ -167,6 +191,8 @@ class HumanLikeExplorationEngine:
             # 3. Action Discovery
             actions = ActionDiscovery.discover_actions_from_html(html, url, self.base_host)
             affordance_labels = [a.label for a in actions[:15]]
+            for a in actions:
+                self.coverage.register_action(f"{a.element_type}:{a.selector}")
 
             state = self.state_graph.register_state(
                 url=url,
@@ -175,12 +201,24 @@ class HumanLikeExplorationEngine:
                 forms_count=sum(1 for a in actions if a.category == ActionCategory.USER_INPUT),
                 interactive_affordances=affordance_labels,
             )
+            self.coverage.register_state(state.state_id, explored=True)
+            self.memory.record_seen_state(state.state_id)
+
+            # Detect semantic state
+            detected_state = StateDetector.detect_state(url, html, self.session.cookies, self.session.local_storage)
+            self.coverage.register_auth_state(detected_state.value)
 
             # 4. Harvest endpoints & JS from HTML & Network
             self._harvest_page_artifacts(html, url)
 
-            # 5. Execute High-Value Safe Interactions (Modals, Tabs, Dynamic Buttons)
-            await self._explore_interactive_affordances(state, actions, html, url)
+            # 5. Rank actions by Information Gain and execute top candidates
+            ranked_actions = InteractionPlanner.rank_actions(
+                actions=actions,
+                has_clicked_fn=lambda sel: self.memory.has_clicked(sel, url),
+                is_loop_fn=self.state_graph.is_loop,
+                current_state_id=state.state_id
+            )
+            await self._explore_interactive_affordances(state, ranked_actions, html, url)
 
             # 6. Enqueue In-Scope Candidate Links
             if depth < self.max_depth:
@@ -190,6 +228,8 @@ class HumanLikeExplorationEngine:
         duration = round(time.time() - t0, 1)
         if not self._queue and self._stop_reason == StopReason.COMPLETED:
             self._stop_reason = StopReason.NO_NEW_SURFACE
+
+        final_coverage = self.coverage.calculate_coverage()
 
         manifest = ExplorationManifest(
             target_url=self.session.target_url,
@@ -204,6 +244,7 @@ class HumanLikeExplorationEngine:
             external_domains_blocked=True,
             stop_reason=self._stop_reason.value,
             duration=duration,
+            overall_coverage_pct=final_coverage.overall_percentage,
         )
 
         lessons = ExplorationLessons(
@@ -217,6 +258,7 @@ class HumanLikeExplorationEngine:
 
         # Save artifacts
         self.state_graph.save_json(self.session.output_dir / "states.json")
+        self.memory.save_json(self.session.output_dir / "exploration_memory.json")
         with open(self.session.output_dir / "exploration_manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest.to_dict(), f, indent=2)
         with open(self.session.output_dir / "exploration_lessons.json", "w", encoding="utf-8") as f:
@@ -226,16 +268,20 @@ class HumanLikeExplorationEngine:
 
         self.session.save_artifacts()
 
+        # Print Coverage Summary Table
+        cov_table = self.coverage.format_coverage_table()
         await self._emit(
             f"[EXPLORER] Finished in {duration}s | StopReason={self._stop_reason.value} | "
-            f"Pages={manifest.pages_visited} | States={manifest.states_discovered} | "
-            f"API Endpoints={manifest.api_endpoints} | Network Requests={manifest.network_requests}"
+            f"Coverage={final_coverage.overall_percentage:.1f}%\n{cov_table}"
         )
 
         return {
             "manifest": manifest.to_dict(),
             "lessons": lessons.to_dict(),
             "state_graph": self.state_graph.to_dict(),
+            "coverage": final_coverage.to_dict(),
+            "coverage_table": cov_table,
+            "memory": self.memory.to_dict(),
             "endpoints": sorted(list(self.discovered_endpoints)),
             "params": sorted(list(self.discovered_params)),
             "js_urls": sorted(list(self.discovered_js_files)),
@@ -244,31 +290,30 @@ class HumanLikeExplorationEngine:
 
     def _harvest_page_artifacts(self, html: str, page_url: str):
         """Extracts scripts, endpoints, and form fields from HTML and session network activity"""
-        # Script tags
-        scripts = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
+        scripts = re.findall(r'<script[^>]+src=["\']([^"\'\s>]+)["\']', html, re.IGNORECASE)
         for s in scripts:
             full_s = urljoin(page_url, s)
             if self._is_in_scope(full_s):
                 self.discovered_js_files.add(full_s)
+                self.coverage.register_js(full_s, analyzed=False)
 
-        # Inline API route hints
         api_matches = re.findall(r'["\'](/(?:api|v1|v2|graphql|auth)/[^"\'\s<>]+)["\']', html)
         for ep in api_matches:
             full_ep = urljoin(page_url, ep)
             self.discovered_endpoints.add(full_ep)
+            self.coverage.register_api(full_ep, observed=False)
 
-        # Recent network requests from session
         for req in self.session.network_history[-50:]:
             if self._is_in_scope(req.url):
                 parsed = urlparse(req.url)
                 if any(kw in parsed.path.lower() for kw in ("/api/", "/_next/", ".json", "/v1/")):
                     self.discovered_endpoints.add(req.url)
+                    self.coverage.register_api(req.url, observed=True)
                 for qk in parse_qs(parsed.query).keys():
                     self.discovered_params.add(qk)
 
     async def _explore_interactive_affordances(self, state: AppState, actions: List[ActionCandidate], current_html: str, current_url: str):
-        """Interacts with top high-priority safe elements (modals, tabs, load more)"""
-        # Take up to 2 safe interactive actions per page
+        """Interacts with highest information gain elements"""
         interactable_candidates = [
             a for a in actions
             if a.category in (ActionCategory.API_TRIGGER, ActionCategory.USER_INPUT)
@@ -283,15 +328,17 @@ class HumanLikeExplorationEngine:
             network_snapshot_idx = len(self.session.network_history)
             interacted = await self.session.interact(action.selector, "click")
             if not interacted:
+                self.memory.record_action(action.selector, "click", current_url, success=False, error="Selector not interactable")
                 continue
 
-            # Check DOM mutation after interaction
+            # Check DOM mutation
             after_html = await self.session.get_dom()
             if after_html:
                 diff = DOMDiffEngine.diff(current_html, after_html)
+                new_network = [r.to_dict() for r in self.session.network_history[network_snapshot_idx:]]
+                new_state_id = ApplicationStateGraph.generate_state_id(current_url, DOMDiffEngine.compute_structural_hash(after_html))
+
                 if diff.has_changes:
-                    new_network = [r.to_dict() for r in self.session.network_history[network_snapshot_idx:]]
-                    new_state_id = ApplicationStateGraph.generate_state_id(current_url, DOMDiffEngine.compute_structural_hash(after_html))
                     self.state_graph.record_transition(
                         from_state_id=state.state_id,
                         to_state_id=new_state_id,
@@ -299,7 +346,19 @@ class HumanLikeExplorationEngine:
                         network_requests=new_network,
                         dom_diff=diff.to_dict()
                     )
-                    await self._emit(f"   -> Triggered '{action.label}' => DOM mutation detected (+{len(diff.added_elements)} elems, {len(new_network)} network calls)")
+                    self.memory.record_action(
+                        selector=action.selector,
+                        action_type="click",
+                        url=current_url,
+                        success=True,
+                        new_surface_generated=True,
+                        dom_diff_summary=diff.to_dict(),
+                        network_requests_triggered=len(new_network)
+                    )
+                    self.memory.record_state_change(state.state_id, new_state_id, f"click:{action.label}", diff.to_dict())
+                    await self._emit(f"   -> [IG GAIN] '{action.label}' => DOM mutated (+{len(diff.added_elements)} elems, {len(new_network)} network calls)")
+                else:
+                    self.memory.record_action(action.selector, "click", current_url, success=True, new_surface_generated=False)
 
     def _enqueue_actions(self, actions: List[ActionCandidate], next_depth: int, current_url: str):
         """Adds in-scope navigation targets to queue sorted by score"""
@@ -308,20 +367,23 @@ class HumanLikeExplorationEngine:
                 norm = ApplicationStateGraph.normalize_url(a.target_url)
                 if norm not in self._visited and not any(q["url"] == a.target_url for q in self._queue):
                     self._queue.append({"url": a.target_url, "depth": next_depth, "referrer": current_url})
+                    self.coverage.register_page_discovered(a.target_url)
 
     async def explore_endpoint(self, url_or_path: str) -> Dict[str, Any]:
         """Bidirectional feedback method: explicitly navigates to an endpoint discovered by Code Intel"""
         target = urljoin(self.session.target_url, url_or_path)
         if not self._is_in_scope(target):
+            self.memory.record_blocked(target, "scope_firewall")
             return {"status": "BLOCKED_BY_FIREWALL", "url": target}
 
         await self._emit(f"[EXPLORER] Bidirectional feedback: exploring Code-Intel discovered route {target}")
         html, status, headers = await self.session.navigate(target)
         if html:
             self._harvest_page_artifacts(html, target)
+            self.coverage.register_page_visited(target)
         return {
             "status": "EXPLORED",
             "url": target,
             "status_code": status,
-            "html_len": len(html),
+            "html_len": len(html) if html else 0,
         }

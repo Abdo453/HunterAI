@@ -1208,20 +1208,26 @@ class AutonomousBrain:
 
         burp_online = await self._check_burp_online(proxy)
 
-        # Initialize continuous Browser Sensor
+        # Initialize continuous Browser Sensor with Event Bus
         target_host_sanitized = (urlparse(target).hostname or "target").replace(":", "_").replace(".", "_")
         browser_output_dir = Path(f"data/scans/{target_host_sanitized}/browser")
+        if not hasattr(self, "browser_event_bus") or not self.browser_event_bus:
+            from core.browser.browser_event_bus import BrowserEventBus
+            self.browser_event_bus = BrowserEventBus()
+
         self.browser_session = StatefulBrowserSession(
             target_url=target,
             output_dir=browser_output_dir,
             headless=not use_browser,
-            proxy=proxy
+            proxy=proxy,
+            event_bus=self.browser_event_bus,
         )
         self.browser_explorer = HumanLikeExplorationEngine(
             session=self.browser_session,
             max_pages=8 if mode in ("full", "web", "auto") else 4,
             max_depth=2,
             time_budget_sec=60.0,
+            coverage_target_pct=80.0,
             on_progress_cb=lambda msg: self._log(msg)
         )
 
@@ -1231,6 +1237,10 @@ class AutonomousBrain:
             log.warning(f"Browser exploration non-critical error: {e}")
             exploration_res = {}
         self._last_browser_exploration = exploration_res
+
+        cov_table = exploration_res.get("coverage_table", "")
+        if cov_table:
+            await self._log(f"[COVERAGE]\n{cov_table}")
 
         html, status_code, headers = await self._fetch_target(target, auth, proxy)
         static_params, static_endpoints = self._extract_endpoints_and_params(html, target)
@@ -1783,6 +1793,13 @@ class AutonomousBrain:
                          message=f"Brain completed in {duration}s")
 
 
+        # Gracefully finalize and persist browser session
+        if hasattr(self, "browser_session") and self.browser_session:
+            try:
+                await self.browser_session.close()
+            except Exception:
+                pass
+
         return {
             "target": target,
             "mode": mode,
@@ -1800,6 +1817,8 @@ class AutonomousBrain:
             "objective_result": objective_result,   # Finding ≠ Completion tracking
             "code_intelligence": getattr(self, "_last_code_intel", code_intel_res),
             "browser_exploration": getattr(self, "_last_browser_exploration", {}),
+            "exploration_coverage": getattr(self, "_last_browser_exploration", {}).get("coverage", {}),
+            "exploration_memory": getattr(self, "_last_browser_exploration", {}).get("memory", {}),
         }
 
     async def explore_discovered_endpoint(self, endpoint_url_or_path: str) -> Dict[str, Any]:

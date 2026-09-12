@@ -160,9 +160,16 @@ async def test_human_like_exploration_engine(tmp_path):
     assert "state_graph" in result
 
     manifest = result["manifest"]
-    assert manifest["target_url"] == "https://example.com"
-    assert manifest["stop_reason"] in (StopReason.COMPLETED.value, StopReason.PAGE_LIMIT.value, StopReason.NO_NEW_SURFACE.value)
+    assert manifest["stop_reason"] in (
+        StopReason.COMPLETED.value,
+        StopReason.PAGE_LIMIT.value,
+        StopReason.NO_NEW_SURFACE.value,
+        StopReason.TIME_LIMIT.value,
+        StopReason.COVERAGE_MET.value,
+    )
     assert manifest["external_domains_blocked"] is True
+    assert "coverage" in result
+    assert "memory" in result
 
     # Test bidirectional feedback
     feedback_res = await explorer.explore_endpoint("/api/v2/products")

@@ -51,28 +51,32 @@ Every finding must survive a multi-party **Evidence Court** and satisfy determin
 
 ## 🏗️ Architecture
 
-HunterAI couples an **Autonomous OODA Loop** (Observe -> Orient -> Decide -> Act) with an **Evidence Court**:
+HunterAI couples an **Autonomous OODA Loop** with a **3-Sensor Triad** (`Browser Sensor`, `HTTP Sensor`, `Code Sensor`) and an **Evidence Court**:
 
 ```mermaid
 flowchart TD
-    Target[🎯 In-Scope Target] --> Collector[Page Collector & JS Inventory]
-    Collector --> CodeIntel[🧠 Code Intelligence Pipeline]
-    
-    subgraph Code Intelligence Pipeline
-        CodeIntel --> Endpoints[Route & Endpoint Hunter]
-        CodeIntel --> Secrets[Shannon Entropy Secret Hunter]
-        CodeIntel --> Framework[Next.js / SPA Framework Analyzer]
+    Target[🎯 In-Scope Target] --> ScopeGuard{🛡️ Scope Firewall}
+    ScopeGuard -->|Blocked| Firewalled[🚫 Out-of-Scope Dropped]
+    ScopeGuard -->|Allowed| Sensors[🧠 Continuous 3-Sensor Triad]
+
+    subgraph Continuous 3-Sensor Triad
+        Sensors --> BrowserSensor[🌐 Stateful Browser Sensor: Playwright + StateGraph]
+        Sensors --> HttpSensor[⚡ Fast HTTP Sensor: Headers & Raw Probing]
+        Sensors --> CodeSensor[🔬 Code Intelligence: JS Decompilation & Shannon Secrets]
     end
 
-    Endpoints --> ScopeGuard{🛡️ Scope Firewall}
-    ScopeGuard -->|External Dependency| Firewalled[🚫 Block Probing]
-    ScopeGuard -->|In-Scope Asset| Brain[🤖 Autonomous Brain OODA Loop]
+    BrowserSensor --> EventBus{📡 Browser Event Bus}
+    HttpSensor --> EventBus
+    CodeSensor --> EventBus
+
+    EventBus --> SurfaceGraph[🗺️ Attack Surface Graph & Exploration Memory]
+    SurfaceGraph --> Brain[🤖 Autonomous Brain OODA Loop]
 
     subgraph Autonomous OODA Loop
-        Brain --> Observe[Phase 0: Observe & Fingerprint]
+        Brain --> Observe[Phase 0: 3-Sensor Surface Observation & Coverage Check]
         Brain --> Orient[Phase 0.5: Security Intelligence & Hypotheses]
-        Brain --> Decide[Phase 1: Multi-Model Attack Plan]
-        Brain --> Act[Phase 2: Systematic Controlled Probing]
+        Brain --> Decide[Phase 1: Multi-Model Attack Plan & IG Ranking]
+        Brain --> Act[Phase 2: Live-Session Probing & Exploitation]
     end
 
     Act --> Claims[Candidate Vulnerability Claims]
@@ -97,14 +101,16 @@ flowchart TD
 
 | Capability | Module | Description |
 |---|---|---|
+| **Persistent Browser Sensor** | `core/browser/session.py` | Maintains an active, authenticated browser session with full state persistence (cookies, storage, DOM snapshots, network events) across all scan phases. |
+| **Browser Event Bus** | `core/browser/browser_event_bus.py` | Real-time publish/subscribe routing for DOM mutations, form discoveries, API calls, and auth transitions. |
+| **Exploration Coverage Engine**| `core/browser/coverage_engine.py` | Quantifies completeness across Pages, States, Forms, APIs, and JS scripts with terminal coverage tables. |
+| **Information Gain Planner** | `core/browser/interaction_planner.py` | Mathematically prioritizes actions maximizing discovery of new attack surfaces while suppressing loops. |
+| **Application State Graph** | `core/browser/state_graph.py` | Maps multi-step workflows (`LOGIN -> AUTHENTICATED -> DASHBOARD -> UPLOAD`) with cyclical loop detection. |
 | **Evidence Court** | `core/evidence_court.py` | Multi-party arbitration (`Finder -> Collector -> Verifier -> Court`). No finding confirmed without cryptographic/deterministic proof. |
-| **Proof-of-Execution** | `core/poe_engine.py` | Requires mathematical evaluation `$((53+19)) 	o 72`, DBMS banner retrieval, or cross-tenant auth bypass. |
+| **Proof-of-Execution** | `core/poe_engine.py` | Requires mathematical evaluation `$((53+19)) \to 72$`, DBMS banner retrieval, or cross-tenant auth bypass. |
 | **Code Intelligence** | `core/code_intel/` | Deconstructs client-side JS bundles, extracts hidden API routes (`fetch`, `axios`, `XHR`), validates API keys with Shannon entropy ($> 3.3$). |
 | **Scope Guard Firewall** | `core/attack_surface_graph.py` | Isolates third-party CDNs and dependencies (`googletagmanager.com`, `play.google.com`, `cloudflare.com`). |
-| **Automated SPA Exploration**| `core/brain/autonomous_brain.py` | Automatically triggers `BrowserAgent` when Next.js, React, or Vue is detected. |
-| **Adaptive Rate Limiter** | `core/risk_scheduler.py` | Prioritizes auth/API vectors while deprioritizing static UI parameters (`modal`, `slide`). |
 | **Interactive Dashboard** | `core/exporters.py` | Generates standalone, zero-dependency dark-mode HTML reports with interactive tabs. |
-| **Unified Session Manager** | `core/session_manager.py` | Tracks multi-phase pentest state, pause/resume, and audited finding lineage. |
 
 ---
 

@@ -1,11 +1,28 @@
 """
 Stateful Browser Session
 ========================
-Maintains an active, stateful browser context (Playwright / HTTP fallback):
+Maintains an active, persistent browser context throughout the entire engagement:
 - Preserves cookies, localStorage, sessionStorage, and auth tokens
 - Intercepts and records all network activity (Fetch/XHR/WebSockets)
-- Supports interactive DOM actions (click, fill, navigate)
-- Persists session artifacts to data/scans/<target>/browser/
+- Tracks complete session state:
+    BrowserSession
+     ├── cookies
+     ├── localStorage
+     ├── sessionStorage
+     ├── current_url
+     ├── visited_states
+     ├── visited_urls
+     ├── DOM snapshots
+     ├── network events
+     ├── XHR/fetch
+     ├── forms
+     ├── buttons
+     ├── links
+     ├── JS files
+     ├── screenshots
+     └── action history
+- Stays alive across scan phases (Observe -> Orient -> Decide -> Act -> Verify)
+- Emits real-time telemetry to BrowserEventBus
 """
 from __future__ import annotations
 
@@ -54,7 +71,7 @@ class InterceptedRequest:
 
 
 class StatefulBrowserSession:
-    """Manages continuous, persistent browser lifecycle across exploration"""
+    """Manages continuous, persistent browser lifecycle across exploration and exploitation"""
 
     def __init__(
         self,
@@ -63,6 +80,7 @@ class StatefulBrowserSession:
         headless: bool = True,
         proxy: Optional[str] = None,
         on_network_event: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        event_bus: Optional[Any] = None,
     ):
         self.target_url = target_url
         self.base_host = (urlparse(target_url).hostname or "target").lower()
@@ -70,6 +88,7 @@ class StatefulBrowserSession:
         self.headless = headless
         self.proxy = proxy
         self.on_network_event = on_network_event
+        self.event_bus = event_bus
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
         (self.output_dir / "screenshots").mkdir(parents=True, exist_ok=True)
@@ -80,14 +99,24 @@ class StatefulBrowserSession:
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
         self._is_playwright_active = False
+        self._is_closed = False
 
-        # In-memory session state
+        # In-memory complete session state
+        self.current_url: str = target_url
         self.cookies: List[Dict[str, Any]] = []
         self.local_storage: Dict[str, str] = {}
         self.session_storage: Dict[str, str] = {}
         self.network_history: List[InterceptedRequest] = []
         self.visited_urls: Set[str] = set()
+        self.visited_states: Set[str] = set()
         self.discovered_urls: Set[str] = set()
+        self.dom_snapshots: Dict[str, str] = {}
+        self.discovered_forms: List[Dict[str, Any]] = []
+        self.discovered_buttons: List[Dict[str, Any]] = []
+        self.discovered_links: List[Dict[str, Any]] = []
+        self.discovered_js_files: Set[str] = set()
+        self.screenshots: List[str] = []
+        self.action_history: List[Dict[str, Any]] = []
 
         # HTTP fallback client
         self._http_client = httpx.AsyncClient(
@@ -97,8 +126,15 @@ class StatefulBrowserSession:
             headers={"User-Agent": "HunterAI-Browser/2.0 (Security Explorer)"}
         )
 
+    @property
+    def is_alive(self) -> bool:
+        return not self._is_closed
+
     async def start(self) -> bool:
         """Attempts to launch Playwright browser, gracefully falling back to HTTP"""
+        if self._is_playwright_active and self._page:
+            return True
+
         if PLAYWRIGHT_AVAILABLE and not os.getenv("DISABLE_PLAYWRIGHT"):
             try:
                 self._pw = await async_playwright().start()
@@ -141,70 +177,105 @@ class StatefulBrowserSession:
             )
             self.network_history.append(req_data)
             if self.on_network_event:
-                self.on_network_event(req_data.to_dict())
+                try:
+                    self.on_network_event(req_data.to_dict())
+                except Exception:
+                    pass
         except Exception:
             pass
 
-    async def _handle_pw_response(self, response: PlaywrightResponse) -> None:
+    def _handle_pw_response(self, response: PlaywrightResponse) -> None:
         try:
-            req_url = response.url
-            for r in reversed(self.network_history):
-                if r.url == req_url and r.status is None:
-                    r.status = response.status
-                    r.response_headers = dict(response.headers)
+            for req in reversed(self.network_history):
+                if req.url == response.url and req.status is None:
+                    req.status = response.status
+                    req.response_headers = dict(response.headers)
                     break
         except Exception:
             pass
 
-    async def navigate(self, url: str) -> Tuple[str, int, Dict[str, str]]:
-        """Navigates to URL, waiting for network idle / DOM loaded"""
+    async def navigate(self, url: str) -> Tuple[Optional[str], int, Dict[str, str]]:
+        """Navigates to URL and records complete DOM and headers snapshot"""
         self.visited_urls.add(url)
+        self.current_url = url
+
         if self._is_playwright_active and self._page:
             try:
-                resp = await self._page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                resp = await self._page.goto(url, wait_until="domcontentloaded", timeout=15000)
                 status = resp.status if resp else 200
                 headers = dict(resp.headers) if resp else {}
-                content = await self._page.content()
+
+                try:
+                    await self._page.wait_for_load_state("networkidle", timeout=3000)
+                except Exception:
+                    pass
+
+                html = await self._page.content()
                 await self._extract_storage()
-                return content, status, headers
+
+                # Record snapshot
+                self.dom_snapshots[url] = html
+
+                # Emit event if bus attached
+                if self.event_bus:
+                    try:
+                        from core.browser.browser_event_bus import BrowserEvent, BrowserEventType
+                        self.event_bus.publish_sync(BrowserEvent(
+                            event_type=BrowserEventType.PAGE_LOADED,
+                            source_url=url,
+                            data={"status": status, "title": await self._page.title()}
+                        ))
+                    except Exception:
+                        pass
+
+                return html, status, headers
             except Exception as e:
-                logger.debug(f"Playwright navigation failed ({e}), falling back to HTTP client.")
+                logger.debug(f"Playwright navigation failed on {url}: {e}, trying HTTP fallback")
 
-        # HTTP Fallback
+        # Fallback HTTP
         try:
-            resp = await self._http_client.get(url)
-            content = resp.text
-            status = resp.status_code
-            headers = dict(resp.headers)
-            # Record network event
-            ev = InterceptedRequest(
-                url=url,
-                method="GET",
-                resource_type="document",
-                headers=dict(headers),
-                status=status
-            )
-            self.network_history.append(ev)
-            return content, status, headers
+            r = await self._http_client.get(url)
+            html = r.text
+            self.dom_snapshots[url] = html
+            for c_name, c_val in r.cookies.items():
+                self.cookies.append({"name": c_name, "value": c_val, "domain": self.base_host})
+            return html, r.status_code, dict(r.headers)
         except Exception as e:
-            logger.warning(f"Session HTTP navigation error: {e}")
-            return "", 0, {}
+            logger.debug(f"HTTP fallback navigation failed on {url}: {e}")
+            return None, 0, {}
 
-    async def interact(self, selector: str, action: str = "click") -> bool:
-        """Executes safe interaction on page"""
+    async def interact(self, selector: str, action: str = "click", value: str = "") -> bool:
+        """Executes safe interaction with DOM elements"""
+        t0 = time.time()
+        success = False
         if self._is_playwright_active and self._page:
             try:
-                elem = self._page.locator(selector).first
-                if await elem.is_visible():
+                elem = await self._page.query_selector(selector)
+                if elem and await elem.is_visible():
                     if action == "click":
                         await elem.click(timeout=3000)
+                        success = True
                     elif action == "hover":
                         await elem.hover(timeout=3000)
-                    await asyncio.sleep(0.5)
-                    return True
+                        success = True
+                    elif action in ("fill", "type"):
+                        await elem.fill(value, timeout=3000)
+                        success = True
+                    await asyncio.sleep(0.4)
+                    await self._extract_storage()
             except Exception as e:
                 logger.debug(f"Interaction error on {selector}: {e}")
-        return False
+
+        # Record action history
+        self.action_history.append({
+            "selector": selector,
+            "action": action,
+            "value": value if action != "type" else "***",
+            "url": self.current_url,
+            "success": success,
+            "timestamp": t0,
+        })
+        return success
 
     async def get_dom(self) -> str:
         if self._is_playwright_active and self._page:
@@ -212,13 +283,14 @@ class StatefulBrowserSession:
                 return await self._page.content()
             except Exception:
                 pass
-        return ""
+        return self.dom_snapshots.get(self.current_url, "")
 
     async def take_screenshot(self, name: str) -> Optional[str]:
         if self._is_playwright_active and self._page:
             try:
                 ss_path = self.output_dir / "screenshots" / f"{name}.png"
                 await self._page.screenshot(path=str(ss_path), full_page=False)
+                self.screenshots.append(str(ss_path))
                 return str(ss_path)
             except Exception:
                 pass
@@ -235,16 +307,33 @@ class StatefulBrowserSession:
             except Exception:
                 pass
 
+    def get_state_summary(self) -> Dict[str, Any]:
+        """Returns structured view of the active browser state"""
+        return {
+            "current_url": self.current_url,
+            "visited_urls": sorted(list(self.visited_urls)),
+            "visited_states": sorted(list(self.visited_states)),
+            "cookies_count": len(self.cookies),
+            "localStorage_keys": list(self.local_storage.keys()),
+            "sessionStorage_keys": list(self.session_storage.keys()),
+            "network_requests_count": len(self.network_history),
+            "actions_executed": len(self.action_history),
+            "screenshots_count": len(self.screenshots),
+            "is_alive": self.is_alive,
+        }
+
     def save_artifacts(self) -> None:
         """Persists all session artifacts to output_dir"""
         try:
             with open(self.output_dir / "session.json", "w", encoding="utf-8") as f:
                 json.dump({
                     "target_url": self.target_url,
+                    "current_url": self.current_url,
                     "visited_urls": list(self.visited_urls),
                     "discovered_urls": list(self.discovered_urls),
                     "total_network_requests": len(self.network_history),
                     "cookies_count": len(self.cookies),
+                    "actions_count": len(self.action_history),
                     "playwright_active": self._is_playwright_active,
                 }, f, indent=2)
 
@@ -257,6 +346,9 @@ class StatefulBrowserSession:
                     "sessionStorage": self.session_storage
                 }, f, indent=2)
 
+            with open(self.output_dir / "action_history.json", "w", encoding="utf-8") as f:
+                json.dump(self.action_history, f, indent=2)
+
             with open(self.output_dir / "network.jsonl", "w", encoding="utf-8") as f:
                 for req in self.network_history:
                     f.write(json.dumps(req.to_dict()) + "\n")
@@ -264,7 +356,10 @@ class StatefulBrowserSession:
             logger.warning(f"Failed to persist session artifacts: {e}")
 
     async def close(self) -> None:
-        """Gracefully closes browser and HTTP client"""
+        """Gracefully closes browser context and HTTP client"""
+        if self._is_closed:
+            return
+        self._is_closed = True
         self.save_artifacts()
         if self._is_playwright_active:
             try:
@@ -277,3 +372,4 @@ class StatefulBrowserSession:
             except Exception:
                 pass
         await self._http_client.aclose()
+        logger.info("StatefulBrowserSession: Closed cleanly.")
