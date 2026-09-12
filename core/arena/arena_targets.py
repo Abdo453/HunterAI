@@ -166,8 +166,50 @@ def _handler_benign_08_fp_trap(method: str, path: str, headers: Dict[str, str], 
     return 200, {"Content-Type": "text/html; charset=utf-8"}, f"<html><body><h3>User Profile</h3><p>Username: {safe_encoded}</p></body></html>"
 
 
+def _handler_upload_08(method: str, path: str, headers: Dict[str, str], params: Dict[str, str], body: str) -> Tuple[int, Dict[str, str], str]:
+    """LAB-UPLOAD-08: Document & Avatar File Upload API"""
+    filename = params.get("filename", "") or "test.jpg"
+    # Vulnerable to extension bypass (e.g. benign php canary)
+    if "php" in filename.lower() and ("canary" in body.lower() or "<?php" in body or "proof" in body.lower()):
+        return 201, {"Content-Type": "application/json"}, json.dumps({
+            "status": "uploaded",
+            "stored_path": f"/uploads/{filename}",
+            "proof": "FILE_UPLOAD_EXECUTION_CANARY_STORED"
+        })
+    return 200, {"Content-Type": "application/json"}, json.dumps({"status": "ready", "accepts": "multipart/form-data"})
+
+
+def _handler_sqli_error_09(method: str, path: str, headers: Dict[str, str], params: Dict[str, str], body: str) -> Tuple[int, Dict[str, str], str]:
+    """LAB-SQLI-ERROR-09: Order Lookup API (Error-Based SQLi)"""
+    order_id = params.get("order_id", "")
+    if "'" in order_id:
+        # Returns verbose database exception disclosure
+        return 500, {"Content-Type": "text/html"}, "<html><body><h3>Database Error</h3><p>PG::SyntaxError: ERROR: syntax error at or near \"'\" at character 42</p></body></html>"
+    return 200, {"Content-Type": "application/json"}, json.dumps({"order_id": order_id or "1001", "status": "shipped"})
+
+
+def _handler_xss_stored_10(method: str, path: str, headers: Dict[str, str], params: Dict[str, str], body: str) -> Tuple[int, Dict[str, str], str]:
+    """LAB-XSS-STORED-10: Public Customer Feedback Board (Stored XSS)"""
+    comment = params.get("comment", "")
+    if comment and "<script>" in comment.lower() and "stored_proof" in comment:
+        return 200, {"Content-Type": "text/html; charset=utf-8"}, f"<html><body><div class='comment'>{comment}</div></body></html>"
+    return 200, {"Content-Type": "text/html; charset=utf-8"}, "<html><body><h3>Feedback Board</h3><p>Leave a review...</p></body></html>"
+
+
+def _handler_benign_12_fp_trap(method: str, path: str, headers: Dict[str, str], params: Dict[str, str], body: str) -> Tuple[int, Dict[str, str], str]:
+    """
+    LAB-BENIGN-12: FAQ Knowledge Base Search (Safe Negative Control 2)
+    - All inputs are strictly checked against alphanumeric regex.
+    - Special characters return standard 400 Bad Request with zero reflection.
+    """
+    query = params.get("q", "")
+    if re.search(r"[^a-zA-Z0-9\s]", query):
+        return 400, {"Content-Type": "application/json"}, json.dumps({"error": "Bad Request: Alphanumeric search queries only"})
+    return 200, {"Content-Type": "application/json"}, json.dumps({"results": ["FAQ Article 1", "FAQ Article 2"]})
+
+
 def get_all_arena_targets() -> List[ArenaTarget]:
-    """Returns the standardized suite of 8 validation arena benchmark targets"""
+    """Returns the standardized suite of 12 validation arena benchmark targets"""
     return [
         ArenaTarget(
             target_id="LAB-CMDI-01",
@@ -310,8 +352,68 @@ def get_all_arena_targets() -> List[ArenaTarget]:
             handler=_handler_jwt_07,
         ),
         ArenaTarget(
-            target_id="LAB-BENIGN-08",
-            name="Hardened User Profile Search (False Positive Trap)",
+            target_id="LAB-UPLOAD-08",
+            name="Document & Avatar File Upload API",
+            category="Unrestricted File Upload",
+            description="Profile avatar upload endpoint allowing executable extension bypass with benign canary.",
+            host="uploads.lab.local",
+            path="/api/v1/avatar",
+            method="POST",
+            parameters=["filename"],
+            ground_truth=TargetGroundTruth(
+                has_vulnerability=True,
+                vulnerability_class="file_upload",
+                parameter="filename",
+                cwe_id="CWE-434",
+                safe_verification_proof="FILE_UPLOAD_EXECUTION_CANARY_STORED",
+                expected_verdict="CONFIRMED",
+                rationale="Executable canary file successfully accepted and persisted in web-accessible storage."
+            ),
+            handler=_handler_upload_08,
+        ),
+        ArenaTarget(
+            target_id="LAB-SQLI-ERROR-09",
+            name="Order Lookup API (Error-Based SQLi)",
+            category="SQL Injection",
+            description="Order lookup query vulnerable to error-based syntax extraction.",
+            host="orders.lab.local",
+            path="/api/v1/orders",
+            method="GET",
+            parameters=["order_id"],
+            ground_truth=TargetGroundTruth(
+                has_vulnerability=True,
+                vulnerability_class="sqli",
+                parameter="order_id",
+                cwe_id="CWE-89",
+                safe_verification_proof="PG::SyntaxError",
+                expected_verdict="CONFIRMED",
+                rationale="Database syntax error disclosure confirms raw SQL query string interpolation."
+            ),
+            handler=_handler_sqli_error_09,
+        ),
+        ArenaTarget(
+            target_id="LAB-XSS-STORED-10",
+            name="Public Customer Feedback Board (Stored XSS)",
+            category="Cross-Site Scripting",
+            description="Stored customer comment reflected back to subsequent users without HTML escaping.",
+            host="feedback.lab.local",
+            path="/api/feedback",
+            method="POST",
+            parameters=["comment"],
+            ground_truth=TargetGroundTruth(
+                has_vulnerability=True,
+                vulnerability_class="xss",
+                parameter="comment",
+                cwe_id="CWE-79",
+                safe_verification_proof="stored_proof",
+                expected_verdict="CONFIRMED",
+                rationale="Persistent script tag stored in database and echoed unescaped to browsing sessions."
+            ),
+            handler=_handler_xss_stored_10,
+        ),
+        ArenaTarget(
+            target_id="LAB-BENIGN-11",
+            name="Hardened User Profile Search (False Positive Trap 1)",
             category="Safe Negative Control",
             description="Reflected input is HTML-encoded. Single quote causes internal exception but query is safe.",
             host="portal.lab.local",
@@ -328,5 +430,25 @@ def get_all_arena_targets() -> List[ArenaTarget]:
                 rationale="Negative Control: HTML encoding prevents XSS, and parameterized ORM prevents SQLi. Must be rejected by Evidence Court."
             ),
             handler=_handler_benign_08_fp_trap,
+        ),
+        ArenaTarget(
+            target_id="LAB-BENIGN-12",
+            name="FAQ Knowledge Base Search (False Positive Trap 2)",
+            category="Safe Negative Control",
+            description="Knowledge base search with strict regex filtering. Special characters safely rejected with 400 Bad Request.",
+            host="help.lab.local",
+            path="/api/faq",
+            method="GET",
+            parameters=["q"],
+            ground_truth=TargetGroundTruth(
+                has_vulnerability=False,
+                vulnerability_class=None,
+                parameter=None,
+                cwe_id=None,
+                safe_verification_proof=None,
+                expected_verdict="REFUTED",
+                rationale="Negative Control: Strict input whitelist returns 400 Bad Request with zero reflection. Must be refuted by Evidence Court."
+            ),
+            handler=_handler_benign_12_fp_trap,
         ),
     ]

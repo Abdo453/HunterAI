@@ -98,6 +98,18 @@ class ScopePolicy(BaseModel):
     max_request_budget: int = 5000
     allow_private_ips_override: bool = False  # Strict default False
 
+    def __init__(self, **data):
+        if "allowed_domains" in data and "allowed_targets" not in data:
+            data["allowed_targets"] = data.pop("allowed_domains")
+        if "excluded_domains" in data and "excluded_targets" not in data:
+            data["excluded_targets"] = data.pop("excluded_domains")
+        if "blocked_paths" in data and "excluded_paths" not in data:
+            data["excluded_paths"] = data.pop("blocked_paths")
+        if "allow_private_networks" in data and "allow_private_ips_override" not in data:
+            data["allow_private_ips_override"] = data.pop("allow_private_networks")
+        super().__init__(**data)
+
+
 
 class StrictScopeEngine:
     """
