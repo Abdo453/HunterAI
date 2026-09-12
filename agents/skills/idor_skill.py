@@ -157,6 +157,13 @@ class IDORSkill:
         orig_val = base_qs.get(param_name, ["1"])[0]
         ctx.original_value = orig_val
 
+        # ── 0. Navigation Parameter Filter ────────────────────────────────
+        nav_keywords = {"slide", "ampslide", "page", "tab", "step", "modal", "category", "lang", "sort", "filter", "offset", "limit"}
+        if any(nav in param_name.lower() for nav in nav_keywords):
+            ctx.log(f"[IDORSkill] Skipping UI navigation parameter {param_name!r}. Not a private object identifier.")
+            ctx.state = IDORState.FAILED
+            return self._build_result(ctx)
+
         client_kwargs = {"verify": False, "follow_redirects": True, "timeout": 8.0}
         if self.proxy:
             import httpx as _hx
@@ -186,31 +193,33 @@ class IDORSkill:
 
             # ── 3. Test Unauthenticated Access with Altered IDs ──────────────
             ctx.state = IDORState.TEST_UNAUTH
-            for cand in candidates[:4]:
-                qs = {k: v[0] for k, v in base_qs.items()}
-                qs[param_name] = cand
-                test_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', urlencode(qs), ''))
-                try:
-                    r_unauth = await client.get(test_url)
-                    # If unauthenticated access returns 200 with substantial distinct data
-                    if r_unauth.status_code == 200 and len(r_unauth.text) > 80:
-                        # Ensure it's not a generic 200 error page or empty list
-                        if abs(len(r_unauth.text) - base_len) > 20 and "login" not in r_unauth.text.lower():
-                            ctx.vulnerable_id = cand
-                            ctx.confidence = 0.92
-                            ctx.leak_evidence = r_unauth.text[:250]
-                            ctx.evidence.append({
-                                "type": "unauthenticated_object_access",
-                                "original_id": orig_val,
-                                "tested_id": cand,
-                                "status": r_unauth.status_code,
-                                "length": len(r_unauth.text)
-                            })
-                            ctx.log(f"[TEST_UNAUTH] ✅ Unauthenticated object access confirmed for ID={cand!r}")
-                            ctx.state = IDORState.COMPLETE
-                            return self._build_result(ctx)
-                except Exception:
-                    continue
+            if auth_headers_a:
+                # Baseline had an authenticated session: test if dropping auth grants access
+                for cand in candidates[:4]:
+                    qs = {k: v[0] for k, v in base_qs.items()}
+                    qs[param_name] = cand
+                    test_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', urlencode(qs), ''))
+                    try:
+                        r_unauth = await client.get(test_url)
+                        if r_unauth.status_code == 200 and len(r_unauth.text) > 80:
+                            if abs(len(r_unauth.text) - base_len) > 20 and "login" not in r_unauth.text.lower() and "sign in" not in r_unauth.text.lower():
+                                ctx.vulnerable_id = cand
+                                ctx.confidence = 0.92
+                                ctx.leak_evidence = r_unauth.text[:250]
+                                ctx.evidence.append({
+                                    "type": "unauthenticated_object_access",
+                                    "original_id": orig_val,
+                                    "tested_id": cand,
+                                    "status": r_unauth.status_code,
+                                    "length": len(r_unauth.text)
+                                })
+                                ctx.log(f"[TEST_UNAUTH] ✅ Unauthenticated object access confirmed for ID={cand!r}")
+                                ctx.state = IDORState.COMPLETE
+                                return self._build_result(ctx)
+                    except Exception:
+                        continue
+            else:
+                ctx.log("[TEST_UNAUTH] Skipped: Target is unauthenticated public page. Public parameter navigation != IDOR/BOLA.")
 
             # ── 4. Test Cross-Tenant Matrix (if Tenant B headers provided) ───
             if auth_headers_b:
@@ -260,6 +269,7 @@ class IDORSkill:
         return {
             "state": ctx.state.name,
             "objective_met": is_success,
+            "verified": is_success,
             "id_type": ctx.id_type.value,
             "original_id": ctx.original_value,
             "vulnerable_id": ctx.vulnerable_id,

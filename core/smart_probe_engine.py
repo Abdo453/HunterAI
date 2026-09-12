@@ -235,15 +235,43 @@ class SmartPoCExecutor:
         b_lower = html_source.lower()
         title_m = re.search(r'<title>(.*?)</title>', html_source, re.I)
         page_title = title_m.group(1) if title_m else ""
-        
-        detected_type = "xss" if ("xss" in page_title.lower() or "search" in param_name.lower() or (test_value in html_source and "<" in test_value)) else ("sqli" if ("sql" in page_title.lower() or "sql" in b_lower) else "injection")
+
+        # WAF block check
+        if any(w in b_lower for w in ("just a moment...", "attention required! | cloudflare", "cf-browser-verification", "access denied")):
+            return {
+                "vulnerable": False,
+                "vuln_type": "none",
+                "severity": "Info",
+                "reasoning": f"Cloudflare / WAF challenge page ({page_title}). Request was not processed by backend application.",
+                "remediation": ""
+            }
+
+        # Check for lab solve banner
+        if "congratulations, you solved the lab" in b_lower or "solved" in page_title.lower():
+            return {
+                "vulnerable": True,
+                "vuln_type": "challenge_solved",
+                "severity": "Medium",
+                "reasoning": f"Lab completion verified: {page_title}",
+                "remediation": "Validate input and enforce authorization."
+            }
+
+        # Check for unencoded executable XSS vector
+        if any(tag in test_value.lower() for tag in ("<script", "<svg", "<img", "onload=", "onerror=")) and test_value in html_source:
+            return {
+                "vulnerable": True,
+                "vuln_type": "xss",
+                "severity": "High",
+                "reasoning": f"Page context ({page_title}): Executable HTML/script vector reflected unencoded.",
+                "remediation": "Apply context-aware output encoding."
+            }
 
         return {
-            "vulnerable": True if ("congratulations, you solved the lab" in b_lower or test_value in html_source) else False,
-            "vuln_type": detected_type,
-            "severity": "High" if detected_type == "xss" else "Critical",
-            "reasoning": f"Page context ({page_title}): Input reflected unencoded in HTML body.",
-            "remediation": "Apply context-aware output encoding and input validation."
+            "vulnerable": False,
+            "vuln_type": "none",
+            "severity": "Info",
+            "reasoning": f"Input handled safely or reflected without executable context.",
+            "remediation": ""
         }
 
     async def execute_and_verify(self, target_url: str, param_name: str,
@@ -332,13 +360,21 @@ class SmartPoCExecutor:
                     probe_url = self._inject_param(target_url, param_name, probe)
                     probe_resp = await client.get(probe_url, headers=headers)
 
-                    # فحص حل لابات PortSwigger أو وجود انعكاس/أخطاء/تغير تفاضلي جوهري
-                    has_solve_banner = "congratulations, you solved the lab" in probe_resp.text.lower() or "solved" in probe_resp.text.lower()
-                    has_reflection = probe in probe_resp.text
-                    has_sql_error = any(err in probe_resp.text.lower() for err in ["sql syntax", "mysql", "ora-", "sqlite3", "syntax error in query", "unterminated string", "psycopg2", "pg_query"])
-                    has_differential_increase = len(probe_resp.text) > (base_len * 1.25) or ("product" in probe_resp.text.lower() and probe_resp.text.count("<div") > base_resp.text.count("<div") + 2)
+                    # Ignore Cloudflare/WAF challenge pages
+                    p_body_lower = probe_resp.text.lower()
+                    if probe_resp.status_code in (403, 429, 503) or any(w in p_body_lower for w in ("just a moment...", "attention required! | cloudflare", "cf-browser-verification", "access denied")):
+                        continue
 
-                    if has_solve_banner or has_sql_error or has_reflection or has_differential_increase:
+                    # فحص حل لابات PortSwigger أو وجود أخطاء SQL أو انعكاس XSS تنفيذي أو تغير تفاضلي جوهري
+                    has_solve_banner = "congratulations, you solved the lab" in p_body_lower or "solved" in p_body_lower
+                    has_xss_exec = any(tag in probe.lower() for tag in ("<script", "<svg", "<img", "onload=", "onerror=")) and probe in probe_resp.text
+                    has_sql_error = any(err in p_body_lower for err in ["you have an error in your sql syntax", "ora-009", "pg_query", "psqlexception", "syntax error at or near", "unclosed quotation mark"])
+                    has_differential_increase = (
+                        probe_resp.status_code == 200 and base_status == 200 and
+                        (len(probe_resp.text) > (base_len * 1.3) or ("product" in p_body_lower and probe_resp.text.count("<div") > base_resp.text.count("<div") + 3))
+                    )
+
+                    if has_solve_banner or has_sql_error or has_xss_exec or has_differential_increase:
                         # استدعاء الذكاء الاصطناعي لقراءة الـ HTML وتحديد نوع الثغرة الحقيقي بدقة
                         ai_decision = await self.ai_reason_and_classify(probe_resp.text, param_name, probe, probe_resp.status_code)
                         if ai_decision.get("vulnerable", False) or has_solve_banner or has_sql_error or has_differential_increase:

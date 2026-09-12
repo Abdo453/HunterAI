@@ -104,10 +104,11 @@ class VulnerabilityEngine:
                     else:
                         base_score = 0.30
                 elif skill_key == "idor":
-                    if any(k in p_lower for k in ("id", "user_id", "account", "doc", "order_id", "no", "uid", "profile")):
+                    nav_filter = any(nav in p_lower for nav in ("slide", "page", "tab", "step", "modal", "lang", "sort", "filter", "category"))
+                    if not nav_filter and (p_lower == "id" or any(k in p_lower for k in ("user_id", "account", "doc_id", "order_id", "uid", "profile_id", "uuid"))):
                         base_score = 0.90
                     else:
-                        base_score = 0.30
+                        base_score = 0.20
 
             # Boost if aligns with primary_focus
             if primary_focus and primary_focus.lower() in skill_key:
@@ -142,10 +143,34 @@ class VulnerabilityEngine:
                 seen.add(key)
                 all_targets.append((target_url, p))
 
+        # Scope check helper
+        def _is_url_in_scope(u: str) -> bool:
+            try:
+                target_h = (urlparse(target_url).hostname or "").lower().strip()
+                probe_h = (urlparse(u).hostname or "").lower().strip()
+                if not probe_h:
+                    return True
+                if probe_h == target_h or (target_h and probe_h.endswith(f".{target_h}")):
+                    return True
+                # Reject known external domains immediately
+                blocked = {"google.com", "googletagmanager.com", "play.google.com", "apple.com", "facebook.com", "twitter.com"}
+                if any(probe_h == b or probe_h.endswith(f".{b}") for b in blocked):
+                    return False
+                parts = target_h.split(".")
+                if len(parts) >= 2:
+                    root = ".".join(parts[-2:])
+                    if probe_h == root or probe_h.endswith(f".{root}"):
+                        return True
+                return False
+            except Exception:
+                return False
+
         # 2. Discovered endpoints
         if endpoints:
             for ep in endpoints:
                 ep_url = ep.get("url") if isinstance(ep, dict) else str(ep)
+                if not _is_url_in_scope(ep_url):
+                    continue
                 param = ep.get("param") if isinstance(ep, dict) else None
                 if not param and "?" in ep_url:
                     ep_qs = parse_qs(urlparse(ep_url).query)

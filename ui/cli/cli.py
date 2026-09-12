@@ -37,7 +37,12 @@ async def run_scan(target: str, mode: str = "web", browser: bool = False, proxy:
         from core.resource_manager import ResourceManager
 
     tools = ToolManager()
-    res_mgr = ResourceManager(ollama_manager=None)
+    try:
+        from models.ollama_manager import OllamaManager
+        ollama_mgr = OllamaManager()
+    except Exception:
+        ollama_mgr = None
+    res_mgr = ResourceManager(ollama_manager=ollama_mgr)
 
     async def cb(ev):
         e = ev.get("event", "")

@@ -92,6 +92,7 @@ class TestCmdInjectionSkill:
         mock_client.get.side_effect = [
             _make_mock_resp("Ping output: 1 packets transmitted"),
             _make_mock_resp(f"output:\n{CmdInjectionSkill.CANARY}\n"),
+            _make_mock_resp("output:\n72\n"),
         ]
 
         with patch("httpx.AsyncClient") as mock_cls:

@@ -619,25 +619,53 @@ class SQLiDetector:
             control_len = len(r_control.text)
             probe_body  = r_probe.text.lower()
 
-            # اكتشاف بـ3 طرق:
-            # 1. اختلاف استجابة الـ probe (True) عن الـ control (False)
-            # 2. خطأ SQL أو خطأ خادم في الـ probe
-            # 3. اختلاف حالة الـ HTTP
-            size_diff   = abs(probe_len - control_len) > 30
-            status_diff = (r_probe.status_code != r_control.status_code)
-            error_found = any(e in probe_body for e in [
-                "ora-", "mysql_fetch", "sqlite_", "syntax error",
-                "unclosed quotation", "quoted string not properly terminated",
-                "you have an error in your sql syntax",
-            ])
+            # WAF & Cloudflare Block Detection
+            waf_block_indicators = [
+                "attention required! | cloudflare",
+                "cf-browser-verification",
+                "just a moment...",
+                "access denied",
+                "security service to protect itself from online attacks",
+                "request blocked by waf",
+                "cloudflare ray id",
+                "web application firewall",
+            ]
+            if r_probe.status_code in (403, 429, 503) or any(ind in probe_body for ind in waf_block_indicators):
+                ctx.log(f"[DETECT] Probe blocked by WAF/Cloudflare (status={r_probe.status_code}) -> not SQLi")
+                continue
 
-            if error_found or size_diff or status_diff:
+            # Real SQL Error Signatures
+            sql_error_sigs = [
+                "you have an error in your sql syntax",
+                "mysql_fetch",
+                "unclosed quotation mark",
+                "quoted string not properly terminated",
+                "ora-009",
+                "ora-017",
+                "pg_query",
+                "syntax error at or near",
+                "psqlexception",
+                "sqlite3::sqlexception",
+                "microsoft ole db provider for sql server",
+            ]
+            error_found = any(e in probe_body for e in sql_error_sigs)
+
+            # Boolean differential: Both status must be 200, probe resembles baseline or adds rows, control diverges
+            boolean_differential = False
+            if r_probe.status_code == 200 and r_control.status_code == 200:
+                diff_control = abs(probe_len - control_len)
+                if diff_control > 200 and (abs(probe_len - base_len) < 150 or probe_len > base_len + 150):
+                    boolean_differential = True
+
+            if error_found or boolean_differential:
+                proof_type = "SQL Error Triggered" if error_found else "Boolean Differential Confirmed"
                 ctx.log(
-                    f"[DETECT] SQLi confirmed | payload={probe_payload!r} "
+                    f"[DETECT] SQLi confirmed ({proof_type}) | payload={probe_payload!r} "
                     f"| probe_len={probe_len} control_len={control_len}"
                 )
                 ctx.evidence.append({
                     "stage": "detect",
+                    "proof": proof_type,
                     "payload": probe_payload,
                     "probe_len": probe_len,
                     "control_len": control_len,
@@ -813,10 +841,10 @@ class SQLiWAFBypasser:
 class SQLiDBMSFingerprinter:
     """يحدد نوع قاعدة البيانات من error messages أو سلوك الـquery الشرطي"""
 
-    ORACLE_SIGS   = ["ora-", "oracle", "from dual", "v$version", "quoted string not properly terminated"]
-    MYSQL_SIGS    = ["mysql_fetch", "you have an error in your sql syntax", "mysql", "information_schema"]
-    MSSQL_SIGS    = ["unclosed quotation mark", "mssql", "sql server", "sqlserver", "@@version"]
-    POSTGRES_SIGS = ["pg_", "postgresql", "psql", "column", "unterminated quoted string"]
+    ORACLE_SIGS   = ["ora-009", "ora-017", "ora-006", "quoted string not properly terminated", "from dual"]
+    MYSQL_SIGS    = ["mysql_fetch", "you have an error in your sql syntax", "check the manual that corresponds to your mysql"]
+    MSSQL_SIGS    = ["unclosed quotation mark", "microsoft ole db provider for sql server", "incorrect syntax near"]
+    POSTGRES_SIGS = ["pg_query", "psqlexception", "syntax error at or near", "unterminated quoted string"]
 
     # Probes تميّز كل DBMS بشكل حاسم عبر شروط صحيحة داخل WHERE
     DBMS_TRUTH_PROBES = {

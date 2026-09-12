@@ -909,6 +909,42 @@ class AutonomousBrain:
         except Exception:
             return False
 
+    def _is_in_scope(self, url: str, base_url: str) -> bool:
+        """
+        Ensures that discovered URLs belong strictly to the target host or its subdomains,
+        filtering out 3rd party trackers, CDNs, app stores, and external links.
+        """
+        try:
+            from urllib.parse import urlparse
+            parsed_target = urlparse(base_url)
+            parsed_probe = urlparse(url)
+            target_host = (parsed_target.hostname or "").lower().strip()
+            probe_host = (parsed_probe.hostname or "").lower().strip()
+            if not probe_host:
+                return True
+            if probe_host == target_host:
+                return True
+            # Subdomains of target
+            if target_host and probe_host.endswith(f".{target_host}"):
+                return True
+            # Blocklist external CDNs, analytics, app stores, social media
+            external_blocklist = {
+                "google.com", "googletagmanager.com", "google-analytics.com", "gstatic.com",
+                "play.google.com", "apple.com", "apps.apple.com", "facebook.com", "twitter.com",
+                "linkedin.com", "youtube.com", "instagram.com", "cloudflare.com", "cdnjs.cloudflare.com"
+            }
+            if any(probe_host == b or probe_host.endswith(f".{b}") for b in external_blocklist):
+                return False
+            # Allow common apex domain matching (e.g. sub.bancoplata.mx -> bancoplata.mx)
+            parts = target_host.split(".")
+            if len(parts) >= 2:
+                root_domain = ".".join(parts[-2:])
+                if probe_host == root_domain or probe_host.endswith(f".{root_domain}"):
+                    return True
+            return False
+        except Exception:
+            return False
+
     def _extract_endpoints_and_params(self, html: str, base_url: str) -> Tuple[List[str], List[Dict[str, Any]]]:
         """
         استخراج ذكي وشامل لجميع الـ Endpoints والـ Parameters من:
@@ -916,11 +952,13 @@ class AutonomousBrain:
         2. نماذج الإدخال (Forms, Inputs, Textareas, Selects)
         3. استدعاءات الـ JavaScript والـ APIs
         4. الـ Query Parameters في الرابط الأصلي
+        مع فحص صارم للـ Scope وفك تشفير كيانات HTML.
         """
         params: set = set()
         endpoints: List[Dict[str, Any]] = []
         seen_ep_keys: set = set()
 
+        import html as html_lib
         from urllib.parse import urljoin, urlparse, parse_qs
 
         # 1. Base URL query parameters
@@ -949,8 +987,11 @@ class AutonomousBrain:
         try:
             hrefs = re.findall(r'href=["\']([^"\'#]+)["\']', html, re.IGNORECASE)
             for href in hrefs:
-                if "?" in href:
-                    full_url = urljoin(base_url, href)
+                clean_href = html_lib.unescape(href.strip())
+                if "?" in clean_href:
+                    full_url = urljoin(base_url, clean_href)
+                    if not self._is_in_scope(full_url, base_url):
+                        continue
                     parsed = urlparse(full_url)
                     qs = parse_qs(parsed.query)
                     for p, vals in qs.items():
@@ -980,9 +1021,11 @@ class AutonomousBrain:
                 body = form.group(2)
                 action_m = re.search(r'action=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
                 method_m = re.search(r'method=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
-                action = action_m.group(1) if action_m else ""
+                action = html_lib.unescape(action_m.group(1).strip()) if action_m else ""
                 method = method_m.group(1).upper() if method_m else "GET"
                 form_url = urljoin(base_url, action) if action else base_url
+                if not self._is_in_scope(form_url, base_url):
+                    continue
 
                 form_inputs = re.findall(r'<(?:input|textarea|select)[^>]+name=["\']([^"\']{1,64})["\']', body, re.IGNORECASE)
                 for inp_name in form_inputs:
@@ -1022,20 +1065,24 @@ class AutonomousBrain:
         return p
 
     def _extract_js_urls(self, html: str, base_url: str) -> List[str]:
+        import html as html_lib
         found = []
         parsed = urlparse(base_url)
         base = f"{parsed.scheme}://{parsed.netloc}"
         try:
             srcs = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
             for src in srcs:
-                if src.startswith("http"):
-                    found.append(src)
-                elif src.startswith("//"):
-                    found.append(f"{parsed.scheme}:{src}")
-                elif src.startswith("/"):
-                    found.append(f"{base}{src}")
+                clean_src = html_lib.unescape(src.strip())
+                if clean_src.startswith("http"):
+                    full_src = clean_src
+                elif clean_src.startswith("//"):
+                    full_src = f"{parsed.scheme}:{clean_src}"
+                elif clean_src.startswith("/"):
+                    full_src = f"{base}{clean_src}"
                 else:
-                    found.append(f"{base}/{src}")
+                    full_src = f"{base}/{clean_src}"
+                if self._is_in_scope(full_src, base_url):
+                    found.append(full_src)
         except Exception:
             pass
         return found[:5]

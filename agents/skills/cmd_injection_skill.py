@@ -131,18 +131,52 @@ class CmdInjectionSkill(BaseSkill):
     def _is_literal_reflection(self, response_text: str, payload: str, canary: str) -> bool:
         """
         Differentiates between mere input reflection and command execution output.
-        If the entire raw payload (e.g. '; echo __PTST_CMD_7331__' or '<input value="...>')
-        appears in the response, it's literal reflection, NOT OS command execution.
+        If the entire raw payload, encoded payload, or command syntax appears in the response,
+        or if the canary is reflected inside HTML/JS/JSON context, it's literal reflection,
+        NOT OS command execution.
         """
+        if not response_text or not canary:
+            return False
+
+        # 1. Direct raw payload reflection
         if payload in response_text:
             return True
-        # Check common HTML attribute reflection patterns
+
+        # 2. HTML attribute & entity reflection
         escaped_payload = payload.replace('"', '&quot;').replace("'", "&#39;")
         if escaped_payload in response_text:
             return True
-        # If 'echo <canary>' is in response, the command invocation itself was printed
-        if f"echo {canary}" in response_text or f"echo  {canary}" in response_text:
+
+        # 3. URL encoded reflection
+        from urllib.parse import quote, quote_plus
+        if quote(payload) in response_text or quote_plus(payload) in response_text:
             return True
+
+        # 4. JSON / JS string escaped reflection
+        import json
+        try:
+            json_dumped = json.dumps(payload)[1:-1]
+            if json_dumped in response_text:
+                return True
+        except Exception:
+            pass
+
+        # 5. Proximity check for command syntax and canary
+        import re
+        if re.search(rf"\becho\b[\s\S]{{0,15}}{re.escape(canary)}", response_text, re.I):
+            return True
+        if re.search(rf"{re.escape(canary)}[\s\S]{{0,15}}\becho\b", response_text, re.I):
+            return True
+
+        # 6. Reflection within HTML tag attributes or script/JSON context
+        tag_match = re.search(rf'<[^>]*{re.escape(canary)}[^>]*>', response_text, re.I)
+        if tag_match:
+            return True
+
+        str_match = re.search(rf'["\'][^"\']*{re.escape(canary)}[^"\']*["\']', response_text)
+        if str_match:
+            return True
+
         return False
 
     async def run(self, target_url: str, param_name: str, **kwargs) -> SkillResult:
@@ -208,23 +242,26 @@ class CmdInjectionSkill(BaseSkill):
                                 )
                                 continue
 
-                            # Reproducibility check: test controlled arithmetic or secondary token
+                            # Reproducibility check: test controlled arithmetic
+                            # Shell MUST evaluate 53+19 to 72 without literal '53+19' in output
                             reproduced = False
+                            exec_proof = ""
                             try:
                                 arith_payload = f"{delimiter} echo $((53+19))"
                                 arith_url = self._inject_param(target_url, param_name, arith_payload)
                                 arith_r = await client.get(arith_url, headers=headers)
-                                # '72' evaluated by shell, but literal expression '53+19' not in response
                                 if "72" in arith_r.text and "53+19" not in arith_r.text:
                                     reproduced = True
                                     exec_proof = "Arithmetic evaluation '$((53+19))' -> '72' executed by OS shell"
-                                else:
-                                    reproduced = True
-                                    exec_proof = f"Canary {self.CANARY} isolated in command stdout without command syntax"
                             except Exception:
-                                # In unit test environments with limited mocks, accept primary verified echo
-                                reproduced = True
-                                exec_proof = f"Canary {self.CANARY} appeared in command output without command syntax"
+                                pass
+
+                            if not reproduced:
+                                res.logs.append(
+                                    f"[CMD] ⚠️ UNCONFIRMED EXECUTION: Canary appeared but arithmetic execution test failed. "
+                                    f"Treated as reflection, not RCE. Reflection != Execution."
+                                )
+                                continue
 
                             # Calculate Dynamic CVSS (Never hard-code 9.5!)
                             cvss_score, cvss_vector = calculate_cvss31(
@@ -232,7 +269,7 @@ class CmdInjectionSkill(BaseSkill):
                             )
 
                             res.verified = True
-                            res.confidence = 0.99 if reproduced else 0.90
+                            res.confidence = 0.99
                             res.severity = "Critical"
                             res.title = f"OS Command Injection Confirmed ({desc}) in {param_name!r}"
                             res.payload_used = payload
@@ -301,7 +338,7 @@ class CmdInjectionSkill(BaseSkill):
                                 if elapsed2 >= 4.4:
                                     reproduced = True
                             except Exception:
-                                reproduced = True
+                                pass
 
                             # Dynamic CVSS for Blind Injection (Availability high, CIA partial)
                             cvss_score, cvss_vector = calculate_cvss31(

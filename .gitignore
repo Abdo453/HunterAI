@@ -38,6 +38,7 @@ data/sessions/
 data/reports/
 data/tool_outputs/
 data/screenshots/
+data/*.db
 data/engagements/
 data/traffic.db*
 data/*.log
