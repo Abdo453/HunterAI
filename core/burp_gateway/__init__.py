@@ -18,6 +18,13 @@ from core.burp_gateway.provenance import (
     EvidenceProvenanceEngine,
 )
 from core.burp_gateway.handoff_contract import AgentHandoffContract
+from core.burp_gateway.experiment_engine import (
+    ExperimentEngine,
+    ExperimentStage,
+    ExperimentStep,
+    ReasoningExperiment,
+    CrossSensorCorrelator,
+)
 
 __all__ = [
     "CaptureStore",
@@ -33,5 +40,10 @@ __all__ = [
     "ProvenanceTrace",
     "EvidenceProvenanceEngine",
     "AgentHandoffContract",
+    "ExperimentEngine",
+    "ExperimentStage",
+    "ExperimentStep",
+    "ReasoningExperiment",
+    "CrossSensorCorrelator",
 ]
 

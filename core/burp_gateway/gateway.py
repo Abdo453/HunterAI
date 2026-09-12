@@ -35,6 +35,7 @@ class BurpGateway:
         capture_store: Optional[CaptureStore] = None,
         on_traffic_cb: Optional[Callable] = None,
         task_executor_fn: Optional[Callable[[BurpTask], Any]] = None,
+        scope_engine: Optional[Any] = None,
     ):
         self.host = host
         self.port = port
@@ -49,10 +50,44 @@ class BurpGateway:
             "include": [],
             "exclude": []
         }
+        if scope_engine is not None:
+            self.scope_engine = scope_engine
+            if hasattr(scope_engine, "in_scope"):
+                self.active_scope["include"] = list(scope_engine.in_scope)
+            if hasattr(scope_engine, "out_of_scope"):
+                self.active_scope["exclude"] = list(scope_engine.out_of_scope)
+        else:
+            from core.scope_guard import ScopeGuard
+            self.scope_engine = ScopeGuard(
+                in_scope=self.active_scope["include"],
+                out_of_scope=self.active_scope["exclude"]
+            )
 
         self.app = FastAPI(title="HunterAI Burp Suite Gateway Bridge", docs_url=None, redoc_url=None)
         self._server = None
         self._setup_routes()
+
+    def set_scope(self, include: Optional[List[str]] = None, exclude: Optional[List[str]] = None):
+        """Programmatically updates active scope filters and recompiles scope engine"""
+        if include is not None:
+            self.active_scope["include"] = list(include)
+        if exclude is not None:
+            self.active_scope["exclude"] = list(exclude)
+        from core.scope_guard import ScopeGuard
+        self.scope_engine = ScopeGuard(
+            in_scope=self.active_scope["include"],
+            out_of_scope=self.active_scope["exclude"]
+        )
+        self.capture_store.save_scope(self.active_scope["include"], self.active_scope["exclude"])
+
+    def check_scope(self, target: str, url: Optional[str] = None) -> tuple[bool, str]:
+        """Checks target or full URL against configured scope engine"""
+        target_to_check = url or target
+        if hasattr(self.scope_engine, "is_allowed"):
+            return self.scope_engine.is_allowed(target_to_check)
+        elif hasattr(self.scope_engine, "is_in_scope"):
+            return self.scope_engine.is_in_scope(target_to_check)
+        return True, "Authorized (Permissive)"
 
     def _setup_routes(self):
         @self.app.get("/health")
@@ -124,6 +159,30 @@ class BurpGateway:
                         hk, hv = hline.split(":", 1)
                         resp_headers[hk.strip()] = hv.strip()
 
+                # ── ACTIVE SCOPE ENFORCEMENT BARRIER ──────────────────────────
+                is_in_scope, scope_reason = self.check_scope(host, full_url)
+                if not is_in_scope:
+                    self.capture_store.record_timeline_event(
+                        "TRAFFIC_DROPPED_OUT_OF_SCOPE",
+                        {
+                            "host": host,
+                            "url": full_url,
+                            "tool": payload.get("tool", "proxy"),
+                            "reason": scope_reason,
+                            "status": "BLOCKED"
+                        }
+                    )
+                    logger.warning(f"[GATEWAY SCOPE GUARD] Dropped out-of-scope traffic: {host} ({scope_reason})")
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            "status": "DROPPED_OUT_OF_SCOPE",
+                            "reason": scope_reason,
+                            "host": host,
+                            "url": full_url
+                        }
+                    )
+
                 tx = CapturedTransaction(
                     tx_id=payload.get("tx_id", ""),
                     target_host=host,
@@ -138,10 +197,10 @@ class BurpGateway:
                     parent_request=payload.get("parent_request")
                 )
 
-                # Persist to CaptureStore
+                # Persist to CaptureStore (In-Scope Only)
                 self.capture_store.store_transaction(tx)
 
-                # Broadcast to on_traffic_cb
+                # Broadcast to on_traffic_cb (In-Scope Only)
                 if self.on_traffic_cb:
                     bg.add_task(self.on_traffic_cb, payload)
 
@@ -159,6 +218,23 @@ class BurpGateway:
                 target_url = data.get("target_url") or data.get("url")
                 if not target_url:
                     return JSONResponse(status_code=400, content={"error": "target_url is required"})
+
+                # Scope check before queueing task
+                is_in_scope, scope_reason = self.check_scope(target_url)
+                if not is_in_scope:
+                    self.capture_store.record_timeline_event(
+                        "TASK_REJECTED_OUT_OF_SCOPE",
+                        {
+                            "target_url": target_url,
+                            "action": action_str,
+                            "reason": scope_reason,
+                            "status": "REJECTED"
+                        }
+                    )
+                    return JSONResponse(
+                        status_code=403,
+                        content={"status": "REJECTED_OUT_OF_SCOPE", "reason": scope_reason, "target_url": target_url}
+                    )
 
                 action = TaskAction[action_str] if action_str in TaskAction.__members__ else TaskAction.SCAN
                 task = self.task_queue.enqueue(action, target_url, data.get("payload", {}))
@@ -180,13 +256,25 @@ class BurpGateway:
 
         @self.app.post("/api/scope")
         async def update_scope(req: Request):
-            """Adds a host to HunterAI scope directly from Burp"""
+            """Adds a host or updates scope directly from Burp"""
             try:
                 data = await req.json()
                 host = data.get("host")
-                if host and host not in self.active_scope["include"]:
-                    self.active_scope["include"].append(host)
-                    self.capture_store.save_scope(self.active_scope["include"], self.active_scope["exclude"])
+                action = data.get("action", "include")
+                includes = data.get("include")
+                excludes = data.get("exclude")
+
+                if includes is not None or excludes is not None:
+                    self.set_scope(include=includes, exclude=excludes)
+                elif host:
+                    if action == "exclude":
+                        if host not in self.active_scope["exclude"]:
+                            self.active_scope["exclude"].append(host)
+                    else:
+                        if host not in self.active_scope["include"]:
+                            self.active_scope["include"].append(host)
+                    self.set_scope(self.active_scope["include"], self.active_scope["exclude"])
+
                 return {"status": "UPDATED", "scope": self.active_scope}
             except Exception as e:
                 return JSONResponse(status_code=400, content={"error": str(e)})
