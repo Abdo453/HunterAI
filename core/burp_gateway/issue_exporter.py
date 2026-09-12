@@ -64,6 +64,7 @@ class BurpIssueExporter:
             "path": parsed.path or "/",
             "issue_background": "Discovered and mathematically confirmed by HunterAI Evidence Court.",
             "issue_detail": f"<b>HunterAI Evidence Court Verdict:</b> {verdict}<br/><br/><b>Details:</b><br/>{detail}<br/><br/><b>Proof-of-Execution:</b> {finding.get('payload_used', 'N/A')}",
+            "remediation": remediation,
             "remediation_background": remediation,
             "remediation_detail": f"Apply context-aware controls: {remediation}",
             "http_messages": [

@@ -44,6 +44,8 @@ data/traffic.db*
 data/*.log
 data/*.sqlite*
 data/cert_browser_test/
+data/scans/
+storage/jobs/
 
 # Archive files
 *.zip

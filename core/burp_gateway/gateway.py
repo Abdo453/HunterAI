@@ -19,6 +19,8 @@ import uvicorn
 from core.burp_gateway.capture_store import CaptureStore, CapturedTransaction
 from core.burp_gateway.issue_exporter import BurpIssueExporter
 from core.burp_gateway.task_queue import BurpTask, TaskAction, TaskQueue
+from core.burp_gateway.provenance import EvidenceProvenanceEngine, ProvenanceStage
+from core.burp_gateway.handoff_contract import AgentHandoffContract
 
 logger = logging.getLogger("hunter_ai.burp_gateway")
 
@@ -39,6 +41,8 @@ class BurpGateway:
         self.capture_store = capture_store or CaptureStore("target_gateway")
         self.on_traffic_cb = on_traffic_cb
         self.task_queue = TaskQueue(executor_fn=task_executor_fn)
+        self.provenance_engine = EvidenceProvenanceEngine()
+        self.cases: Dict[str, AgentHandoffContract] = {}
 
         self.confirmed_findings: List[Dict[str, Any]] = []
         self.active_scope: Dict[str, List[str]] = {
@@ -74,19 +78,51 @@ class BurpGateway:
                 port = payload.get("port", 80)
                 proto = payload.get("protocol", "http")
 
-                # Parse request line
-                lines = req_str.splitlines() if req_str else []
+                # Parse request line & headers vs body
+                req_headers = {}
+                req_body = ""
+                clean_req = req_str.replace("\\r\\n", "\r\n").replace("\\n", "\n") if "\\r\\n" in req_str or "\\n" in req_str else req_str
+                if "\r\n\r\n" in clean_req:
+                    hdr_part, req_body = clean_req.split("\r\n\r\n", 1)
+                elif "\n\n" in clean_req:
+                    hdr_part, req_body = clean_req.split("\n\n", 1)
+                else:
+                    hdr_part = clean_req
+                    req_body = ""
+
+                lines = hdr_part.splitlines() if hdr_part else []
                 first_line = lines[0] if lines else "GET / HTTP/1.1"
                 parts = first_line.split()
                 method = parts[0] if len(parts) > 0 else "GET"
                 path = parts[1] if len(parts) > 1 else "/"
                 full_url = f"{proto}://{host}:{port}{path}" if port not in (80, 443) else f"{proto}://{host}{path}"
 
-                # Parse status code
-                resp_lines = resp_str.splitlines() if resp_str else []
+                for hline in lines[1:]:
+                    if ":" in hline:
+                        hk, hv = hline.split(":", 1)
+                        req_headers[hk.strip()] = hv.strip()
+
+                # Parse response line & headers vs body
+                resp_headers = {}
+                resp_body = ""
+                clean_resp = resp_str.replace("\\r\\n", "\r\n").replace("\\n", "\n") if "\\r\\n" in resp_str or "\\n" in resp_str else resp_str
+                if "\r\n\r\n" in clean_resp:
+                    rhdr_part, resp_body = clean_resp.split("\r\n\r\n", 1)
+                elif "\n\n" in clean_resp:
+                    rhdr_part, resp_body = clean_resp.split("\n\n", 1)
+                else:
+                    rhdr_part = clean_resp
+                    resp_body = ""
+
+                resp_lines = rhdr_part.splitlines() if rhdr_part else []
                 resp_first = resp_lines[0] if resp_lines else "HTTP/1.1 200 OK"
                 status_parts = resp_first.split()
                 status_code = int(status_parts[1]) if len(status_parts) > 1 and status_parts[1].isdigit() else 200
+
+                for hline in resp_lines[1:]:
+                    if ":" in hline:
+                        hk, hv = hline.split(":", 1)
+                        resp_headers[hk.strip()] = hv.strip()
 
                 tx = CapturedTransaction(
                     tx_id=payload.get("tx_id", ""),
@@ -94,9 +130,12 @@ class BurpGateway:
                     method=method,
                     url=full_url,
                     status_code=status_code,
-                    req_body=req_str,
-                    resp_body=resp_str,
-                    tool_source=payload.get("tool", "proxy")
+                    req_headers=req_headers,
+                    req_body=req_body,
+                    resp_headers=resp_headers,
+                    resp_body=resp_body,
+                    tool_source=payload.get("tool", "proxy"),
+                    parent_request=payload.get("parent_request")
                 )
 
                 # Persist to CaptureStore
@@ -171,6 +210,45 @@ class BurpGateway:
             """Exports confirmed HunterAI findings formatted for Burp Suite Target tab import"""
             formatted = BurpIssueExporter.export_all(self.confirmed_findings)
             return {"issues_count": len(formatted), "issues": formatted}
+
+        @self.app.get("/api/traffic/{tx_id}/lineage")
+        async def get_traffic_lineage(tx_id: str):
+            """Returns parent/child request ancestry lineage"""
+            lineage = self.capture_store.get_request_lineage(tx_id)
+            return {"tx_id": tx_id, "lineage_depth": len(lineage), "lineage": lineage}
+
+        @self.app.post("/api/cases")
+        async def create_or_update_case(req: Request):
+            """Receives structured AgentHandoffContract / InvestigationCase"""
+            try:
+                data = await req.json()
+                case = AgentHandoffContract.from_dict(data)
+                self.cases[case.case_id] = case
+                case.save(self.capture_store.root_dir / "cases")
+                return {"status": "STORED", "case_id": case.case_id}
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.app.get("/api/cases")
+        async def list_cases():
+            """Lists active investigation cases"""
+            return {"cases": [c.to_dict() for c in self.cases.values()]}
+
+        @self.app.get("/api/cases/{case_id}")
+        async def get_case(case_id: str):
+            """Retrieves an investigation case dossier"""
+            case = self.cases.get(case_id) or AgentHandoffContract.load(case_id, self.capture_store.root_dir / "cases")
+            if not case:
+                return JSONResponse(status_code=404, content={"error": "Case not found"})
+            return case.to_dict()
+
+        @self.app.get("/api/provenance/{trace_or_case_id}")
+        async def get_provenance(trace_or_case_id: str):
+            """Retrieves 7-stage causal provenance trace"""
+            trace = self.provenance_engine.get_trace(trace_or_case_id)
+            if not trace:
+                return JSONResponse(status_code=404, content={"error": "Provenance trace not found"})
+            return trace.to_dict()
 
     def register_confirmed_finding(self, finding: Dict[str, Any]):
         """Called by Evidence Court when a finding is CONFIRMED"""

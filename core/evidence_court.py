@@ -54,6 +54,7 @@ class CourtJudgment:
     verifier_result: Dict[str, Any] = field(default_factory=dict)
     adjudication_rationale: str = ""
     negative_evidence: List[str] = field(default_factory=list)
+    provenance_chain: List[Dict[str, Any]] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,14 +75,16 @@ class EvidenceCourt:
         finder_claim: Dict[str, Any],
         verifier_result: Optional[Dict[str, Any]] = None,
         is_in_scope: bool = True,
-        is_blocked_by_waf: bool = False
+        is_blocked_by_waf: bool = False,
+        provenance_chain: Optional[List[Dict[str, Any]]] = None
     ) -> CourtJudgment:
         judgment = CourtJudgment(
             target_url=target_url,
             parameter=parameter,
             vuln_class=vuln_class,
             finder_claim=finder_claim,
-            verifier_result=verifier_result or {}
+            verifier_result=verifier_result or {},
+            provenance_chain=provenance_chain or []
         )
 
         # 1. Inviolable Scope Check
@@ -159,10 +162,18 @@ class EvidenceCourt:
             else:
                 judgment.calibrated_severity = "Medium"
 
-            judgment.adjudication_rationale = (
-                f"Deterministic proof confirmed by independent verifier ({verifier_result.get('proof_detail', 'verified')}). "
-                "Adjudicated as CONFIRMED."
-            )
+            if not judgment.provenance_chain:
+                try:
+                    from core.burp_gateway.provenance import EvidenceProvenanceEngine
+                    judgment.provenance_chain = EvidenceProvenanceEngine.synthesize_standard_provenance(
+                        target_url=target_url,
+                        vuln_class=vuln_class,
+                        finder_claim=finder_claim,
+                        verifier_result=verifier_result
+                    )
+                except Exception:
+                    pass
+
             return judgment
 
         # Fallback: verifier said reproduced, but lacked deterministic proof

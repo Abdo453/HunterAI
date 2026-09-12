@@ -11,6 +11,13 @@ from core.burp_gateway.capture_store import CaptureStore, CapturedTransaction
 from core.burp_gateway.task_queue import TaskQueue, BurpTask, TaskAction, TaskStatus
 from core.burp_gateway.issue_exporter import BurpIssueExporter
 from core.burp_gateway.gateway import BurpGateway
+from core.burp_gateway.provenance import (
+    ProvenanceStage,
+    ProvenanceStep,
+    ProvenanceTrace,
+    EvidenceProvenanceEngine,
+)
+from core.burp_gateway.handoff_contract import AgentHandoffContract
 
 __all__ = [
     "CaptureStore",
@@ -21,4 +28,10 @@ __all__ = [
     "TaskStatus",
     "BurpIssueExporter",
     "BurpGateway",
+    "ProvenanceStage",
+    "ProvenanceStep",
+    "ProvenanceTrace",
+    "EvidenceProvenanceEngine",
+    "AgentHandoffContract",
 ]
+

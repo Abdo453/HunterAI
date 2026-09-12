@@ -1263,9 +1263,13 @@ class AutonomousBrain:
                 ep_path = urlparse(ep_url).path if "://" in ep_url else ep_url
                 self.security_state.add_endpoint(path=ep_path, url=ep_url)
 
+        manifest_obj = exploration_res.get("manifest", {}) if isinstance(exploration_res.get("manifest"), dict) else {}
+        pages_val = manifest_obj.get("pages_visited", 0)
+        browser_pages_count = len(pages_val) if isinstance(pages_val, (list, set, dict)) else int(pages_val or 0)
+
         self._audit("observe_done", status=status_code,
                     params=params_from_page, endpoints_count=len(discovered_endpoints), js_count=len(js_urls),
-                    browser_pages=len(exploration_res.get("manifest", {}).get("pages_visited", 0) if isinstance(exploration_res.get("manifest"), dict) else 0))
+                    browser_pages=browser_pages_count)
         await self._log(
             f"[OBSERVE] status={status_code} | "
             f"params={len(params_from_page)} | "
