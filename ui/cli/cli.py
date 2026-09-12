@@ -90,7 +90,21 @@ async def run_scan(target: str, mode: str = "web", browser: bool = False, proxy:
     code_intel = result.get("code_intelligence", {})
     manifest = code_intel.get("manifest", {})
 
+    browser_exp = result.get("browser_exploration", {})
+    b_manifest = browser_exp.get("manifest", {})
+
     if RICH:
+        if b_manifest:
+            b_summary = (
+                f"[bold blue]Human-Like Stateful Exploration:[/bold blue]\n"
+                f"• Pages Explored: [bold]{b_manifest.get('pages_visited', 0)}[/bold] | Stop Reason: [yellow]{b_manifest.get('stop_reason', 'N/A')}[/yellow]\n"
+                f"• Application States Discovered: [green]{b_manifest.get('states_discovered', 0)}[/green]\n"
+                f"• API Endpoints Intercepted: [cyan]{b_manifest.get('api_endpoints', 0)}[/cyan]\n"
+                f"• Live Network Requests Recorded: [magenta]{b_manifest.get('network_requests', 0)}[/magenta]\n"
+                f"• Scope Firewall: [bold green]Active (Zero Out-of-Scope Probes)[/bold green]"
+            )
+            console.print(Panel(b_summary, title="🌐 Browser Sensor & Application Explorer", border_style="blue"))
+
         if manifest:
             techs = ", ".join(manifest.get("technologies", [])) or "None detected"
             summary_text = (

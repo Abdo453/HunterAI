@@ -22,6 +22,8 @@ from urllib.parse import urlparse, parse_qs, urljoin
 from core.evidence_court import EvidenceCourt, CourtVerdict
 from core.code_intel import CodeIntelligenceAgent
 from core.attack_surface_graph import AttackSurfaceGraph, ThirdPartyDependencyFirewall
+from core.browser import StatefulBrowserSession, HumanLikeExplorationEngine
+from pathlib import Path
 
 log = logging.getLogger("autonomous_brain")
 
@@ -1196,19 +1198,53 @@ class AutonomousBrain:
             log.debug(f"Failed to initialize SecurityState: {e}")
             self.security_state = None
 
-        # ── PHASE 0: OBSERVE ────────────────────────────────────────────────
-        await self._emit("phase", phase="observe", message="[OBSERVE] Fetching target...")
+        # ── PHASE 0: OBSERVE (Human-like Browser Exploration Sensor) ────────
+        await self._emit("phase", phase="observe", message="[OBSERVE] Launching Browser Sensor & Application Explorer...")
         self._audit("observe_start", target=target, mode=mode)
 
         if self.user_hints:
             for uh in self.user_hints:
                 await self._log(f"[HINT 💡] User Guidance Active: {uh.get('hint')}")
 
+        burp_online = await self._check_burp_online(proxy)
+
+        # Initialize continuous Browser Sensor
+        target_host_sanitized = (urlparse(target).hostname or "target").replace(":", "_").replace(".", "_")
+        browser_output_dir = Path(f"data/scans/{target_host_sanitized}/browser")
+        self.browser_session = StatefulBrowserSession(
+            target_url=target,
+            output_dir=browser_output_dir,
+            headless=not use_browser,
+            proxy=proxy
+        )
+        self.browser_explorer = HumanLikeExplorationEngine(
+            session=self.browser_session,
+            max_pages=8 if mode in ("full", "web", "auto") else 4,
+            max_depth=2,
+            time_budget_sec=60.0,
+            on_progress_cb=lambda msg: self._log(msg)
+        )
+
+        try:
+            exploration_res = await self.browser_explorer.explore()
+        except Exception as e:
+            log.warning(f"Browser exploration non-critical error: {e}")
+            exploration_res = {}
+        self._last_browser_exploration = exploration_res
 
         html, status_code, headers = await self._fetch_target(target, auth, proxy)
-        burp_online = await self._check_burp_online(proxy)
-        params_from_page, discovered_endpoints = self._extract_endpoints_and_params(html, target)
-        js_urls = self._extract_js_urls(html, target)
+        static_params, static_endpoints = self._extract_endpoints_and_params(html, target)
+
+        # Merge browser discovered artifacts with static extraction
+        params_from_page = list(dict.fromkeys(static_params + exploration_res.get("params", [])))
+        discovered_endpoints = list(static_endpoints)
+        for ep_url in exploration_res.get("endpoints", []):
+            if not any((ep.get("url") if isinstance(ep, dict) else ep) == ep_url for ep in discovered_endpoints):
+                discovered_endpoints.append({"url": ep_url, "param": None})
+
+        # Merge JS URLs
+        static_js = self._extract_js_urls(html, target)
+        js_urls = list(dict.fromkeys(static_js + exploration_res.get("js_urls", [])))
 
         # Update SecurityState with observed endpoints
         if self.security_state:
@@ -1218,12 +1254,14 @@ class AutonomousBrain:
                 self.security_state.add_endpoint(path=ep_path, url=ep_url)
 
         self._audit("observe_done", status=status_code,
-                    params=params_from_page, endpoints_count=len(discovered_endpoints), js_count=len(js_urls))
+                    params=params_from_page, endpoints_count=len(discovered_endpoints), js_count=len(js_urls),
+                    browser_pages=len(exploration_res.get("manifest", {}).get("pages_visited", 0) if isinstance(exploration_res.get("manifest"), dict) else 0))
         await self._log(
             f"[OBSERVE] status={status_code} | "
             f"params={len(params_from_page)} | "
             f"endpoints={len(discovered_endpoints)} | "
-            f"js={len(js_urls)} | burp={'online' if burp_online else 'offline'}"
+            f"js={len(js_urls)} | burp={'online' if burp_online else 'offline'} | "
+            f"browser_states={len(exploration_res.get('state_graph', {}).get('states', {}))}"
         )
 
         # Tech Stack Detection via AggressiveLearner
@@ -1274,6 +1312,16 @@ class AutonomousBrain:
                 f"Secrets validated: {m.get('secrets_discovered', 0)}"
             )
             self._audit("code_intelligence_done", manifest=m)
+
+            # Bidirectional Sensor Feedback: direct active Browser Sensor to explore top newly discovered JS API routes
+            if hasattr(self, "browser_explorer") and self.browser_explorer:
+                for ep in code_intel_res.get("endpoints", [])[:3]:
+                    ep_path = ep.get("url_or_path", "")
+                    if ep_path and self._is_in_scope(ep_path, target):
+                        try:
+                            await self.browser_explorer.explore_endpoint(ep_path)
+                        except Exception:
+                            pass
         except Exception as e:
             log.debug(f"CodeIntelligenceAgent non-critical error: {e}")
 
@@ -1751,7 +1799,14 @@ class AutonomousBrain:
             "audit_log": self._audit_log,
             "objective_result": objective_result,   # Finding ≠ Completion tracking
             "code_intelligence": getattr(self, "_last_code_intel", code_intel_res),
+            "browser_exploration": getattr(self, "_last_browser_exploration", {}),
         }
+
+    async def explore_discovered_endpoint(self, endpoint_url_or_path: str) -> Dict[str, Any]:
+        """Bidirectional sensor feedback: directs the active browser to visit and inspect a new route"""
+        if hasattr(self, "browser_explorer") and self.browser_explorer:
+            return await self.browser_explorer.explore_endpoint(endpoint_url_or_path)
+        return {"status": "BROWSER_SENSOR_NOT_INITIALIZED"}
 
     @property
     def audit_log(self) -> List[Dict[str, Any]]:
