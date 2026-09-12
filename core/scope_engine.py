@@ -185,7 +185,7 @@ class StrictScopeEngine:
             pattern_list.append(pattern)
         else:
             domain_part = re.escape(clean)
-            pattern = re.compile(rf"^(?:[a-zA-Z0-9_\-]+\.)*{domain_part}$", re.IGNORECASE)
+            pattern = re.compile(rf"^{domain_part}$", re.IGNORECASE)
             pattern_list.append(pattern)
 
     def _check_hard_invariants(self, host: str, port: Optional[int] = None) -> Tuple[bool, Optional[str]]:

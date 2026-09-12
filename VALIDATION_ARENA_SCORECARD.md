@@ -1,6 +1,6 @@
 # HunterAI Validation Arena - Ground-Truth Benchmark Scorecard
 
-**Execution Timestamp:** 2026-09-12T21:36:26Z  
+**Execution Timestamp:** 2026-09-12T21:52:49Z  
 **Overall Status:** ✅ PASS — BENCHMARK PRODUCTION CERTIFIED
 
 ---
@@ -46,14 +46,14 @@
 
 ## Continuous Epistemic Regression Matrix
 
-| Metric | Baseline (v1.0-prototype) | Current (v2.0-arena) | Delta (Δ) |
+| Metric | Baseline (v2.0-arena) | Current (v2.0-arena) | Delta (Δ) |
 | :--- | :--- | :--- | :--- |
-| **Detection Rate (Recall)** | 71.4% | **100.0%** | +28.6% |
-| **Precision** | 83.3% | **100.0%** | +16.7% |
-| **False Positive Rate** | 14.3% | **0.0%** | -14.3% |
+| **Detection Rate (Recall)** | 100.0% | **100.0%** | +0.0% |
+| **Precision** | 100.0% | **100.0%** | +0.0% |
+| **False Positive Rate** | 0.0% | **0.0%** | +0.0% |
 | **Scope Violations** | 0 | **0** | 0 |
-| **Proof-of-Execution Rate** | 60.0% | **100.0%** | +40.0% |
-| **7-Stage Provenance Rate** | 50.0% | **100.0%** | +50.0% |
-| **Mean Time to Finding** | 0.045s | **0.000s** | -0.045s |
+| **Proof-of-Execution Rate** | 100.0% | **100.0%** | +0.0% |
+| **7-Stage Provenance Rate** | 100.0% | **100.0%** | +0.0% |
+| **Mean Time to Finding** | 0.000s | **0.000s** | +0.000s |
 
 > **Regression Status**: Architecture integrity certified. Zero regression detected.

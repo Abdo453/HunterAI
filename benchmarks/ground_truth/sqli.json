@@ -1,0 +1,32 @@
+[
+  {
+    "case_id": "TC-SQLI-JUICE-01",
+    "target_app": "OWASP Juice Shop",
+    "vulnerability_type": "sqli",
+    "endpoint": "/rest/products/search",
+    "parameter": "q",
+    "expected_vulnerable": true,
+    "cwe": "CWE-89",
+    "description": "SQL injection in product search filter"
+  },
+  {
+    "case_id": "TC-SQLI-DVWA-02",
+    "target_app": "DVWA",
+    "vulnerability_type": "sqli",
+    "endpoint": "/vulnerabilities/sqli/",
+    "parameter": "id",
+    "expected_vulnerable": true,
+    "cwe": "CWE-89",
+    "description": "Classic error-based and boolean SQL injection"
+  },
+  {
+    "case_id": "TC-SQLI-SAFE-03",
+    "target_app": "DVWA",
+    "vulnerability_type": "sqli",
+    "endpoint": "/vulnerabilities/sqli_blind/",
+    "parameter": "safe_id",
+    "expected_vulnerable": false,
+    "cwe": "CWE-89",
+    "description": "Negative control with prepared statement"
+  }
+]\n

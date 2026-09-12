@@ -1,0 +1,32 @@
+[
+  {
+    "case_id": "TC-XSS-JUICE-01",
+    "target_app": "OWASP Juice Shop",
+    "vulnerability_type": "xss",
+    "endpoint": "/rest/products/search",
+    "parameter": "q",
+    "expected_vulnerable": true,
+    "cwe": "CWE-79",
+    "description": "Reflected search query unencoded injection"
+  },
+  {
+    "case_id": "TC-XSS-DVWA-02",
+    "target_app": "DVWA",
+    "vulnerability_type": "xss",
+    "endpoint": "/vulnerabilities/xss_r/",
+    "parameter": "name",
+    "expected_vulnerable": true,
+    "cwe": "CWE-79",
+    "description": "Reflected name parameter execution"
+  },
+  {
+    "case_id": "TC-XSS-SAFE-03",
+    "target_app": "OWASP Juice Shop",
+    "vulnerability_type": "xss",
+    "endpoint": "/api/profile",
+    "parameter": "username",
+    "expected_vulnerable": false,
+    "cwe": "CWE-79",
+    "description": "Hardened profile with HTML encoding"
+  }
+]\n
