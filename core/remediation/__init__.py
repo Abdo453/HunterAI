@@ -5,6 +5,10 @@ from core.remediation.workflow_remediation import (
     WorkflowRemediationRequest,
     WorkflowRemediationResult,
 )
+from core.remediation.protocol_remediation import (
+    ProtocolRemediationEngine,
+    ProtocolRemediationResult,
+)
 
 __all__ = [
     "RemediationGenerator",
@@ -14,4 +18,6 @@ __all__ = [
     "WorkflowRemediationEngine",
     "WorkflowRemediationRequest",
     "WorkflowRemediationResult",
+    "ProtocolRemediationEngine",
+    "ProtocolRemediationResult",
 ]

@@ -272,6 +272,15 @@ def build_parser() -> argparse.ArgumentParser:
     ti_p.add_argument("--export-sarif", action="store_true", help="Export OASIS SARIF v2.1.0 file")
     ti_p.add_argument("--output", default="artifacts/reports", help="Output directory for generated reports")
 
+    # Protocol Audit command (V13.0 Modern & Real-Time Protocol Agent)
+    proto_p = subparsers.add_parser("protocol-audit", help="Audit WebSockets, GraphQL Subscriptions, and gRPC-Web protocols")
+    proto_p.add_argument("--protocol", default="ws", choices=["ws", "graphql", "grpc"], help="Target protocol")
+    proto_p.add_argument("--target", default="wss://api.target.com/ws", help="Target URL or endpoint path")
+    proto_p.add_argument("--check-cswsh", action="store_true", help="Run multi-vector CSWSH origin testing matrix")
+    proto_p.add_argument("--check-tenant-leak", action="store_true", help="Audit GraphQL subscription pub/sub tenant boundary isolation")
+    proto_p.add_argument("--dissect", action="store_true", help="Dissect gRPC protobuf wire format and check metadata auth")
+    proto_p.add_argument("--remediate", action="store_true", help="Synthesize protocol defensive security middleware")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -700,6 +709,80 @@ def process_debit(user_id, amount):
             sarif_file = out_dir / f"HUNTER-{parsed.vuln.upper()}.sarif"
             SARIFExporter.export_sarif([finding_dict], output_file=sarif_file)
             print(f"📄 Saved OASIS SARIF v2.1.0 Report: {sarif_file.resolve()}\n")
+
+    elif parsed.command == "protocol-audit":
+        from core.protocols.websocket_agent import WebSocketSecurityAgent, CSWSHOriginTestType
+        from core.protocols.graphql_subscription_auditor import GraphQLSubscriptionAuditor
+        from core.protocols.grpc_web_dissector import ProtobufWireDissector, GRPCWebSecurityAuditor
+        from core.remediation.protocol_remediation import ProtocolRemediationEngine
+
+        print(f"\n⚡ HunterAI V13.0 Modern & Real-Time Protocol Security Audit:")
+        print(f"   Target Protocol: {parsed.protocol.upper()}")
+        print(f"   Target Endpoint: {parsed.target}")
+
+        if parsed.protocol == "ws":
+            ws_agent = WebSocketSecurityAgent(target_domain="target.com")
+            print(f"\n🌐 WebSocket Handshake CSWSH Matrix Audit:")
+
+            def mock_handshake(url, headers):
+                orig = headers.get("Origin", "")
+                if "evil-attacker.com" in orig:
+                    return 101, {"Upgrade": "websocket"}
+                return 403, {}
+
+            trials = ws_agent.audit_cswsh_matrix(parsed.target, cookies={"session": "auth_token_xyz"}, handshake_fn=mock_handshake)
+            for trial in trials:
+                status_icon = "❌ VULN" if trial.is_vulnerable else "✅ PASS"
+                print(f"   • [{status_icon}] Type: {trial.test_type.value}")
+                print(f"     Origin: {trial.tested_origin} -> Status: {trial.handshake_status}")
+                print(f"     Details: {trial.details}\n")
+
+            if parsed.remediate:
+                rem = ProtocolRemediationEngine.generate_websocket_origin_guard(["target.com", "app.target.com"])
+                print(f"🛠️ AST Protocol Remediation ({rem.vulnerability_remediated}):")
+                print(f"{rem.middleware_code}\n")
+
+        elif parsed.protocol == "graphql":
+            print(f"\n📡 GraphQL Subscription Pub/Sub Tenant Boundary Audit:")
+            sample_query = "subscription { orderCreated { id customerId amount } }"
+            sample_event = {"id": 101, "tenantId": "enterprise-client-b", "amount": 9999.00}
+            event_audit = GraphQLSubscriptionAuditor.audit_tenant_boundary(
+                subscription_query=sample_query,
+                subscriber_tenant_id="startup-client-a",
+                emitted_event_data=sample_event
+            )
+            print(f"   Cross-Tenant Leak: {event_audit.is_cross_tenant_leak} (Severity: {event_audit.severity})")
+            print(f"   Subscriber:        {event_audit.subscriber_tenant_id}")
+            print(f"   Event Owner:       {event_audit.emitted_event_tenant_id}")
+            print(f"   Details:           {event_audit.details}\n")
+
+            if parsed.remediate:
+                rem = ProtocolRemediationEngine.generate_graphql_tenant_guard()
+                print(f"🛠️ AST Protocol Remediation ({rem.vulnerability_remediated}):")
+                print(f"{rem.middleware_code}\n")
+
+        elif parsed.protocol == "grpc":
+            print(f"\n📦 gRPC-Web Wire Dissector & Authentication Audit:")
+            raw_sample = b"\n\nadmin_user\x10*"
+            fields = ProtobufWireDissector.dissect(raw_sample)
+            print(f"   Dissected Protobuf Fields ({len(fields)} fields identified):")
+            for f in fields:
+                print(f"   • Field #{f.field_number} (Type: {f.wire_type.name}): Value = '{f.decoded_value}'")
+
+            audit_res = GRPCWebSecurityAuditor.audit_rpc_request(
+                rpc_method_path="/api.UserService/DeleteAccount",
+                headers={"content-type": "application/grpc-web+proto"},
+                raw_protobuf_body=raw_sample
+            )
+            print(f"\n   RPC Method:     {audit_res['rpc_method']}")
+            print(f"   Sensitive:      {audit_res['is_sensitive_operation']}")
+            print(f"   Missing Auth:   {audit_res['is_unauthorized_hazard']} (Risk: {audit_res['risk_level']})")
+            print(f"   Recommendation: {audit_res['recommendation']}\n")
+
+            if parsed.remediate:
+                rem = ProtocolRemediationEngine.generate_grpc_auth_interceptor()
+                print(f"🛠️ AST Protocol Remediation ({rem.vulnerability_remediated}):")
+                print(f"{rem.middleware_code}\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
