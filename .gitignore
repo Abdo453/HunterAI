@@ -51,6 +51,10 @@ artifacts/secrets/*.jsonl
 artifacts/secrets/*/*.json
 artifacts/secrets/*/*.md
 !artifacts/secrets/**/.gitkeep
+artifacts/threat_intel/*
+!artifacts/threat_intel/.gitkeep
+artifacts/reports/*
+!artifacts/reports/.gitkeep
 
 # Archive files
 *.zip

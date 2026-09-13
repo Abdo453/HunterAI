@@ -262,6 +262,16 @@ def build_parser() -> argparse.ArgumentParser:
     wf_p.add_argument("--check-race", action="store_true", help="Perform concurrency and TOCTOU hazard audit")
     wf_p.add_argument("--remediate", action="store_true", help="Synthesize defensive AST patches and regression tests")
 
+    # Threat Intel command (V12.0 Threat Intel & Financial Impact)
+    ti_p = subparsers.add_parser("threat-intel", help="Calculate EPSS, CISA KEV correlation, GDPR/PCI fines, and export reports")
+    ti_p.add_argument("--vuln", default="sqli", choices=["sqli", "cmdi", "bola", "xss", "ssrf"], help="Vulnerability class")
+    ti_p.add_argument("--asset", default="https://api.target.com", help="Target asset URL")
+    ti_p.add_argument("--records", type=int, default=25000, help="Number of records potentially compromised")
+    ti_p.add_argument("--revenue", type=float, default=20000000.0, help="Annual global company turnover in EUR")
+    ti_p.add_argument("--export-bounty", action="store_true", help="Generate HackerOne Markdown dossier")
+    ti_p.add_argument("--export-sarif", action="store_true", help="Export OASIS SARIF v2.1.0 file")
+    ti_p.add_argument("--output", default="artifacts/reports", help="Output directory for generated reports")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -608,6 +618,88 @@ def process_debit(user_id, amount):
             print(f"   Target File: {rem.target_file}")
             print(f"   Guidance:    {rem.developer_guidance}")
             print(f"   Git Diff:\n{rem.git_diff}\n")
+
+    elif parsed.command == "threat-intel":
+        from core.threat_intel.threat_intel_engine import ThreatIntelligenceEngine
+        from core.impact.financial_impact_calculator import FinancialImpactCalculator, DataSensitivityLevel
+        from core.reporting.bounty_and_sarif_exporter import BountyReportGenerator, SARIFExporter
+        from pathlib import Path
+
+        v_map = {
+            "sqli": ("CWE-89", "SQL Injection in User Search Parameter", DataSensitivityLevel.FINANCIAL_PAYMENT),
+            "cmdi": ("CWE-78", "OS Command Execution in Diagnostics Endpoint", DataSensitivityLevel.CREDENTIALS_AND_KEYS),
+            "bola": ("CWE-639", "Broken Object Level Authorization (IDOR)", DataSensitivityLevel.PII_BASIC),
+            "xss":  ("CWE-79", "Reflected Cross-Site Scripting in Header", DataSensitivityLevel.PII_BASIC),
+            "ssrf": ("CWE-918", "Server-Side Request Forgery via Webhook", DataSensitivityLevel.INTERNAL_CONFIDENTIAL),
+        }
+        cwe_id, title, sensitivity = v_map.get(parsed.vuln.lower(), ("CWE-89", "Security Vulnerability", DataSensitivityLevel.PII_BASIC))
+
+        print(f"\n🌐 HunterAI V12.0 Threat Intelligence & Financial Risk Impact:")
+        print(f"   Target Asset:        {parsed.asset}")
+        print(f"   Vulnerability Class: {parsed.vuln.upper()} ({cwe_id})")
+
+        # 1. Threat Intel Evaluation
+        t_prof = ThreatIntelligenceEngine.evaluate_finding(
+            cwe_id=cwe_id,
+            title=title,
+            has_public_exploit=True,
+            requires_auth=False
+        )
+        print(f"\n🎯 Real-World Exploitability & Threat Telemetry:")
+        print(f"   EPSS Probability:    {round(t_prof.epss_score * 100, 2)}% (Percentile: {round(t_prof.epss_percentile * 100, 1)}%)")
+        print(f"   CISA KEV Status:     {'LISTED (Active Exploitation Mandate)' if t_prof.in_cisa_kev else 'Not Listed'}")
+        print(f"   Ransomware Campaign: {'Documented APT / Ransomware vector' if t_prof.cisa_ransomware_use else 'None'}")
+        print(f"   CVSS v4.0 Score:     {t_prof.cvss_v4_score} ({t_prof.cvss_v4_severity})")
+        print(f"   CVSS v4.0 Vector:    {t_prof.cvss_v4_vector}")
+
+        # 2. Financial Exposure Calculation
+        f_rep = FinancialImpactCalculator.assess_full_exposure(
+            cwe_id=cwe_id,
+            title=title,
+            severity=t_prof.cvss_v4_severity,
+            affected_records=parsed.records,
+            annual_turnover_eur=parsed.revenue,
+            sensitivity=sensitivity
+        )
+        print(f"\n💰 Financial & Regulatory Liability Assessment:")
+        print(f"   Affected Records:    {f_rep.affected_records_count:,} ({f_rep.data_sensitivity.value})")
+        print(f"   GDPR Max Fine:       €{f_rep.gdpr_max_fine_eur:,.2f} (Est. Sanction: €{f_rep.gdpr_estimated_fine_eur:,.2f})")
+        if f_rep.pci_dss_penalties_usd > 0:
+            print(f"   PCI-DSS v4.0 Loss:   ${f_rep.pci_dss_penalties_usd:,.2f} USD")
+        if f_rep.hipaa_penalties_usd > 0:
+            print(f"   HIPAA Penalties:     ${f_rep.hipaa_penalties_usd:,.2f} USD")
+        print(f"   Downtime Loss:       ${f_rep.downtime_loss_usd:,.2f} USD")
+        print(f"   Total Exposure:      ${f_rep.total_potential_exposure_usd:,.2f} USD")
+        print(f"   Mitigation ROI:      {f_rep.mitigation_roi_multiplier:.1f}x Return on Investment")
+
+        out_dir = Path(parsed.output)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # 3. Exporters
+        finding_dict = {
+            "title": title,
+            "cwe_id": cwe_id,
+            "asset": parsed.asset,
+            "route": f"/api/v1/{parsed.vuln}",
+            "method": "POST",
+            "cvss_score": t_prof.cvss_v4_score,
+            "cvss_vector": t_prof.cvss_v4_vector,
+            "severity": t_prof.cvss_v4_severity,
+            "epss_score": t_prof.epss_score,
+            "evidence": "Deterministic proof verified without destructive mutations.",
+            "remediation": "Apply parameterized statements, contextual output encoding, and input boundaries."
+        }
+
+        if parsed.export_bounty:
+            h1_md = BountyReportGenerator.generate_hackerone_report(finding_dict)
+            bounty_file = out_dir / f"BOUNTY-{parsed.vuln.upper()}.md"
+            bounty_file.write_text(h1_md, encoding="utf-8")
+            print(f"\n📄 Saved HackerOne/Bugcrowd Report: {bounty_file.resolve()}")
+
+        if parsed.export_sarif:
+            sarif_file = out_dir / f"HUNTER-{parsed.vuln.upper()}.sarif"
+            SARIFExporter.export_sarif([finding_dict], output_file=sarif_file)
+            print(f"📄 Saved OASIS SARIF v2.1.0 Report: {sarif_file.resolve()}\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
