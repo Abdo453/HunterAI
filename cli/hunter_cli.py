@@ -1,7 +1,7 @@
 """
 HunterAI Unified CLI Interface
 ==============================
-Modern command-line interface for HunterAI V5.0 Cognitive Security Operating System:
+Modern command-line interface for HunterAI V6.0: Agent Security Engineering Platform
 - hunter scan --target https://example.test --profile api
 - hunter replay --finding F-001
 - hunter provenance --finding F-001
@@ -10,11 +10,17 @@ Modern command-line interface for HunterAI V5.0 Cognitive Security Operating Sys
 - hunter agent-ids
 - hunter economics --finding F-001
 - hunter research --finding F-001 --reason "unstable baseline"
-- hunter root-cause
-- hunter js-intel --file bundle.js
+- hunter root-cause --demo
+- hunter js-intel --demo
 - hunter lab --target builtin_arena
 - hunter assets --list-pending
 - hunter adaptive --endpoint /api/v1/auth/login
+- hunter contract --vuln sqli
+- hunter drift --replay-status 403
+- hunter benchmark-agent
+- hunter export-case --finding F-001
+- hunter budget
+- hunter negative-kb --demo
 """
 from __future__ import annotations
 
@@ -44,11 +50,21 @@ from core.recon.asset_consent import AssetConsentManager, AssetCategory
 from core.lab.safe_lab_orchestrator import SafeLabOrchestrator, LabTargetType
 from core.profiles.adaptive_risk_selector import AdaptiveRiskSelector
 
+# V6.0 Additions
+from core.contract.security_contract import SecurityContractEngine
+from core.drift.evidence_drift_classifier import EvidenceDriftClassifier, DriftClassification
+from core.benchmark.adversarial_agent_benchmark import AdversarialAgentBenchmark
+from core.bundle.investigation_bundle import InvestigationBundleManager
+from core.optimization.cost_to_evidence import CostToEvidenceOptimizer, ExperimentCandidate
+from core.policy.policy_as_code import PolicyAsCodeEngine, EnvironmentTier
+from core.budget.categorized_budget import CategorizedBudgetManager
+from core.memory.negative_knowledge_base import NegativeKnowledgeBase
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hunter",
-        description="HunterAI V5.0: Cognitive Security Operating System & Evidence OS"
+        description="HunterAI V6.0: Agent Security Engineering & Cognitive Evidence Platform"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
@@ -114,6 +130,31 @@ def build_parser() -> argparse.ArgumentParser:
     ada_p.add_argument("--endpoint", required=True, help="Endpoint path (e.g. /api/auth/login)")
     ada_p.add_argument("--method", default="POST", help="HTTP Method")
 
+    # Contract command (V6.0)
+    ctr_p = subparsers.add_parser("contract", help="Inspect Security Finding Contract for vulnerability")
+    ctr_p.add_argument("--vuln", default="SQLI", help="Vulnerability family (SQLI, BOLA, CMDI, SSRF)")
+
+    # Drift command (V6.0)
+    drf_p = subparsers.add_parser("drift", help="Classify replay evidence drift outcome")
+    drf_p.add_argument("--replay-status", type=int, default=403, help="Observed replay status code")
+    drf_p.add_argument("--proof", default="", help="Observed proof string")
+
+    # Benchmark Agent command (V6.0)
+    subparsers.add_parser("benchmark-agent", help="Run Adversarial Agent Epistemic Robustness Benchmark")
+
+    # Export Case command (V6.0)
+    exp_p = subparsers.add_parser("export-case", help="Export portable investigation case bundle")
+    exp_p.add_argument("--finding", default="F-0042", help="Finding ID")
+    exp_p.add_argument("--target", default="api.target.local", help="Target host")
+    exp_p.add_argument("--out", default="case_output", help="Output directory path")
+
+    # Budget command (V6.0)
+    subparsers.add_parser("budget", help="Inspect categorized scan budget allocation")
+
+    # Negative KB command (V6.0)
+    nkb_p = subparsers.add_parser("negative-kb", help="Inspect Negative Knowledge Base")
+    nkb_p.add_argument("--demo", action="store_true", help="Run negative KB demo")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -134,7 +175,7 @@ def main(args=None):
         sys.exit(0)
 
     if parsed.command == "scan":
-        print(f"\n🚀 HunterAI V5.0 Assessment Initialized")
+        print(f"\n🚀 HunterAI V6.0 Assessment Initialized")
         print(f"   Target:  {parsed.target}")
         print(f"   Profile: {parsed.profile.upper()}")
         print(f"   Mode:    {'PASSIVE (Safe Mode)' if parsed.safe_mode else 'ACTIVE'}")
@@ -292,6 +333,79 @@ def main(args=None):
         print(f"   Risk Weight:       {plan.risk_weight} (1=Highest)")
         print(f"   Prioritized:       {[c.value for c in plan.prioritized_checks]}")
         print(f"   Suppressed:        {[c.value for c in plan.suppressed_checks]}\n")
+
+    elif parsed.command == "contract":
+        contract = SecurityContractEngine.get_contract(parsed.vuln)
+        if not contract:
+            print(f"\nNo specific contract for {parsed.vuln}. Generic fallback active.\n")
+        else:
+            print(f"\n📜 Security Finding Contract: [{contract.contract_id}] {contract.vulnerability_family} ({contract.cwe_id})")
+            print(f"   Minimum Reproductions Required: {contract.min_reproductions}")
+            print(f"   Mandatory Evidence Prerequisites ({len(contract.requirements)}):")
+            for r in contract.requirements:
+                print(f"     • [{r.requirement_id}] {r.name} (key: {r.validator_key})")
+            print("")
+
+    elif parsed.command == "drift":
+        orig = {"status_code": 200, "proof_nonce": "CONFIDENTIAL_DATA_42"}
+        curr = {"status_code": parsed.replay_status, "body": parsed.proof}
+        verdict = EvidenceDriftClassifier.classify_replay("F-0042", orig, curr)
+        print(f"\n🔄 Evidence Drift Classification for F-0042:")
+        print(f"   Verdict:      {verdict.classification.value}")
+        print(f"   Confidence:   {int(verdict.confidence * 100)}%")
+        print(f"   Explanation:  {verdict.causal_explanation}")
+        print(f"   Next Action:  {verdict.recommended_action}\n")
+
+    elif parsed.command == "benchmark-agent":
+        print("\n🧨 Launching HunterAI Adversarial Agent Epistemic Benchmark...")
+        res = AdversarialAgentBenchmark.run_benchmark()
+        print(f"\n📊 Benchmark Completed: {res['passed_cases']}/{res['total_adversarial_cases']} cases passed")
+        print(f"   Epistemic Robustness Score: {res['epistemic_robustness_score']}%")
+        for r in res['results']:
+            status_symbol = "✅" if r['passed'] else "❌"
+            print(f"   {status_symbol} [{r['case_id']}] {r['name']} -> Observed: {r['observed']}")
+        print("")
+
+    elif parsed.command == "export-case":
+        f_data = {
+            "finding_id": parsed.finding,
+            "title": "SQL Injection in Order Management",
+            "cwe_id": "CWE-89",
+            "endpoint": f"https://{parsed.target}/api/v1/orders",
+            "parameter": "order_id"
+        }
+        out_dir = Path(parsed.out)
+        bundle = InvestigationBundleManager.export_case(parsed.finding, parsed.target, f_data, out_dir)
+        print(f"\n📦 Exported Portable Investigation Bundle:")
+        print(f"   Case ID:      {bundle.case_id}")
+        print(f"   Directory:    {bundle.bundle_dir.resolve()}")
+        print(f"   Files Packed: {bundle.manifest.get('files_count')}")
+        print(f"   Integrity:    Verified SHA-256 Digest\n")
+
+    elif parsed.command == "budget":
+        bm = CategorizedBudgetManager()
+        summary = bm.get_summary()
+        print(f"\n🎯 Categorized Test Budget Status:")
+        print(f"   Total Allocated: {summary['total_allocated']} requests")
+        print(f"   Total Consumed:  {summary['total_consumed']} requests")
+        print(f"   Total Remaining: {summary['total_remaining']} requests")
+        print("   Category Allocations:")
+        for cat, q in summary['categories'].items():
+            print(f"     • {cat:<20}: {q['remaining']}/{q['allocated']} remaining")
+        print("")
+
+    elif parsed.command == "negative-kb":
+        nkb = NegativeKnowledgeBase()
+        nkb.record_negative_proof("/api/search", "GET", "SQL_INJECTION", 200, "Tested with $((41+1)) arithmetic; response identical to baseline.")
+        nkb.record_negative_proof("/api/v1/docs", "GET", "PATH_TRAVERSAL", 400, "Strict path canonicalization enforces base folder.")
+        print(f"\n🧬 Negative Knowledge Base ({nkb.count()} verified clean endpoints):")
+        proof = nkb.is_known_negative("/api/search", "GET", "SQL_INJECTION")
+        if proof:
+            print(f"   Endpoint:      {proof.method} {proof.endpoint}")
+            print(f"   Vuln Checked:  {proof.vulnerability_family}")
+            print(f"   Rationale:     {proof.conclusive_rationale}")
+            print(f"   Confidence:    {int(proof.confidence_score * 100)}%")
+        print("")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
