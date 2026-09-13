@@ -1,6 +1,6 @@
 # HunterAI Validation Arena - Ground-Truth Benchmark Scorecard
 
-**Execution Timestamp:** 2026-09-13T03:50:12Z  
+**Execution Timestamp:** 2026-09-13T03:58:12Z  
 **Overall Status:** ✅ PASS — BENCHMARK PRODUCTION CERTIFIED
 
 ---
@@ -54,6 +54,6 @@
 | **Scope Violations** | 0 | **0** | 0 |
 | **Proof-of-Execution Rate** | 100.0% | **100.0%** | +0.0% |
 | **7-Stage Provenance Rate** | 100.0% | **100.0%** | +0.0% |
-| **Mean Time to Finding** | 0.000s | **0.000s** | +0.000s |
+| **Mean Time to Finding** | 0.000s | **0.000s** | -0.000s |
 
 > **Regression Status**: Architecture integrity certified. Zero regression detected.

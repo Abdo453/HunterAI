@@ -1,7 +1,7 @@
 """
 HunterAI Unified CLI Interface
 ==============================
-Modern command-line interface for HunterAI V6.0: Agent Security Engineering Platform
+Modern command-line interface for HunterAI V7.0: Enterprise Cognitive Assurance Platform
 - hunter scan --target https://example.test --profile api
 - hunter replay --finding F-001
 - hunter provenance --finding F-001
@@ -21,6 +21,12 @@ Modern command-line interface for HunterAI V6.0: Agent Security Engineering Plat
 - hunter export-case --finding F-001
 - hunter budget
 - hunter negative-kb --demo
+- hunter trace --demo
+- hunter secrets --demo
+- hunter review --demo
+- hunter compliance --cwe CWE-89
+- hunter unknowns --demo
+- hunter timeline --demo
 """
 from __future__ import annotations
 
@@ -39,7 +45,7 @@ from core.profiles.target_profiles import TargetProfile, ProfileType
 from core.security.report_signer import ReportSigner
 from core.reporting.html_reporter import HTMLReportGenerator
 from core.telemetry.flight_recorder import SecurityFlightRecorder, FlightEventType
-from core.provenance.provenance_chain import ProvenanceChain, ProvenanceStage
+from core.provenance.provenance_chain import ProvenanceStage, ProvenanceChain
 from core.graph.digital_twin import TargetDigitalTwin
 from core.safety.agent_ids import AgentIntrusionDetector
 from core.economics.finding_economics import FindingEconomicsTracker
@@ -60,11 +66,20 @@ from core.policy.policy_as_code import PolicyAsCodeEngine, EnvironmentTier
 from core.budget.categorized_budget import CategorizedBudgetManager
 from core.memory.negative_knowledge_base import NegativeKnowledgeBase
 
+# V7.0 Additions
+from core.trace.agent_decision_trace import AgentDecisionTrace
+from core.trust.trust_pipeline import TrustBoundaryPipeline, TrustState
+from core.secrets.secret_lifecycle import SecretLifecycleManager
+from core.review.peer_review_workflow import PeerReviewWorkflow
+from core.compliance.compliance_mapper import ComplianceMapper
+from core.visibility.unknowns_matrix import UnknownsMatrix, SurfaceSector
+from core.timeline.posture_timeline import PostureTimelineTracker
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hunter",
-        description="HunterAI V6.0: Agent Security Engineering & Cognitive Evidence Platform"
+        description="HunterAI V7.0: Enterprise Cognitive Assurance & Security Engineering Platform"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
@@ -155,6 +170,30 @@ def build_parser() -> argparse.ArgumentParser:
     nkb_p = subparsers.add_parser("negative-kb", help="Inspect Negative Knowledge Base")
     nkb_p.add_argument("--demo", action="store_true", help="Run negative KB demo")
 
+    # Trace command (V7.0)
+    trc_p = subparsers.add_parser("trace", help="Render auditable Agent Decision Trace")
+    trc_p.add_argument("--demo", action="store_true", help="Render demo decision trace")
+
+    # Secrets command (V7.0)
+    sec_p = subparsers.add_parser("secrets", help="Inspect Secret Lifecycle without raw disclosure")
+    sec_p.add_argument("--demo", action="store_true", help="Show demo secret lifecycle records")
+
+    # Review command (V7.0)
+    rev_p = subparsers.add_parser("review", help="Inspect Peer Review Queue")
+    rev_p.add_argument("--demo", action="store_true", help="Show demo peer review queue")
+
+    # Compliance command (V7.0)
+    cmp_p = subparsers.add_parser("compliance", help="Map CWE to OWASP, CAPEC, NIST, and CIS controls")
+    cmp_p.add_argument("--cwe", default="CWE-89", help="CWE identifier (e.g. CWE-89, CWE-639)")
+
+    # Unknowns command (V7.0)
+    unk_p = subparsers.add_parser("unknowns", help="Inspect 'Unknown Unknowns' attack surface matrix")
+    unk_p.add_argument("--demo", action="store_true", help="Render demo unknowns breakdown")
+
+    # Timeline command (V7.0)
+    tim_p = subparsers.add_parser("timeline", help="Inspect security posture longitudinal timeline")
+    tim_p.add_argument("--demo", action="store_true", help="Show demo security posture timeline")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -175,7 +214,7 @@ def main(args=None):
         sys.exit(0)
 
     if parsed.command == "scan":
-        print(f"\n🚀 HunterAI V6.0 Assessment Initialized")
+        print(f"\n🚀 HunterAI V7.0 Assessment Initialized")
         print(f"   Target:  {parsed.target}")
         print(f"   Profile: {parsed.profile.upper()}")
         print(f"   Mode:    {'PASSIVE (Safe Mode)' if parsed.safe_mode else 'ACTIVE'}")
@@ -406,6 +445,81 @@ def main(args=None):
             print(f"   Rationale:     {proof.conclusive_rationale}")
             print(f"   Confidence:    {int(proof.confidence_score * 100)}%")
         print("")
+
+    elif parsed.command == "trace":
+        trc = AgentDecisionTrace("TRC-DEMO-01", "api.target.local")
+        trc.record_step(
+            observation="Discovered endpoint /api/v1/orders accepting integer id",
+            evidence=["Baseline 200 OK", "Content-Type application/json"],
+            decision="Prioritize BOLA/IDOR cross-tenant test",
+            policy_result="ALLOW",
+            policy_receipt="POL-v14-001",
+            action="GET /api/v1/orders/102 [Tenant-B Token]",
+            result="200 OK leaked sensitive order details",
+            mutated=False
+        )
+        trc.record_step(
+            observation="Confirmed BOLA on /api/v1/orders/102",
+            evidence=["Contract satisfied: 2/2 reproductions verified"],
+            decision="Transition claim to CONFIRMED",
+            policy_result="ALLOW",
+            policy_receipt="POL-v14-002",
+            action="Commit finding to EvidenceGraph",
+            result="Finding F-BOLA-01 logged with cryptographic provenance",
+            mutated=False
+        )
+        print("\n" + trc.format_timeline_ascii() + "\n")
+
+    elif parsed.command == "secrets":
+        sm = SecretLifecycleManager()
+        sm.register_secret_candidate("AKIAIOSFODNN7EXAMPLE", "AWS_ACCESS_KEY", "https://target.local/bundle.js")
+        sm.register_secret_candidate("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.sec123", "JWT_SECRET", "https://target.local/.env")
+        print(f"\n🔐 HunterAI Secret Lifecycle Ledger ({len(sm.get_records())} secrets tracked):")
+        for rec in sm.get_records():
+            print(f"   • [{rec.secret_id}] Type: {rec.secret_type}")
+            print(f"     Masked:      {rec.masked_preview} (Raw secret NEVER disclosed)")
+            print(f"     Fingerprint: {rec.sha256_fingerprint[:16]}...")
+            print(f"     Status:      {rec.state.value}")
+            print(f"     Action:      {rec.remediation_advice}\n")
+
+    elif parsed.command == "review":
+        pw = PeerReviewWorkflow()
+        p1 = pw.submit_finding("F-001", "api.target.local", "SQLi in Order Search", "CWE-89")
+        pw.approve_finding("F-001", "Lead Auditor (Alice)", "Evidence contract and differential proof confirmed.")
+        p2 = pw.submit_finding("F-002", "api.target.local", "Potential IDOR in User Profile", "CWE-639")
+        pw.request_additional_evidence("F-002", "Auditor (Bob)", "Require reproduction with 3rd tenant token.")
+        print(f"\n🧑⚖️ HunterAI Peer Review Workflow:")
+        print(f"   [F-001] Status: {p1.current_status.value} (Audited by Alice)")
+        print(f"   [F-002] Status: {p2.current_status.value} (Awaiting Bob additional evidence)\n")
+
+    elif parsed.command == "compliance":
+        rec = ComplianceMapper.map_cwe(parsed.cwe)
+        print(f"\n📋 Compliance Framework Mapping for {rec.cwe_id} ({rec.vulnerability_title}):")
+        print(f"   • OWASP Top 10:  {rec.owasp_top10}")
+        print(f"   • CAPEC Attack:  {rec.capec_id}")
+        print(f"   • NIST SP800-53: {rec.nist_sp800_53}")
+        print(f"   • CIS Control:   {rec.cis_control}\n")
+
+    elif parsed.command == "unknowns":
+        um = UnknownsMatrix("api.target.local")
+        um.record_asset("/api/v1/users", "GET", SurfaceSector.KNOWN_TESTED, "Tested clean")
+        um.record_asset("/api/v1/orders", "GET", SurfaceSector.KNOWN_TESTED, "Vulnerability F-01 confirmed")
+        um.record_asset("/api/v1/admin/debug", "GET", SurfaceSector.BLOCKED, "Blocked by 403 WAF challenge")
+        um.record_asset("/ws/notifications", "WS", SurfaceSector.UNSUPPORTED, "WebSocket protocol unassessed")
+        um.record_asset("/api/v2/beta_checkout", "POST", SurfaceSector.KNOWN_UNTESTED, "Queued in test plan")
+        summary = um.get_summary()
+        print(f"\n🧭 'Unknown Unknowns' Attack Surface Matrix ({summary['target']}):")
+        print(f"   Epistemic Visibility: {summary['visibility_percentage']}%")
+        for sec, cnt in summary['sectors'].items():
+            print(f"     • {sec:<18}: {cnt} endpoints")
+        print(f"   {summary['warning']}\n")
+
+    elif parsed.command == "timeline":
+        pt = PostureTimelineTracker("target.enterprise.local")
+        pt.record_snapshot("SCN-01", "July", open_findings=8, fixed_findings=0, regressions=0, coverage_pct=75.0)
+        pt.record_snapshot("SCN-02", "August", open_findings=5, fixed_findings=3, regressions=0, coverage_pct=82.5)
+        pt.record_snapshot("SCN-03", "September", open_findings=2, fixed_findings=6, regressions=0, coverage_pct=91.0)
+        print("\n" + pt.get_timeline_ascii() + "\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
