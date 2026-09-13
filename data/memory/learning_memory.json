@@ -486,6 +486,20 @@
       "concept": "Object-Level Access Control",
       "score": 1.0,
       "timestamp": 1789175532.3908272
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1789267042.2415965
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1789267469.904168
     }
   ],
   "lessons_completed": [

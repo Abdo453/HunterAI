@@ -1,0 +1,24 @@
+# HunterAI Declarative Assessment Configuration
+target: "https://api.example.test"
+profile: "api"  # api | spa | graphql | wordpress | generic_web
+mode: "passive" # passive (default safe) | active
+
+scope:
+  allow:
+    - "api.example.test"
+    - "*.api.example.test"
+  deny:
+    - "admin.example.test"
+    - "10.0.0.0/8"
+  excluded_paths:
+    - "/logout"
+    - "/billing/cancel"
+    - "/reset-db"
+
+limits:
+  requests_per_second: 2.0
+  max_runtime_minutes: 30
+  max_requests: 5000
+
+approval:
+  high_risk_actions: "manual" # manual | deny | whitelist\n
