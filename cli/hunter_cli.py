@@ -1,7 +1,7 @@
 """
 HunterAI Unified CLI Interface
 ==============================
-Modern command-line interface for HunterAI V7.0: Enterprise Cognitive Assurance Platform
+Modern command-line interface for HunterAI V8.0: Autonomous Security Investigation OS
 - hunter scan --target https://example.test --profile api
 - hunter replay --finding F-001
 - hunter provenance --finding F-001
@@ -27,6 +27,13 @@ Modern command-line interface for HunterAI V7.0: Enterprise Cognitive Assurance 
 - hunter compliance --cwe CWE-89
 - hunter unknowns --demo
 - hunter timeline --demo
+- hunter causal --demo
+- hunter twin-v8 --demo
+- hunter hypothesis --demo
+- hunter competing --demo
+- hunter court-v2 --demo
+- hunter constitution --demo
+- hunter state-machine --demo
 """
 from __future__ import annotations
 
@@ -75,11 +82,20 @@ from core.compliance.compliance_mapper import ComplianceMapper
 from core.visibility.unknowns_matrix import UnknownsMatrix, SurfaceSector
 from core.timeline.posture_timeline import PostureTimelineTracker
 
+# V8.0 Additions
+from core.causal.causal_graph import CausalSecurityGraph, CausalNodeType
+from core.twin.security_digital_twin import SecurityDigitalTwin, RoleTier
+from core.reasoning.hypothesis_engine import HypothesisEngine
+from core.reasoning.competing_hypotheses import CompetingHypothesesEngine
+from core.court.evidence_court_v2 import EvidenceCourtV2
+from core.safety.constitutional_layer import AgentConstitution
+from core.statemachine.security_state_machine import SecurityStateMachine, ApplicationState
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hunter",
-        description="HunterAI V7.0: Enterprise Cognitive Assurance & Security Engineering Platform"
+        description="HunterAI V8.0: Autonomous Security Investigation Operating System"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
@@ -194,6 +210,27 @@ def build_parser() -> argparse.ArgumentParser:
     tim_p = subparsers.add_parser("timeline", help="Inspect security posture longitudinal timeline")
     tim_p.add_argument("--demo", action="store_true", help="Show demo security posture timeline")
 
+    # Causal command (V8.0)
+    subparsers.add_parser("causal", help="Verify unbroken Cause-to-Effect causal path")
+
+    # Twin V8 command (V8.0)
+    subparsers.add_parser("twin-v8", help="Simulate cross-tenant attack paths inside Security Digital Twin")
+
+    # Hypothesis command (V8.0)
+    subparsers.add_parser("hypothesis", help="Inspect Bayesian hypothesis formulation and confidence update")
+
+    # Competing command (V8.0)
+    subparsers.add_parser("competing", help="Run Analysis of Competing Hypotheses (ACH) against noise")
+
+    # Court V2 command (V8.0)
+    subparsers.add_parser("court-v2", help="Run Evidence Court 2.0 Adversarial Tribunal with Skeptic role")
+
+    # Constitution command (V8.0)
+    subparsers.add_parser("constitution", help="Verify machine-enforced Constitutional Invariants")
+
+    # State Machine command (V8.0)
+    subparsers.add_parser("state-machine", help="Track business logic state machine & evaluate specifications")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -214,7 +251,7 @@ def main(args=None):
         sys.exit(0)
 
     if parsed.command == "scan":
-        print(f"\n🚀 HunterAI V7.0 Assessment Initialized")
+        print(f"\n🚀 HunterAI V8.0 Assessment Initialized")
         print(f"   Target:  {parsed.target}")
         print(f"   Profile: {parsed.profile.upper()}")
         print(f"   Mode:    {'PASSIVE (Safe Mode)' if parsed.safe_mode else 'ACTIVE'}")
@@ -236,290 +273,132 @@ def main(args=None):
         )
         print(f"\n📄 Saved Cryptographically Signed HTML Report: {out.resolve()}\n")
 
-    elif parsed.command == "provenance":
-        chain = ProvenanceChain(finding_id=parsed.finding, target="api.target.local")
-        chain.add_step(ProvenanceStage.OBSERVATION, "recon_agent", "Endpoint identified", "GET /api/v1/orders/1")
-        chain.add_step(ProvenanceStage.BASELINE, "http_engine", "Baseline 200 OK", '{"id": 1, "owner": "alice"}')
-        chain.add_step(ProvenanceStage.ACTIVE_REQUEST, "active_probe", "Cross-tenant token replay", "GET /api/v1/orders/1 [Bob-Token]")
-        chain.add_step(ProvenanceStage.COURT_VERDICT, "evidence_court", "BOLA confirmed with PoE", '{"verdict": "CONFIRMED"}')
-        print("\n" + chain.render_trace_ascii() + "\n")
+    elif parsed.command == "causal":
+        cg = CausalSecurityGraph("api.target.local")
+        cg.add_node("N_IN", CausalNodeType.USER_INPUT, "Parameter 'user_id'")
+        cg.add_node("N_GW", CausalNodeType.PARSER_GATEWAY, "JSON Body Deserializer")
+        cg.add_node("N_AUTH", CausalNodeType.AUTH_DECISION, "Missing Object Ownership Check")
+        cg.add_node("N_SINK", CausalNodeType.DATA_SINK, "PostgreSQL SELECT Query")
+        cg.add_node("N_OUT", CausalNodeType.OBSERVABLE_RESPONSE, "Leaked Record in HTTP 200")
 
-    elif parsed.command == "flight-log":
-        recorder = SecurityFlightRecorder.get_instance()
-        if not recorder.events:
-            recorder.record_event(FlightEventType.SCOPE_LOADED, "INIT", "planner", "Loaded scope for target.local")
-            recorder.record_event(FlightEventType.ACTION_PROPOSED, "PLAN", "planner", "Proposed BOLA test on /api/orders")
-            recorder.record_event(FlightEventType.POLICY_DECISION, "POLICY", "firewall", "Approved with permit PMT-101")
-        print("\n" + recorder.format_timeline(limit=parsed.limit) + "\n")
+        cg.add_causal_link("N_IN", "N_GW", "Ingestion into parser")
+        cg.add_causal_link("N_GW", "N_AUTH", "Parameter passed to authorization logic")
+        cg.add_causal_link("N_AUTH", "N_SINK", "Unrestricted data access executed")
+        cg.add_causal_link("N_SINK", "N_OUT", "Database payload reflected in response")
 
-    elif parsed.command == "digital-twin":
-        twin = TargetDigitalTwin(parsed.domain)
-        twin.register_endpoint("/api/v1/users", "GET")
-        twin.register_endpoint("/api/v1/admin/keys", "POST")
-        sim = twin.simulate_attack_path("/api/v1/admin/keys", "POST")
-        print(f"\n🌐 HunterAI Target Digital Twin: {parsed.domain}")
-        print(f"   Simulated Attack Path: /api/v1/admin/keys [POST]")
-        print(f"   Priority: {sim['recommended_priority']} ({sim['simulated_risk']})")
-        print(f"   Rationale: {sim['simulation_rationale']}\n")
-
-    elif parsed.command == "agent-ids":
-        ids = AgentIntrusionDetector()
-        status = ids.get_health_status()
-        print("\n🛡️ HunterAI Agent IDS Health Report:")
-        print(f"   Kill Switch Tripped: {status['kill_switch_tripped']}")
-        print(f"   Current Velocity:    {status['recent_velocity_req_per_min']} req/min")
-        print(f"   Active Alerts:       {status['active_alerts_count']}\n")
-
-    elif parsed.command == "economics":
-        econ = FindingEconomicsTracker()
-        if parsed.finding:
-            econ.record_cost(parsed.finding, "api.target.local", "SQLi", 14, 2.3, tokens=1200)
-            summary = econ.get_summary(parsed.finding)
-            print(f"\n💰 Finding Economics for {parsed.finding}:")
-            print(f"   Requests:       {summary['requests_count']}")
-            print(f"   Socket Seconds: {summary['socket_seconds']}s")
-            print(f"   LLM Tokens:     {summary['llm_tokens']}\n")
-        else:
-            print("\n💰 HunterAI Aggregate Finding Economics: Tracking active\n")
-
-    elif parsed.command == "research":
-        case = ResearchModeEngine.open_research_case(
-            finding_id=parsed.finding,
-            endpoint=parsed.endpoint,
-            parameter="id",
-            uncertainty_reason=parsed.reason
-        )
-        print(f"\n🔬 HunterAI Research Case Opened: {case.case_id}")
-        print(f"   Finding ID:       {case.finding_id}")
-        print(f"   Missing Elements: {[m.value for m in case.missing_elements]}")
-        print(f"   Planned Probes:   {len(case.experiments)} targeted scientific experiments\n")
-
-    elif parsed.command == "root-cause":
-        sample_findings = [
-            {"finding_id": "F-01", "vulnerability_type": "SQL_INJECTION", "cwe_id": "CWE-89", "parameter": "order_id", "endpoint": "/api/v1/orders/view"},
-            {"finding_id": "F-02", "vulnerability_type": "SQL_INJECTION", "cwe_id": "CWE-89", "parameter": "order_id", "endpoint": "/api/v1/orders/download"},
-            {"finding_id": "F-03", "vulnerability_type": "SQL_INJECTION", "cwe_id": "CWE-89", "parameter": "order_id", "endpoint": "/api/v1/orders/status"},
-            {"finding_id": "F-04", "vulnerability_type": "BOLA_IDOR", "cwe_id": "CWE-639", "parameter": "id", "endpoint": "/api/v2/users/profile"},
-            {"finding_id": "F-05", "vulnerability_type": "BOLA_IDOR", "cwe_id": "CWE-639", "parameter": "id", "endpoint": "/api/v2/users/settings"},
-        ]
-        clusters = RootCauseEngine.analyze_findings(sample_findings)
-        print("\n" + RootCauseEngine.format_developer_report(clusters) + "\n")
-
-    elif parsed.command == "js-intel":
-        sample_js = """
-        const API_BASE = '/api/v1/internal/admin';
-        function checkBeta() {
-            if (isFeatureEnabled('beta_checkout_flow')) {
-                fetch('/api/v2/payments/charge', {method: 'POST'});
-            }
-        }
-        const service = 'payment-worker-svc';
-        const gqlQuery = `query GetUserDetails { user { id email role } }`;
-        const NEXT_PUBLIC_ANALYTICS_KEY = 'pk_live_9483018402';
-        """
-        content = sample_js
-        source = "sample_bundle.js"
-        if parsed.file and Path(parsed.file).exists():
-            content = Path(parsed.file).read_text(encoding="utf-8", errors="ignore")
-            source = parsed.file
-
-        report = DeepJSAnalyzer.analyze_script(content, source_file=source)
-        print(f"\n🔍 HunterAI JavaScript Intelligence [{report.source_file}]:")
-        print(f"   Endpoints ({len(report.endpoints)}): {report.endpoints}")
-        print(f"   Feature Flags: {report.feature_flags}")
-        print(f"   Service Names: {report.service_names}")
-        print(f"   Admin Paths:   {report.admin_paths}")
-        print(f"   GraphQL Ops:   {report.graphql_operations}")
-        print(f"   Env Keys:      {report.env_keys}\n")
-
-    elif parsed.command == "lab":
-        target_type = LabTargetType(parsed.target)
-        if parsed.compose:
-            template = SafeLabOrchestrator.get_compose_template(target_type)
-            print(f"\n🐳 Docker Compose configuration for {target_type.value}:\n")
-            print(template)
-        elif parsed.run_benchmark:
-            res = SafeLabOrchestrator.run_builtin_arena_benchmark()
-            print(f"\n🎯 Built-in Benchmark Executed: {res['total_targets']} targets evaluated cleanly without Docker.")
-        else:
-            preset = SafeLabOrchestrator.PRESETS[target_type]
-            print(f"\n🧪 Safe Lab Target: {preset.name}")
-            print(f"   Description:   {preset.description}")
-            print(f"   Default Port:  {preset.default_port}")
-            print(f"   Ground Truth:  {preset.ground_truth_vulns}")
-            print(f"   Health Check:  {preset.health_endpoint}\n")
-
-    elif parsed.command == "assets":
-        mgr = AssetConsentManager()
-        mgr.discover_asset(AssetCategory.SUBDOMAIN, "admin.target.local", "subdomain_enum")
-        mgr.discover_asset(AssetCategory.CLOUD_BUCKET, "s3://target-confidential-backups", "js_scraper")
-        mgr.discover_asset(AssetCategory.API_ENDPOINT, "/api/internal/debug", "deep_js_analyzer")
-
-        if parsed.approve:
-            success = mgr.approve_asset(parsed.approve)
-            print(f"\nAsset {parsed.approve} Approved: {success}\n")
-        else:
-            pending = mgr.get_pending()
-            print(f"\n📋 HunterAI Asset Consent Queue ({len(pending)} pending):")
-            for a in pending:
-                print(f"   [{a.asset_id}] ({a.category.value}) {a.value} (via {a.discovery_source})")
-            print("\n   Use: hunter assets --approve <ASSET_ID> to add to active scope.\n")
-
-    elif parsed.command == "adaptive":
-        plan = AdaptiveRiskSelector.select_checks(parsed.endpoint, parsed.method)
-        print(f"\n🎯 Adaptive Risk Plan for {parsed.method} {parsed.endpoint}:")
-        print(f"   Semantic Category: {plan.detected_semantic}")
-        print(f"   Risk Weight:       {plan.risk_weight} (1=Highest)")
-        print(f"   Prioritized:       {[c.value for c in plan.prioritized_checks]}")
-        print(f"   Suppressed:        {[c.value for c in plan.suppressed_checks]}\n")
-
-    elif parsed.command == "contract":
-        contract = SecurityContractEngine.get_contract(parsed.vuln)
-        if not contract:
-            print(f"\nNo specific contract for {parsed.vuln}. Generic fallback active.\n")
-        else:
-            print(f"\n📜 Security Finding Contract: [{contract.contract_id}] {contract.vulnerability_family} ({contract.cwe_id})")
-            print(f"   Minimum Reproductions Required: {contract.min_reproductions}")
-            print(f"   Mandatory Evidence Prerequisites ({len(contract.requirements)}):")
-            for r in contract.requirements:
-                print(f"     • [{r.requirement_id}] {r.name} (key: {r.validator_key})")
-            print("")
-
-    elif parsed.command == "drift":
-        orig = {"status_code": 200, "proof_nonce": "CONFIDENTIAL_DATA_42"}
-        curr = {"status_code": parsed.replay_status, "body": parsed.proof}
-        verdict = EvidenceDriftClassifier.classify_replay("F-0042", orig, curr)
-        print(f"\n🔄 Evidence Drift Classification for F-0042:")
-        print(f"   Verdict:      {verdict.classification.value}")
-        print(f"   Confidence:   {int(verdict.confidence * 100)}%")
-        print(f"   Explanation:  {verdict.causal_explanation}")
-        print(f"   Next Action:  {verdict.recommended_action}\n")
-
-    elif parsed.command == "benchmark-agent":
-        print("\n🧨 Launching HunterAI Adversarial Agent Epistemic Benchmark...")
-        res = AdversarialAgentBenchmark.run_benchmark()
-        print(f"\n📊 Benchmark Completed: {res['passed_cases']}/{res['total_adversarial_cases']} cases passed")
-        print(f"   Epistemic Robustness Score: {res['epistemic_robustness_score']}%")
-        for r in res['results']:
-            status_symbol = "✅" if r['passed'] else "❌"
-            print(f"   {status_symbol} [{r['case_id']}] {r['name']} -> Observed: {r['observed']}")
+        res = cg.verify_causal_chain("N_IN", "N_OUT")
+        print(f"\n☠️ Causal Security Graph Verification:")
+        print(f"   Causally Proven: {res.is_causally_proven}")
+        print(f"   Confidence:      {int(res.confidence_score * 100)}%")
+        print(f"   Summary:         {res.causal_summary}")
+        print(f"   Unbroken Chain:")
+        for link in res.unbroken_chain:
+            print(f"     • {link}")
         print("")
 
-    elif parsed.command == "export-case":
-        f_data = {
-            "finding_id": parsed.finding,
-            "title": "SQL Injection in Order Management",
-            "cwe_id": "CWE-89",
-            "endpoint": f"https://{parsed.target}/api/v1/orders",
-            "parameter": "order_id"
-        }
-        out_dir = Path(parsed.out)
-        bundle = InvestigationBundleManager.export_case(parsed.finding, parsed.target, f_data, out_dir)
-        print(f"\n📦 Exported Portable Investigation Bundle:")
-        print(f"   Case ID:      {bundle.case_id}")
-        print(f"   Directory:    {bundle.bundle_dir.resolve()}")
-        print(f"   Files Packed: {bundle.manifest.get('files_count')}")
-        print(f"   Integrity:    Verified SHA-256 Digest\n")
+    elif parsed.command == "twin-v8":
+        dt = SecurityDigitalTwin("portal.corp.local")
+        dt.register_identity("alice_101", RoleTier.AUTHENTICATED_USER, "token_alice")
+        dt.register_identity("bob_102", RoleTier.AUTHENTICATED_USER, "token_bob")
+        dt.register_resource("REC-ORD-4201", "order", "alice_101", "HIGH")
 
-    elif parsed.command == "budget":
-        bm = CategorizedBudgetManager()
-        summary = bm.get_summary()
-        print(f"\n🎯 Categorized Test Budget Status:")
-        print(f"   Total Allocated: {summary['total_allocated']} requests")
-        print(f"   Total Consumed:  {summary['total_consumed']} requests")
-        print(f"   Total Remaining: {summary['total_remaining']} requests")
-        print("   Category Allocations:")
-        for cat, q in summary['categories'].items():
-            print(f"     • {cat:<20}: {q['remaining']}/{q['allocated']} remaining")
+        paths = dt.simulate_cross_tenant_access_paths()
+        print(f"\n🧬 Security Digital Twin Simulation (Target: {dt.target_host}):")
+        print(f"   Identities Tracked: {len(dt.identities)}")
+        print(f"   Resources Modeled:  {len(dt.resources)}")
+        print(f"   Simulated Attack Paths ({len(paths)}):")
+        for p in paths:
+            print(f"     • [{p.path_id}] Risk: {p.projected_risk}")
+            print(f"       Rationale: {p.simulation_rationale}")
         print("")
 
-    elif parsed.command == "negative-kb":
-        nkb = NegativeKnowledgeBase()
-        nkb.record_negative_proof("/api/search", "GET", "SQL_INJECTION", 200, "Tested with $((41+1)) arithmetic; response identical to baseline.")
-        nkb.record_negative_proof("/api/v1/docs", "GET", "PATH_TRAVERSAL", 400, "Strict path canonicalization enforces base folder.")
-        print(f"\n🧬 Negative Knowledge Base ({nkb.count()} verified clean endpoints):")
-        proof = nkb.is_known_negative("/api/search", "GET", "SQL_INJECTION")
-        if proof:
-            print(f"   Endpoint:      {proof.method} {proof.endpoint}")
-            print(f"   Vuln Checked:  {proof.vulnerability_family}")
-            print(f"   Rationale:     {proof.conclusive_rationale}")
-            print(f"   Confidence:    {int(proof.confidence_score * 100)}%")
-        print("")
+    elif parsed.command == "hypothesis":
+        he = HypothesisEngine()
+        hyp = he.formulate_hypothesis("/api/v1/orders", "SQLI", "Parameter 'order_id' appears vulnerable to boolean differential.")
+        print(f"\n🧠 Bayesian Hypothesis Engine:")
+        print(f"   [{hyp.hypothesis_id}] Vulnerability: {hyp.vulnerability_class}")
+        print(f"   Prior Confidence: {int(hyp.current_confidence * 100)}%")
+        
+        # Apply evidence: Differential confirmed (LR = 4.0)
+        hyp.apply_evidence("Stable Baseline & Arithmetic Differential Confirmed", likelihood_ratio=4.0)
+        print(f"   After Evidence 1 (Differential): {int(hyp.current_confidence * 100)}% ({hyp.state.value})")
 
-    elif parsed.command == "trace":
-        trc = AgentDecisionTrace("TRC-DEMO-01", "api.target.local")
-        trc.record_step(
-            observation="Discovered endpoint /api/v1/orders accepting integer id",
-            evidence=["Baseline 200 OK", "Content-Type application/json"],
-            decision="Prioritize BOLA/IDOR cross-tenant test",
-            policy_result="ALLOW",
-            policy_receipt="POL-v14-001",
-            action="GET /api/v1/orders/102 [Tenant-B Token]",
-            result="200 OK leaked sensitive order details",
-            mutated=False
+        # Apply evidence: Deterministic Nonce ((53+19))->72 verified (LR = 10.0)
+        hyp.apply_evidence("Deterministic Computational Nonce Reflected", likelihood_ratio=10.0)
+        print(f"   After Evidence 2 (Nonce 72):    {int(hyp.current_confidence * 100)}% ({hyp.state.value})\n")
+
+    elif parsed.command == "competing":
+        print(f"\n🕵️ Analysis of Competing Hypotheses (ACH Engine):")
+        res = CompetingHypothesesEngine.evaluate(
+            status_code=200,
+            body="Proof Nonce 72 Reflected",
+            proof_nonce_present=True,
+            baseline_stable=True,
+            waf_signatures_found=False,
+            auth_session_valid=True
         )
-        trc.record_step(
-            observation="Confirmed BOLA on /api/v1/orders/102",
-            evidence=["Contract satisfied: 2/2 reproductions verified"],
-            decision="Transition claim to CONFIRMED",
-            policy_result="ALLOW",
-            policy_receipt="POL-v14-002",
-            action="Commit finding to EvidenceGraph",
-            result="Finding F-BOLA-01 logged with cryptographic provenance",
-            mutated=False
+        print(f"   Winning Hypothesis: {res.winning_hypothesis.value}")
+        print(f"   Verdict:            {res.verdict}")
+        print(f"   Falsified Noise:    {res.falsified_alternatives}")
+        print(f"   Justification:      {res.justification}\n")
+
+    elif parsed.command == "court-v2":
+        print(f"\n⚖️ Evidence Court 2.0 (Adversarial Epistemic Tribunal):")
+        ruling = EvidenceCourtV2.adjudicate_case(
+            case_id="CASE-SQLI-001",
+            endpoint="/api/v1/products",
+            proof_nonce_proven=True,
+            reproductions_count=2,
+            causal_chain_verified=True,
+            baseline_stable=True,
+            waf_clean=True
         )
-        print("\n" + trc.format_timeline_ascii() + "\n")
+        print(f"   Case ID:       {ruling.case_id} ({ruling.target_endpoint})")
+        print(f"   Final Ruling:  {ruling.final_verdict} (Unanimous: {ruling.unanimous})")
+        print(f"   Tribunal Arguments:")
+        for op in ruling.opinions:
+            print(f"     • [{op.role.value:<15}]: {op.disposition:<18} -> {op.argument}")
+        print(f"   Chief Judgment: {ruling.chief_justification}\n")
 
-    elif parsed.command == "secrets":
-        sm = SecretLifecycleManager()
-        sm.register_secret_candidate("AKIAIOSFODNN7EXAMPLE", "AWS_ACCESS_KEY", "https://target.local/bundle.js")
-        sm.register_secret_candidate("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.sec123", "JWT_SECRET", "https://target.local/.env")
-        print(f"\n🔐 HunterAI Secret Lifecycle Ledger ({len(sm.get_records())} secrets tracked):")
-        for rec in sm.get_records():
-            print(f"   • [{rec.secret_id}] Type: {rec.secret_type}")
-            print(f"     Masked:      {rec.masked_preview} (Raw secret NEVER disclosed)")
-            print(f"     Fingerprint: {rec.sha256_fingerprint[:16]}...")
-            print(f"     Status:      {rec.state.value}")
-            print(f"     Action:      {rec.remediation_advice}\n")
+    elif parsed.command == "constitution":
+        print(f"\n🧱 HunterAI Constitutional Layer (Machine-Enforced Invariants):")
+        chk = AgentConstitution.verify_action(
+            target_ip="169.254.169.254",
+            is_in_scope=True,
+            method="GET",
+            has_operator_approval=True,
+            consumed_requests=10,
+            max_budget=5000
+        )
+        print(f"   Probe Metadata IP: Compliant = {chk.is_compliant} -> Violated: {chk.violated_invariant} ({chk.remediation_action})")
 
-    elif parsed.command == "review":
-        pw = PeerReviewWorkflow()
-        p1 = pw.submit_finding("F-001", "api.target.local", "SQLi in Order Search", "CWE-89")
-        pw.approve_finding("F-001", "Lead Auditor (Alice)", "Evidence contract and differential proof confirmed.")
-        p2 = pw.submit_finding("F-002", "api.target.local", "Potential IDOR in User Profile", "CWE-639")
-        pw.request_additional_evidence("F-002", "Auditor (Bob)", "Require reproduction with 3rd tenant token.")
-        print(f"\n🧑⚖️ HunterAI Peer Review Workflow:")
-        print(f"   [F-001] Status: {p1.current_status.value} (Audited by Alice)")
-        print(f"   [F-002] Status: {p2.current_status.value} (Awaiting Bob additional evidence)\n")
+        chk2 = AgentConstitution.verify_action(
+            target_ip="93.184.216.34",
+            is_in_scope=True,
+            method="POST",
+            has_operator_approval=False,
+            consumed_requests=10,
+            max_budget=5000
+        )
+        print(f"   Unapproved Mutation: Compliant = {chk2.is_compliant} -> Violated: {chk2.violated_invariant} ({chk2.remediation_action})\n")
 
-    elif parsed.command == "compliance":
-        rec = ComplianceMapper.map_cwe(parsed.cwe)
-        print(f"\n📋 Compliance Framework Mapping for {rec.cwe_id} ({rec.vulnerability_title}):")
-        print(f"   • OWASP Top 10:  {rec.owasp_top10}")
-        print(f"   • CAPEC Attack:  {rec.capec_id}")
-        print(f"   • NIST SP800-53: {rec.nist_sp800_53}")
-        print(f"   • CIS Control:   {rec.cis_control}\n")
-
-    elif parsed.command == "unknowns":
-        um = UnknownsMatrix("api.target.local")
-        um.record_asset("/api/v1/users", "GET", SurfaceSector.KNOWN_TESTED, "Tested clean")
-        um.record_asset("/api/v1/orders", "GET", SurfaceSector.KNOWN_TESTED, "Vulnerability F-01 confirmed")
-        um.record_asset("/api/v1/admin/debug", "GET", SurfaceSector.BLOCKED, "Blocked by 403 WAF challenge")
-        um.record_asset("/ws/notifications", "WS", SurfaceSector.UNSUPPORTED, "WebSocket protocol unassessed")
-        um.record_asset("/api/v2/beta_checkout", "POST", SurfaceSector.KNOWN_UNTESTED, "Queued in test plan")
-        summary = um.get_summary()
-        print(f"\n🧭 'Unknown Unknowns' Attack Surface Matrix ({summary['target']}):")
-        print(f"   Epistemic Visibility: {summary['visibility_percentage']}%")
-        for sec, cnt in summary['sectors'].items():
-            print(f"     • {sec:<18}: {cnt} endpoints")
-        print(f"   {summary['warning']}\n")
-
-    elif parsed.command == "timeline":
-        pt = PostureTimelineTracker("target.enterprise.local")
-        pt.record_snapshot("SCN-01", "July", open_findings=8, fixed_findings=0, regressions=0, coverage_pct=75.0)
-        pt.record_snapshot("SCN-02", "August", open_findings=5, fixed_findings=3, regressions=0, coverage_pct=82.5)
-        pt.record_snapshot("SCN-03", "September", open_findings=2, fixed_findings=6, regressions=0, coverage_pct=91.0)
-        print("\n" + pt.get_timeline_ascii() + "\n")
+    elif parsed.command == "state-machine":
+        sm = SecurityStateMachine("sess_demo_101")
+        print(f"\n🛡️ Security State Machine & Specification Engine:")
+        print(f"   Initial State: {sm.current_state.value}")
+        
+        # Transition 1: Unauthenticated request leaks confidential SSN -> Invariant Breach!
+        vio = sm.execute_transition(
+            action_route="/api/v1/user/export",
+            response_status=200,
+            response_body='{"confidential_ssn": "123-45-6789"}',
+            intended_next_state=ApplicationState.RESOURCE_OWNER
+        )
+        if vio:
+            print(f"   ⚠️ Business Logic Invariant Breach Detected!")
+            print(f"      Violation:   {vio.rule_name} ({vio.cwe_id})")
+            print(f"      State:       {vio.from_state.value} accessed protected resource")
+            print(f"      Evidence:    {vio.evidence_proof}\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
