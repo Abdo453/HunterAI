@@ -256,6 +256,12 @@ def build_parser() -> argparse.ArgumentParser:
     sec_p.add_argument("--source", required=True, help="Target file, directory, or text snippet to scan")
     sec_p.add_argument("--output", default="artifacts/secrets", help="Artifact storage output directory")
 
+    # Workflow Audit command (V11.0 Business Logic & Concurrency Auditor)
+    wf_p = subparsers.add_parser("workflow-audit", help="Audit multi-step business logic workflows and concurrency hazards")
+    wf_p.add_argument("--flow", default="checkout", choices=["checkout", "password-reset"], help="Target workflow model to audit")
+    wf_p.add_argument("--check-race", action="store_true", help="Perform concurrency and TOCTOU hazard audit")
+    wf_p.add_argument("--remediate", action="store_true", help="Synthesize defensive AST patches and regression tests")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -525,6 +531,83 @@ def main(args=None):
                 print(f"     Endpoints:   {', '.join(cand.related_endpoints[:2])}")
             print(f"     Remediation: {cand.remediation_advice}\n")
         print(f"📄 Audit reports generated under: {report_gen.reports_dir.resolve()}\n")
+
+    elif parsed.command == "workflow-audit":
+        from core.statemachine.workflow_engine import (
+            create_standard_checkout_workflow,
+            create_standard_password_reset_workflow,
+            WorkflowAuditor,
+        )
+        from core.statemachine.concurrency_auditor import ConcurrencyAuditor
+        from core.remediation.workflow_remediation import (
+            WorkflowRemediationEngine,
+            WorkflowRemediationRequest,
+        )
+
+        print(f"\n🔄 HunterAI V11.0 Business Logic & Workflow Invariant Audit:")
+        print(f"   Target Workflow: {parsed.flow.upper()}")
+
+        if parsed.flow == "checkout":
+            graph = create_standard_checkout_workflow()
+            trace = [
+                {"step_id": "STEP_ADD_CART", "route": "/api/cart/add", "status_code": 200},
+                {"step_id": "STEP_ORDER_COMPLETE", "route": "/api/order/complete", "status_code": 200},
+            ]
+        else:
+            graph = create_standard_password_reset_workflow()
+            trace = [
+                {"step_id": "STEP_REQUEST_RESET", "route": "/auth/password/reset/request", "status_code": 200},
+                {"step_id": "STEP_SET_PASSWORD", "route": "/auth/password/reset/confirm", "status_code": 200},
+            ]
+
+        auditor = WorkflowAuditor(graph)
+        flaws = auditor.audit_trace(trace)
+
+        print(f"\n📊 Workflow Invariant Findings ({len(flaws)} Flaws Detected):")
+        for flaw in flaws:
+            print(f"   • [{flaw.flaw_id}] Type: {flaw.flaw_type.value} | Severity: {flaw.severity}")
+            print(f"     Route:       {flaw.route}")
+            print(f"     Description: {flaw.description}")
+            print(f"     Evidence:    {flaw.evidence_proof}")
+
+        if parsed.check_race:
+            print(f"\n⚡ Concurrency & TOCTOU Audit:")
+            c_auditor = ConcurrencyAuditor()
+            report = c_auditor.evaluate_endpoint(
+                route="/api/checkout/pay",
+                method="POST",
+                headers={"Content-Type": "application/json"},
+                source_code_snippet="""
+def process_debit(user_id, amount):
+    if user.balance >= amount:
+        user.balance -= amount
+        user.save()
+        return True
+    return False
+"""
+            )
+            print(f"   Target Route:  {report.method} {report.route}")
+            print(f"   Risk Level:    {report.risk_level.value}")
+            print(f"   Vulnerable:    {report.is_vulnerable}")
+            print(f"   Hazards:       {', '.join(h.value for h in report.hazards_detected)}")
+            print(f"   Evidence:      {report.evidence_proof}")
+
+            sim = c_auditor.simulate_burst_race("/api/checkout/pay", initial_balance=100, debit_amount=100, concurrent_requests=5)
+            print(f"   Burst Simulation: {sim['concurrent_requests']} concurrent debits -> Exploit: {sim['is_race_exploited']} (Final: {sim['final_balance']})")
+
+        if parsed.remediate:
+            print(f"\n🛠️ AST Automated Workflow Remediation:")
+            rem = WorkflowRemediationEngine.generate_remediation(
+                WorkflowRemediationRequest(
+                    flaw_type="STEP_SKIPPING",
+                    route="/api/order/complete",
+                    file_path="checkout_views.py",
+                    function_name="confirm_order"
+                )
+            )
+            print(f"   Target File: {rem.target_file}")
+            print(f"   Guidance:    {rem.developer_guidance}")
+            print(f"   Git Diff:\n{rem.git_diff}\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
