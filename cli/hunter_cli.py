@@ -237,6 +237,20 @@ def build_parser() -> argparse.ArgumentParser:
     inv_p.add_argument("--mission", default="full", choices=["full", "auth", "bola", "api"], help="Target mission type")
     inv_p.add_argument("--safe-mode", action="store_true", help="Enforce passive safe mode")
 
+    # Swarm command (V9.0 Multi-Agent Swarm)
+    swm_p = subparsers.add_parser("swarm", help="Run Multi-Agent Autonomous Swarm Mission")
+    swm_p.add_argument("--target", default="api.corp.local", help="Target domain or host")
+
+    # Patch command (V9.0 AST Auto-Remediation)
+    pat_p = subparsers.add_parser("patch", help="Generate AST-Level Git Diff Patch & Regression Unit Test")
+    pat_p.add_argument("--cwe", default="CWE-89", help="Target vulnerability CWE (e.g. CWE-89, CWE-639, CWE-79, CWE-918)")
+    pat_p.add_argument("--file", default="backend/controllers/query.py", help="Target file path")
+    pat_p.add_argument("--param", default="search_query", help="Vulnerable parameter name")
+
+    # Chain command (V9.0 Attack Path Chaining)
+    chn_p = subparsers.add_parser("chain", help="Model multi-stage compound attack path chaining")
+    chn_p.add_argument("--demo", action="store_true", help="Run demonstration compound chain simulation")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -427,6 +441,45 @@ def main(args=None):
         kernel = AutonomousInvestigationKernel()
         dossier = kernel.run(cfg)
         print(dossier.format_terminal_summary())
+
+    elif parsed.command == "swarm":
+        import asyncio
+        from core.swarm.swarm_coordinator import SwarmCoordinator
+        print(f"\n🐝 Launching HunterAI Autonomous Multi-Agent Swarm against {parsed.target}:")
+        coordinator = SwarmCoordinator(parsed.target)
+        res = asyncio.run(coordinator.run_swarm_mission())
+        print(f"   Target:               {res['target']}")
+        print(f"   Duration:             {res['duration_seconds']}s")
+        print(f"   Endpoints Discovered: {res['endpoints_discovered']}")
+        print(f"   Total Requests:       {res['total_requests']}")
+        print(f"   Defender Stealth:     {res['stealth_score']}% (Alerts: {res['simulated_siem_alerts']})")
+        print(f"   Alert Limit Exceeded: {res['alert_ceiling_exceeded']}")
+        print(f"   Swarm Status:         {res['status']}\n")
+
+    elif parsed.command == "patch":
+        from core.remediation.ast_patch_engine import ASTPatchEngine, VulnerabilityPatchRequest
+        print(f"\n🛠️ Generating AST-Level Patch & Regression Test for {parsed.cwe}:")
+        req = VulnerabilityPatchRequest(
+            cwe_id=parsed.cwe,
+            file_path=parsed.file,
+            target_parameter=parsed.param
+        )
+        res = ASTPatchEngine.generate_patch(req)
+        print(f"   File:      {res.target_file}")
+        print(f"   Guidance:  {res.developer_guidance}")
+        print(f"\n📄 Git Diff Patch:\n{res.git_diff}")
+        print(f"🧪 Automated Regression Test:\n{res.regression_test_code}")
+
+    elif parsed.command == "chain":
+        from core.chains.attack_path_chain import AttackPathChainingEngine
+        print(f"\n⛓️ HunterAI Compound Attack Path Chaining Engine:")
+        sample_findings = [
+            {"finding_id": "F-01", "cwe": "CWE-200", "title": "Information Leak: Exposed User UUID", "endpoint": "/api/v1/users/lookup"},
+            {"finding_id": "F-02", "cwe": "CWE-639", "title": "BOLA / IDOR: Cross-Tenant Account Update", "endpoint": "/api/v1/account/settings"}
+        ]
+        paths = AttackPathChainingEngine.analyze_compound_paths(sample_findings)
+        for p in paths:
+            print(p.format_topology_ascii() + "\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
