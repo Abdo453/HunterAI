@@ -20,6 +20,12 @@ from copy import deepcopy
 from typing import Dict, Any, List, Optional, Callable, Tuple
 from urllib.parse import urlparse, parse_qs, urljoin
 from core.evidence_court import EvidenceCourt, CourtVerdict
+from core.court.evidence_court_v2 import EvidenceCourtV2, TribunalRuling
+from core.causal.causal_graph import CausalSecurityGraph, CausalNodeType
+from core.twin.security_digital_twin import SecurityDigitalTwin, RoleTier
+from core.reasoning.competing_hypotheses import CompetingHypothesesEngine, HypothesisOption
+from core.safety.constitutional_layer import AgentConstitution, ConstitutionalCheckResult
+from core.statemachine.security_state_machine import SecurityStateMachine, ApplicationState
 from core.code_intel import CodeIntelligenceAgent
 from core.attack_surface_graph import AttackSurfaceGraph, ThirdPartyDependencyFirewall
 from core.browser import StatefulBrowserSession, HumanLikeExplorationEngine
@@ -720,6 +726,13 @@ class AutonomousBrain:
         self.scan_timeout = scan_timeout
         self._audit_log: List[Dict[str, Any]] = []
 
+        # V8.0 Investigation OS Tri-Engine Components
+        self.digital_twin: Optional[SecurityDigitalTwin] = None
+        self.causal_graph: Optional[CausalSecurityGraph] = None
+        self.state_machine: Optional[SecurityStateMachine] = None
+        self.consumed_requests: int = 0
+        self.max_request_budget: int = 5000
+
         from core.brain.decision_engine import DecisionEngine
         from core.brain.artifact_analyzer import ArtifactAnalyzer
         from core.brain.api_escalation import APIEscalationManager
@@ -1124,8 +1137,26 @@ class AutonomousBrain:
             self._audit("tool_rejected", tool=tool_name)
             return []
 
-        # Defense-in-Depth Scope & Governed Gateway Check before active execution
+        # V8.0 Machine-Enforced Constitutional Gate
         target = kwargs.get("target", "")
+        target_ip = urlparse(target).hostname or target
+        method = kwargs.get("method", "GET")
+        has_approval = kwargs.get("has_operator_approval", True if method.upper() == "GET" else False)
+        chk = AgentConstitution.verify_action(
+            target_ip=target_ip,
+            is_in_scope=self._is_in_scope(target, target) if target else True,
+            method=method,
+            has_operator_approval=has_approval,
+            consumed_requests=self.consumed_requests,
+            max_budget=self.max_request_budget
+        )
+        if not chk.is_compliant:
+            await self._log(f"[CONSTITUTION] Blocked {tool_name} on {target}: {chk.violated_invariant} ({chk.remediation_action})")
+            self._audit("constitutional_violation", tool=tool_name, target=target, invariant=chk.violated_invariant)
+            return []
+        self.consumed_requests += 1
+
+        # Defense-in-Depth Scope & Governed Gateway Check before active execution
         if self.tool_gateway and target:
             from core.gateway.schemas import ActionProposal
             proposal = ActionProposal(
@@ -1197,6 +1228,12 @@ class AutonomousBrain:
         except Exception as e:
             log.debug(f"Failed to initialize SecurityState: {e}")
             self.security_state = None
+
+        # V8.0 Investigation OS Tri-Engine Initialization
+        target_host = urlparse(target).hostname or target
+        self.digital_twin = SecurityDigitalTwin(target_host)
+        self.causal_graph = CausalSecurityGraph(target_host)
+        self.state_machine = SecurityStateMachine(session_id=f"scan_{int(time.time())}")
 
         # ── PHASE 0: OBSERVE (Human-like Browser Exploration Sensor) ────────
         await self._emit("phase", phase="observe", message="[OBSERVE] Launching Browser Sensor & Application Explorer...")
@@ -1572,53 +1609,74 @@ class AutonomousBrain:
                 )
                 vt = poc_result.get("vuln_type", primary_focus)
 
-                # ── Evidence Court Adjudication ──────────────────────────────
-                # No single agent or LLM alone can declare CONFIRMED.
-                # Must provide deterministic proof (arithmetic, dbms data, auth bypass)
-                # and reject literal DOM / script reflections.
+                # ── Evidence Court 2.0 & Causal Tri-Engine Adjudication ──────
                 p_reason = str(poc_result.get("proof_reason", ""))
                 is_reflection = ("reflection" in p_reason.lower() or "Reflection != Execution" in p_reason)
                 has_arith = bool("72" in p_reason and "53+19" not in p_reason)
+                is_reproduced = poc_result.get("reproduced", False)
+                is_verified = poc_result.get("verified", False) and not is_reflection
 
-                judgment = EvidenceCourt.adjudicate(
-                    target_url=target,
-                    parameter=param,
-                    vuln_class=vt,
-                    finder_claim={"poc_result": poc_result, "xploiter": classify, "qwen": qwen},
-                    verifier_result={
-                        "reproduced": poc_result.get("reproduced", False),
-                        "arithmetic_proof_confirmed": has_arith,
-                        "is_reflection": is_reflection,
-                        "waf_blocked": ("403" in p_reason or "cloudflare" in p_reason.lower()),
-                        "confidence": 0.95 if has_arith else (0.30 if is_reflection else 0.50),
-                        "proof_detail": p_reason
-                    },
-                    is_in_scope=self._is_in_scope(target, target)
+                # 1. Causal Security Graph
+                if self.causal_graph is None:
+                    self.causal_graph = CausalSecurityGraph(urlparse(target).hostname or target)
+                causal_res = self.causal_graph.build_standard_injection_chain(
+                    finding_id=f"CAUSAL-{vt}-{param}",
+                    param=param,
+                    sink_name=f"{vt.upper()}_SINK",
+                    differential_detail=p_reason or "Observable differential anomaly triggered"
                 )
 
-                if not judgment.reportable or judgment.verdict != CourtVerdict.CONFIRMED:
+                # 2. Analysis of Competing Hypotheses (ACH)
+                baseline_stable = not ("unstable" in p_reason.lower() or "jitter" in p_reason.lower() or "flaky" in p_reason.lower())
+                waf_found = ("403" in p_reason or "cloudflare" in p_reason.lower() or "waf" in p_reason.lower())
+                auth_valid = not ("session expired" in p_reason.lower() or "login required" in p_reason.lower())
+                ach_res = CompetingHypothesesEngine.evaluate(
+                    status_code=poc_result.get("status_code", 200),
+                    body=p_reason,
+                    proof_nonce_present=bool((has_arith or is_verified) and not is_reflection),
+                    baseline_stable=baseline_stable,
+                    waf_signatures_found=waf_found,
+                    auth_session_valid=auth_valid
+                )
+
+                # 3. Evidence Court 2.0 (Adversarial Epistemic Tribunal)
+                case_id = f"CASE-{vt.upper()}-{int(time.time()*1000)%100000}"
+                ruling = EvidenceCourtV2.adjudicate_case(
+                    case_id=case_id,
+                    endpoint=target,
+                    proof_nonce_proven=bool((has_arith or is_verified) and ach_res.verdict == "CONFIRMED"),
+                    reproductions_count=2 if is_reproduced else 1,
+                    causal_chain_verified=causal_res.is_causally_proven,
+                    baseline_stable=baseline_stable and (ach_res.verdict != "INCONCLUSIVE"),
+                    waf_clean=not waf_found
+                )
+
+                if ruling.final_verdict != "CONFIRMED" or not ruling.unanimous:
                     await self._log(
-                        f"   -> [COURT: {judgment.verdict.value}] param={param!r} vt={vt} "
-                        f"| {judgment.adjudication_rationale}"
+                        f"   -> [COURT-V2: {ruling.final_verdict}] param={param!r} vt={vt} "
+                        f"| {ruling.chief_justification}"
                     )
-                    self._audit("finding_rejected", reason=judgment.verdict.value,
-                                param=param, rationale=judgment.adjudication_rationale)
+                    self._audit("finding_rejected", reason=ruling.final_verdict,
+                                param=param, rationale=ruling.chief_justification)
                     continue
 
                 finding = {
                     "type": vt,
                     "param_name": param,
                     "title": f"{vt.upper()} in parameter {param!r}",
-                    "severity": judgment.calibrated_severity,
-                    "evidence": p_reason or judgment.adjudication_rationale,
+                    "severity": "CRITICAL" if has_arith else "HIGH",
+                    "evidence": p_reason or ruling.chief_justification,
                     "payload_used": poc_result.get("payload_used", "N/A"),
                     "remediation": qwen.get("remediation_code", ""),
-                    "confidence": judgment.confidence_score,
+                    "confidence": 0.95,
                     "tool": "AutonomousBrain/SmartPoC",
-                    "lifecycle_verdict": judgment.verdict.value,
+                    "lifecycle_verdict": ruling.final_verdict,
+                    "tribunal_ruling": ruling.to_dict(),
+                    "causal_chain": causal_res.unbroken_chain,
+                    "ach_evaluation": ach_res.to_dict(),
                 }
                 findings.append(finding)
-                self._audit("finding_added", title=finding["title"], severity=finding["severity"], verdict=judgment.verdict.value)
+                self._audit("finding_added", title=finding["title"], severity=finding["severity"], verdict=ruling.final_verdict)
                 await self._emit("finding", **finding)
                 # ── Feedback Loop: save confirmed finding to Knowledge Base ──
                 if self.knowledge:

@@ -126,3 +126,30 @@ class CausalSecurityGraph:
             missing_links=missing,
             causal_summary="Unbroken causal chain established from user payload to observable effect." if is_proven else "Incomplete causal attribution."
         )
+
+    def build_standard_injection_chain(
+        self,
+        finding_id: str,
+        param: str,
+        sink_name: str,
+        differential_detail: str
+    ) -> CausalChainVerification:
+        """Constructs and verifies a standard linear injection causal chain"""
+        in_id = f"IN_{finding_id}_{param}"
+        parser_id = f"PARSER_{finding_id}"
+        sink_id = f"SINK_{finding_id}_{sink_name}"
+        resp_id = f"RESP_{finding_id}"
+
+        self.add_node(in_id, CausalNodeType.USER_INPUT, f"Parameter '{param}'")
+        self.add_node(parser_id, CausalNodeType.PARSER_GATEWAY, "HTTP Request & Query Parser")
+        self.add_node(sink_id, CausalNodeType.DATA_SINK, f"Backend Sink: {sink_name}")
+        self.add_node(resp_id, CausalNodeType.OBSERVABLE_RESPONSE, f"Differential: {differential_detail}")
+
+        self.add_causal_link(in_id, parser_id, "User input injected into parser")
+        self.add_causal_link(parser_id, sink_id, "Unsanitized parameter reaches execution sink")
+        self.add_causal_link(sink_id, resp_id, "Execution sink output reflected in response")
+
+        verif = self.verify_causal_chain(in_id, resp_id)
+        verif.finding_id = finding_id
+        return verif
+

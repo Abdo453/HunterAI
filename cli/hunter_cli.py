@@ -231,6 +231,12 @@ def build_parser() -> argparse.ArgumentParser:
     # State Machine command (V8.0)
     subparsers.add_parser("state-machine", help="Track business logic state machine & evaluate specifications")
 
+    # Investigate command (V8.5 Investigation OS Master Kernel)
+    inv_p = subparsers.add_parser("investigate", help="Run Autonomous Closed-Loop Security Investigation Kernel")
+    inv_p.add_argument("--target", default="https://juice-shop.local", help="Target URL or domain")
+    inv_p.add_argument("--mission", default="full", choices=["full", "auth", "bola", "api"], help="Target mission type")
+    inv_p.add_argument("--safe-mode", action="store_true", help="Enforce passive safe mode")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -399,6 +405,28 @@ def main(args=None):
             print(f"      Violation:   {vio.rule_name} ({vio.cwe_id})")
             print(f"      State:       {vio.from_state.value} accessed protected resource")
             print(f"      Evidence:    {vio.evidence_proof}\n")
+
+    elif parsed.command == "investigate":
+        from core.orchestration.investigation_kernel import (
+            AutonomousInvestigationKernel,
+            InvestigationKernelConfig,
+        )
+        from core.mission.mission_system import MissionType
+
+        mission_map = {
+            "full": MissionType.FULL_SCOPE_ASSESSMENT,
+            "auth": MissionType.AUTHENTICATION_AUDIT,
+            "bola": MissionType.AUTHORIZATION_BOLA_AUDIT,
+            "api": MissionType.API_CONTRACT_AUDIT,
+        }
+        cfg = InvestigationKernelConfig(
+            target_url=parsed.target,
+            mission_type=mission_map.get(parsed.mission, MissionType.FULL_SCOPE_ASSESSMENT),
+            safe_mode=parsed.safe_mode
+        )
+        kernel = AutonomousInvestigationKernel()
+        dossier = kernel.run(cfg)
+        print(dossier.format_terminal_summary())
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
