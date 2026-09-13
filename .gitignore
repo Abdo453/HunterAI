@@ -47,6 +47,10 @@ data/cert_browser_test/
 data/scans/
 storage/jobs/
 emergency_save.json
+artifacts/secrets/*.jsonl
+artifacts/secrets/*/*.json
+artifacts/secrets/*/*.md
+!artifacts/secrets/**/.gitkeep
 
 # Archive files
 *.zip

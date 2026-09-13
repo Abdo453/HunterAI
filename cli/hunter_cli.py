@@ -251,6 +251,11 @@ def build_parser() -> argparse.ArgumentParser:
     chn_p = subparsers.add_parser("chain", help="Model multi-stage compound attack path chaining")
     chn_p.add_argument("--demo", action="store_true", help="Run demonstration compound chain simulation")
 
+    # Secret Hunt command (V10.0 Secret Hunter Intelligence)
+    sec_p = subparsers.add_parser("secret-hunt", help="Discover, correlate, and report leaked credentials & API keys")
+    sec_p.add_argument("--source", required=True, help="Target file, directory, or text snippet to scan")
+    sec_p.add_argument("--output", default="artifacts/secrets", help="Artifact storage output directory")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -480,6 +485,46 @@ def main(args=None):
         paths = AttackPathChainingEngine.analyze_compound_paths(sample_findings)
         for p in paths:
             print(p.format_topology_ascii() + "\n")
+
+    elif parsed.command == "secret-hunt":
+        from pathlib import Path
+        from core.secrets.secret_hunter_agent import SecretHunterPipeline
+        from core.secrets.secret_report_generator import SecretReportGenerator
+
+        src_path = Path(parsed.source)
+        pipeline = SecretHunterPipeline()
+        report_gen = SecretReportGenerator(Path(parsed.output))
+
+        print(f"\n🔐 HunterAI Secret Hunter Intelligence Pipeline:")
+        print(f"   Target Source: {parsed.source}")
+        print(f"   Artifacts Dir: {parsed.output}")
+
+        candidates = []
+        if src_path.is_file():
+            candidates = pipeline.scan_file(src_path)
+        elif src_path.is_dir():
+            for f in src_path.rglob("*"):
+                if f.is_file() and f.suffix in (".js", ".env", ".json", ".yaml", ".yml", ".xml", ".txt", ".py"):
+                    candidates.extend(pipeline.scan_file(f))
+        else:
+            candidates = pipeline.scan_content(parsed.source, source_origin="CLI_INPUT")
+
+        saved_files = []
+        for cand in candidates:
+            p = report_gen.persist_candidate(cand)
+            saved_files.append(p)
+
+        print(f"\n📊 Secret Discovery Summary:")
+        print(f"   Total Discovered: {len(candidates)}")
+        for cand in candidates:
+            print(f"   • [{cand.candidate_id}] Type: {cand.secret_type} ({cand.provider})")
+            print(f"     Masked:      {cand.masked_value} (Fingerprint: {cand.raw_fingerprint[:16]}...)")
+            print(f"     Status:      {cand.lifecycle_state.value} (Confidence: {int(cand.confidence_score*100)}%)")
+            print(f"     Location:    {cand.source_origin} ({cand.location})")
+            if cand.related_endpoints:
+                print(f"     Endpoints:   {', '.join(cand.related_endpoints[:2])}")
+            print(f"     Remediation: {cand.remediation_advice}\n")
+        print(f"📄 Audit reports generated under: {report_gen.reports_dir.resolve()}\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
