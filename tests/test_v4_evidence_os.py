@@ -256,3 +256,61 @@ class TestFindingFingerprintsAndTestCases:
         assert tc.test_case_id.startswith("TC-SQLI-")
         assert "curl" in tc.reproduce_command
         assert tc.expected_safe_behavior is not None
+from core.resilience.stability_guard import StabilityGuard, RedirectLoopError, CircuitOpenError
+from core.orchestration.checkpoint_manager import CheckpointManager
+
+
+class TestStabilityAndCheckpoints:
+    def test_stability_truncation_and_redirects(self):
+        guard = StabilityGuard(max_response_bytes=100, max_redirect_hops=3)
+
+        # Truncation
+        large_payload = b"A" * 250
+        truncated, was_cut = guard.truncate_payload(large_payload)
+        assert was_cut is True
+        assert len(truncated) == 100
+
+        # Circular redirect loop detection
+        with pytest.raises(RedirectLoopError):
+            guard.validate_redirect_chain(["https://target/a", "https://target/b", "https://target/a"])
+
+        # Excessive redirect hops
+        with pytest.raises(RedirectLoopError):
+            guard.validate_redirect_chain(["/1", "/2", "/3", "/4"])
+
+    def test_circuit_breaker(self):
+        guard = StabilityGuard(consecutive_failure_threshold=2, circuit_cooldown_sec=30.0)
+        ep = "GET:/api/slow"
+
+        # Record 2 consecutive timeouts -> trips circuit
+        guard.record_outcome(ep, is_success=False, is_timeout=True)
+        guard.record_outcome(ep, is_success=False, is_timeout=True)
+
+        with pytest.raises(CircuitOpenError):
+            guard.pre_request_check(ep)
+
+        # Successful recovery
+        guard.record_outcome(ep, is_success=True)
+        guard.pre_request_check(ep)  # Should not raise
+
+    def test_checkpoint_atomic_save_and_resume(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mgr = CheckpointManager(checkpoints_dir=Path(tmpdir))
+            saved_file = mgr.save_checkpoint(
+                mission_id="MSS-100",
+                target="api.target.local",
+                started_at=1700000000.0,
+                completed_endpoints={"/api/v1/login", "/api/v1/users"},
+                pending_queue=["/api/v1/orders"],
+                findings_count=3,
+                coverage_pct=66.7
+            )
+            assert saved_file.exists()
+
+            # Load checkpoint
+            loaded = mgr.load_checkpoint("MSS-100")
+            assert loaded is not None
+            assert loaded.target == "api.target.local"
+            assert "/api/v1/login" in loaded.completed_endpoints
+            assert loaded.findings_count == 3
+            assert loaded.coverage_percentage == 66.7

@@ -46,6 +46,7 @@ data/*.sqlite*
 data/cert_browser_test/
 data/scans/
 storage/jobs/
+emergency_save.json
 
 # Archive files
 *.zip
