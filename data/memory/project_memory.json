@@ -11,7 +11,7 @@
       ],
       "auth_required": false,
       "first_seen": 1788367547.39412,
-      "times_seen": 46
+      "times_seen": 47
     },
     "GET /api/v2/users/9912": {
       "method": "GET",
@@ -21,7 +21,7 @@
       ],
       "auth_required": true,
       "first_seen": 1788367547.6974797,
-      "times_seen": 46
+      "times_seen": 47
     },
     "GET /api/v1/invoices/9412": {
       "method": "GET",
@@ -29,7 +29,7 @@
       "params": [],
       "auth_required": true,
       "first_seen": 1788368639.5361702,
-      "times_seen": 46
+      "times_seen": 47
     },
     "GET /api/v1/invoices/0": {
       "method": "GET",
@@ -69,7 +69,7 @@
       "params": [],
       "auth_required": true,
       "first_seen": 1788369491.6221008,
-      "times_seen": 172
+      "times_seen": 176
     }
   },
   "auth_mechanisms": [],

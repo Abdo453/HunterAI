@@ -281,6 +281,14 @@ def build_parser() -> argparse.ArgumentParser:
     proto_p.add_argument("--dissect", action="store_true", help="Dissect gRPC protobuf wire format and check metadata auth")
     proto_p.add_argument("--remediate", action="store_true", help="Synthesize protocol defensive security middleware")
 
+    # Cloud Audit command (V14.0 Cloud Metadata Boundary & Container Isolation)
+    cloud_p = subparsers.add_parser("cloud-audit", help="Audit cloud IMDS configs and container isolation misconfigurations")
+    cloud_p.add_argument("--provider", default="aws", choices=["aws", "gcp", "azure", "all"], help="Cloud provider to audit")
+    cloud_p.add_argument("--manifest", default=None, help="Path to Dockerfile, docker-compose YAML, or K8s manifest to audit")
+    cloud_p.add_argument("--manifest-type", default="k8s", choices=["dockerfile", "compose", "k8s"], help="Type of container manifest")
+    cloud_p.add_argument("--hcl-file", default=None, help="Path to Terraform HCL file containing metadata_options block")
+    cloud_p.add_argument("--remediate", action="store_true", help="Generate hardened Dockerfile, K8s PSS, and Terraform IMDSv2 policy snippets")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -783,6 +791,102 @@ def process_debit(user_id, amount):
                 rem = ProtocolRemediationEngine.generate_grpc_auth_interceptor()
                 print(f"🛠️ AST Protocol Remediation ({rem.vulnerability_remediated}):")
                 print(f"{rem.middleware_code}\n")
+
+    elif parsed.command == "cloud-audit":
+        from core.cloud.cloud_boundary_agent import CloudMetadataBoundaryAuditor, IMDSRiskLevel
+        from core.container.container_security_auditor import ContainerSecurityAuditor
+        from core.remediation.cloud_container_remediation import CloudContainerRemediationEngine
+
+        cloud_auditor = CloudMetadataBoundaryAuditor()
+        container_auditor = ContainerSecurityAuditor()
+
+        print(f"\n\u2601\ufe0f  HunterAI V14.0 Cloud Metadata Boundary & Container Isolation Audit")
+        print(f"   Provider: {parsed.provider.upper()}")
+
+        if parsed.provider in ("aws", "all"):
+            aws_cfg = {}
+            if parsed.hcl_file:
+                try:
+                    hcl_text = open(parsed.hcl_file).read()
+                    aws_cfg = CloudMetadataBoundaryAuditor.parse_terraform_imds_block(hcl_text)
+                    print(f"   Parsed Terraform HCL: {parsed.hcl_file}")
+                except FileNotFoundError:
+                    print(f"   [WARN] HCL file not found: {parsed.hcl_file}. Using demo config.")
+                    aws_cfg = {"http_tokens": "optional", "http_put_response_hop_limit": 2}
+            else:
+                aws_cfg = {"http_tokens": "optional", "http_put_response_hop_limit": 2}
+
+            aws_report = cloud_auditor.audit_aws_imds_config(aws_cfg)
+            risk_icon = "\U0001f534" if aws_report.risk_level == IMDSRiskLevel.CRITICAL else \
+                        "\U0001f7e0" if aws_report.risk_level == IMDSRiskLevel.HIGH else "\U0001f7e1"
+            print(f"\n\U0001f50d AWS IMDS Audit [{risk_icon} {aws_report.risk_level.value}]")
+            print(f"   IMDSv1 Exposed:   {aws_report.is_imdsv1_exposed}")
+            print(f"   Hop-Limit Unsafe: {aws_report.hop_limit_unsafe}")
+            for finding in aws_report.findings:
+                print(f"   \u274c [{finding.check_id}] {finding.description[:80]}...")
+                print(f"      Evidence:    {finding.evidence}")
+                print(f"      Remediation: {finding.remediation[:80]}...\n")
+
+        if parsed.provider in ("gcp", "all"):
+            gcp_report = cloud_auditor.audit_gcp_metadata_headers(
+                {"Content-Type": "application/json"}
+            )
+            risk_icon = "\U0001f7e0" if gcp_report.risk_level == IMDSRiskLevel.HIGH else "\U0001f7e2"
+            print(f"\n\U0001f50d GCP IMDS Audit [{risk_icon} {gcp_report.risk_level.value}]")
+            print(f"   Missing Auth Header: {gcp_report.missing_auth_header}")
+            for finding in gcp_report.findings:
+                print(f"   \u274c [{finding.check_id}] {finding.description[:80]}...\n")
+
+        if parsed.provider in ("azure", "all"):
+            azure_report = cloud_auditor.audit_azure_imds_config(
+                {"headers": {}, "api_version": ""}
+            )
+            risk_icon = "\U0001f7e1" if azure_report.risk_level == IMDSRiskLevel.MEDIUM else "\U0001f7e2"
+            print(f"\n\U0001f50d Azure IMDS Audit [{risk_icon} {azure_report.risk_level.value}]")
+            print(f"   Missing Auth Header: {azure_report.missing_auth_header}")
+            for finding in azure_report.findings:
+                print(f"   \u26a0\ufe0f  [{finding.check_id}] {finding.description[:80]}...\n")
+
+        if parsed.manifest:
+            try:
+                manifest_text = open(parsed.manifest).read()
+                mtype = parsed.manifest_type
+                print(f"\n\U0001f433 Container Manifest Audit ({mtype.upper()}): {parsed.manifest}")
+                if mtype == "dockerfile":
+                    findings = container_auditor.audit_dockerfile(manifest_text)
+                elif mtype == "compose":
+                    findings = container_auditor.audit_compose_manifest(manifest_text)
+                else:
+                    findings = container_auditor.audit_k8s_manifest(manifest_text)
+
+                if not findings:
+                    print("   \u2705 No container breakout risks detected.")
+                else:
+                    summary = container_auditor.summarise_findings(findings)
+                    print(f"   Total Findings: {summary['total']} | Highest Risk: {summary['highest_risk']}")
+                    for finding in findings:
+                        print(f"   \u274c [{finding.check_id}] [{finding.risk_level.value}] {finding.description[:70]}...")
+                        print(f"      Evidence:    {finding.evidence}")
+                        print(f"      Remediation: {finding.remediation[:70]}...\n")
+            except FileNotFoundError:
+                print(f"   [WARN] Manifest file not found: {parsed.manifest}")
+
+        if parsed.remediate:
+            print(f"\n\U0001f6e0\ufe0f  HunterAI V14.0 Remediation Artifacts:\n")
+            r1 = CloudContainerRemediationEngine.generate_hardened_dockerfile()
+            print(f"-- Hardened Dockerfile ({r1.vulnerability_remediated}) --")
+            print(r1.code_snippet)
+            print(f"   Notes: {r1.notes}\n")
+
+            r2 = CloudContainerRemediationEngine.generate_k8s_security_context()
+            print(f"-- K8s PodSecurityStandards Restricted --")
+            print(r2.code_snippet)
+            print(f"   Notes: {r2.notes}\n")
+
+            r3 = CloudContainerRemediationEngine.generate_terraform_imds_policy()
+            print(f"-- Terraform IMDSv2 Policy --")
+            print(r3.code_snippet)
+            print(f"   Notes: {r3.notes}\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")

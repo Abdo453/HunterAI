@@ -1,8 +1,8 @@
 {
   "cve-2024-1234": {
-    "cached_at": 1789267042.255574,
+    "cached_at": 1789509109.4270103,
     "report": {
-      "id": "RES-4600a0ad",
+      "id": "RES-cd0c3574",
       "query": "CVE-2024-1234",
       "topic": "CVE-2024-1234",
       "cve_id": "CVE-2024-1234",
@@ -16,7 +16,7 @@
           "source_name": "NVD NIST Database / CVE Project (CVE-2024-1234)",
           "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-1234",
           "confidence": 0.9,
-          "retrieved_at": 1789267042.255574
+          "retrieved_at": 1789509109.4270103
         }
       ],
       "arabic_summary": "ثغرة أمنية مسجلة برقم CVE-2024-1234، تؤثر على المكونات المعنية وتتطلب تحديث الإصدار أو تطبيق الترقيع الأمني.",

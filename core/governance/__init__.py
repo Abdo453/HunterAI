@@ -6,7 +6,20 @@ from core.governance.risk_budget_queue import (
     ApprovalQueue,
     RiskTier,
     PendingApprovalItem,
-    RiskBudgetExceededError
+    RiskBudgetExceededError,
+)
+from core.governance.policy_engine import (
+    ProgramScopePolicy,
+    GovernancePolicyEngine,
+)
+from core.governance.task_router import (
+    GovernedTask,
+    GovernedTaskRouter,
+)
+from core.governance.safety_rewriter import SafetyRewriter
+from core.governance.orchestrator import (
+    GovernedOrchestrator,
+    GovernedExecutionResult,
 )
 
 __all__ = [
@@ -14,5 +27,12 @@ __all__ = [
     "ApprovalQueue",
     "RiskTier",
     "PendingApprovalItem",
-    "RiskBudgetExceededError"
+    "RiskBudgetExceededError",
+    "ProgramScopePolicy",
+    "GovernancePolicyEngine",
+    "GovernedTask",
+    "GovernedTaskRouter",
+    "SafetyRewriter",
+    "GovernedOrchestrator",
+    "GovernedExecutionResult",
 ]
