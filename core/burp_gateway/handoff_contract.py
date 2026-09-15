@@ -39,6 +39,7 @@ class AgentHandoffContract:
     tests_failed: List[Dict[str, Any]] = field(default_factory=list)
     tests_remaining: List[Dict[str, Any]] = field(default_factory=list)
     provenance_trace_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -92,9 +93,16 @@ class AgentHandoffContract:
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), indent=2)
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> AgentHandoffContract:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+
+    @classmethod
+    def from_json(cls, json_str: str) -> AgentHandoffContract:
+        return cls.from_dict(json.loads(json_str))
 
     def save(self, cases_dir: Path) -> Path:
         cases_dir.mkdir(parents=True, exist_ok=True)

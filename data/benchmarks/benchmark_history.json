@@ -287,5 +287,22 @@
     "provenance_completeness_pct": 100.0,
     "average_time_sec": 0.0004,
     "scope_violations_count": 0
+  },
+  {
+    "version_tag": "v2.0-arena",
+    "timestamp": 1789513380.5030138,
+    "date": "2026-09-15 23:03:00",
+    "total_targets": 12,
+    "true_positives": 10,
+    "true_negatives": 2,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "detection_rate_pct": 100.0,
+    "precision_pct": 100.0,
+    "false_positive_rate_pct": 0.0,
+    "proof_success_rate_pct": 100.0,
+    "provenance_completeness_pct": 100.0,
+    "average_time_sec": 0.0003,
+    "scope_violations_count": 0
   }
 ]

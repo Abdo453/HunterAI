@@ -289,6 +289,10 @@ def build_parser() -> argparse.ArgumentParser:
     cloud_p.add_argument("--hcl-file", default=None, help="Path to Terraform HCL file containing metadata_options block")
     cloud_p.add_argument("--remediate", action="store_true", help="Generate hardened Dockerfile, K8s PSS, and Terraform IMDSv2 policy snippets")
 
+    # Sensor Status command (V15.0 Sensory Triad & Burp Sensor Integration)
+    sensor_p = subparsers.add_parser("sensor-status", help="Inspect active perceptual sensors (Browser, Burp, Code) and sensory triad metrics")
+    sensor_p.add_argument("--json", action="store_true", help="Output sensory metrics in raw JSON")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -887,6 +891,29 @@ def process_debit(user_id, amount):
             print(f"-- Terraform IMDSv2 Policy --")
             print(r3.code_snippet)
             print(f"   Notes: {r3.notes}\n")
+
+    elif parsed.command == "sensor-status":
+        from core.sensors import BurpSensor, SensoryTriadCoordinator
+        sensor = BurpSensor()
+        triad = SensoryTriadCoordinator(burp_sensor=sensor)
+        summary = triad.get_triad_summary()
+
+        if parsed.json:
+            import json
+            print(json.dumps(summary, indent=2))
+        else:
+            print("\n" + "=" * 65)
+            print(" 📡 HunterAI V15.0 Unified Sensory Triad & Burp Sensor Status")
+            print("=" * 65)
+            print(f" • Burp Sensor Status:             ACTIVE [HTTP Reality Sensor]")
+            print(f" • Browser Sensor Connected:       {summary['browser_sensor_online']}")
+            print(f" • Code Intelligence Connected:    {summary['code_sensor_online']}")
+            print(f" • Total Ingested Transactions:    {summary['burp_sensor_metrics']['total_transactions_ingested']}")
+            print(f" • Pending Observations:           {summary['burp_sensor_metrics']['pending_observations']}")
+            print(f" • Tracked Lineage Roots:          {summary['burp_sensor_metrics']['tracked_lineage_roots']}")
+            print(f" • Correlated Cross-Sensor Events: {summary['total_correlated_events']}")
+            print(f" • High-Confidence Hypotheses:     {summary['high_confidence_hypotheses']}")
+            print("=" * 65 + "\n")
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")

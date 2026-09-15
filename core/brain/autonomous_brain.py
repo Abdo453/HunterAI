@@ -850,6 +850,39 @@ class AutonomousBrain:
         # User hints & interactive co-pilot guidance
         self.user_hints: List[Dict[str, Any]] = []
 
+        # V15.0 Sensory Triad & Burp Sensor Integration
+        self.burp_sensor = None
+        self.sensory_triad = None
+        try:
+            from core.sensors import BurpSensor, SensoryTriadCoordinator
+            self.burp_sensor = BurpSensor()
+            self.sensory_triad = SensoryTriadCoordinator(burp_sensor=self.burp_sensor)
+            log.info("[BRAIN] BurpSensor and SensoryTriadCoordinator attached")
+        except Exception as e:
+            log.warning(f"[BRAIN] BurpSensor could not be attached: {e}")
+
+    def attach_burp_sensor(self, sensor: Any) -> None:
+        """Attaches or updates the BurpSensor perceptual organ."""
+        self.burp_sensor = sensor
+        if self.sensory_triad:
+            self.sensory_triad.burp_sensor = sensor
+        self._audit("burp_sensor_attached", status=sensor.get_sensor_status() if hasattr(sensor, "get_sensor_status") else {})
+
+    def attach_sensory_triad(self, triad: Any) -> None:
+        """Attaches or updates the unified SensoryTriadCoordinator."""
+        self.sensory_triad = triad
+        if hasattr(triad, "burp_sensor") and triad.burp_sensor:
+            self.burp_sensor = triad.burp_sensor
+        self._audit("sensory_triad_attached")
+
+    def ingest_burp_transaction(self, tx: Any, parent_id: Optional[str] = None) -> Any:
+        """Ingests live HTTP transaction from Burp Suite into the sensory stream."""
+        if self.burp_sensor:
+            obs = self.burp_sensor.ingest_transaction(tx, parent_id=parent_id)
+            self._audit("burp_transaction_ingested", url=obs.target_url, method=obs.method)
+            return obs
+        return None
+
     def add_user_hint(self, hint: str) -> None:
         """إضافة نصيحة أو توجيه من المستخدم للـ Agent أثناء التخطيط والتنفيذ"""
         self.user_hints.append({"hint": hint, "ts": time.time()})
