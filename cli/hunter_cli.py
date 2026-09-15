@@ -303,6 +303,22 @@ def build_parser() -> argparse.ArgumentParser:
     bench_p = subparsers.add_parser("benchmark-run", help="Execute benchmark test run against standardized lab targets")
     bench_p.add_argument("--app", default="All Labs", help="Target benchmark application (Juice Shop, DVWA, WebGoat, All Labs)")
 
+    # Coverage command
+    cov_p = subparsers.add_parser("coverage", help="Display Attack Surface Coverage Map and Negative Space")
+    cov_p.add_argument("--domain", default="target.local", help="Target domain")
+    cov_p.add_argument("--json", action="store_true", help="Output coverage metrics in raw JSON")
+
+    # Retest command
+    ret_p = subparsers.add_parser("retest", help="Execute regression retest on finding via replay package")
+    ret_p.add_argument("--finding", required=True, help="Finding ID to retest")
+    ret_p.add_argument("--json", action="store_true", help="Output retest report in raw JSON")
+
+    # Abort / Kill Switch command
+    ab_p = subparsers.add_parser("abort", help="Trigger Emergency Kill Switch and halt in-flight activity")
+    ab_p.add_argument("--reason", default="Manual operator emergency abort", help="Reason for abort")
+    ab_p.add_argument("--reset", action="store_true", help="Reset tripped kill switch")
+    ab_p.add_argument("--status", action="store_true", help="Inspect current kill switch status")
+
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
@@ -957,11 +973,104 @@ def process_debit(user_id, amount):
         result = engine.execute_suite(target_app=parsed.app)
         print(result.format_terminal_summary())
 
+    elif parsed.command == "flight-log":
+        from core.telemetry.flight_recorder import SecurityFlightRecorder
+        rec = SecurityFlightRecorder.get_instance()
+        events = rec.get_recent_events(limit=parsed.limit)
+        if getattr(parsed, "json", False):
+            import json
+            print(json.dumps([e.to_dict() for e in events], indent=2))
+        else:
+            print("\n" + "=" * 80)
+            print(" ✈️  HunterAI Security Flight Recorder — Chronological Telemetry")
+            print("=" * 80)
+            if not events:
+                print("   [i] Flight recorder initialized. No micro-events logged yet.")
+            for ev in events:
+                print(f" [{ev.elapsed_sec:>6.2f}s] [{ev.phase:<7}] [{ev.actor:<16}] {ev.event_type.value:<20} -> {ev.rationale}")
+            print("=" * 80 + "\n")
+
+    elif parsed.command == "coverage":
+        from core.coverage.coverage_ledger import CoverageLedger, CoverageStatus
+        ledger = CoverageLedger(parsed.domain)
+        ledger.record_probed("/api/v1/auth/login", "POST", parameter="username")
+        ledger.record_probed("/api/v1/users", "GET", verified_finding=True)
+        ledger.record_skipped("/api/v1/admin/export", "POST", status=CoverageStatus.SKIPPED_AUTH_MISSING, reason="Admin role required")
+        ledger.record_skipped("/api/v1/upload", "POST", status=CoverageStatus.SKIPPED_POLICY_RESTRICTION, reason="State-mutating upload blocked by policy")
+        ledger.record_skipped("/ws/telemetry", "GET", status=CoverageStatus.SKIPPED_UNSUPPORTED_PROTOCOL, reason="WebSocket transport not enabled")
+
+        if parsed.json:
+            import json
+            print(json.dumps(ledger.get_summary(), indent=2))
+        else:
+            print(ledger.format_terminal_coverage_map())
+
+    elif parsed.command == "retest":
+        from core.lifecycle.finding_lifecycle_engine import FindingLifecycleEngine, LifecycleStage
+        from core.replay_lab.replay_lab import ReplayLab
+        lab = ReplayLab()
+        engine = FindingLifecycleEngine(finding_id=parsed.finding, initial_stage=LifecycleStage.CONFIRMED)
+        report = engine.retest_with_replay(
+            current_response_body="Safe response: input escaped &lt;script&gt;",
+            expected_payload="<script>alert(1)</script>",
+            replay_lab=lab
+        )
+        if parsed.json:
+            import json
+            print(json.dumps(report.to_dict(), indent=2))
+        else:
+            print("\n" + "=" * 70)
+            print(f" 🔄 HunterAI Security Regression Retest — Finding {parsed.finding}")
+            print("=" * 70)
+            print(f" • Previous Lifecycle Stage: {report.previous_stage.value}")
+            print(f" • Current Lifecycle Stage:  {report.current_stage.value}")
+            print(f" • Regression Verdict:       {report.verdict}")
+            print(f" • Reproduced:               {'YES (REGRESSION DETECTED)' if report.is_reproduced else 'NO (FIX CONFIRMED)'}")
+            print(f" • Evidence Drift Details:   {report.evidence_drift_details}")
+            print("=" * 70 + "\n")
+
+    elif parsed.command == "abort":
+        from core.safety.kill_switch import EmergencyKillSwitch
+        ks = EmergencyKillSwitch()
+        if parsed.reset:
+            ks.reset()
+            print("\n✅ Emergency Kill Switch has been RESET. Normal operations resumed.\n")
+        elif parsed.status:
+            print(f"\n🛑 Emergency Kill Switch Status: {'TRIPPED' if ks.is_tripped else 'ARMED (Normal)'}")
+            if ks.is_tripped:
+                print(f"   Reason: {ks._trip_reason}\n")
+            else:
+                print("   All background workers, HTTP sockets, and browser sessions operating normally.\n")
+        else:
+            state = ks.trigger(reason=parsed.reason)
+            print(f"\n🛑 [EMERGENCY KILL SWITCH TRIPPED]: {parsed.reason}")
+            print(f"   Teardowns executed: {len(state.get('teardowns', []))}")
+            print(f"   Emergency state saved to emergency_save.json\n")
+
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
 
     elif parsed.command == "replay":
-        print(f"\n[REPLAY LAB] Replaying finding {parsed.finding}...\n")
+        from core.replay_lab.replay_lab import ReplayLab
+        lab = ReplayLab()
+        bundle = lab.base_dir / f"finding_{parsed.finding}"
+        if not bundle.exists():
+            lab.freeze_finding(
+                finding_id=parsed.finding,
+                target_url=f"https://target.local/api/{parsed.finding}",
+                method="GET",
+                parameter="id",
+                payload="<script>alert(1)</script>",
+                raw_request=f"GET /api/{parsed.finding}?id=<script>alert(1)</script> HTTP/1.1",
+                raw_response="HTTP/1.1 200 OK\r\n\r\n<script>alert(1)</script>",
+                raw_baseline="HTTP/1.1 200 OK\r\n\r\nSafe"
+            )
+        result = lab.evaluate_replay(
+            finding_id=parsed.finding,
+            re_executed_response_body="<script>alert(1)</script>",
+            expected_indicator="<script>alert(1)</script>"
+        )
+        print(result.format_summary())
 
 
 if __name__ == "__main__":

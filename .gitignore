@@ -45,6 +45,7 @@ data/*.log
 data/*.sqlite*
 data/cert_browser_test/
 data/scans/
+data/replays/
 storage/jobs/
 emergency_save.json
 artifacts/secrets/*.jsonl

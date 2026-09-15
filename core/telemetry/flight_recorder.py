@@ -143,3 +143,7 @@ class SecurityFlightRecorder:
 
         lines.append("=" * 76)
         return "\n".join(lines)
+
+    def get_recent_events(self, limit: int = 50) -> List[FlightEvent]:
+        """Returns the most recent flight recorder events up to limit"""
+        return self.events[-limit:]

@@ -10,6 +10,9 @@ along with explicit causal reasons:
 - SKIPPED_AUTH_MISSING
 - SKIPPED_RATE_LIMITED
 - SKIPPED_WAF_BLOCKED
+- SKIPPED_POLICY_RESTRICTION
+- SKIPPED_MANUAL_APPROVAL_REQUIRED
+- SKIPPED_UNSUPPORTED_PROTOCOL
 """
 from __future__ import annotations
 
@@ -26,6 +29,9 @@ class CoverageStatus(str, Enum):
     SKIPPED_AUTH_MISSING = "SKIPPED_AUTH_MISSING"
     SKIPPED_RATE_LIMITED = "SKIPPED_RATE_LIMITED"
     SKIPPED_WAF_BLOCKED = "SKIPPED_WAF_BLOCKED"
+    SKIPPED_POLICY_RESTRICTION = "SKIPPED_POLICY_RESTRICTION"
+    SKIPPED_MANUAL_APPROVAL_REQUIRED = "SKIPPED_MANUAL_APPROVAL_REQUIRED"
+    SKIPPED_UNSUPPORTED_PROTOCOL = "SKIPPED_UNSUPPORTED_PROTOCOL"
     SKIPPED_USER_RESTRICTION = "SKIPPED_USER_RESTRICTION"
 
 
@@ -94,6 +100,15 @@ class CoverageLedger:
             if "SKIPPED" in i.status.value:
                 skipped_breakdown[i.status.value] = skipped_breakdown.get(i.status.value, 0) + 1
 
+        # Calculate multidimensional confidence metrics
+        unique_endpoints = len(set(i.endpoint for i in self.items.values()))
+        probed_endpoints = len(set(i.endpoint for i in self.items.values() if "PROBED" in i.status.value))
+        endpoint_pct = round((probed_endpoints / max(1, unique_endpoints)) * 100.0, 1)
+
+        params = [i for i in self.items.values() if i.parameter]
+        probed_params = [i for i in params if "PROBED" in i.status.value]
+        param_pct = round((len(probed_params) / max(1, len(params))) * 100.0, 1) if params else 100.0
+
         return {
             "target_scope": self.target_scope,
             "total_surface_items": total,
@@ -102,26 +117,35 @@ class CoverageLedger:
             "probed_and_safe": probed_safe,
             "skipped_items": skipped,
             "coverage_percentage": coverage_pct,
+            "endpoint_coverage_pct": endpoint_pct,
+            "parameter_coverage_pct": param_pct,
             "skipped_breakdown": skipped_breakdown
         }
 
     def format_terminal_coverage_map(self) -> str:
         summary = self.get_summary()
-        sep = "═" * 68
-        sub = "─" * 68
+        pct = summary['coverage_percentage']
+        filled_slots = int(pct / 5)
+        bar = "█" * filled_slots + "░" * (20 - filled_slots)
+
+        sep = "═" * 70
+        sub = "─" * 70
         lines = [
             sep,
             f" 🗺️ HunterAI Attack Surface Coverage Map — {self.target_scope}",
             sep,
+            f" Coverage Progress: [{bar}] {pct}%",
             f" Total Identified Surface:  {summary['total_surface_items']:>6} endpoints & parameters",
-            f" Fully Probed & Verified:   {summary['probed_items']:>6} ({summary['coverage_percentage']}%)",
+            f" Fully Probed & Verified:   {summary['probed_items']:>6} ({pct}%)",
+            f" Endpoint-Level Coverage:   {summary['endpoint_coverage_pct']:>6}%",
+            f" Parameter-Level Coverage:  {summary['parameter_coverage_pct']:>6}%",
             f" Untested / Negative Space: {summary['skipped_items']:>6}",
             sub,
-            " Negative Space Breakdown (What was NOT tested and why):"
+            " Negative Space Ledger (What was NOT tested and why):"
         ]
         if summary["skipped_breakdown"]:
-            for k, count in summary["skipped_breakdown"].items():
-                lines.append(f"   • {k:<28} : {count:>4} items")
+            for k, count in sorted(summary["skipped_breakdown"].items()):
+                lines.append(f"   [!] {k:<32} : {count:>4} items")
         else:
             lines.append("   • All discovered in-scope endpoints were fully probed.")
         lines.append(sep)

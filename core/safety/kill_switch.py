@@ -32,7 +32,20 @@ class EmergencyKillSwitch:
 
     @property
     def is_tripped(self) -> bool:
-        return self._is_tripped
+        if self._is_tripped:
+            return True
+        save_path = Path("emergency_save.json")
+        if save_path.exists():
+            try:
+                with open(save_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if data.get("kill_switch_tripped"):
+                        self._is_tripped = True
+                        self._trip_reason = data.get("reason", "Emergency trip detected in state file")
+                        return True
+            except Exception:
+                pass
+        return False
 
     def register_teardown(self, callback: Callable[[], None], name: str = "worker"):
         self._registered_teardowns.append((name, callback))
@@ -71,3 +84,9 @@ class EmergencyKillSwitch:
         """Resets the kill switch for testing purposes"""
         self._is_tripped = False
         self._trip_reason = ""
+        save_path = Path("emergency_save.json")
+        if save_path.exists():
+            try:
+                save_path.unlink()
+            except Exception:
+                pass

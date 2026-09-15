@@ -16,6 +16,8 @@ from benchmarks.benchmark_engine import BenchmarkEngine, BenchmarkCase, Benchmar
 from core.dashboard.assessment_dashboard import DashboardMetrics
 from core.finding_model import Finding, HttpExchangeRecord, VerificationRecord, ReproducibilityRecord
 from core.evidence_state_machine import EvidenceStateMachine, FindingState, InvalidStateTransitionError
+from core.request_fingerprinter import RequestFingerprinter
+from core.replay_lab.replay_lab import ReplayLab, ReplayDriftResult
 
 
 class TestBenchmarkEngine:
@@ -134,3 +136,59 @@ class TestEvidenceStateMachine:
         # Attempting to jump from DISCOVERED directly to CONFIRMED must raise InvalidStateTransitionError
         with pytest.raises(InvalidStateTransitionError):
             sm.transition_to(FindingState.CONFIRMED, reason="Hallucinated leap without evidence")
+
+
+class TestRequestFingerprinter:
+    """Test Case 6: Request fingerprinting, canonicalization, and deduplication"""
+
+    def test_request_fingerprinter_deduplication(self):
+        rf = RequestFingerprinter()
+        url1 = "https://target.local/api/search?q=1&t=12345"
+        url2 = "https://target.local/api/search?t=99999&q=1"
+
+        sig1 = rf.calculate_hash("GET", url1, parameter="q", mutation_payload="' OR 1=1--")
+        sig2 = rf.calculate_hash("GET", url2, parameter="q", mutation_payload="' OR 1=1--")
+        assert sig1 == sig2  # Noise timestamps ignored and query keys sorted
+
+        assert rf.should_skip("GET", url1, parameter="q", mutation_payload="' OR 1=1--") is False
+        rf.record_execution("GET", url1, parameter="q", mutation_payload="' OR 1=1--")
+        assert rf.should_skip("GET", url2, parameter="q", mutation_payload="' OR 1=1--") is True
+
+
+class TestReplayLab:
+    """Test Case 7: Replay lab freeze, replay execution, and evidence drift detection"""
+
+    def test_replay_lab_drift_detection(self, tmp_path):
+        lab = ReplayLab(base_dir=tmp_path)
+        bundle_dir = lab.freeze_finding(
+            finding_id="FND-REPLAY-01",
+            target_url="https://target.local/profile?id=42",
+            method="GET",
+            parameter="id",
+            payload="<script>alert(1)</script>",
+            raw_request="GET /profile?id=42 HTTP/1.1",
+            raw_response="HTTP/1.1 200 OK\r\n\r\n<script>alert(1)</script>",
+            raw_baseline="HTTP/1.1 200 OK\r\n\r\nSafe profile"
+        )
+        assert (bundle_dir / "replay.py").exists()
+        assert (bundle_dir / "metadata.json").exists()
+
+        # Case A: Replay reproduces payload -> Drift: NONE
+        result_ok = lab.evaluate_replay(
+            finding_id="FND-REPLAY-01",
+            re_executed_response_body="Profile: <script>alert(1)</script>",
+            expected_indicator="<script>alert(1)</script>"
+        )
+        assert result_ok.evidence_drift_detected is False
+        assert result_ok.is_reproducible is True
+        assert result_ok.replay_verdict == "CONFIRMED"
+
+        # Case B: Replay fails (e.g. patched) -> Drift: DETECTED
+        result_drift = lab.evaluate_replay(
+            finding_id="FND-REPLAY-01",
+            re_executed_response_body="Profile: &lt;script&gt;alert(1)&lt;/script&gt;",
+            expected_indicator="<script>alert(1)</script>"
+        )
+        assert result_drift.evidence_drift_detected is True
+        assert result_drift.is_reproducible is False
+        assert result_drift.replay_verdict == "REJECTED"

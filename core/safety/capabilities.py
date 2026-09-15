@@ -65,3 +65,9 @@ class CapabilityGate:
                 f"SECURITY POLICY VIOLATION: Agent '{token.agent_role}' attempted operation "
                 f"requiring '{required_cap.value}' without valid capability token."
             )
+
+    @classmethod
+    def verify_capability(cls, token: CapabilityToken, required_cap: AgentCapability) -> bool:
+        """Verifies capability and raises UnauthorizedCapabilityError if missing; returns True if authorized"""
+        cls.enforce(token, required_cap)
+        return True
