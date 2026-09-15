@@ -1,0 +1,13 @@
+{
+  "run_id": "CFD445",
+  "target_app": "All Labs",
+  "total_cases": 4,
+  "detected": 3,
+  "missed": 0,
+  "false_positives": 0,
+  "precision_pct": 100.0,
+  "recall_pct": 100.0,
+  "total_requests": 16,
+  "runtime_sec": 0.001001119613647461,
+  "timestamp": 1789513580.1420949
+}

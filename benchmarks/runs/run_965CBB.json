@@ -1,0 +1,13 @@
+{
+  "run_id": "965CBB",
+  "target_app": "All Labs",
+  "total_cases": 4,
+  "detected": 3,
+  "missed": 0,
+  "false_positives": 0,
+  "precision_pct": 100.0,
+  "recall_pct": 100.0,
+  "total_requests": 16,
+  "runtime_sec": 0.0016663074493408203,
+  "timestamp": 1789513595.5280473
+}

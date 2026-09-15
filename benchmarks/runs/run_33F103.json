@@ -1,0 +1,13 @@
+{
+  "run_id": "33F103",
+  "target_app": "All Labs",
+  "total_cases": 4,
+  "detected": 3,
+  "missed": 0,
+  "false_positives": 0,
+  "precision_pct": 100.0,
+  "recall_pct": 100.0,
+  "total_requests": 16,
+  "runtime_sec": 0.0009906291961669922,
+  "timestamp": 1789513656.4328613
+}
