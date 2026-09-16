@@ -215,6 +215,22 @@ def build_parser() -> argparse.ArgumentParser:
     pf_p.add_argument("--scenario", default="BOLA_USER_DELETION", choices=["BOLA_USER_DELETION", "SQLI_SEARCH_DISCOVERY", "MASS_ASSIGNMENT_ROLE"], help="PentesterFlow scenario")
     pf_p.add_argument("--demo", action="store_true", help="Run demonstration PentesterFlow sensory triad cycle")
 
+    # V21.0 Tri-Core Subcommands
+    # Blindspots command
+    bs_p = subparsers.add_parser("blindspots", help="Inspect official Blind-Spot & Visibility Registry")
+    bs_p.add_argument("--json", action="store_true", help="Output blindspots in raw JSON")
+
+    # External Arena command
+    ea_p = subparsers.add_parser("external-arena", help="Run evaluation against external ground truth targets (Juice Shop, DVWA)")
+    ea_p.add_argument("--app", default="juice_shop", choices=["juice_shop", "dvwa"], help="Target application catalog")
+    ea_p.add_argument("--json", action="store_true", help="Output scorecard in raw JSON")
+
+    # Compile SIR command
+    sir_p = subparsers.add_parser("compile-sir", help="Compile telemetry sources to Canonical Security Intermediate Representation (SIR)")
+    sir_p.add_argument("--openapi", default=None, help="Path to OpenAPI / Swagger JSON specification")
+    sir_p.add_argument("--demo", action="store_true", help="Run demonstration multi-source SIR compilation")
+    sir_p.add_argument("--json", action="store_true", help="Output full SIR graph in JSON")
+
     # Causal command (V8.0)
     subparsers.add_parser("causal", help="Verify unbroken Cause-to-Effect causal path")
 
@@ -331,6 +347,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(args=None):
+    import json
     if hasattr(sys.stdout, 'reconfigure'):
         try:
             sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -1381,6 +1398,81 @@ def process_debit(user_id, amount):
         scenario_enum = PentesterFlowScenario[scen_name] if scen_name in PentesterFlowScenario.__members__ else PentesterFlowScenario.BOLA_USER_DELETION
         ruling = engine.run_scenario(scenario_enum)
         print("\n" + engine.render_causal_chain_ascii(ruling) + "\n")
+
+    elif parsed.command == "blindspots":
+        from core.visibility.blindspot_registry import BlindSpotRegistry
+        reg = BlindSpotRegistry()
+        if getattr(parsed, "json", False):
+            print(json.dumps({
+                "metrics": reg.get_visibility_metrics(),
+                "blindspots": [b.to_dict() for b in reg.list_blindspots()]
+            }, indent=2))
+        else:
+            print("\n" + reg.format_terminal_dashboard() + "\n")
+
+    elif parsed.command == "external-arena":
+        from benchmarks.external_arena_harness import ExternalBenchmarkHarness
+        app_name = getattr(parsed, "app", "juice_shop")
+        report = ExternalBenchmarkHarness.run_suite(app_name)
+        if getattr(parsed, "json", False):
+            print(json.dumps(report.to_dict(), indent=2))
+        else:
+            print("\n" + report.format_terminal_scorecard() + "\n")
+
+    elif parsed.command == "compile-sir":
+        from core.compiler.security_ir import SecurityKnowledgeCompiler, SIRGraph
+        if getattr(parsed, "openapi", None):
+            spec_path = Path(parsed.openapi)
+            if not spec_path.exists():
+                print(f"\n❌ Spec file not found: {parsed.openapi}\n")
+            else:
+                with open(spec_path, "r", encoding="utf-8") as f:
+                    spec_data = json.load(f)
+                graph = SecurityKnowledgeCompiler.compile_openapi(spec_data)
+                if getattr(parsed, "json", False):
+                    print(graph.to_json())
+                else:
+                    print(f"\n📐 Compiled SIR Graph from {parsed.openapi}")
+                    print(f" • Target:        {graph.target_host}")
+                    print(f" • Entities:      {len(graph.entities)}")
+                    print(f" • Relationships: {len(graph.relationships)}")
+                    print(f" • Endpoints:     {len(graph.get_endpoints())}\n")
+        else:
+            # Demo compilation merging OpenAPI + Burp Wire + Browser DOM
+            sample_spec = {
+                "paths": {
+                    "/api/v1/user": {
+                        "get": {"summary": "Get user profile", "security": [{"bearer": []}], "parameters": [{"name": "id", "in": "query", "required": True}]},
+                        "delete": {"summary": "Delete user", "security": [{"bearer": []}], "parameters": [{"name": "id", "in": "query", "required": True}]}
+                    }
+                }
+            }
+            g_api = SecurityKnowledgeCompiler.compile_openapi(sample_spec, target_host="api.target.local")
+            g_burp = SecurityKnowledgeCompiler.compile_burp_transaction({
+                "method": "DELETE",
+                "url": "https://api.target.local/api/v1/user?id=42",
+                "status_code": 204,
+                "auth_context": "Attacker Tenant B",
+                "request_id": "req_del_42"
+            }, target_host="api.target.local")
+            g_ui = SecurityKnowledgeCompiler.compile_browser_event(
+                action_type="click",
+                selector="#btn-delete-account",
+                page_url="https://api.target.local/settings",
+                label="Delete Account Button"
+            )
+            merged = SecurityKnowledgeCompiler.merge_graphs(g_api, g_burp, g_ui)
+            if getattr(parsed, "json", False):
+                print(merged.to_json())
+            else:
+                print(f"\n📐 HunterAI Canonical SIR Compiler (Demonstration Tri-Source Fusion)")
+                print(f" • Target:        {merged.target_host}")
+                print(f" • Entities:      {len(merged.entities)} (Endpoints, Parameters, Identities, UI Resources)")
+                print(f" • Relationships: {len(merged.relationships)}")
+                print(f" • Endpoints:     {len(merged.get_endpoints())}")
+                for ep in merged.get_endpoints():
+                    print(f"   - {ep.name} [Sources: {', '.join(sorted(ep.observed_sources))}]")
+                print("")
 
 
 

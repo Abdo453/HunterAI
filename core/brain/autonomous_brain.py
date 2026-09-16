@@ -929,6 +929,25 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] PentesterFlow could not be attached: {e}")
 
+        # V21.0 Tri-Core & Empirical Evidence OS Subsystems
+        self.blindspot_registry = None
+        self.security_compiler = None
+        self.evidence_evaluator = None
+        self.external_benchmark_harness = None
+        try:
+            from core.visibility.blindspot_registry import BlindSpotRegistry
+            from core.compiler.security_ir import SecurityKnowledgeCompiler
+            from core.evidence.evidence_level import EvidenceLevelEvaluator
+            from benchmarks.external_arena_harness import ExternalBenchmarkHarness
+
+            self.blindspot_registry = BlindSpotRegistry()
+            self.security_compiler = SecurityKnowledgeCompiler()
+            self.evidence_evaluator = EvidenceLevelEvaluator()
+            self.external_benchmark_harness = ExternalBenchmarkHarness()
+            log.info("[BRAIN] V21.0 Tri-Core Subsystems attached (BlindSpotRegistry, SecurityKnowledgeCompiler, EvidenceLevelEvaluator, ExternalBenchmarkHarness)")
+        except Exception as e:
+            log.warning(f"[BRAIN] V21.0 Tri-Core Subsystems could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor
