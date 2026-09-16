@@ -973,6 +973,30 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] V23.0 AuthenticationTestingEngine could not be attached: {e}")
 
+        # V24.0 Autonomous Security Researcher Engines
+        self.identity_graph = None
+        self.multi_identity_replayer = None
+        self.business_logic_engine = None
+        self.race_engine = None
+        self.opportunity_graph = None
+        self.adversarial_prosecutor = None
+        try:
+            from core.identity import IdentityGraph, MultiIdentityReplayer
+            from core.business_logic import BusinessLogicReasoningEngine
+            from core.concurrency import RaceConditionEngine
+            from core.opportunity import AttackOpportunityGraph
+            from core.court import AdversarialEvidenceProsecutor
+
+            self.identity_graph = IdentityGraph()
+            self.multi_identity_replayer = MultiIdentityReplayer(self.identity_graph)
+            self.business_logic_engine = BusinessLogicReasoningEngine()
+            self.race_engine = RaceConditionEngine()
+            self.opportunity_graph = AttackOpportunityGraph()
+            self.adversarial_prosecutor = AdversarialEvidenceProsecutor
+            log.info("[BRAIN] V24.0 Security Researcher Engines attached (IdentityGraph, BusinessLogicEngine, RaceEngine, OpportunityGraph, AdversarialProsecutor)")
+        except Exception as e:
+            log.warning(f"[BRAIN] V24.0 Security Researcher Engines could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor

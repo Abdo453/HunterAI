@@ -256,6 +256,27 @@ def build_parser() -> argparse.ArgumentParser:
     auth_p.add_argument("--demo", action="store_true", help="Run demonstration authentication lifecycle audit")
     auth_p.add_argument("--json", action="store_true", help="Output findings in raw JSON")
 
+    # V24.0 Autonomous Security Researcher Engines
+    id_p = subparsers.add_parser("identity-matrix", help="Run Multi-Identity Authorization Matrix (BOLA / PrivEsc)")
+    id_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    id_p.add_argument("--demo", action="store_true", help="Run demonstration multi-identity cross-tenant audit")
+    id_p.add_argument("--json", action="store_true", help="Output matrix results in raw JSON")
+
+    logic_p = subparsers.add_parser("logic-audit", help="Run Business Logic Reasoning Engine & State Mutation Tester")
+    logic_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    logic_p.add_argument("--demo", action="store_true", help="Run demonstration business invariant tests")
+    logic_p.add_argument("--json", action="store_true", help="Output violations in raw JSON")
+
+    race_p = subparsers.add_parser("race-audit", help="Run Concurrency & State Mutation Race Condition Engine")
+    race_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    race_p.add_argument("--demo", action="store_true", help="Run demonstration burst race condition audit")
+    race_p.add_argument("--json", action="store_true", help="Output race findings in raw JSON")
+
+    opp_p = subparsers.add_parser("opportunities", help="Generate Multi-Vector Attack Opportunity Graph & Parameter Semantics")
+    opp_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    opp_p.add_argument("--demo", action="store_true", help="Run demonstration opportunity derivation")
+    opp_p.add_argument("--json", action="store_true", help="Output attack opportunities in raw JSON")
+
     # Causal command (V8.0)
     subparsers.add_parser("causal", help="Verify unbroken Cause-to-Effect causal path")
 
@@ -1670,6 +1691,103 @@ def process_debit(user_id, amount):
             }, indent=2))
         else:
             print("\n" + engine.format_terminal_dashboard() + "\n")
+
+    elif parsed.command == "identity-matrix":
+        from core.identity import IdentityGraph, MultiIdentityReplayer
+        graph = IdentityGraph()
+        replayer = MultiIdentityReplayer(graph)
+        target = getattr(parsed, "target", "https://api.target.local")
+        results = replayer.replay_authorization_matrix(
+            endpoint=f"{target}/api/v1/orders/1337",
+            method="GET",
+            target_object_id="order_1337_vuln",
+            owner_identity_id="user_a"
+        )
+        if getattr(parsed, "json", False):
+            print(json.dumps([r.to_dict() for r in results], indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 👥 HunterAI V24.0: Multi-Identity Authorization Matrix\n{sep}")
+            print(f" Target Endpoint: {target}/api/v1/orders/1337 (Owner: user_a)")
+            for r in results:
+                status_icon = "🔴 VULNERABLE" if r.is_anomaly else "🟢 PROTECTED"
+                print(f" • Replay Identity: {r.tested_identity:<12} [{status_icon}]")
+                if r.is_anomaly:
+                    print(f"   ↳ Anomaly Type: {r.anomaly_type.value}")
+                    print(f"   ↳ Rationale:    {r.evidence_rationale}")
+            print(sep + "\n")
+
+    elif parsed.command == "logic-audit":
+        from core.business_logic import BusinessLogicReasoningEngine, BusinessResourceState, BusinessActionType
+        engine = BusinessLogicReasoningEngine()
+        target = getattr(parsed, "target", "https://api.target.local")
+        engine.test_step_skipping(
+            target_endpoint=f"{target}/api/orders/download_skip",
+            initial_state=BusinessResourceState.CREATED,
+            attempted_action=BusinessActionType.DOWNLOAD_ASSET
+        )
+        engine.test_coupon_reuse_after_refund(
+            coupon_code="REUSABLE_VIP50",
+            user_id="user_victim_99"
+        )
+        violations = engine.get_violations()
+        if getattr(parsed, "json", False):
+            print(json.dumps([v.to_dict() for v in violations], indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 🧠 HunterAI V24.0: Business Logic Reasoning & State Mutation\n{sep}")
+            print(f" Total Invariants Evaluated: {len(engine.invariants)}")
+            print(f" Total Violations Detected:  {len(violations)}")
+            for v in violations:
+                print(f" • [{v.finding_id}] {v.invariant_name} (Action: {v.violating_action})")
+                print(f"   ↳ Transition: {v.initial_state} ➔ {v.resulting_state}")
+                print(f"   ↳ Impact:     {v.security_impact}")
+                print(f"   ↳ Proof:      {v.evidence_proof}")
+            print(sep + "\n")
+
+    elif parsed.command == "race-audit":
+        from core.concurrency import RaceConditionEngine
+        engine = RaceConditionEngine()
+        target = getattr(parsed, "target", "https://api.target.local")
+        finding = engine.execute_financial_race(
+            endpoint=f"{target}/api/v1/wallet/debit_race",
+            initial_balance=100.0,
+            debit_amount=60.0,
+            concurrency=5
+        )
+        if getattr(parsed, "json", False):
+            print(json.dumps(finding.to_dict(), indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n ⚡ HunterAI V24.0: Concurrency & State Mutation Race Engine\n{sep}")
+            status_tag = "🔴 RACE CONFIRMED (Double-Spend)" if finding.is_race_confirmed else "🟢 RACE SAFE"
+            print(f" Endpoint:     {finding.target_endpoint} [{status_tag}]")
+            print(f" Requests:     {finding.successful_requests_count}/{finding.parallel_requests_sent} succeeded concurrently")
+            print(f" Pre-State:    Balance = ${finding.pre_race_state.get('balance')}")
+            print(f" Post-State:   Balance = ${finding.post_race_state.get('balance')}")
+            print(f" Evidence:     {finding.evidence_proof}")
+            print(sep + "\n")
+
+    elif parsed.command == "opportunities":
+        from core.opportunity import AttackOpportunityGraph
+        graph = AttackOpportunityGraph()
+        target = getattr(parsed, "target", "https://api.target.local")
+        opps = graph.derive_opportunities_for_endpoint(
+            endpoint=f"{target}/api/v1/orders/1337",
+            method="PUT",
+            parameters=["id", "price", "quantity", "role", "redirect_url", "search"]
+        )
+        if getattr(parsed, "json", False):
+            print(json.dumps([o.to_dict() for o in opps], indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 🎯 HunterAI V24.0: Attack Opportunity Graph & Parameter Semantics\n{sep}")
+            print(f" Target Endpoint: {target}/api/v1/orders/1337 (Method: PUT)")
+            print(f" Total Attack Opportunities Derived: {len(opps)}")
+            for o in opps:
+                print(f" • [{o.test_priority:<8}] {o.vuln_vector:<25} (Param: {str(o.target_parameter):<12} EIG: {o.expected_information_gain})")
+                print(f"   ↳ Rationale: {o.rationale}")
+            print(sep + "\n")
 
 
 
