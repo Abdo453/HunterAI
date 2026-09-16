@@ -77,6 +77,13 @@ class BurpGateway:
             experiment_queue=self.experiment_queue,
             event_stream=self.event_stream,
         )
+        from core.burp_gateway.bcsl import BurpControlSensorLayer
+        self.bcsl = BurpControlSensorLayer(
+            research_controller=self.research_controller,
+            scope_guard=self.scope_engine,
+            event_stream=self.event_stream,
+            capture_store=self.capture_store,
+        )
 
         self.app = FastAPI(title="HunterAI Burp Suite Gateway Bridge", docs_url=None, redoc_url=None)
         self._server = None
@@ -96,6 +103,8 @@ class BurpGateway:
         self.capture_store.save_scope(self.active_scope["include"], self.active_scope["exclude"])
         if hasattr(self, "research_controller"):
             self.research_controller.scope_guard = self.scope_engine
+        if hasattr(self, "bcsl"):
+            self.bcsl.scope_guard = self.scope_engine
 
     def check_scope(self, target: str, url: Optional[str] = None) -> tuple[bool, str]:
         """Checks target or full URL against configured scope engine"""
@@ -454,6 +463,19 @@ class BurpGateway:
             """Returns recent events from the live event stream"""
             events = self.event_stream.get_recent_events(limit=limit)
             return {"events_count": len(events), "events": [e.to_dict() for e in events]}
+
+        @self.app.post("/api/research/experiment")
+        async def research_experiment(req: Request):
+            """Executes structured ExperimentContract through BCSL"""
+            try:
+                data = await req.json()
+                from core.burp_gateway.experiment_contract import ExperimentContract
+                contract = ExperimentContract.from_dict(data)
+                record = self.bcsl.submit_experiment(contract)
+                return record.to_dict()
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
 
 
     def register_confirmed_finding(self, finding: Dict[str, Any]):

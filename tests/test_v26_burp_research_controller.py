@@ -529,3 +529,130 @@ def test_autonomous_brain_v26_binding():
     assert brain.burp_event_stream is not None
     assert hasattr(brain, "burp_normalizer")
     assert brain.burp_normalizer is not None
+
+
+# ── 7. Burp Control & Sensor Layer (BCSL) Tests ──────────────────────────────
+
+def test_bcsl_experiment_contract_submission_success():
+    from core.burp_gateway.bcsl import BurpControlSensorLayer
+    from core.burp_gateway.experiment_contract import ExperimentContract
+
+    guard = ScopeGuard(in_scope=["api.target.local"])
+    bcsl = BurpControlSensorLayer(scope_guard=guard)
+
+    # Seed baseline
+    base_tx = CanonicalTransaction(
+        tx_id="tx_bcsl_base",
+        source=TrafficSource.PROXY,
+        correlation=BurpCorrelationContext(transaction_id="tx_bcsl_base", identity_id="User_A"),
+        request=CanonicalRequest(method="GET", url="https://api.target.local/orders?id=1", host="api.target.local"),
+        response=CanonicalResponse(status_code=403, body='{"error": "Forbidden"}'),
+        identity=CanonicalIdentity(identity_id="User_A"),
+        state=TargetStateContext(cookies={"sess": "abc"}),
+    )
+    bcsl.controller.ingest_canonical(base_tx)
+
+    contract = ExperimentContract(
+        hypothesis_id="HYP-BCSL-01",
+        source_request_id="tx_bcsl_base",
+        identity_context="User_B",
+        target_endpoint="https://api.target.local/orders?id=1",
+        mutation_plan={"params": {"id": "102"}},
+        expected_observation="Cross-tenant access reflection",
+        success_conditions={"status": 200},
+    )
+
+    record = bcsl.submit_experiment(contract)
+    assert record.execution_status == "EXECUTED"
+    assert record.parent_request_id == "tx_bcsl_base"
+    assert record.identity_id == "User_B"
+    assert len(record.provenance) == 7
+    assert record.audit_hash != ""
+
+
+def test_bcsl_experiment_scope_violation_blocked():
+    from core.burp_gateway.bcsl import BurpControlSensorLayer
+    from core.burp_gateway.experiment_contract import ExperimentContract
+
+    guard = ScopeGuard(in_scope=["safe.local"], out_of_scope=["169.254.169.254", "*.evil.com"])
+    bcsl = BurpControlSensorLayer(scope_guard=guard)
+
+    base_tx = CanonicalTransaction(
+        tx_id="tx_safe_b",
+        source=TrafficSource.PROXY,
+        correlation=BurpCorrelationContext(transaction_id="tx_safe_b"),
+        request=CanonicalRequest(method="GET", url="https://safe.local/data", host="safe.local"),
+        response=CanonicalResponse(status_code=200),
+        identity=CanonicalIdentity(),
+        state=TargetStateContext(),
+    )
+    bcsl.controller.ingest_canonical(base_tx)
+
+    contract = ExperimentContract(
+        hypothesis_id="HYP-SSRF-01",
+        source_request_id="tx_safe_b",
+        target_endpoint="http://169.254.169.254/latest/meta-data",
+        mutation_plan={"url": "http://169.254.169.254/latest/meta-data"},
+        expected_observation="AWS Metadata Harvest",
+    )
+
+    record = bcsl.submit_experiment(contract)
+    assert record.execution_status == "BLOCKED_SCOPE"
+    assert any("SCOPE VIOLATION BLOCKED" in p for p in record.provenance)
+
+
+def test_bcsl_gateway_endpoint_integration():
+    from fastapi.testclient import TestClient
+    from core.burp_gateway.gateway import BurpGateway
+
+    scope = ScopeGuard(in_scope=["api.target.local"])
+    gw = BurpGateway(scope_engine=scope)
+    client = TestClient(gw.app)
+
+    # Seed baseline
+    base_tx = CanonicalTransaction(
+        tx_id="tx_gw_bcsl",
+        source=TrafficSource.PROXY,
+        correlation=BurpCorrelationContext(transaction_id="tx_gw_bcsl"),
+        request=CanonicalRequest(method="GET", url="https://api.target.local/profile?id=1", host="api.target.local"),
+        response=CanonicalResponse(status_code=403),
+        identity=CanonicalIdentity(),
+        state=TargetStateContext(),
+    )
+    gw.research_controller.ingest_canonical(base_tx)
+
+    contract_payload = {
+        "hypothesis_id": "HYP-GW-BCSL-01",
+        "source_request_id": "tx_gw_bcsl",
+        "identity_context": "Admin",
+        "target_endpoint": "https://api.target.local/profile?id=1",
+        "mutation_plan": {"params": {"id": "102"}},
+        "expected_observation": "Admin bypass",
+    }
+
+    resp = client.post("/api/research/experiment", json=contract_payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["execution_status"] == "EXECUTED"
+    assert data["identity_id"] == "Admin"
+    assert len(data["provenance"]) == 7
+
+
+def test_burp_extension_execution_facilities():
+    from core.burp_gateway.burp_test_harness import BurpTestHarness, MockBurpExtenderCallbacks
+
+    callbacks = MockBurpExtenderCallbacks()
+    helpers = callbacks.getHelpers()
+    service = helpers.buildHttpService("api.target.local", 443, "https")
+
+    # 1. Test makeHttpRequest
+    req_bytes = helpers.stringToBytes("GET /api/v1/test HTTP/1.1\\r\\nHost: api.target.local\\r\\n\\r\\n")
+    resp_msg = callbacks.makeHttpRequest(service, req_bytes)
+    assert resp_msg is not None
+    assert len(callbacks.http_requests_made) == 1
+    assert "Burp Suite Wire Response" in helpers.bytesToString(resp_msg.getResponse())
+
+    # 2. Test sendToRepeater
+    callbacks.sendToRepeater("api.target.local", 443, True, req_bytes, "Tab-Audit-01")
+    assert len(callbacks.repeater_tabs) == 1
+    assert callbacks.repeater_tabs[0]["tab_caption"] == "Tab-Audit-01"

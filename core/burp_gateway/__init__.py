@@ -55,6 +55,13 @@ from core.burp_gateway.experiment_queue import (
     ExperimentStatus,
     TokenBucketRateLimiter,
 )
+from core.burp_gateway.experiment_contract import (
+    ExperimentContract,
+    ExperimentExecutionRecord,
+    StateSnapshot,
+)
+from core.burp_gateway.bcsl import BurpControlSensorLayer
+
 from core.burp_gateway.event_stream import (
     BurpLiveEventStream,
     StreamEvent,
@@ -101,4 +108,8 @@ __all__ = [
     "TokenBucketRateLimiter",
     "BurpLiveEventStream",
     "StreamEvent",
+    "ExperimentContract",
+    "ExperimentExecutionRecord",
+    "StateSnapshot",
+    "BurpControlSensorLayer",
 ]

@@ -342,3 +342,20 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, IHttpListener, IScannerLi
             urllib2.urlopen(req, timeout=1.5)
         except Exception:
             pass
+
+    # Execution Facilities (Burp Control & Sensor Layer - BCSL)
+    def execute_http_request(self, host, port, protocol, req_str):
+        """Executes an HTTP request directly through Burp network facilities"""
+        service = self._helpers.buildHttpService(host, int(port), protocol)
+        req_bytes = self._helpers.stringToBytes(req_str)
+        resp_msg = self._callbacks.makeHttpRequest(service, req_bytes)
+        resp_bytes = resp_msg.getResponse() if resp_msg else None
+        return self._helpers.bytesToString(resp_bytes) if resp_bytes else ""
+
+    def dispatch_to_repeater(self, host, port, protocol, req_str, tab_caption):
+        """Provisions a Repeater tab in Burp Suite UI"""
+        use_https = protocol.lower() == "https"
+        req_bytes = self._helpers.stringToBytes(req_str)
+        self._callbacks.sendToRepeater(host, int(port), use_https, req_bytes, tab_caption)
+        self._log("[✓] Dispatched request to Burp Repeater Tab: " + str(tab_caption))
+        return True

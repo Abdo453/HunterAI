@@ -311,6 +311,11 @@ def build_parser() -> argparse.ArgumentParser:
     bstream_p = subparsers.add_parser("burp-stream", help="Stream real-time Burp Suite traffic, mutations, and telemetry events")
     bstream_p.add_argument("--demo", action="store_true", help="Run demonstration real-time event streaming")
     bstream_p.add_argument("--json", action="store_true", help="Output stream events in raw JSON")
+    # V26.5 Burp Control & Sensor Layer (BCSL) Subsystem
+    bcsl_p = subparsers.add_parser("bcsl", help="Execute structured ExperimentContract through Burp Control & Sensor Layer (BCSL)")
+    bcsl_p.add_argument("--demo", action="store_true", help="Run demonstration BCSL contract execution and state differential")
+    bcsl_p.add_argument("--json", action="store_true", help="Output execution record in raw JSON")
+
 
 
     # Causal command (V8.0)
@@ -2033,6 +2038,60 @@ def process_debit(user_id, amount):
             for e in recent:
                 print(f" • [{e.event_type:<24}] {json.dumps(e.data)}")
             print(sep + "\n")
+    elif parsed.command == "bcsl":
+        from core.burp_gateway.bcsl import BurpControlSensorLayer
+        from core.burp_gateway.experiment_contract import ExperimentContract
+        from core.burp_gateway.traffic_normalizer import CanonicalRequest, CanonicalResponse, CanonicalTransaction, CanonicalIdentity, TargetStateContext, TrafficSource
+        from core.burp_gateway.correlation import BurpCorrelationContext
+        from core.scope_guard import ScopeGuard
+
+        guard = ScopeGuard(in_scope=["api.target.local"], out_of_scope=["169.254.169.254"])
+        bcsl = BurpControlSensorLayer(scope_guard=guard)
+
+        # Seed baseline request in BCSL memory
+        base_tx = CanonicalTransaction(
+            tx_id="tx_order_baseline",
+            source=TrafficSource.PROXY,
+            correlation=BurpCorrelationContext(transaction_id="tx_order_baseline", identity_id="User_A"),
+            request=CanonicalRequest(method="GET", url="https://api.target.local/api/orders?order_id=5001", host="api.target.local"),
+            response=CanonicalResponse(status_code=403, body='{"error": "Forbidden: Not Owner"}'),
+            identity=CanonicalIdentity(identity_id="User_A"),
+            state=TargetStateContext(cookies={"session": "sess_usera_123"}),
+        )
+        bcsl.controller.ingest_canonical(base_tx)
+
+        # Brain issues structured ExperimentContract (Never calls Burp API directly)
+        contract = ExperimentContract(
+            hypothesis_id="HYP-BOLA-ORDER-5001",
+            source_request_id="tx_order_baseline",
+            identity_context="User_B",
+            target_endpoint="https://api.target.local/api/orders?order_id=5001",
+            mutation_plan={"params": {"order_id": "102"}},
+            expected_observation="Unauthorized cross-tenant order access allowed without 403",
+            success_conditions={"status": 200, "contains": "Target Account"},
+            scope_requirements=["api.target.local"],
+            safety_policy={"risk_tier": "LOW_RISK"},
+        )
+
+        record = bcsl.submit_experiment(contract)
+
+        if getattr(parsed, "json", False):
+            print(json.dumps(record.to_dict(), indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 🛡️ HunterAI V26.5: Burp Control & Sensor Layer (BCSL)\n{sep}")
+            print(f" Experiment ID:   {record.experiment_id} [{record.execution_status}]")
+            print(f" Hypothesis:      {contract.hypothesis_id}")
+            print(f" Target Endpoint: {record.request.method} {record.request.url}")
+            print(f" Identity:        {record.identity_id} (Parent TX: {record.parent_request_id})")
+            print(f" Outcome:         HTTP {record.response.status_code} ({len(record.response.body)} bytes)")
+            print(f" Differential:    Status Changed: {record.response_diff.get('status_code_changed')} (Verdict: {record.response_diff.get('verdict')})")
+            print(f" Audit Hash:      {record.audit_hash}")
+            print(" 7-Stage Causal Provenance:")
+            for p in record.provenance:
+                print(f"  • {p}")
+            print(sep + "\n")
+
 
 
 

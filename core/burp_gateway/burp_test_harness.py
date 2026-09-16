@@ -241,10 +241,13 @@ class MockHttpRequestResponse:
         request: bytes,
         response: Optional[bytes] = None,
         service: Optional[MockHttpService] = None,
+        tool: Optional[str] = None,
+        **kwargs,
     ):
         self._request = request
         self._response = response
         self._service = service or MockHttpService()
+        self.tool = tool
 
     def getRequest(self):
         return self._request
@@ -347,6 +350,43 @@ class MockBurpExtenderCallbacks:
 
     def printError(self, message: str):
         self.stderr_log.append(str(message))
+
+    def sendToRepeater(self, host: str, port: int, use_https: bool, request_bytes: bytes, tab_caption: str):
+        if not hasattr(self, "repeater_tabs"):
+            self.repeater_tabs = []
+        self.repeater_tabs.append({
+            "host": host,
+            "port": port,
+            "use_https": use_https,
+            "request_bytes": request_bytes,
+            "tab_caption": tab_caption,
+        })
+        self.printOutput(f"[✓] Burp Repeater Tab '{tab_caption}' provisioned for {host}:{port}")
+
+    def makeHttpRequest(self, http_service: MockHttpService, request_bytes: bytes) -> MockHttpRequestResponse:
+        if not hasattr(self, "http_requests_made"):
+            self.http_requests_made = []
+        req_str = self.helpers.bytesToString(request_bytes)
+        resp_str = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nBurp Suite Wire Response"
+        resp_bytes = self.helpers.stringToBytes(resp_str)
+        msg = MockHttpRequestResponse(
+            service=http_service,
+            request=request_bytes,
+            response=resp_bytes,
+            tool="repeater"
+        )
+        self.http_requests_made.append(msg)
+        return msg
+
+    def includeInScope(self, url: str):
+        if not hasattr(self, "in_scope_urls"):
+            self.in_scope_urls = []
+        self.in_scope_urls.append(url)
+
+    def isInScope(self, url: str) -> bool:
+        if not hasattr(self, "in_scope_urls") or not self.in_scope_urls:
+            return True
+        return any(u in url for u in self.in_scope_urls)
 
 
 # ── 4. PYTHON 3 URLLIB2 COMPATIBILITY SHIM ────────────────────────────────────
