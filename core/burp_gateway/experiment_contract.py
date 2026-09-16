@@ -55,6 +55,12 @@ class ExperimentContract:
     experiment_id: Optional[str] = None
     http_method: str = "GET"
     risk_tier: str = "LOW_RISK"
+    state_precondition: Optional[str] = None
+    expected_invariants: List[str] = field(default_factory=list)
+    negative_observables: Dict[str, Any] = field(default_factory=dict)
+    risk_budget: float = 1.0
+    category: str = "SECURITY_EXPERIMENT"
+    candidate_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -65,7 +71,9 @@ class ExperimentContract:
             "hypothesis_id", "source_request_id", "identity_context",
             "target_endpoint", "mutation_plan", "expected_observation",
             "success_conditions", "scope_requirements", "safety_policy",
-            "correlation_id", "created_at", "experiment_id", "http_method", "risk_tier"
+            "correlation_id", "created_at", "experiment_id", "http_method", "risk_tier",
+            "state_precondition", "expected_invariants", "negative_observables",
+            "risk_budget", "category", "candidate_id"
         }
         filtered = {k: v for k, v in data.items() if k in valid_keys}
         return cls(**filtered)
