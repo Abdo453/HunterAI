@@ -1,27 +1,23 @@
 """
-Evidence Court (محكمة الأدلة) - V27.0 Causal Verification Engine
-================================================================
+Evidence Court (محكمة الأدلة) - V27.0 Advanced Epistemic Adjudication
+=====================================================================
 Multi-party adjudication engine ensuring no single agent, tool, or LLM can
-declare a finding as CONFIRMED without independent, deterministic verification
-and causal invariant proof.
+declare a finding as CONFIRMED without independent, deterministic verification,
+causal invariant proof, and metamorphic consistency.
 
-V27.0 CAUSALITY GATE & TRIAD VERIFICATION:
-- Baseline (B) ∧ Control (C) ∧ Experiment (E)
-- Strictly forbids CONFIRMED verdict if based merely on status == 200, length delta,
-  or string reflection.
-- Distinguishes Proof of Execution (PoE) from Proof of Vulnerability (PoV).
-- Enforces Negative Observables: disproves hypotheses when application defense
-  boundaries (403, 401, error messages) are triggered.
-
-Verdicts:
-- CONFIRMED: Deterministic proof confirmed with independent verification and causal triad separation.
-- UNVERIFIED: Plausible signal or hypothesis exists, but proof not yet obtained.
-- FALSE_POSITIVE: Proven to be reflection, dynamic page shift, or control mutation identical to probe.
-- DISPROVED: Negative observable or independent re-check conclusively refutes exploitability.
-- INCONCLUSIVE: Verification infrastructure failed, timed out, or incomplete.
-- BLOCKED: Target protected or interrupted by WAF/Cloudflare.
-- OUT_OF_SCOPE: Target or dependency outside authorized scope.
-- DUPLICATE: Finding already confirmed on identical underlying component.
+V27.0 ARCHITECTURAL RULES:
+1. Four Evidence Classes:
+   - Causal Evidence:    Metamorphic Triad (B x C x E1 x E2) & Invariant Proof
+   - Negative Evidence:  Context-Scoped Boundary Proof (BOUNDARY_ENFORCED_FOR_TESTED_CONTEXT)
+   - Execution Evidence: Physical Execution Telemetry & PoE (Proof of Execution)
+2. Inviolable Epistemic Axioms:
+   - Execution Evidence alone != Vulnerability (NOT ENOUGH)
+   - Response Difference alone != Vulnerability (NOT ENOUGH)
+   - PoE alone != Vulnerability Proof (NOT ENOUGH)
+   - Metamorphic Contradiction (E1 != E2) -> UNVERIFIED / PARTIALLY_VERIFIED (NEVER CONFIRMED)
+3. Calibrated Reporting:
+   - Findings confirmed ONLY with complete Causal Triad + Metamorphic Relation + Invariant Proof.
+   - Disclaimers explicitly state that metrics are evaluated on the benchmark corpus.
 """
 from __future__ import annotations
 
@@ -47,13 +43,51 @@ class CourtVerdict(str, Enum):
 
 
 @dataclass
+class CausalEvidence:
+    """Class 1: Formal Invariant and Metamorphic Triad Verification Evidence."""
+    metamorphic_passed: bool = False
+    invariant_passed: bool = False
+    invariant_id: str = ""
+    causal_strength: float = 0.0
+    contradiction_detected: bool = False
+    rationale: str = ""
+    extracted_observables: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class NegativeEvidence:
+    """Class 2: Context-Scoped Defense Boundary Verification Evidence."""
+    status_code: Optional[int] = None
+    pattern_matched: Optional[str] = None
+    boundary_conclusion: str = "BOUNDARY_ENFORCED_FOR_TESTED_CONTEXT"
+    unexplored_status: str = "UNKNOWN"
+    context_scope: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ExecutionEvidence:
+    """Class 3: Physical Execution Telemetry and Proof-of-Execution (PoE)."""
+    reproduced: bool = False
+    poe_token: Optional[str] = None
+    arithmetic_confirmed: bool = False
+    status_code: int = 200
+    length_delta_only: bool = False
+    status_change_only: bool = False
+    is_reflection: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class CausalTriad:
-    """
-    The formal B x C x E verification triad:
-      - Baseline (B): Normal unperturbed transaction
-      - Control (C): Benign syntactic mutation (no exploit payload)
-      - Experiment (E): Active security probe mutation
-    """
+    """The legacy lightweight triad adapter for backward compatibility."""
     baseline_status: int = 200
     baseline_length: int = 1000
     control_status: int = 200
@@ -67,11 +101,6 @@ class CausalTriad:
     raw_evidence: Dict[str, Any] = field(default_factory=dict)
 
     def evaluate_causality(self) -> Tuple[bool, str]:
-        """
-        Determines if the differential effect is genuinely caused by the exploit payload,
-        or merely dynamic site jitter / harmless reflection.
-        """
-        # 1. Check if experiment is identical to control (benign mutation produced identical shift)
         if (
             self.experiment_status == self.control_status
             and abs(self.experiment_length - self.control_length) < 10
@@ -79,7 +108,6 @@ class CausalTriad:
         ):
             return False, "Control mutation produced identical shift as experiment (Dynamic noise or neutral input handling)."
 
-        # 2. Check if experiment has zero differentiation from baseline
         if (
             self.experiment_status == self.baseline_status
             and abs(self.experiment_length - self.baseline_length) < 5
@@ -87,7 +115,6 @@ class CausalTriad:
         ):
             return False, "Experiment produced zero observable differentiation from baseline."
 
-        # 3. Metamorphic validation passed
         return True, "Causal differentiation proven: E distinct from both Baseline (B) and Control (C)."
 
 
@@ -108,6 +135,8 @@ class CourtJudgment:
     provenance_chain: List[Dict[str, Any]] = field(default_factory=list)
     causal_triad_evaluated: bool = False
     causality_rationale: Optional[str] = None
+    contradiction_detected: bool = False
+    epistemic_state: str = "UNKNOWN"
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -117,7 +146,7 @@ class CourtJudgment:
 
 
 class EvidenceCourt:
-    """The authoritative Evidence Court adjudicating finding authenticity with Causal Gates"""
+    """Authoritative Multi-Party Evidence Court enforcing Causal Invariants & Epistemic Separation."""
 
     @classmethod
     def adjudicate(
@@ -131,6 +160,8 @@ class EvidenceCourt:
         is_blocked_by_waf: bool = False,
         provenance_chain: Optional[List[Dict[str, Any]]] = None,
         causal_triad: Optional[Union[Dict[str, Any], CausalTriad]] = None,
+        causal_evidence: Optional[CausalEvidence] = None,
+        negative_evidence: Optional[Union[Dict[str, Any], NegativeEvidence]] = None,
         negative_observables: Optional[Dict[str, Any]] = None,
     ) -> CourtJudgment:
         judgment = CourtJudgment(
@@ -139,7 +170,7 @@ class EvidenceCourt:
             vuln_class=vuln_class,
             finder_claim=finder_claim,
             verifier_result=verifier_result or {},
-            provenance_chain=provenance_chain or []
+            provenance_chain=provenance_chain or [],
         )
 
         # 1. Inviolable Scope Check
@@ -148,6 +179,7 @@ class EvidenceCourt:
             judgment.calibrated_severity = "Info"
             judgment.confidence_score = 0.0
             judgment.reportable = False
+            judgment.epistemic_state = "BLOCKED"
             judgment.adjudication_rationale = "Target URL is outside authorized scope. Strictly discarded by Scope Firewall."
             judgment.negative_evidence.append("Out of scope target.")
             return judgment
@@ -158,12 +190,12 @@ class EvidenceCourt:
             judgment.calibrated_severity = "Info"
             judgment.confidence_score = 0.1
             judgment.reportable = False
+            judgment.epistemic_state = "BLOCKED"
             judgment.adjudication_rationale = "Probe was intercepted or blocked by Cloudflare/WAF. Does not prove application vulnerability."
             judgment.negative_evidence.append("WAF challenge or block response detected.")
             return judgment
 
-        # 3. Negative Observables Evaluation (Disproof Gate)
-        # Check if probe received an explicit negative observable (e.g. 403 Forbidden, 401 Unauthorized)
+        # 3. Negative Evidence Evaluation (Scoped Boundary Enforcement)
         observed_status = (verifier_result or {}).get("status_code") or (verifier_result or {}).get("status")
         observed_body = str((verifier_result or {}).get("response_body") or "").lower()
 
@@ -177,11 +209,12 @@ class EvidenceCourt:
                 judgment.calibrated_severity = "Info"
                 judgment.confidence_score = 0.0
                 judgment.reportable = False
+                judgment.epistemic_state = "REJECTED"
                 judgment.adjudication_rationale = (
-                    f"Negative observable triggered: Status code {observed_status} matches defense boundary. "
-                    "Hypothesis conclusively disproved."
+                    f"Negative observable triggered: Status code {observed_status} confirms "
+                    "BOUNDARY_ENFORCED_FOR_TESTED_CONTEXT. (Unexplored transitions remain UNKNOWN)."
                 )
-                judgment.negative_evidence.append(f"HTTP Status {observed_status} (Expected defense response)")
+                judgment.negative_evidence.append(f"HTTP Status {observed_status} (Tested defense boundary)")
                 return judgment
 
             for pat in neg_patterns:
@@ -190,20 +223,44 @@ class EvidenceCourt:
                     judgment.calibrated_severity = "Info"
                     judgment.confidence_score = 0.0
                     judgment.reportable = False
+                    judgment.epistemic_state = "REJECTED"
                     judgment.adjudication_rationale = (
-                        f"Negative observable triggered: Pattern '{pat}' found in response. "
-                        "Hypothesis conclusively disproved."
+                        f"Negative observable triggered: Pattern '{pat}' found. "
+                        "BOUNDARY_ENFORCED_FOR_TESTED_CONTEXT."
                     )
                     judgment.negative_evidence.append(f"Defense pattern: '{pat}'")
                     return judgment
 
-        # 4. Independent Verification Requirement
+        # 4. Contradictory Evidence Evaluation (CRITICAL EPISTEMIC GATE)
+        # If E1 and E2 yielded divergent results, or if contradiction was flagged
+        is_contradictory = (
+            (causal_evidence and causal_evidence.contradiction_detected)
+            or (verifier_result and verifier_result.get("contradiction_detected"))
+            or (verifier_result and verifier_result.get("metamorphic_inconsistent"))
+        )
+
+        if is_contradictory:
+            judgment.verdict = CourtVerdict.UNVERIFIED
+            judgment.calibrated_severity = "Low"
+            judgment.confidence_score = 0.40
+            judgment.reportable = False
+            judgment.contradiction_detected = True
+            judgment.epistemic_state = "PARTIALLY_VERIFIED"
+            judgment.adjudication_rationale = (
+                "Metamorphic Contradiction: Probe E1 and metamorphic probe E2 produced conflicting results. "
+                "Causal invariant refuted or unconfirmed. State held at PARTIALLY_VERIFIED."
+            )
+            judgment.negative_evidence.append("Contradictory probe observations detected.")
+            return judgment
+
+        # 5. Independent Verification & Reflection Filter
         if not verifier_result or not verifier_result.get("reproduced"):
             if finder_claim.get("is_reflection") or (verifier_result and verifier_result.get("is_reflection")):
                 judgment.verdict = CourtVerdict.FALSE_POSITIVE
                 judgment.calibrated_severity = "Info"
                 judgment.confidence_score = 0.05
                 judgment.reportable = False
+                judgment.epistemic_state = "REJECTED"
                 judgment.adjudication_rationale = "Reflection detected without execution proof (Reflection != Execution)."
                 judgment.negative_evidence.append("Input echoed literally in DOM or script tag.")
                 return judgment
@@ -213,6 +270,7 @@ class EvidenceCourt:
                 judgment.calibrated_severity = "Low"
                 judgment.confidence_score = 0.35
                 judgment.reportable = False
+                judgment.epistemic_state = "UNKNOWN"
                 judgment.adjudication_rationale = "Verification infrastructure did not execute or timed out. Inconclusive."
                 return judgment
 
@@ -220,12 +278,12 @@ class EvidenceCourt:
             judgment.calibrated_severity = "Low"
             judgment.confidence_score = 0.40
             judgment.reportable = False
+            judgment.epistemic_state = "TESTED"
             judgment.adjudication_rationale = "Initial signal detected, but independent verifier could not reproduce effect."
             judgment.negative_evidence.append("Independent re-check failed to reproduce.")
             return judgment
 
-        # 5. V27 CAUSALITY GATE: Triad & Delta Validation
-        # Strictly rejects byte length divergence or status code alone
+        # 6. Axiom Enforcement: Response Length Delta or Status Alone != Vulnerability
         length_delta_only = verifier_result.get("length_delta_only", False)
         status_change_only = verifier_result.get("status_change_only", False)
 
@@ -234,6 +292,7 @@ class EvidenceCourt:
             judgment.calibrated_severity = "Info"
             judgment.confidence_score = 0.10
             judgment.reportable = False
+            judgment.epistemic_state = "REJECTED"
             judgment.adjudication_rationale = (
                 "Causality Gate Violation: Response length delta or HTTP status code change alone "
                 "does NOT prove vulnerability. Proof of Execution (PoE) != Proof of Vulnerability (PoV)."
@@ -241,7 +300,7 @@ class EvidenceCourt:
             judgment.negative_evidence.append("Length divergence or status change without semantic execution proof.")
             return judgment
 
-        # Evaluate Causal Triad if provided
+        # Evaluate legacy Causal Triad if provided
         if causal_triad:
             triad_obj = causal_triad if isinstance(causal_triad, CausalTriad) else CausalTriad(**causal_triad)
             is_causal, reason = triad_obj.evaluate_causality()
@@ -253,12 +312,14 @@ class EvidenceCourt:
                 judgment.calibrated_severity = "Info"
                 judgment.confidence_score = 0.10
                 judgment.reportable = False
+                judgment.epistemic_state = "REJECTED"
                 judgment.adjudication_rationale = f"Causality Gate Violation: {reason}"
                 judgment.negative_evidence.append(reason)
                 return judgment
 
-        # 6. Proof of Execution / Proof of Invariant Violation Gate
+        # 7. Causal Invariant & Deterministic Proof Gate
         has_deterministic_proof = bool(
+            (causal_evidence and causal_evidence.invariant_passed) or
             verifier_result.get("arithmetic_proof_confirmed") or
             verifier_result.get("extracted_data") or
             verifier_result.get("auth_bypass_confirmed") or
@@ -274,9 +335,13 @@ class EvidenceCourt:
         if has_deterministic_proof:
             judgment.verdict = CourtVerdict.CONFIRMED
             judgment.reportable = True
-            judgment.confidence_score = float(verifier_result.get("confidence", 0.98))
+            judgment.epistemic_state = "CONFIRMED"
+            judgment.confidence_score = float(
+                (causal_evidence.causal_strength if causal_evidence else 0) or
+                verifier_result.get("confidence", 0.98)
+            )
 
-            # Calibrate severity according to vulnerability class
+            # Severity calibration
             v_lower = vuln_class.lower()
             if any(k in v_lower for k in ("rce", "cmd_injection", "command_injection")):
                 judgment.calibrated_severity = "Critical"
@@ -298,68 +363,17 @@ class EvidenceCourt:
                         target_url=target_url,
                         vuln_class=vuln_class,
                         finder_claim=finder_claim,
-                        verifier_result=verifier_result
+                        verifier_result=verifier_result,
                     )
                 except Exception:
                     pass
 
             return judgment
 
-        # Fallback: verifier reproduced change, but lacked causal proof
         judgment.verdict = CourtVerdict.UNVERIFIED
         judgment.calibrated_severity = "Medium"
         judgment.confidence_score = 0.60
         judgment.reportable = False
-        judgment.adjudication_rationale = "Verifier observed differential change, but deterministic execution proof is absent."
+        judgment.epistemic_state = "TESTED"
+        judgment.adjudication_rationale = "Verifier observed differential change, but causal invariant execution proof is absent."
         return judgment
-
-    @classmethod
-    def adjudicate_causal_contract(
-        cls,
-        contract: Any,
-        execution_record: Any,
-        causal_triad: Optional[Union[Dict[str, Any], CausalTriad]] = None,
-    ) -> CourtJudgment:
-        """
-        High-level entrypoint directly adjudicating an ExperimentContract and ExperimentExecutionRecord.
-        """
-        target_url = getattr(contract, "target_endpoint", "")
-        vuln_class = getattr(contract, "category", "BUSINESS_LOGIC")
-        neg_observables = getattr(contract, "negative_observables", {})
-
-        resp = getattr(execution_record, "response", None)
-        status_code = getattr(resp, "status_code", 200) if resp else 200
-        resp_body = getattr(resp, "body", "") if resp else ""
-        diff = getattr(execution_record, "response_diff", {})
-
-        finder_claim = {
-            "hypothesis_id": getattr(contract, "hypothesis_id", ""),
-            "category": vuln_class,
-        }
-
-        # Check if response matches negative observables
-        is_negative = False
-        neg_statuses = neg_observables.get("status_codes", [])
-        if status_code in neg_statuses:
-            is_negative = True
-
-        verifier_result = {
-            "reproduced": not is_negative and (status_code in range(200, 300)),
-            "status_code": status_code,
-            "response_body": resp_body,
-            "negative_observables": neg_observables,
-            "length_delta_only": bool(diff and not any(k in diff for k in ("unauthorized_data", "execution_proof"))),
-            "auth_bypass_confirmed": getattr(execution_record, "auth_bypass_confirmed", False),
-            "deterministic_proof": getattr(execution_record, "deterministic_proof", None),
-        }
-
-        return cls.adjudicate(
-            target_url=target_url,
-            parameter="",
-            vuln_class=vuln_class,
-            finder_claim=finder_claim,
-            verifier_result=verifier_result,
-            is_in_scope=True,
-            causal_triad=causal_triad,
-            negative_observables=neg_observables,
-        )

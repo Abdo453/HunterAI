@@ -48,6 +48,43 @@ from .feedback_loop import (
     NegativeEvidenceRecord,
 )
 
+from .triad_verifier import (
+    TransactionSnapshot,
+    TriadBundle,
+    TriadVerificationResult,
+    TriadVerifier,
+)
+from .causal_invariants import (
+    AuthorizationInvariant,
+    BooleanDifferentialInvariant,
+    CausalInvariant,
+    CausalInvariantRegistry,
+    CommandExecutionInvariant,
+    DOMExecutionInvariant,
+    InvariantEvaluationResult,
+    OOBCorrelationInvariant,
+    StateTransitionInvariant,
+)
+from .negative_evidence import (
+    BoundaryScope,
+    NegativeObservation,
+    NuancedNegativeEvidenceLedger,
+)
+from .experiment_ledger import (
+    ExperimentRecord,
+    TamperEvidentExperimentLedger,
+)
+from .attack_surface_graph import (
+    AttackSurfaceGraph,
+    SurfaceEdge,
+    SurfaceNode,
+)
+from .eig_planner import (
+    DeterministicEIGPlanner,
+    PlanSelectionStatus,
+    PlannedExperiment,
+)
+
 __all__ = [
     "HypothesisEngine",
     "SecurityHypothesis",
@@ -81,6 +118,30 @@ __all__ = [
     "EvidenceFeedbackLoop",
     "NegativeEvidenceLedger",
     "NegativeEvidenceRecord",
+    "TransactionSnapshot",
+    "TriadBundle",
+    "TriadVerificationResult",
+    "TriadVerifier",
+    "CausalInvariant",
+    "CommandExecutionInvariant",
+    "BooleanDifferentialInvariant",
+    "AuthorizationInvariant",
+    "OOBCorrelationInvariant",
+    "DOMExecutionInvariant",
+    "StateTransitionInvariant",
+    "InvariantEvaluationResult",
+    "CausalInvariantRegistry",
+    "BoundaryScope",
+    "NegativeObservation",
+    "NuancedNegativeEvidenceLedger",
+    "ExperimentRecord",
+    "TamperEvidentExperimentLedger",
+    "AttackSurfaceGraph",
+    "SurfaceNode",
+    "SurfaceEdge",
+    "DeterministicEIGPlanner",
+    "PlannedExperiment",
+    "PlanSelectionStatus",
 ]
 
 
