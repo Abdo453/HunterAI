@@ -1034,6 +1034,28 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] V25.0 Application Reasoning Engines could not be attached: {e}")
 
+        # V26.0 Bidirectional Burp Control Plane & Research Controller Subsystems
+        self.burp_research_controller = None
+        self.burp_experiment_queue = None
+        self.burp_event_stream = None
+        self.burp_normalizer = None
+        try:
+            from core.controllers.burp_research_controller import BurpResearchController
+            from core.burp_gateway.experiment_queue import BurpExperimentQueue
+            from core.burp_gateway.event_stream import BurpLiveEventStream
+            from core.burp_gateway.traffic_normalizer import BurpTrafficNormalizer
+
+            self.burp_event_stream = BurpLiveEventStream()
+            self.burp_experiment_queue = BurpExperimentQueue()
+            self.burp_normalizer = BurpTrafficNormalizer
+            self.burp_research_controller = BurpResearchController(
+                experiment_queue=self.burp_experiment_queue,
+                event_stream=self.burp_event_stream,
+            )
+            log.info("[BRAIN] V26.0 Bidirectional Burp Control Plane attached (BurpResearchController, ExperimentQueue, EventStream, Normalizer)")
+        except Exception as e:
+            log.warning(f"[BRAIN] V26.0 Bidirectional Burp Control Plane could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor

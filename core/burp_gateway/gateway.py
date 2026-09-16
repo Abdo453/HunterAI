@@ -21,6 +21,12 @@ from core.burp_gateway.issue_exporter import BurpIssueExporter
 from core.burp_gateway.task_queue import BurpTask, TaskAction, TaskQueue
 from core.burp_gateway.provenance import EvidenceProvenanceEngine, ProvenanceStage
 from core.burp_gateway.handoff_contract import AgentHandoffContract
+from core.burp_gateway.correlation import BurpCorrelationContext
+from core.burp_gateway.traffic_normalizer import BurpTrafficNormalizer, CanonicalRequest
+from core.burp_gateway.experiment_queue import BurpExperimentQueue, BurpExperimentItem
+from core.burp_gateway.event_stream import BurpLiveEventStream
+from core.controllers.burp_research_controller import BurpResearchController, ScopeViolationError
+
 
 logger = logging.getLogger("hunter_ai.burp_gateway")
 
@@ -63,6 +69,15 @@ class BurpGateway:
                 out_of_scope=self.active_scope["exclude"]
             )
 
+        self.event_stream = BurpLiveEventStream()
+        self.experiment_queue = BurpExperimentQueue()
+        self.research_controller = BurpResearchController(
+            scope_guard=self.scope_engine,
+            capture_store=self.capture_store,
+            experiment_queue=self.experiment_queue,
+            event_stream=self.event_stream,
+        )
+
         self.app = FastAPI(title="HunterAI Burp Suite Gateway Bridge", docs_url=None, redoc_url=None)
         self._server = None
         self._setup_routes()
@@ -79,6 +94,8 @@ class BurpGateway:
             out_of_scope=self.active_scope["exclude"]
         )
         self.capture_store.save_scope(self.active_scope["include"], self.active_scope["exclude"])
+        if hasattr(self, "research_controller"):
+            self.research_controller.scope_guard = self.scope_engine
 
     def check_scope(self, target: str, url: Optional[str] = None) -> tuple[bool, str]:
         """Checks target or full URL against configured scope engine"""
@@ -199,6 +216,18 @@ class BurpGateway:
 
                 # Persist to CaptureStore (In-Scope Only)
                 self.capture_store.store_transaction(tx)
+
+                # Broadcast to event stream & normalize into research controller
+                self.event_stream.publish_event("REQUEST_INGESTED", {
+                    "tx_id": tx.tx_id,
+                    "host": host,
+                    "url": full_url,
+                    "method": method,
+                    "status_code": status_code,
+                    "tool": payload.get("tool", "proxy")
+                })
+                can_tx = BurpTrafficNormalizer.normalize_dict(payload)
+                self.research_controller.ingest_canonical(can_tx)
 
                 # Broadcast to on_traffic_cb (In-Scope Only)
                 if self.on_traffic_cb:
@@ -337,6 +366,95 @@ class BurpGateway:
             if not trace:
                 return JSONResponse(status_code=404, content={"error": "Provenance trace not found"})
             return trace.to_dict()
+        @self.app.post("/api/research/replay")
+        async def research_replay(req: Request):
+            """Executes active verification replay via Research Controller"""
+            try:
+                data = await req.json()
+                req_id = data.get("request_id")
+                if not req_id:
+                    return JSONResponse(status_code=400, content={"error": "request_id is required"})
+                mutation = data.get("mutation")
+                reason = data.get("reason", "API Replay")
+                try:
+                    res = self.research_controller.replay(request_id=req_id, mutation=mutation, reason=reason)
+                    return res.to_dict()
+                except ScopeViolationError as sve:
+                    return JSONResponse(status_code=403, content={"error": "ScopeViolation", "detail": str(sve)})
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.app.post("/api/research/repeater")
+        async def research_send_repeater(req: Request):
+            """Provisions a Repeater tab via Research Controller"""
+            try:
+                data = await req.json()
+                req_id = data.get("request_id")
+                tab_name = data.get("tab_name")
+                if req_id:
+                    tab_id = self.research_controller.send_to_repeater(req_id, tab_name=tab_name)
+                    return {"status": "PROVISIONED", "tab_id": tab_id}
+                elif "url" in data:
+                    c_req = CanonicalRequest(
+                        method=data.get("method", "GET"),
+                        url=data["url"],
+                        headers=data.get("headers", {}),
+                        body=data.get("body", ""),
+                    )
+                    tab_id = self.research_controller.send_to_repeater(c_req, tab_name=tab_name)
+                    return {"status": "PROVISIONED", "tab_id": tab_id}
+                return JSONResponse(status_code=400, content={"error": "request_id or url required"})
+            except ScopeViolationError as sve:
+                return JSONResponse(status_code=403, content={"error": "ScopeViolation", "detail": str(sve)})
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.app.post("/api/research/queue")
+        async def research_queue_exp(req: Request):
+            """Enqueues an experiment in BurpExperimentQueue"""
+            try:
+                data = await req.json()
+                url = data.get("url")
+                if not url:
+                    return JSONResponse(status_code=400, content={"error": "url is required"})
+                c_req = CanonicalRequest(
+                    method=data.get("method", "GET"),
+                    url=url,
+                    headers=data.get("headers", {}),
+                    body=data.get("body", "")
+                )
+                exp_id = self.research_controller.queue(
+                    request=c_req,
+                    priority=int(data.get("priority", 5)),
+                    eig=float(data.get("eig", 0.5)),
+                    risk_tier=data.get("risk_tier", "LOW_RISK"),
+                )
+                return {"status": "QUEUED", "experiment_id": exp_id}
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.app.get("/api/research/queue")
+        async def research_list_queue():
+            """Returns queue metrics and experiment items"""
+            return {
+                "metrics": self.experiment_queue.get_metrics(),
+                "items": [it.to_dict() for it in self.experiment_queue.list_items()],
+            }
+
+        @self.app.delete("/api/research/queue/{exp_id}")
+        async def research_cancel_queue(exp_id: str):
+            """Cancels an experiment in the queue"""
+            ok = self.research_controller.cancel(exp_id)
+            if ok:
+                return {"status": "CANCELLED", "experiment_id": exp_id}
+            return JSONResponse(status_code=404, content={"error": "Experiment not found or already executed"})
+
+        @self.app.get("/api/stream/events")
+        async def stream_events(limit: int = 50):
+            """Returns recent events from the live event stream"""
+            events = self.event_stream.get_recent_events(limit=limit)
+            return {"events_count": len(events), "events": [e.to_dict() for e in events]}
+
 
     def register_confirmed_finding(self, finding: Dict[str, Any]):
         """Called by Evidence Court when a finding is CONFIRMED"""

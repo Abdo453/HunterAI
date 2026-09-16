@@ -297,6 +297,21 @@ def build_parser() -> argparse.ArgumentParser:
     meta_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
     meta_p.add_argument("--demo", action="store_true", help="Run demonstration metamorphic equivalence tests")
     meta_p.add_argument("--json", action="store_true", help="Output metamorphic reports in raw JSON")
+    # V26.0 Bidirectional Burp Control Plane & Research Controller Subsystems
+    bctrl_p = subparsers.add_parser("burp-controller", help="Control Burp Suite as an active execution backend (observe/replay/repeater)")
+    bctrl_p.add_argument("--demo", action="store_true", help="Run demonstration bidirectional replay and differential analysis")
+    bctrl_p.add_argument("--target", default="https://api.target.local", help="Target base URL")
+    bctrl_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+
+    bqueue_p = subparsers.add_parser("burp-queue", help="Inspect and schedule experiments via Burp Experiment Queue")
+    bqueue_p.add_argument("--demo", action="store_true", help="Run demonstration EIG-prioritized experiment scheduling")
+    bqueue_p.add_argument("--list", action="store_true", help="List all queued experiments")
+    bqueue_p.add_argument("--json", action="store_true", help="Output queue state in raw JSON")
+
+    bstream_p = subparsers.add_parser("burp-stream", help="Stream real-time Burp Suite traffic, mutations, and telemetry events")
+    bstream_p.add_argument("--demo", action="store_true", help="Run demonstration real-time event streaming")
+    bstream_p.add_argument("--json", action="store_true", help="Output stream events in raw JSON")
+
 
     # Causal command (V8.0)
     subparsers.add_parser("causal", help="Verify unbroken Cause-to-Effect causal path")
@@ -1908,6 +1923,117 @@ def process_debit(user_id, amount):
             else:
                 print(" Invariance Intact: Equivalence transformations strictly preserved security policy.")
             print(sep + "\n")
+    elif parsed.command == "burp-controller":
+        from core.controllers.burp_research_controller import BurpResearchController
+        from core.burp_gateway.traffic_normalizer import CanonicalRequest, CanonicalResponse, CanonicalTransaction, CanonicalIdentity, TargetStateContext, TrafficSource
+        from core.burp_gateway.correlation import BurpCorrelationContext
+        from core.scope_guard import ScopeGuard
+
+        guard = ScopeGuard(in_scope=["api.target.local"], out_of_scope=["169.254.169.254", "*.evilcorp.com"])
+        ctrl = BurpResearchController(scope_guard=guard)
+
+        # Ingest baseline
+        corr_base = BurpCorrelationContext(intent="Baseline unprivileged user profile read")
+        base_req = CanonicalRequest(method="GET", url="https://api.target.local/api/v1/user?user_id=101", host="api.target.local")
+        base_resp = CanonicalResponse(status_code=403, body='{"error": "Forbidden: Tenant Access Denied"}')
+        can_tx = CanonicalTransaction(
+            tx_id=corr_base.transaction_id,
+            source=TrafficSource.PROXY,
+            correlation=corr_base,
+            request=base_req,
+            response=base_resp,
+            identity=CanonicalIdentity(identity_id="user_b"),
+            state=TargetStateContext(),
+        )
+        ctrl.ingest_canonical(can_tx)
+
+        # Execute replay mutation: user_id -> 102
+        exec_res = ctrl.replay(
+            request_id=corr_base.transaction_id,
+            mutation={"params": {"user_id": "102"}},
+            reason="BOLA Tenant Isolation Probe"
+        )
+        diff = ctrl.compare(corr_base.transaction_id, exec_res.transaction.tx_id)
+
+        if getattr(parsed, "json", False):
+            print(json.dumps({
+                "action": "REPLAY_MUTATION",
+                "execution": exec_res.to_dict(),
+                "differential": diff.to_dict(),
+            }, indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 🎮 HunterAI V26.0: Burp Research Controller (Bidirectional Reality Lab)\n{sep}")
+            print(f" Baseline TX:    {diff.baseline_tx_id} [Status HTTP {diff.status_baseline}]")
+            print(f" Replay TX:      {diff.experiment_tx_id} [Status HTTP {diff.status_experiment}]")
+            print(f" Status Delta:   Changed: {diff.status_code_changed} ({diff.status_baseline} -> {diff.status_experiment})")
+            print(f" Length Delta:   {diff.length_delta_bytes:+d} bytes")
+            print(f" Verdict:        {diff.verdict}")
+            if diff.invariant_violation:
+                print(f" ⚠️ Invariant:    {diff.invariant_violation}")
+            print(f" Receipt Audit:  {exec_res.receipt.audit_hash} [{exec_res.receipt.status.value}]")
+            print(sep + "\n")
+
+    elif parsed.command == "burp-queue":
+        from core.burp_gateway.experiment_queue import BurpExperimentQueue, BurpExperimentItem
+        from core.burp_gateway.traffic_normalizer import CanonicalRequest
+        from core.governance.risk_budget_queue import RiskTier
+
+        queue = BurpExperimentQueue(rate_limit_rps=20.0)
+        e1 = BurpExperimentItem(
+            request=CanonicalRequest(method="GET", url="https://api.target.local/api/v1/meta", host="api.target.local"),
+            priority=8, expected_info_gain=0.2, risk_tier=RiskTier.LOW_RISK
+        )
+        e2 = BurpExperimentItem(
+            request=CanonicalRequest(method="POST", url="https://api.target.local/api/v1/orders/refund", host="api.target.local"),
+            priority=2, expected_info_gain=0.95, risk_tier=RiskTier.MEDIUM_RISK
+        )
+        e3 = BurpExperimentItem(
+            request=CanonicalRequest(method="GET", url="https://api.target.local/api/v1/users/42", host="api.target.local"),
+            priority=3, expected_info_gain=0.80, risk_tier=RiskTier.LOW_RISK
+        )
+        queue.enqueue(e1)
+        queue.enqueue(e2)
+        queue.enqueue(e3)
+
+        dispatched = queue.dispatch_next()
+
+        if getattr(parsed, "json", False):
+            print(json.dumps({
+                "metrics": queue.get_metrics(),
+                "dispatched_item": dispatched.to_dict() if dispatched else None,
+            }, indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n ⏱️ HunterAI V26.0: Burp Scientific Experiment Queue\n{sep}")
+            metrics = queue.get_metrics()
+            print(f" Enqueued Total:  {metrics['total_enqueued']}")
+            print(f" Pending:         {metrics['pending_in_queue']}")
+            print(f" Rate Limit:      {metrics['rate_limit_rps']} req/s (Token Bucket)")
+            if dispatched:
+                print(f" Dispatched Top:  [{dispatched.experiment_id}] {dispatched.request.method} {dispatched.request.url}")
+                print(f" Rank Score:      {dispatched.rank_score:.2f} (Priority: {dispatched.priority}, EIG: {dispatched.expected_info_gain})")
+                print(f" Status:          {dispatched.status.value} -> HTTP {dispatched.response.status_code if dispatched.response else 'N/A'}")
+            print(sep + "\n")
+
+    elif parsed.command == "burp-stream":
+        from core.burp_gateway.event_stream import BurpLiveEventStream
+        stream = BurpLiveEventStream()
+        stream.publish_event("REQUEST_INGESTED", {"method": "GET", "url": "https://api.target.local/login", "status": 200})
+        stream.publish_event("MUTATION_EXECUTED", {"action": "BOLA_PROBE", "param": "user_id", "value": "102"})
+        stream.publish_event("CONTRADICTION_DETECTED", {"anomaly": "403 Status with 200 Body", "cwe": "CWE-200"})
+
+        recent = stream.get_recent_events()
+        if getattr(parsed, "json", False):
+            print(json.dumps([e.to_dict() for e in recent], indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 📡 HunterAI V26.0: Real-Time Burp Event Stream\n{sep}")
+            print(f" Stream Buffer:   {len(recent)} events captured in bounded ring buffer")
+            for e in recent:
+                print(f" • [{e.event_type:<24}] {json.dumps(e.data)}")
+            print(sep + "\n")
+
 
 
 

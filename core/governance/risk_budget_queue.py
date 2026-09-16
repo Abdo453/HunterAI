@@ -77,6 +77,8 @@ class RiskBudgetManager:
             )
         self.consumed[tier] += 1
 
+    consume = consume_budget
+
     def get_budget_status(self) -> Dict[str, Any]:
         return {
             tier.value: {

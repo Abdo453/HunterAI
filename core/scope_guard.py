@@ -66,11 +66,13 @@ class ScopeGuard:
         except ValueError:
             pass
 
-        # Wildcard domain handling (e.g. *.example.com or example.com)
+        # Wildcard domain handling (e.g. *, *.example.com or example.com)
         clean = re.sub(r"^https?://", "", clean)
         clean = clean.split("/")[0].split(":")[0]  # remove path and port
 
-        if clean.startswith("*."):
+        if clean == "*":
+            patterns_list.append(re.compile(r"^.*$", re.IGNORECASE))
+        elif clean.startswith("*."):
             domain_part = re.escape(clean[2:])
             # Matches sub.example.com or example.com
             pattern = re.compile(rf"^(?:[a-zA-Z0-9_\-]+\.)*{domain_part}$", re.IGNORECASE)
@@ -130,6 +132,8 @@ class ScopeGuard:
                 return True, f"Target {host} matched In-Scope domain rule"
 
         return False, f"Target {host} is outside authorized scope"
+
+    is_allowed = is_in_scope
 
     def filter_urls(self, urls: List[str]) -> List[str]:
         """تصفية قائمة روابط وإبقاء المسموح به فقط"""

@@ -20,6 +20,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qs, urlparse
+from core.burp_gateway.correlation import BurpCorrelationContext
+from core.burp_gateway.traffic_normalizer import BurpTrafficNormalizer, CanonicalRequest, CanonicalTransaction
+from core.burp_gateway.experiment_queue import BurpExperimentQueue
+from core.burp_gateway.event_stream import BurpLiveEventStream
+from core.controllers.burp_research_controller import BurpResearchController, ExecutionResult, DifferentialAnalysis
+
 
 logger = logging.getLogger("hunter_ai.burp_sensor")
 
@@ -116,6 +122,9 @@ class BurpSensor:
         attack_surface: Optional[Any] = None,
         evidence_graph: Optional[Any] = None,
         event_bus: Optional[Any] = None,
+        research_controller: Optional[Any] = None,
+        experiment_queue: Optional[Any] = None,
+        event_stream: Optional[Any] = None,
     ):
         self.capture_store = capture_store
         self.blackboard = blackboard
@@ -129,7 +138,16 @@ class BurpSensor:
         self._scanner_issues: List[Dict[str, Any]] = []
         self._lineage_index: Dict[str, List[str]] = {}  # parent_id -> list of child_ids
 
-        logger.info("[BURP_SENSOR] Initialized HTTP Reality Sensor")
+        self.event_stream = event_stream or BurpLiveEventStream()
+        self.experiment_queue = experiment_queue or BurpExperimentQueue()
+        self.research_controller = research_controller or BurpResearchController(
+            capture_store=self.capture_store,
+            evidence_graph=self.evidence_graph,
+            experiment_queue=self.experiment_queue,
+            event_stream=self.event_stream,
+        )
+
+        logger.info("[BURP_SENSOR] Initialized HTTP Reality Sensor & Research Controller")
 
     def ingest_transaction(
         self,
@@ -251,6 +269,14 @@ class BurpSensor:
             except Exception as e:
                 logger.warning(f"[BURP_SENSOR] Failed to store in capture store: {e}")
 
+        # Forward canonical transaction to Research Controller & Event Stream
+        try:
+            can_tx = BurpTrafficNormalizer.normalize_dict(ctx.to_dict())
+            self.research_controller.ingest_canonical(can_tx)
+            self.event_stream.publish_event("REQUEST_INGESTED", can_tx.to_dict())
+        except Exception as e:
+            logger.warning(f"[BURP_SENSOR] Error syncing to research controller: {e}")
+
         return obs
 
     def ingest_repeater_mutation(
@@ -346,6 +372,14 @@ class BurpSensor:
         """Drains and returns all unconsumed observations for the Brain's OODA loop."""
         obs = list(self._pending_observations)
         self._pending_observations.clear()
+        # Forward canonical transaction to Research Controller & Event Stream
+        try:
+            can_tx = BurpTrafficNormalizer.normalize_dict(ctx.to_dict())
+            self.research_controller.ingest_canonical(can_tx)
+            self.event_stream.publish_event("REQUEST_INGESTED", can_tx.to_dict())
+        except Exception as e:
+            logger.warning(f"[BURP_SENSOR] Error syncing to research controller: {e}")
+
         return obs
 
     def get_transaction(self, request_id: str) -> Optional[BurpSessionContext]:
@@ -437,6 +471,30 @@ class BurpSensor:
             "active_auth_contexts": sorted(list(set(tx.auth_context for tx in self._transactions.values()))),
             "unique_endpoints_observed": sorted(list(set(tx.endpoint_id for tx in self._transactions.values()))),
         }
+
+
+    # ── ACTIVE RESEARCH CONTROLLER PRIMITIVES ─────────────────────────────────
+    def replay(
+        self,
+        request_id: str,
+        mutation: Optional[Dict[str, Any]] = None,
+        reason: str = "Active BurpSensor Replay",
+        risk_tier: str = "LOW_RISK"
+    ) -> ExecutionResult:
+        """Executes active verification replay through BurpResearchController."""
+        return self.research_controller.replay(request_id=request_id, mutation=mutation, reason=reason)
+
+    def send_to_repeater(self, request_or_tx_id: Any, tab_name: Optional[str] = None) -> str:
+        """Provisions a named Repeater experiment workspace tab."""
+        return self.research_controller.send_to_repeater(request_or_tx_id, tab_name=tab_name)
+
+    def compare(self, baseline_tx_id: str, experiment_tx_id: str) -> DifferentialAnalysis:
+        """Performs differential analysis between baseline and mutation."""
+        return self.research_controller.compare(baseline_tx_id, experiment_tx_id)
+
+    def queue_experiment(self, request: CanonicalRequest, priority: int = 5, eig: float = 0.5) -> str:
+        """Enqueues an experiment into the prioritized BurpExperimentQueue."""
+        return self.research_controller.queue(request, priority=priority, eig=eig)
 
     def _extract_tokens(self, ctx: BurpSessionContext) -> Dict[str, str]:
         """Extracts security-relevant tokens (Bearer, JWT, CSRF) from request/response."""
