@@ -9,6 +9,14 @@ from .competing_hypotheses import (
     HypothesisOption,
     ACHMatrixResult,
 )
+from .contradiction_resolver import (
+    ContradictionResolver,
+    ConflictCase,
+    ConflictType,
+    ConflictVerdict,
+    ResolutionRuling,
+)
+
 __all__ = [
     "HypothesisEngine",
     "SecurityHypothesis",
@@ -17,4 +25,10 @@ __all__ = [
     "CompetingHypothesesEngine",
     "HypothesisOption",
     "ACHMatrixResult",
+    "ContradictionResolver",
+    "ConflictCase",
+    "ConflictType",
+    "ConflictVerdict",
+    "ResolutionRuling",
 ]
+

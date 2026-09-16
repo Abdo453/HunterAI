@@ -948,6 +948,22 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] V21.0 Tri-Core Subsystems could not be attached: {e}")
 
+        # V22.0 Autonomous Epistemic Investigation Triad Subsystems
+        self.tool_normalizer = None
+        self.contradiction_resolver = None
+        self.info_gain_scheduler = None
+        try:
+            from core.normalizer import ToolOutputNormalizer
+            from core.reasoning import ContradictionResolver
+            from core.optimization import InformationGainScheduler
+
+            self.tool_normalizer = ToolOutputNormalizer()
+            self.contradiction_resolver = ContradictionResolver()
+            self.info_gain_scheduler = InformationGainScheduler()
+            log.info("[BRAIN] V22.0 Investigation Triad attached (ToolOutputNormalizer, ContradictionResolver, InformationGainScheduler)")
+        except Exception as e:
+            log.warning(f"[BRAIN] V22.0 Investigation Triad could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor

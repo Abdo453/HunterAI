@@ -231,6 +231,25 @@ def build_parser() -> argparse.ArgumentParser:
     sir_p.add_argument("--demo", action="store_true", help="Run demonstration multi-source SIR compilation")
     sir_p.add_argument("--json", action="store_true", help="Output full SIR graph in JSON")
 
+    # V22.0 Investigation Triad Subcommands
+    # Normalize command
+    norm_p = subparsers.add_parser("normalize", help="Normalize external tool outputs (Subfinder, Httpx, Katana, Nuclei, FFUF, Sqlmap) into Canonical SIR")
+    norm_p.add_argument("--tool", default="nuclei", choices=["subfinder", "httpx", "katana", "nuclei", "sqlmap", "ffuf", "dalfox"], help="Target tool name")
+    norm_p.add_argument("--file", default=None, help="Path to tool output file")
+    norm_p.add_argument("--demo", action="store_true", help="Run demonstration tool normalization into SIR")
+    norm_p.add_argument("--json", action="store_true", help="Output normalized signals in JSON")
+
+    # Schedule command
+    sch_p = subparsers.add_parser("schedule", help="Rank attack surface endpoints using Active Information-Gain (ΔI / Cost)")
+    sch_p.add_argument("--domain", default="api.target.local", help="Target domain")
+    sch_p.add_argument("--demo", action="store_true", help="Run demonstration Information-Gain priority scheduling")
+    sch_p.add_argument("--json", action="store_true", help="Output scheduled priority queue in JSON")
+
+    # Resolve Conflict command
+    res_p = subparsers.add_parser("resolve-conflict", help="Adjudicate tool vs wire contradictions and defensive control proof")
+    res_p.add_argument("--demo", action="store_true", help="Run demonstration Nuclei vs Burp wire conflict adjudication")
+    res_p.add_argument("--json", action="store_true", help="Output conflict ruling in JSON")
+
     # Causal command (V8.0)
     subparsers.add_parser("causal", help="Verify unbroken Cause-to-Effect causal path")
 
@@ -1474,7 +1493,137 @@ def process_debit(user_id, amount):
                     print(f"   - {ep.name} [Sources: {', '.join(sorted(ep.observed_sources))}]")
                 print("")
 
+    elif parsed.command == "normalize":
+        from core.normalizer import ToolOutputNormalizer
+        if getattr(parsed, "file", None):
+            f_path = Path(parsed.file)
+            if not f_path.exists():
+                print(f"\n❌ Tool output file not found: {parsed.file}\n")
+                return
+            raw_text = f_path.read_text(encoding="utf-8", errors="ignore")
+        else:
+            # Demo payloads
+            if parsed.tool == "nuclei":
+                raw_text = json.dumps([{
+                    "template-id": "sqli-error-based",
+                    "info": {"name": "SQL Injection in User Search", "severity": "high"},
+                    "matched-at": "https://api.target.local/api/v1/search?q=test",
+                    "extracted-results": ["syntax error near 'test'"],
+                    "curl-command": "curl -s 'https://api.target.local/api/v1/search?q=test'"
+                }])
+            elif parsed.tool == "subfinder":
+                raw_text = "api.target.local\nadmin.target.local\nauth.target.local\n"
+            elif parsed.tool == "httpx":
+                raw_text = '{"url":"https://api.target.local/v1","status_code":200,"title":"API v1","technologies":["Express","Node.js"]}\n'
+            elif parsed.tool == "katana":
+                raw_text = '{"request":{"endpoint":"https://api.target.local/users?id=101","method":"GET"}}\n'
+            elif parsed.tool == "sqlmap":
+                raw_text = "Parameter: id (GET) is vulnerable. Type: boolean-based blind. back-end DBMS: PostgreSQL\n"
+            else:
+                raw_text = '{"url":"https://api.target.local/search","param":"q","evidence":"<script>alert(1)</script>"}\n'
+
+        normalizer_map = {
+            "subfinder": ToolOutputNormalizer.normalize_subfinder,
+            "httpx": ToolOutputNormalizer.normalize_httpx,
+            "katana": ToolOutputNormalizer.normalize_katana,
+            "nuclei": ToolOutputNormalizer.normalize_nuclei,
+            "sqlmap": ToolOutputNormalizer.normalize_sqlmap,
+            "ffuf": ToolOutputNormalizer.normalize_ffuf,
+            "dalfox": ToolOutputNormalizer.normalize_dalfox,
+        }
+        func = normalizer_map.get(parsed.tool, ToolOutputNormalizer.normalize_nuclei)
+        signals = func(raw_text)
+        sir_graph = ToolOutputNormalizer.ingest_to_sir(signals)
+
+        if getattr(parsed, "json", False):
+            print(json.dumps({
+                "tool": parsed.tool,
+                "total_signals": len(signals),
+                "signals": [s.to_dict() for s in signals],
+                "sir_graph": sir_graph.to_dict(),
+            }, indent=2))
+        else:
+            print(f"\n🔄 HunterAI Unified Tool Normalizer — [{parsed.tool.upper()}]")
+            print(f" • Total Signals Normalized: {len(signals)}")
+            print(f" • SIR Entities Created:     {len(sir_graph.entities)}")
+            print(f" • SIR Relationships:        {len(sir_graph.relationships)}")
+            print(" • Normalized Signals:")
+            for s in signals:
+                print(f"   - [{s.source_tool}] {s.method} {s.endpoint} (Type: {s.signal_type}, Level: E{int(s.initial_evidence_level)}, Fidelity: {s.source_fidelity})")
+            print("")
+
+    elif parsed.command == "schedule":
+        from core.optimization import InformationGainScheduler
+        scheduler = InformationGainScheduler()
+        sample_endpoints = [
+            {"path": "/api/v1/users/42", "method": "GET", "auth_required": True, "params": ["id"]},
+            {"path": "/api/v1/invoices/902", "method": "DELETE", "auth_required": True, "params": ["id"]},
+            {"path": "/api/v1/search", "method": "GET", "auth_required": False, "params": ["q", "filter"]},
+            {"path": "/about", "method": "GET", "auth_required": False, "params": []},
+            {"path": "/api/v1/login", "method": "POST", "auth_required": False, "params": ["username", "password"]},
+        ]
+        targets = scheduler.schedule_inspection(sample_endpoints, asset=parsed.domain)
+
+        if getattr(parsed, "json", False):
+            print(json.dumps([t.to_dict() for t in targets], indent=2))
+        else:
+            sep = "=" * 80
+            print(f"\n{sep}")
+            print(f" 🧭 HunterAI Active Information-Gain Scheduler — Attack Surface Queue")
+            print(f" Target Domain: {parsed.domain} | Total Candidates: {len(targets)}")
+            print(sep)
+            print(f"Rank  Eff.Score  ΔI    Cost  Method  Path                    Hypothesis")
+            print("-" * 80)
+            for t in targets:
+                print(f" #{t.priority_rank:<3} {t.efficiency_score:>9.2f} {t.information_gain:>5.1f} {t.estimated_cost:>5.1f}  {t.method:<6}  {t.path:<22}  {t.recommended_hypothesis}")
+            print(sep + "\n")
+
+    elif parsed.command == "resolve-conflict":
+        from core.reasoning import ContradictionResolver, ConflictType, ConflictVerdict
+        resolver = ContradictionResolver()
+        # Simulated Nuclei Claim
+        claim = {
+            "source_tool": "nuclei",
+            "signal_type": "BOLA",
+            "endpoint": "/api/v1/users/99",
+            "proof": "Reflection differential observed"
+        }
+        # Wire Telemetry (Burp Sensor)
+        wire_telemetry = {
+            "status_code": 403,
+            "body": '{"error": "Access Denied: Forbidden by Tenant Isolation Policy"}'
+        }
+        conflict = resolver.detect_conflict(claim, wire_telemetry=wire_telemetry)
+        if not conflict:
+            print("\n✅ No contradiction detected between tool claim and wire telemetry.\n")
+        else:
+            # Re-test confirms server strictly enforces defensive control
+            retest_res = {"status_code": 403, "defensive_control_verified": True}
+            ruling = resolver.adjudicate_conflict(conflict, retest_res)
+
+            if getattr(parsed, "json", False):
+                print(json.dumps({
+                    "conflict": conflict.to_dict(),
+                    "ruling": ruling.to_dict()
+                }, indent=2))
+            else:
+                sep = "=" * 80
+                print(f"\n{sep}")
+                print(f" ⚖️ HunterAI Contradiction Resolver — Tool vs Wire Conflict Adjudication")
+                print(sep)
+                print(f" • Conflict ID:       {conflict.conflict_id}")
+                print(f" • Endpoint:          {conflict.target_endpoint}")
+                print(f" • Claim:             {conflict.claimed_vuln} reported by [{conflict.claimant_source}]")
+                print(f" • Counter Evidence:  HTTP {wire_telemetry['status_code']} observed by [{conflict.counter_source}]")
+                print(f" • Conflict Category: {conflict.conflict_type.value}")
+                print(f" • Verdict:           {ruling.verdict.value}")
+                print(f" • Confidence:        {ruling.confidence * 100:.1f}%")
+                print(f" • Resolution Proof:  {ruling.conclusive_proof}")
+                print(f" • Negative KB Saved: {'YES (Formal Invariant Recorded)' if ruling.recorded_negative_kb else 'NO'}")
+                print(sep + "\n")
+
 
 
 if __name__ == "__main__":
     main()
+

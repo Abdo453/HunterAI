@@ -70,5 +70,9 @@ class NegativeKnowledgeBase:
         key = self._make_key(endpoint, method, vuln_family)
         return self._records.get(key)
 
+    def has_negative_proof(self, endpoint: str, method: str, vuln_family: str) -> bool:
+        return self.is_known_negative(endpoint, method, vuln_family) is not None
+
     def count(self) -> int:
         return len(self._records)
+
