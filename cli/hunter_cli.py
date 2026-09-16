@@ -210,6 +210,11 @@ def build_parser() -> argparse.ArgumentParser:
     tim_p = subparsers.add_parser("timeline", help="Inspect security posture longitudinal timeline")
     tim_p.add_argument("--demo", action="store_true", help="Show demo security posture timeline")
 
+    # PentesterFlow command (V20.0)
+    pf_p = subparsers.add_parser("pentester-flow", help="Run PentesterFlow Sensory Triad investigation scenario")
+    pf_p.add_argument("--scenario", default="BOLA_USER_DELETION", choices=["BOLA_USER_DELETION", "SQLI_SEARCH_DISCOVERY", "MASS_ASSIGNMENT_ROLE"], help="PentesterFlow scenario")
+    pf_p.add_argument("--demo", action="store_true", help="Run demonstration PentesterFlow sensory triad cycle")
+
     # Causal command (V8.0)
     subparsers.add_parser("causal", help="Verify unbroken Cause-to-Effect causal path")
 
@@ -1368,6 +1373,15 @@ def process_debit(user_id, amount):
         for s in tracker.snapshots:
             print(f"   [{s.month_label}] Open: {s.open_findings} | Fixed: {s.fixed_findings} | Regressions: {s.regressions} | Coverage: {s.coverage_percentage}%")
         print("")
+
+    elif parsed.command == "pentester-flow":
+        from core.sensors.pentester_flow import PentesterFlowEngine, PentesterFlowScenario
+        engine = PentesterFlowEngine()
+        scen_name = getattr(parsed, "scenario", "BOLA_USER_DELETION")
+        scenario_enum = PentesterFlowScenario[scen_name] if scen_name in PentesterFlowScenario.__members__ else PentesterFlowScenario.BOLA_USER_DELETION
+        ruling = engine.run_scenario(scenario_enum)
+        print("\n" + engine.render_causal_chain_ascii(ruling) + "\n")
+
 
 
 if __name__ == "__main__":

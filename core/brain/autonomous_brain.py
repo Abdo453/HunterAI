@@ -914,11 +914,28 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] V19.0 Epistemic Subsystems could not be attached: {e}")
 
+        # V20.0 PentesterFlow Sensory Triad & Auditable Evidence OS Engine
+        self.pentester_flow = None
+        try:
+            from core.sensors.pentester_flow import PentesterFlowEngine
+            self.pentester_flow = PentesterFlowEngine(
+                burp_sensor=self.burp_sensor,
+                sensory_triad=self.sensory_triad,
+                contract_engine=self.contract_engine,
+                bundle_manager=self.bundle_manager,
+                decision_trace=self.decision_trace,
+            )
+            log.info("[BRAIN] V20.0 PentesterFlow Sensory Triad Engine attached")
+        except Exception as e:
+            log.warning(f"[BRAIN] PentesterFlow could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor
         if self.sensory_triad:
             self.sensory_triad.burp_sensor = sensor
+        if self.pentester_flow:
+            self.pentester_flow.burp_sensor = sensor
         self._audit("burp_sensor_attached", status=sensor.get_sensor_status() if hasattr(sensor, "get_sensor_status") else {})
 
     def attach_sensory_triad(self, triad: Any) -> None:
@@ -926,14 +943,41 @@ class AutonomousBrain:
         self.sensory_triad = triad
         if hasattr(triad, "burp_sensor") and triad.burp_sensor:
             self.burp_sensor = triad.burp_sensor
+        if self.pentester_flow:
+            self.pentester_flow.sensory_triad = triad
+            if self.burp_sensor:
+                self.pentester_flow.burp_sensor = self.burp_sensor
         self._audit("sensory_triad_attached")
 
     def ingest_burp_transaction(self, tx: Any, parent_id: Optional[str] = None) -> Any:
         """Ingests live HTTP transaction from Burp Suite into the sensory stream."""
-        if self.burp_sensor:
+        if self.pentester_flow:
+            event = self.pentester_flow.ingest_burp_transaction(tx, parent_id=parent_id)
+            self._audit("burp_transaction_ingested", url=event.burp_tx.url, method=event.burp_tx.method)
+            from core.sensors.burp_sensor import NormalizedObservation, SensorType
+            obs = NormalizedObservation(
+                sensor_type=SensorType.BURP,
+                target_url=event.burp_tx.url,
+                method=event.burp_tx.method,
+                status_code=event.burp_tx.status_code,
+                parameters=event.burp_tx.parameter_ids,
+                headers=event.burp_tx.headers,
+                raw_context=event.burp_tx.to_dict(),
+                timestamp=event.burp_tx.timestamp,
+            )
+            return obs
+        elif self.burp_sensor:
             obs = self.burp_sensor.ingest_transaction(tx, parent_id=parent_id)
             self._audit("burp_transaction_ingested", url=obs.target_url, method=obs.method)
             return obs
+        return None
+
+    def run_pentester_flow(self, scenario: Any) -> Any:
+        """Executes a complete, reproducible PentesterFlow causal investigation cycle."""
+        if self.pentester_flow:
+            ruling = self.pentester_flow.run_scenario(scenario)
+            self._audit("pentester_flow_scenario_completed", scenario=str(scenario), verdict=ruling.court_verdict)
+            return ruling
         return None
 
     def add_user_hint(self, hint: str) -> None:

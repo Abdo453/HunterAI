@@ -16,6 +16,13 @@ from core.sensors.sensory_triad import (
     CorrelatedEvent,
     SensoryTriadCoordinator,
 )
+from core.sensors.pentester_flow import (
+    PentesterFlowEngine,
+    PentesterFlowEvent,
+    PentesterFlowRuling,
+    PentesterFlowScenario,
+    BrowserActionEvent,
+)
 
 __all__ = [
     "SensorType",
@@ -24,4 +31,10 @@ __all__ = [
     "BurpSensor",
     "CorrelatedEvent",
     "SensoryTriadCoordinator",
+    "PentesterFlowEngine",
+    "PentesterFlowEvent",
+    "PentesterFlowRuling",
+    "PentesterFlowScenario",
+    "BrowserActionEvent",
 ]
+

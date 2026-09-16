@@ -62,7 +62,15 @@ class SensoryTriadCoordinator:
         self.evidence_graph = evidence_graph
 
         self._correlated_events: List[CorrelatedEvent] = []
+        self._pentester_flow = None
         logger.info("[SENSORY_TRIAD] Unified 3-Sensor Triad Initialized")
+
+    @property
+    def pentester_flow(self):
+        if self._pentester_flow is None:
+            from core.sensors.pentester_flow import PentesterFlowEngine
+            self._pentester_flow = PentesterFlowEngine(burp_sensor=self.burp_sensor, sensory_triad=self)
+        return self._pentester_flow
 
     def record_browser_action(self, action_description: str, target_selector: str, current_url: str):
         """Records an action taken in the browser (e.g. Playwright click, input)."""
@@ -73,6 +81,16 @@ class SensoryTriadCoordinator:
             "url": current_url,
             "timestamp": time.time()
         }
+        if self._pentester_flow:
+            parts = action_description.split(" ", 1)
+            act_type = parts[0].lower() if parts else "click"
+            label = parts[1] if len(parts) > 1 else target_selector
+            self._pentester_flow.record_browser_action(
+                action_type=act_type,
+                selector=target_selector,
+                page_url=current_url,
+                label=label
+            )
 
     def correlate_with_burp(
         self,
