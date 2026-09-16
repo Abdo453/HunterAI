@@ -1,21 +1,10 @@
-from .unknowns_matrix import (
-    UnknownsMatrix,
-    SurfaceSector,
-    SurfaceAssetRecord,
-)
-from .blindspot_registry import (
-    BlindSpotRegistry,
-    BlindSpotItem,
-    BlindSpotCategory,
-    CapabilityLevel,
-)
-
+from .unknowns_matrix import UnknownsMatrix
+from .blindspot_registry import BlindSpotRegistry, BlindSpotItem
+from .why_not_engine import WhyNotEngine, NegativeProofRecord
 __all__ = [
     "UnknownsMatrix",
-    "SurfaceSector",
-    "SurfaceAssetRecord",
     "BlindSpotRegistry",
     "BlindSpotItem",
-    "BlindSpotCategory",
-    "CapabilityLevel",
+    "WhyNotEngine",
+    "NegativeProofRecord",
 ]

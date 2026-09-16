@@ -997,6 +997,43 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] V24.0 Security Researcher Engines could not be attached: {e}")
 
+        # V25.0 Application Reasoning Engine Subsystems
+        self.application_twin = None
+        self.target_contradiction_engine = None
+        self.attack_chain_composer = None
+        self.mutation_grammar = None
+        self.protocol_state_learner = None
+        self.dynamic_invariant_discoverer = None
+        self.why_not_engine = None
+        self.metamorphic_engine = None
+        self.experiment_notebook = None
+        self.test_synthesizer = None
+        try:
+            from core.twin.application_twin import ApplicationDigitalTwin
+            from core.reasoning.target_contradiction_engine import TargetContradictionEngine
+            from core.chains.attack_chain_composer import AttackChainComposer
+            from core.mutation.grammar_engine import MutationGrammarEngine
+            from core.statemachine.protocol_state_learner import ProtocolStateLearner
+            from core.business_logic.invariant_discovery import DynamicInvariantDiscoverer
+            from core.visibility.why_not_engine import WhyNotEngine
+            from core.testing.metamorphic_engine import MetamorphicEngine
+            from core.experiment.experiment_notebook import ExperimentNotebook
+            from core.testing.self_generated_tests import SelfGeneratedTestSynthesizer
+
+            self.application_twin = ApplicationDigitalTwin()
+            self.target_contradiction_engine = TargetContradictionEngine()
+            self.attack_chain_composer = AttackChainComposer()
+            self.mutation_grammar = MutationGrammarEngine
+            self.protocol_state_learner = ProtocolStateLearner()
+            self.dynamic_invariant_discoverer = DynamicInvariantDiscoverer()
+            self.why_not_engine = WhyNotEngine()
+            self.metamorphic_engine = MetamorphicEngine()
+            self.experiment_notebook = ExperimentNotebook()
+            self.test_synthesizer = SelfGeneratedTestSynthesizer
+            log.info("[BRAIN] V25.0 Application Reasoning Engines attached (ApplicationTwin, ContradictionEngine, AttackChainComposer, MutationGrammar, ProtocolStateLearner, InvariantDiscoverer, WhyNotEngine, MetamorphicEngine, ExperimentNotebook, TestSynthesizer)")
+        except Exception as e:
+            log.warning(f"[BRAIN] V25.0 Application Reasoning Engines could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor

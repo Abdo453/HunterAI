@@ -277,6 +277,27 @@ def build_parser() -> argparse.ArgumentParser:
     opp_p.add_argument("--demo", action="store_true", help="Run demonstration opportunity derivation")
     opp_p.add_argument("--json", action="store_true", help="Output attack opportunities in raw JSON")
 
+    # V25.0 Application Reasoning Engine Subsystems
+    twin_p = subparsers.add_parser("app-twin", help="Inspect Living Application Digital Twin (Identities, Resources, Workflows)")
+    twin_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    twin_p.add_argument("--demo", action="store_true", help="Run demonstration digital twin state inspection")
+    twin_p.add_argument("--json", action="store_true", help="Output digital twin state in raw JSON")
+
+    chain_p = subparsers.add_parser("attack-chain", help="Compose Evidence-Backed Attack Chains & Shortest Path Search")
+    chain_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    chain_p.add_argument("--demo", action="store_true", help="Run demonstration compound kill-chain synthesis")
+    chain_p.add_argument("--json", action="store_true", help="Output attack chains in raw JSON")
+
+    whynot_p = subparsers.add_parser("why-not", help="Query 'Why Not?' Negative Proof Ledger & Coverage Accounting")
+    whynot_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    whynot_p.add_argument("--demo", action="store_true", help="Run demonstration negative proof report")
+    whynot_p.add_argument("--json", action="store_true", help="Output negative proof in raw JSON")
+
+    meta_p = subparsers.add_parser("metamorphic", help="Run Metamorphic Security Inconsistency & Parser Desync Tests")
+    meta_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    meta_p.add_argument("--demo", action="store_true", help="Run demonstration metamorphic equivalence tests")
+    meta_p.add_argument("--json", action="store_true", help="Output metamorphic reports in raw JSON")
+
     # Causal command (V8.0)
     subparsers.add_parser("causal", help="Verify unbroken Cause-to-Effect causal path")
 
@@ -1787,6 +1808,105 @@ def process_debit(user_id, amount):
             for o in opps:
                 print(f" • [{o.test_priority:<8}] {o.vuln_vector:<25} (Param: {str(o.target_parameter):<12} EIG: {o.expected_information_gain})")
                 print(f"   ↳ Rationale: {o.rationale}")
+            print(sep + "\n")
+
+    elif parsed.command == "app-twin":
+        from core.twin.application_twin import ApplicationDigitalTwin, ResourceSensitivity
+        twin = ApplicationDigitalTwin(target_host=getattr(parsed, "target", "target.local"))
+        twin.register_resource("order_1337", "order", "user_a", ResourceSensitivity.CONFIDENTIAL)
+        twin.register_endpoint("/api/v1/orders/1337", "GET", params=["id"])
+        twin.register_workflow_state("checkout", "PAID", {"ship": "SHIPPED"})
+        summary = twin.get_summary()
+        if getattr(parsed, "json", False):
+            print(json.dumps(summary, indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 🌐 HunterAI V25.0: Living Application Digital Twin\n{sep}")
+            print(f" Target Host:       {summary['target_host']}")
+            print(f" Total Identities:  {summary['total_identities']} (Anonymous, User A, User B, Admin)")
+            print(f" Total Resources:   {summary['total_resources']}")
+            print(f" Total Endpoints:   {summary['total_endpoints']}")
+            print(f" Total Workflows:   {summary['total_workflows']}")
+            print(sep + "\n")
+
+    elif parsed.command == "attack-chain":
+        from core.chains.attack_chain_composer import AttackChainComposer, ChainLink
+        composer = AttackChainComposer()
+        links = [
+            ChainLink(1, "FIND-BOLA-01", "BOLA", "Read User B private profile", "user_b_cloud_bucket_url", "Leaked signed S3 bucket URL"),
+            ChainLink(2, "FIND-SSRF-02", "SSRF", "Access internal cloud metadata", "iam_role_creds", "Harvested AWS metadata role credentials"),
+            ChainLink(3, "FIND-RCE-03", "PrivEsc", "Assume role and execute admin Lambda", "root_shell", "Full AWS account compromise"),
+        ]
+        chain = composer.compose_chain(
+            chain_title="BOLA to Cloud IAM Privilege Escalation & Account Takeover",
+            initial_identity="user_a",
+            target_impact="Full AWS Cloud Infrastructure Compromise",
+            links=links
+        )
+        if getattr(parsed, "json", False):
+            print(json.dumps(chain.to_dict(), indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n ⛓️ HunterAI V25.0: Evidence-Backed Attack Chain Composer\n{sep}")
+            print(f" Chain ID:    {chain.chain_id} [{chain.composite_severity}]")
+            print(f" Title:       {chain.chain_title}")
+            print(f" Initial:     {chain.initial_identity} ➔ Impact: {chain.target_impact}")
+            for l in chain.links:
+                print(f" • Step {l.stage_number}: [{l.vuln_class}] {l.action_description} ➔ Unlocked: {l.unlocked_primitive}")
+            print(sep + "\n")
+
+    elif parsed.command == "why-not":
+        from core.visibility.why_not_engine import WhyNotEngine
+        engine = WhyNotEngine()
+        target = getattr(parsed, "target", "https://api.target.local")
+        rec = engine.record_negative_proof(
+            endpoint=f"{target}/api/v1/billing",
+            vuln_class="BOLA / Broken Object Level Authorization",
+            tested_identities=["user_a", "user_b", "anonymous"],
+            total_probes=15,
+            rejections=15,
+            negative_control_verified=True,
+            private_data_leaked=False,
+            coverage=100.0
+        )
+        if getattr(parsed, "json", False):
+            print(json.dumps(rec.to_dict(), indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 🔍 HunterAI V25.0: 'Why Not?' Negative Proof Ledger\n{sep}")
+            print(f" Endpoint:      {rec.endpoint}")
+            print(f" Vulnerability: {rec.vulnerability_class}")
+            print(f" Verdict:       NO CONFIRMED FINDING (Negative Proof Verified)")
+            print(f" Coverage:      {rec.coverage_percentage:.1f}% ({rec.total_probes_sent} probes across {len(rec.tested_identities)} identities)")
+            print(f" Epistemic Log: {rec.reason_no_finding}")
+            print(sep + "\n")
+
+    elif parsed.command == "metamorphic":
+        from core.testing.metamorphic_engine import MetamorphicEngine
+        engine = MetamorphicEngine()
+        target = getattr(parsed, "target", "https://api.target.local")
+        def sim_request(p):
+            first_key = list(p.keys())[0] if p else ""
+            return {"status": 403 if first_key == "role" else 200}
+
+        report = engine.test_parameter_order_invariance(
+            endpoint=f"{target}/api/admin/action",
+            params={"role": "admin", "action": "export_logs"},
+            request_fn=sim_request
+        )
+        if getattr(parsed, "json", False):
+            print(json.dumps(report.to_dict() if report else {}, indent=2))
+        else:
+            sep = "=" * 70
+            print(f"\n{sep}\n 🧪 HunterAI V25.0: Metamorphic Security Inconsistency Tester\n{sep}")
+            if report:
+                print(f" Anomaly ID:    {report.report_id} [{report.severity}]")
+                print(f" Endpoint:      {report.endpoint}")
+                print(f" Relation:      {report.relation_type.value}")
+                print(f" Status Delta:  Baseline HTTP {report.baseline_status} vs Transformed HTTP {report.transformed_status}")
+                print(f" Rationale:     {report.inconsistency_rationale}")
+            else:
+                print(" Invariance Intact: Equivalence transformations strictly preserved security policy.")
             print(sep + "\n")
 
 

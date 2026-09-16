@@ -1,16 +1,7 @@
-"""
-HunterAI Scientific Experiment & Tripartite Control Package
-"""
-from core.experiment.scientific_experiment import (
-    ScientificExperimentEngine,
-    TripartiteObservation,
-    ExperimentResult,
-    ExperimentPhase
-)
-
+from .scientific_experiment import ScientificExperimentEngine
+from .experiment_notebook import ExperimentNotebook, ExperimentEntry
 __all__ = [
     "ScientificExperimentEngine",
-    "TripartiteObservation",
-    "ExperimentResult",
-    "ExperimentPhase"
+    "ExperimentNotebook",
+    "ExperimentEntry",
 ]

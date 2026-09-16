@@ -1,16 +1,8 @@
-"""
-HunterAI Attack Path Chaining Package
-"""
-from core.chains.attack_path_chain import (
-    CompoundImpactTier,
-    AtomicFindingNode,
-    ChainedAttackPath,
-    AttackPathChainingEngine,
-)
-
+from .attack_path_chain import AttackPathChainingEngine
+from .attack_chain_composer import AttackChainComposer, AttackChain, ChainLink
 __all__ = [
-    "CompoundImpactTier",
-    "AtomicFindingNode",
-    "ChainedAttackPath",
     "AttackPathChainingEngine",
+    "AttackChainComposer",
+    "AttackChain",
+    "ChainLink",
 ]
