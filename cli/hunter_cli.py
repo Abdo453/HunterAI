@@ -250,6 +250,12 @@ def build_parser() -> argparse.ArgumentParser:
     res_p.add_argument("--demo", action="store_true", help="Run demonstration Nuclei vs Burp wire conflict adjudication")
     res_p.add_argument("--json", action="store_true", help="Output conflict ruling in JSON")
 
+    # V23.0 Comprehensive Authentication Testing Engine
+    auth_p = subparsers.add_parser("auth-audit", help="Run Comprehensive Authentication Attack-Surface & Reasoning Engine")
+    auth_p.add_argument("--target", default="https://api.target.local", help="Target URL or domain")
+    auth_p.add_argument("--demo", action="store_true", help="Run demonstration authentication lifecycle audit")
+    auth_p.add_argument("--json", action="store_true", help="Output findings in raw JSON")
+
     # Causal command (V8.0)
     subparsers.add_parser("causal", help="Verify unbroken Cause-to-Effect causal path")
 
@@ -1621,6 +1627,49 @@ def process_debit(user_id, amount):
                 print(f" • Resolution Proof:  {ruling.conclusive_proof}")
                 print(f" • Negative KB Saved: {'YES (Formal Invariant Recorded)' if ruling.recorded_negative_kb else 'NO'}")
                 print(sep + "\n")
+
+    elif parsed.command == "auth-audit":
+        from core.auth_engine import AuthenticationTestingEngine
+        engine = AuthenticationTestingEngine()
+        target = getattr(parsed, "target", "https://api.target.local")
+
+        # 1. Audit Session Fixation demo
+        engine.audit_session_fixation(
+            endpoint=f"{target}/login",
+            pre_auth_cookies={"session": "stale_token_12345"},
+            post_auth_cookies={"session": "stale_token_12345"}
+        )
+
+        # 2. Audit Logout Invalidation demo
+        engine.audit_logout_invalidation(
+            logout_endpoint=f"{target}/logout",
+            protected_endpoint=f"{target}/api/v1/user/profile",
+            post_logout_status=200,
+            sensitive_data_leaked=True
+        )
+
+        # 3. Audit Differential Access
+        engine.audit_differential_access(
+            endpoint=f"{target}/api/v1/account/billing",
+            method="GET",
+            anonymous_res={"status_code": 200, "body": '{"user_id": 42, "balance": 1500, "email": "victim@corp.local"}'},
+            authenticated_res={"status_code": 200, "body": '{"user_id": 42, "balance": 1500, "email": "victim@corp.local"}'}
+        )
+
+        # 4. Audit JWT
+        engine.audit_jwt_token(
+            endpoint=f"{target}/api/v1/auth/jwt",
+            token_str="eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIn0."
+        )
+
+        if getattr(parsed, "json", False):
+            print(json.dumps({
+                "target": target,
+                "total_findings": len(engine.findings),
+                "findings": [f.to_dict() for f in engine.findings]
+            }, indent=2))
+        else:
+            print("\n" + engine.format_terminal_dashboard() + "\n")
 
 
 

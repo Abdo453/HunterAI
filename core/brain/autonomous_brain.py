@@ -964,6 +964,15 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] V22.0 Investigation Triad could not be attached: {e}")
 
+        # V23.0 Comprehensive Authentication Attack-Surface & Reasoning Engine
+        self.auth_testing_engine = None
+        try:
+            from core.auth_engine import AuthenticationTestingEngine
+            self.auth_testing_engine = AuthenticationTestingEngine()
+            log.info("[BRAIN] V23.0 AuthenticationTestingEngine attached")
+        except Exception as e:
+            log.warning(f"[BRAIN] V23.0 AuthenticationTestingEngine could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor
