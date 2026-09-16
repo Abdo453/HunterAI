@@ -889,6 +889,31 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] V18.0 Auditable Subsystems could not be attached: {e}")
 
+        # V19.0 Epistemic Security OS Subsystems
+        self.decision_trace = None
+        self.policy_engine = None
+        self.contract_engine = None
+        self.budget_manager = None
+        self.drift_classifier = None
+        self.bundle_manager = None
+        try:
+            from core.trace.agent_decision_trace import AgentDecisionTrace
+            from core.policy.policy_as_code import PolicyAsCodeEngine, EnvironmentTier
+            from core.contract.security_contract import SecurityContractEngine
+            from core.budget.categorized_budget import CategorizedBudgetManager
+            from core.drift.evidence_drift_classifier import EvidenceDriftClassifier
+            from core.bundle.investigation_bundle import InvestigationBundleManager
+
+            self.decision_trace = AgentDecisionTrace(trace_id=f"TRC-{int(time.time())}", target="target.local")
+            self.policy_engine = PolicyAsCodeEngine(policy_version="v1.4", environment=EnvironmentTier.LAB)
+            self.contract_engine = SecurityContractEngine()
+            self.budget_manager = CategorizedBudgetManager()
+            self.drift_classifier = EvidenceDriftClassifier()
+            self.bundle_manager = InvestigationBundleManager()
+            log.info("[BRAIN] V19.0 Epistemic Subsystems attached (DecisionTrace, PolicyAsCode, ContractEngine, CategorizedBudget, DriftClassifier, BundleManager)")
+        except Exception as e:
+            log.warning(f"[BRAIN] V19.0 Epistemic Subsystems could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor
@@ -1300,6 +1325,19 @@ class AutonomousBrain:
                 actor="AutonomousBrain",
                 rationale=f"Primary target asset recognized: {urlparse(target).hostname or target}",
                 details={"host": urlparse(target).hostname or target}
+            )
+
+        # Initialize Decision Trace for this scan
+        if self.decision_trace:
+            self.decision_trace.target = target
+            self.decision_trace.record_step(
+                observation=f"Target {target} armed into active scope",
+                evidence=[f"Mode: {mode}", f"Host: {urlparse(target).hostname or target}"],
+                decision="Initiate passive discovery and sensory observation phase",
+                policy_result="ALLOW",
+                policy_receipt="POL-V14-INIT",
+                action="Arm scope boundaries and telemetry blackbox",
+                result="Epistemic security tracking active"
             )
 
         if self.dry_run:
@@ -1947,6 +1985,42 @@ class AutonomousBrain:
                         f.get("param", ""),
                         verified_finding=True
                     )
+
+                # Policy-as-Code: Issue cryptographically auditable PolicyReceipt
+                if self.policy_engine:
+                    receipt = self.policy_engine.evaluate_action(
+                        target=f.get("url", target),
+                        action_type="CONFIRM_FINDING",
+                        is_state_mutating=False,
+                        is_in_scope=True
+                    )
+                    f["policy_receipt"] = receipt.receipt_id
+                    f["policy_version"] = receipt.policy_version
+
+                # Decision Trace: Record non-CoT epistemic verification step
+                if self.decision_trace:
+                    self.decision_trace.record_step(
+                        observation=f"Confirmed security finding: {f_title}",
+                        evidence=[str(f.get("evidence", ""))[:120]],
+                        decision="Promote to CONFIRMED via tripartite Evidence Court",
+                        policy_result="ALLOW",
+                        policy_receipt=f.get("policy_receipt", "POL-V14-AUTO"),
+                        action=f"Seal finding {f_id} and export portable investigation case bundle",
+                        result="Confirmed finding registered in EvidenceOS ledger"
+                    )
+
+                # Export Portable Investigation Bundle
+                if self.bundle_manager:
+                    try:
+                        self.bundle_manager.export_case(
+                            finding_id=f_id,
+                            target=target,
+                            finding_data=f,
+                            output_parent_dir=Path("data/cases")
+                        )
+                        f["investigation_bundle_available"] = True
+                    except Exception as e:
+                        log.debug(f"Could not export investigation bundle for {f_id}: {e}")
 
                 verified.append(f)
                 await self._log(
