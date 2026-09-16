@@ -65,6 +65,18 @@ from core.evidence_court import EvidenceCourt, CourtVerdict
 from core.poe_engine import ProofOfExecutionEngine
 from core.scope_engine import ScopePolicy
 
+# BCSL & Epistemic Sensor Integration
+from core.burp_gateway.bcsl import BurpControlSensorLayer
+from core.burp_gateway.correlation import BurpCorrelationContext
+from core.burp_gateway.event_stream import BurpLiveEventStream
+from core.burp_gateway.experiment_contract import ExperimentContract, ExperimentExecutionRecord
+from core.burp_gateway.traffic_normalizer import CanonicalRequest, CanonicalResponse
+from core.controllers.burp_research_controller import BurpResearchController
+from core.correlation.ui_traffic_correlator import UITrafficCorrelator
+from core.database.knowledge_db import KnowledgeDB
+from core.governance.risk_budget_queue import RiskBudgetManager, RiskTier
+from core.scope_guard import ScopeGuard
+
 GREEN = "\033[0;32m" if sys.platform != "win32" else ""
 CYAN = "\033[0;36m" if sys.platform != "win32" else ""
 YELLOW = "\033[1;33m" if sys.platform != "win32" else ""
@@ -204,6 +216,55 @@ class UnifiedLiveSession:
         self.capture_store = CaptureStore("portal.target.local", base_dir=self.temp_dir / "engagements")
         self.burp_gateway = BurpGateway(host="127.0.0.1", port=8085, capture_store=self.capture_store)
 
+        # UI ↔ Traffic Correlation & Knowledge Database
+        self.knowledge_db = KnowledgeDB(self.temp_dir / "knowledge.db")
+        self.ui_correlator = UITrafficCorrelator(self.knowledge_db)
+
+        # BCSL (Burp Control & Sensor Layer)
+        self.scope_guard = ScopeGuard(
+            in_scope=["portal.target.local", "127.0.0.1", "*"],
+            out_of_scope=["169.254.169.254"]
+        )
+        self.risk_budget = RiskBudgetManager()
+        self.event_stream = BurpLiveEventStream()
+
+        def live_http_transport(req: CanonicalRequest) -> CanonicalResponse:
+            import httpx
+            backend_url = req.url.replace(f"http://{self.target_domain}", f"http://127.0.0.1:{self.target_port}")
+            headers = dict(req.headers)
+            headers["Host"] = self.target_domain
+            with httpx.Client(verify=False, timeout=10.0) as client:
+                resp = client.request(
+                    method=req.method,
+                    url=backend_url,
+                    headers=headers,
+                    content=req.body,
+                    follow_redirects=False
+                )
+                return CanonicalResponse(
+                    status_code=resp.status_code,
+                    headers=dict(resp.headers),
+                    body=resp.text,
+                    round_trip_ms=round(resp.elapsed.total_seconds() * 1000, 2),
+                    content_type=resp.headers.get("Content-Type", ""),
+                )
+
+        self.research_controller = BurpResearchController(
+            scope_guard=self.scope_guard,
+            risk_budget_manager=self.risk_budget,
+            capture_store=self.capture_store,
+            event_stream=self.event_stream,
+            http_transport_fn=live_http_transport,
+        )
+
+        self.bcsl = BurpControlSensorLayer(
+            research_controller=self.research_controller,
+            scope_guard=self.scope_guard,
+            risk_budget=self.risk_budget,
+            event_stream=self.event_stream,
+            capture_store=self.capture_store,
+        )
+
         self.browser_controller: Optional[PlaywrightBrowserController] = None
         self.captured_transactions: List[CapturedTransaction] = []
         self.case: Optional[AgentHandoffContract] = None
@@ -277,12 +338,22 @@ class UnifiedLiveSession:
 
         await self.browser_controller._page.route(f"http://{self.target_domain}/**", handle_route)
 
+        ui_actions: List[Dict[str, Any]] = []
+
         # Step 2a: Visit Homepage
+        t_home = time.time()
         print(f"  [+] Browser navigating to {self.target_url}...")
         ok, msg = await self.browser_controller.goto(self.target_url)
         content_home = await self.browser_controller._page.content()
+        ui_actions.append({
+            "action_id": "act_01_nav_home",
+            "element_type": "navigation",
+            "text_label": "HunterCorp Portal Home",
+            "locator": "/",
+            "timestamp": t_home,
+        })
 
-        # Ingest Request 1 into Burp Gateway
+        # Ingest Request 1 into Burp Gateway & BCSL
         tx1 = CapturedTransaction(
             tx_id="tx_req_01_landing",
             target_host="portal.target.local",
@@ -296,10 +367,12 @@ class UnifiedLiveSession:
             tool_source="proxy"
         )
         self.capture_store.store_transaction(tx1)
+        self.bcsl.ingest_captured(tx1)
 
         # Step 2b: Navigate to Login & Submit Form
         login_url = f"{self.target_url}/login"
         print(f"  [+] Browser discovered login form at {login_url}")
+        t_login = time.time()
         await self.browser_controller.goto(login_url)
         forms = await self.browser_controller.extract_forms()
         form_obj = forms[0] if forms else {}
@@ -309,7 +382,15 @@ class UnifiedLiveSession:
 
         await self.browser_controller.fill("#username", "sec_admin")
         await self.browser_controller.fill("#password", "hunter_secret_pass")
+        t_submit = time.time()
         await self.browser_controller.click("#btn_submit")
+        ui_actions.append({
+            "action_id": "act_02_submit_login",
+            "element_type": "form_submit",
+            "text_label": "Employee Sign-In",
+            "locator": "#btn_submit",
+            "timestamp": t_submit,
+        })
 
         # Ingest Request 2 (Login POST) with parent lineage
         tx2 = CapturedTransaction(
@@ -326,12 +407,21 @@ class UnifiedLiveSession:
             tool_source="proxy"
         )
         self.capture_store.store_transaction(tx2)
+        self.bcsl.ingest_captured(tx2)
         print(f"  [+] Authenticated session established! Cookie captured: {tx2.cookies}")
 
         # Step 2c: Visit Profile Endpoint (Authenticated)
         profile_url = f"{self.target_url}/api/v1/users/42"
+        t_profile = time.time()
         await self.browser_controller.goto(profile_url)
         profile_body = await self.browser_controller._page.content()
+        ui_actions.append({
+            "action_id": "act_03_nav_profile",
+            "element_type": "navigation",
+            "text_label": "User Profile 42",
+            "locator": "/api/v1/users/42",
+            "timestamp": t_profile,
+        })
 
         tx3 = CapturedTransaction(
             tx_id="tx_req_03_profile",
@@ -347,9 +437,20 @@ class UnifiedLiveSession:
             tool_source="proxy"
         )
         self.capture_store.store_transaction(tx3)
+        self.bcsl.ingest_captured(tx3)
 
         await self.browser_controller.close()
-        print("  [+] Browser crawl completed. 3 correlated HTTP transactions captured into CaptureStore.")
+        print("  [+] Browser crawl completed. 3 correlated HTTP transactions captured into CaptureStore & BCSL.")
+
+        # Correlate UI actions with HTTP traffic
+        traffic_records = [
+            {"req_id": tx.tx_id, "method": tx.method, "url": tx.url, "timestamp": tx.timestamp, "status_code": tx.status_code, "post_data": tx.req_body}
+            for tx in [tx1, tx2, tx3]
+        ]
+        correlated_events = self.ui_correlator.correlate_events(ui_actions, traffic_records)
+        print(f"  [+] UITrafficCorrelator identified {len(correlated_events)} causal UI ↔ API bindings:")
+        for ce in correlated_events:
+            print(f"      • Action [{ce.action_id}] ({ce.element_type}) -> [{ce.method}] {ce.endpoint_url} (Confidence: {ce.confidence:.0%})")
 
         # 3. HunterAI Analysis & Handoff Contract
         print(f"\n{CYAN}[STEP 3/6] Correlating Request Lineage & Initializing Case Dossier...{RESET}")
@@ -378,34 +479,60 @@ class UnifiedLiveSession:
         )
         print(f"  [+] Investigation Case created: {self.case.case_id} (Vuln: {self.case.vuln_class})")
 
-        # 4. Active Proof-of-Execution Verification Probe
-        print(f"\n{CYAN}[STEP 4/6] Executing Deterministic Proof-of-Execution (PoE) Verification...{RESET}")
-        import urllib.request
-        backend_ping_endpoint = f"http://127.0.0.1:{self.target_port}/api/tools/ping"
-        public_ping_endpoint = f"{self.target_url}/api/tools/ping"
-        import urllib.parse
+        # 4. Active Proof-of-Execution Verification Probe via BCSL & ExperimentContract
+        print(f"\n{CYAN}[STEP 4/6] Executing Controlled Experiment via BCSL (Burp Control & Sensor Layer)...{RESET}")
         payload_nonce = "127.0.0.1; echo $((53+19));"
-        post_data = urllib.parse.urlencode({"host": payload_nonce}).encode("utf-8")
+        public_ping_endpoint = f"{self.target_url}/api/tools/ping"
 
-        req = urllib.request.Request(backend_ping_endpoint, data=post_data, headers={"Content-Type": "application/x-www-form-urlencoded", "Host": "portal.target.local"})
-        with urllib.request.urlopen(req) as resp:
-            resp_body_text = resp.read().decode("utf-8")
+        # Brain declares formal ExperimentContract (Zero direct raw HTTP / Burp API exposure)
+        experiment_contract = ExperimentContract(
+            experiment_id="exp_os_cmd_ping_nonce",
+            hypothesis_id=self.case.case_id,
+            target_endpoint=public_ping_endpoint,
+            http_method="POST",
+            source_request_id=tx3.tx_id,
+            mutation_plan={
+                "url": public_ping_endpoint,
+                "method": "POST",
+                "headers": {"Content-Type": "application/x-www-form-urlencoded"},
+                "params": {"host": payload_nonce},
+                "body": f"host={payload_nonce}",
+            },
+            expected_observation="Deterministic arithmetic evaluation: $((53+19)) strictly computed to 72 in shell response.",
+            risk_tier="MEDIUM_RISK",
+        )
+        print(f"  [+] Brain formulated ExperimentContract: {experiment_contract.experiment_id}")
+        print(f"      - Target: {experiment_contract.http_method} {experiment_contract.target_endpoint}")
+        print(f"      - Inviolable Gates: ScopeGuard & RiskBudgetManager active")
 
-        # Ingest Active Verification Transaction
+        # BCSL executes the experiment: enforces policy, injects correlation, runs replay, takes state snapshots
+        exec_record = self.bcsl.submit_experiment(experiment_contract)
+        print(f"  [+] BCSL Execution Status: {exec_record.execution_status} (HTTP {exec_record.response.status_code})")
+        print(f"  [+] BCSL Provenance Trace: {exec_record.provenance}")
+        print(f"  [+] BCSL Response Delta: {exec_record.response_diff.get('length_delta_bytes', 0):+d} bytes | Audit Hash: {exec_record.audit_hash}")
+
+        resp_body_text = exec_record.response.body
+
+        # Ingest active experiment transaction into CaptureStore
         tx_verify = CapturedTransaction(
-            tx_id="tx_req_04_poe_probe",
+            tx_id=exec_record.request_id,
             parent_request=tx3.tx_id,
             target_host="portal.target.local",
             method="POST",
             url=public_ping_endpoint,
-            status_code=200,
-            req_headers={"Content-Type": "application/x-www-form-urlencoded", "Host": "portal.target.local"},
-            req_body=f"host={payload_nonce}",
-            resp_headers={"Content-Type": "text/plain"},
+            status_code=exec_record.response.status_code,
+            req_headers=exec_record.request.headers,
+            req_body=exec_record.request.body,
+            resp_headers=exec_record.response.headers,
             resp_body=resp_body_text,
-            tool_source="repeater"
+            tool_source="bcsl_repeater"
         )
         self.capture_store.store_transaction(tx_verify)
+
+        # Provision interactive research tab in Burp Repeater for human operator
+        tab_caption = f"HunterAI: PoE Cmd Injection ({exec_record.experiment_id})"
+        tab_name = self.bcsl.provision_repeater_tab(exec_record.request, tab_caption=tab_caption)
+        print(f"  [+] Burp Repeater Tab provisioned: '{tab_name}' for manual verification.")
 
         # Validate with ProofOfExecutionEngine
         is_poe_valid, poe_reason = ProofOfExecutionEngine.verify_command_injection(resp_body_text, "72", "53+19")
@@ -416,7 +543,7 @@ class UnifiedLiveSession:
         self.case.record_test(
             test_name="arithmetic_nonce_probe",
             payload=payload_nonce,
-            result={"status": 200, "arithmetic_evaluated": 72, "output": resp_body_text[:100]},
+            result={"status": exec_record.response.status_code, "arithmetic_evaluated": 72, "output": resp_body_text[:100]},
             succeeded=True
         )
         self.case.transfer(to_agent="VerifierAgent", next_action="ADJUDICATE", confidence_delta=0.99)
@@ -425,8 +552,10 @@ class UnifiedLiveSession:
         print(f"\n{CYAN}[STEP 5/6] Submitting to Evidence Court for Multi-Party Adjudication...{RESET}")
         finder_claim = {
             "claim": "OS Command Injection via ping tool parameter",
-            "raw_request": f"POST /api/tools/ping HTTP/1.1\r\nHost: 127.0.0.1:{self.target_port}\r\n\r\nhost={payload_nonce}",
-            "raw_response": f"HTTP/1.1 200 OK\r\n\r\n{resp_body_text[:200]}"
+            "raw_request": f"{exec_record.request.method} {exec_record.request.path} HTTP/1.1\r\nHost: {self.target_domain}\r\n\r\n{exec_record.request.body}",
+            "raw_response": f"HTTP/1.1 {exec_record.response.status_code} OK\r\n\r\n{resp_body_text[:200]}",
+            "audit_hash": exec_record.audit_hash,
+            "experiment_id": exec_record.experiment_id,
         }
         verifier_result = {
             "reproduced": True,

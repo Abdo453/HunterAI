@@ -68,7 +68,7 @@ class BurpControlSensorLayer:
         """
         Submits an ExperimentContract for controlled execution through Burp Suite.
         """
-        exp_id = f"exp_{uuid.uuid4().hex[:8]}"
+        exp_id = contract.experiment_id or f"exp_{uuid.uuid4().hex[:8]}"
         base_tx = self.controller._transactions.get(contract.source_request_id)
 
         # Baseline capture
@@ -188,6 +188,94 @@ class BurpControlSensorLayer:
 
         return record
 
+    def ingest_transaction(self, tx: CanonicalTransaction):
+        """Registers a canonical transaction into BCSL memory."""
+        self.controller.ingest_canonical(tx)
+
+    def ingest_captured(self, cap_tx: Any) -> CanonicalTransaction:
+        """Converts a CapturedTransaction into canonical format and registers it into BCSL."""
+        from core.burp_gateway.correlation import BurpCorrelationContext
+        from core.burp_gateway.traffic_normalizer import (
+            CanonicalIdentity,
+            CanonicalRequest,
+            CanonicalResponse,
+            CanonicalTransaction,
+            TargetStateContext,
+            TrafficSource,
+        )
+        from urllib.parse import parse_qs, urlparse
+
+        if isinstance(cap_tx, CanonicalTransaction):
+            self.controller.ingest_canonical(cap_tx)
+            return cap_tx
+
+        source_map = {
+            "proxy": TrafficSource.PROXY,
+            "repeater": TrafficSource.REPEATER,
+            "scanner": TrafficSource.SCANNER,
+            "extension": TrafficSource.EXTENSION,
+            "browser": TrafficSource.BROWSER,
+        }
+        tool = getattr(cap_tx, "tool_source", "proxy").lower()
+        src = source_map.get(tool, TrafficSource.PROXY)
+
+        tx_id = getattr(cap_tx, "tx_id", str(uuid.uuid4()))
+        url = getattr(cap_tx, "url", "")
+        method = getattr(cap_tx, "method", "GET")
+        host = getattr(cap_tx, "target_host", "")
+        req_headers = dict(getattr(cap_tx, "req_headers", {}))
+        req_body = getattr(cap_tx, "req_body", "")
+        status_code = int(getattr(cap_tx, "status_code", 200))
+        resp_headers = dict(getattr(cap_tx, "resp_headers", {}))
+        resp_body = getattr(cap_tx, "resp_body", "")
+        parent_id = getattr(cap_tx, "parent_request", None)
+
+        p = urlparse(url)
+        q_params = parse_qs(p.query) if p.query else {}
+
+        req_obj = CanonicalRequest(
+            method=method,
+            url=url,
+            host=host or p.netloc,
+            path=p.path or "/",
+            query_params=q_params,
+            headers=req_headers,
+            body=req_body,
+        )
+        resp_obj = CanonicalResponse(
+            status_code=status_code,
+            headers=resp_headers,
+            body=resp_body,
+        )
+        corr = BurpCorrelationContext(
+            transaction_id=tx_id,
+            parent_transaction_id=parent_id,
+            action_type="INGESTED_CAPTURE",
+        )
+        norm_tx = CanonicalTransaction(
+            tx_id=tx_id,
+            source=src,
+            correlation=corr,
+            request=req_obj,
+            response=resp_obj,
+            identity=CanonicalIdentity(
+                identity_id=getattr(cap_tx, "identity", "GUEST"),
+                role=getattr(cap_tx, "identity", "GUEST")
+            ),
+            state=TargetStateContext(cookies=getattr(cap_tx, "cookies", {})),
+            timestamp=getattr(cap_tx, "timestamp", time.time()),
+        )
+        self.controller.ingest_canonical(norm_tx)
+        return norm_tx
+
+    def provision_repeater_tab(
+        self,
+        request_or_tx_id: Any,
+        tab_caption: Optional[str] = None,
+    ) -> str:
+        """Provisions an interactive research tab in Burp Repeater."""
+        return self.controller.send_to_repeater(request_or_tx_id, tab_name=tab_caption)
+
     def _create_error_record(
         self,
         exp_id: str,
@@ -212,3 +300,4 @@ class BurpControlSensorLayer:
             provenance=provenance,
             audit_hash="",
         )
+
