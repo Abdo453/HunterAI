@@ -704,10 +704,121 @@ class HunterPipelineOrchestrator:
 
         transport = httpx.AsyncHTTPTransport(proxy=self.proxy, verify=False) if self.proxy else None
 
+        # 0. Playwright Browser Intelligence — JS-rendered crawl + XHR/Fetch interception
+        if self.profile in ("full", "hunter", "deep", "active"):
+            try:
+                from core.browser.playwright_controller import PlaywrightBrowserController, PLAYWRIGHT_AVAILABLE
+                if PLAYWRIGHT_AVAILABLE:
+                    await self._emit("browser_start", message="🌐 Launching Playwright headless browser for JS-rendered crawl...")
+                    browser_dir = os.path.join(self.artifact_root, "15_browser")
+                    os.makedirs(browser_dir, exist_ok=True)
+
+                    browser_ctrl = PlaywrightBrowserController(
+                        output_dir=browser_dir,
+                        policy_gate=self.policy_gate,
+                        proxy=self.proxy,   # routes ALL traffic through Burp if --proxy is set
+                        headless=True,
+                    )
+
+                    launched = await browser_ctrl.launch(browser_type="chromium")
+                    if launched:
+                        browser_endpoint_count = 0
+                        for target_live in self.live_assets[:5]:
+                            is_valid, _ = self.strict_scope_engine.validate_url(target_live.url)
+                            if not is_valid:
+                                continue
+                            try:
+                                ok, nav_msg = await browser_ctrl.goto(target_live.url, wait_until="networkidle", timeout=30000)
+                                if ok:
+                                    # Take screenshot as evidence
+                                    screenshot_name = f"{target_live.host.replace('.', '_')}.png"
+                                    await browser_ctrl.screenshot(name=screenshot_name)
+
+                                    # Extract all links from the DOM
+                                    links_raw = await browser_ctrl.evaluate_js("""
+                                        () => [...document.querySelectorAll('a[href]')]
+                                              .map(a => a.href)
+                                              .filter(h => h.startsWith('http'))
+                                    """) or []
+                                    for link in links_raw:
+                                        if isinstance(link, str) and self.domain in link and link not in seen_urls:
+                                            seen_urls.add(link)
+                                            p_link = urlparse(link)
+                                            cat = "API" if "/api" in p_link.path else ("ADMIN" if "admin" in p_link.path else "WEB")
+                                            endpoints.append(EndpointRecord(url=link, path=p_link.path, method="GET", category=cat, source="playwright"))
+                                            browser_endpoint_count += 1
+
+                                    # Extract JS script sources
+                                    scripts_raw = await browser_ctrl.evaluate_js("""
+                                        () => [...document.querySelectorAll('script[src]')].map(s => s.src)
+                                    """) or []
+                                    for js_src in scripts_raw:
+                                        if isinstance(js_src, str):
+                                            js_urls.add(js_src)
+
+                                    # Extract forms (login, register, search, upload etc)
+                                    forms = await browser_ctrl.extract_forms()
+                                    for form in forms:
+                                        form_action = form.get("action", "")
+                                        if form_action and self.domain in form_action and form_action not in seen_urls:
+                                            seen_urls.add(form_action)
+                                            p_fa = urlparse(form_action)
+                                            endpoints.append(EndpointRecord(
+                                                url=form_action, path=p_fa.path,
+                                                method=form.get("method", "POST"),
+                                                category="FORM", source="playwright_form"
+                                            ))
+                                            browser_endpoint_count += 1
+
+                                    # Save cookies + storage
+                                    await browser_ctrl.save_storage_state()
+
+                                    await self._emit("browser_page_done", url=target_live.url,
+                                        message=f"🌐 Browser: {target_live.url} → {len(links_raw)} links, {len(forms)} forms, {len(scripts_raw)} scripts")
+                            except Exception as be:
+                                logger.debug(f"Playwright page error on {target_live.url}: {be}")
+
+                        await browser_ctrl.close()
+
+                        # Parse XHR/Fetch requests from requests.jsonl (captured by network hooks)
+                        req_log = os.path.join(browser_dir, "requests.jsonl")
+                        if os.path.isfile(req_log):
+                            with open(req_log, encoding="utf-8") as rf:
+                                for line in rf:
+                                    try:
+                                        req_rec = json.loads(line)
+                                        req_url = req_rec.get("url", "")
+                                        req_type = req_rec.get("resource_type", "")
+                                        req_method = req_rec.get("method", "GET")
+                                        if req_url and self.domain in req_url and req_type in ("xhr", "fetch") and req_url not in seen_urls:
+                                            seen_urls.add(req_url)
+                                            p_r = urlparse(req_url)
+                                            endpoints.append(EndpointRecord(
+                                                url=req_url, path=p_r.path,
+                                                method=req_method, category="API", source="playwright_xhr"
+                                            ))
+                                            browser_endpoint_count += 1
+                                    except Exception:
+                                        pass
+
+                        self._save_stage_artifact("15_browser", "playwright_endpoints.json",
+                            [e.model_dump() for e in endpoints if "playwright" in e.source])
+                        await self._emit("browser_done",
+                            message=f"🌐 Playwright done — {browser_endpoint_count} endpoints captured (screenshots + cookies in 15_browser/)")
+                    else:
+                        print("[!] [BROWSER] Playwright launch failed — run: playwright install chromium")
+                else:
+                    print("[!] [BROWSER] ⚠️  Playwright not installed — run: pip install playwright && playwright install chromium")
+            except Exception as e:
+                logger.debug(f"Playwright browser controller error: {e}")
+                print(f"[!] [BROWSER] Playwright error: {e}")
+
+
         # 1. HTML Crawling
         for live in self.live_assets[:10]:
             is_valid_url, _ = self.strict_scope_engine.validate_url(live.url)
             if not is_valid_url:
+
                 continue
             try:
                 await self.rate_limiter.acquire(live.host)
@@ -1625,13 +1736,33 @@ class HunterPipelineOrchestrator:
         # 🔬 Print tool availability diagnostic so user knows what runs natively
         self.master_tools.print_tools_status(profile=self.profile)
 
+        # 🔴 BurpAgent — Start background Burp Suite listener if --proxy is set
+        burp_agent_task = None
+        if self.proxy:
+            try:
+                from agents.burp_agent.burp_agent import BurpAgent
+                from agents.base_agent import AgentTask
+                burp_port = 8085
+                self._burp_agent = BurpAgent(
+                    db_path=str(Path(self.artifact_root) / "burp_traffic.db"),
+                    port=burp_port,
+                    scope_includes=[self.domain, f"*.{self.domain}"],
+                )
+                await self._burp_agent.start_background_workers()
+                print(f"\n[+] 🔴 [BURP SUITE] Traffic listener active on port {burp_port}")
+                print(f"[+] 🔴 [BURP SUITE] Configure Burp Extension → HunterAI → http://127.0.0.1:{burp_port}")
+                print(f"[+] 🔴 [BURP SUITE] All browser Playwright traffic will also route through: {self.proxy}\n")
+                await self._emit("burp_started", message=f"🔴 Burp Suite listener active on :{burp_port} — intercept all traffic via {self.proxy}")
+            except Exception as be:
+                logger.debug(f"BurpAgent startup error: {be}")
+                print(f"[!] [BURP] BurpAgent could not start: {be}")
+
         # Step 0: Scope
         if not await self.stage_scope_check():
             return {"status": "aborted", "reason": "out_of_scope", "target": self.raw_target}
 
         # Step 1: Recon & Subdomains
         await self.stage_recon()
-
 
         # Step 2: Live Assets
         await self.stage_live_probing()
@@ -1643,6 +1774,7 @@ class HunterPipelineOrchestrator:
         await self.stage_testing_and_verification()
 
         duration = round(time.time() - t0, 2)
+
         # Finalize engagement manager with manifest, timeline, lineage graph
         finalize_summary = self.engagement_mgr.finalize(
             findings_count=len(self.findings),
