@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -1147,6 +1148,7 @@ class HunterPipelineOrchestrator:
 
         await self._emit("report_start", message="Writing final scan reports and persistent tool logs...")
         rep_paths = await self._generate_reports()
+        self.last_reports = rep_paths
 
         self.fsm.transition_to(HunterState.COMPLETE, "All pipeline stages completed successfully")
         await self._emit("pipeline_complete", findings=len(self.findings), reports=rep_paths)
@@ -1296,6 +1298,27 @@ class HunterPipelineOrchestrator:
         except Exception as e:
             logger.debug(f"Could not compute diff: {e}")
 
+        # Automatically export master reports directly to Desktop for convenient user access
+        desktop_target_dir = None
+        try:
+            desktop_dir = Path.home() / "Desktop"
+            if desktop_dir.is_dir():
+                clean_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', self.domain)
+                target_folder = f"HunterAI_{clean_name}"
+                desktop_target = desktop_dir / target_folder
+                desktop_target.mkdir(parents=True, exist_ok=True)
+                for f_path in [md_path, html_path, json_path]:
+                    if os.path.isfile(f_path):
+                        shutil.copy2(f_path, desktop_target / os.path.basename(f_path))
+                if diff_info.get("diff_md") and os.path.isfile(diff_info["diff_md"]):
+                    shutil.copy2(diff_info["diff_md"], desktop_target / "temporal_diff.md")
+                desktop_target_dir = str(desktop_target)
+                diff_info["desktop_export"] = desktop_target_dir
+                print(f"\n[+] 📁 Desktop Export Created: {desktop_target}")
+                logger.info(f"Exported final reports to Desktop: {desktop_target}")
+        except Exception as e:
+            logger.debug(f"Could not copy reports to Desktop: {e}")
+
         self.engagement_mgr.complete_stage("14_reports", item_count=len(self.findings))
         return {"json": json_path, "markdown": md_path, "html": html_path, **diff_info}
 
@@ -1328,6 +1351,7 @@ class HunterPipelineOrchestrator:
             endpoints_count=len(self.endpoints)
         )
 
+        desktop_export = getattr(self, "last_reports", {}).get("desktop_export")
         return {
             "status": "completed",
             "target": self.raw_target,
@@ -1345,5 +1369,7 @@ class HunterPipelineOrchestrator:
             "manifest_file": str(self.engagement_mgr.manifest_file),
             "timeline_file": str(self.engagement_mgr.timeline_file),
             "lineage_file": str(self.engagement_mgr.lineage_file),
+            "desktop_directory": desktop_export,
+            "reports": getattr(self, "last_reports", {}),
             "tool_logs": self.tool_logs
         }

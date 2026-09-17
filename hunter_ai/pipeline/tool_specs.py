@@ -392,14 +392,18 @@ class MasterToolRegistry:
 
         try:
             if self.is_available(tool_name) and spec and spec.command_template:
+                print(f"[*] [{stage.upper()}] ⚡ Dispatching {tool_name} (Max Timeout: {effective_timeout}s)...")
                 res = await self.tm.execute(cmd_str, timeout=effective_timeout)
                 raw_str = res.output
                 parsed = spec.parser(res.stdout) if spec.parser else res.stdout.splitlines()
                 if not res.success:
                     status = "failed"
                     error_msg = res.error or res.stderr
+                duration = time.time() - t0
+                print(f"[+] [{stage.upper()}] ✅ {tool_name} finished in {duration:.1f}s ({len(parsed)} items extracted)")
             elif spec and spec.fallback_tool:
                 status = "fallback"
+                print(f"[*] [{stage.upper()}] 🔄 {tool_name} missing from PATH; routing to fallback: '{spec.fallback_tool}'")
                 logger.info(f"Tool '{tool_name}' missing; executing fallback: '{spec.fallback_tool}'")
                 parsed, log_f = await self._execute_fallback(spec.fallback_tool, context)
                 if log_f and os.path.isfile(log_f):
@@ -410,14 +414,20 @@ class MasterToolRegistry:
                         raw_str = f"[Fallback: {spec.fallback_tool}]\n" + "\n".join(str(p) for p in parsed)
                 else:
                     raw_str = f"[Fallback: {spec.fallback_tool}]\n" + "\n".join(str(p) for p in parsed)
+                duration = time.time() - t0
+                print(f"[+] [{stage.upper()}] ✅ Fallback {spec.fallback_tool} finished in {duration:.1f}s ({len(parsed)} items extracted)")
             else:
+                print(f"[*] [{stage.upper()}] ⚡ Running {tool_name}...")
                 res = await self.tm.execute(cmd_str)
                 raw_str = res.output
                 parsed = [res.stdout] if res.stdout else []
+                duration = time.time() - t0
+                print(f"[+] [{stage.upper()}] ✅ {tool_name} finished in {duration:.1f}s")
         except Exception as e:
             status = "error"
             error_msg = str(e)
             raw_str = f"Error executing {tool_name}: {e}"
+            print(f"[!] [{stage.upper()}] ❌ Error running {tool_name}: {e}")
 
         duration = time.time() - t0
         meta = engagement_mgr.save_tool_artifact(

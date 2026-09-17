@@ -67,9 +67,17 @@ def main():
         if args.hunter or args.workflow or args.mode in ("hunter", "bugbounty") or args.profile != "safe" or args.scope_file or args.triad or args.lab_mode or args.proxy or args.deep or args.timeout_multiplier > 1.0:
             effective_profile = "deep" if args.deep else args.profile
             effective_mult = max(args.timeout_multiplier, 5.0 if (args.deep or effective_profile in ("deep", "patient")) else 1.0)
+
+            def console_progress(ev: dict):
+                msg = ev.get("message")
+                event_name = ev.get("event", "STATUS").upper()
+                if msg:
+                    print(f"[*] 🚀 [{event_name}] {msg}")
+
             from hunter_ai.pipeline import HunterPipelineOrchestrator
             orch = HunterPipelineOrchestrator(
                 target=args.target,
+                progress_cb=console_progress,
                 authorized=args.authorized,
                 workflow=args.workflow or "full",
                 mode=args.mode,
@@ -89,10 +97,12 @@ def main():
                 print(f"\n[!] HunterAI Pipeline Aborted: {res.get('reason')} (Target: {res.get('target')})")
                 return
             print(f"\n[*] HunterAI Pipeline Complete! Status: {res['status']}")
-            print(f"[*] Profile: {args.profile} | Rate Limit: {args.rate_limit} rps")
+            print(f"[*] Profile: {effective_profile} (Timeout Multiplier: {effective_mult}x) | Rate Limit: {args.rate_limit} rps")
             print(f"[*] Subdomains: {res['subdomains_count']} | Live Hosts: {res['live_assets_count']} | Endpoints: {res['endpoints_count']}")
             print(f"[*] Confirmed Findings: {res['findings_count']}")
             print(f"[*] Artifacts & Reports: {res['artifact_directory']}")
+            if res.get("desktop_directory"):
+                print(f"[+] 📁 Desktop Export Folder: {res['desktop_directory']}")
             if res.get("diff_md"):
                 print(f"[*] Temporal Diff Report: {res['diff_md']}")
             if res.get("tool_logs"):
