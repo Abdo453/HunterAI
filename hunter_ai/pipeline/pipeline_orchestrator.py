@@ -736,7 +736,50 @@ class HunterPipelineOrchestrator:
             except Exception as e:
                 logger.debug(f"katana error: {e}")
 
-        # 2. Directory Fuzzing
+        # 1d. Hakrawler - Fast passive link extraction
+        try:
+            for target_live in self.live_assets[:3]:
+                hk_urls, meta_hk = await self.master_tools.execute_artifact(
+                    "hakrawler", {"url": target_live.url}, self.engagement_mgr, "07_urls", input_source=target_live.url
+                )
+                for hu in hk_urls:
+                    if isinstance(hu, str) and hu.startswith("http") and hu not in seen_urls:
+                        seen_urls.add(hu)
+                        p_hu = urlparse(hu)
+                        endpoints.append(EndpointRecord(
+                            url=hu,
+                            path=p_hu.path,
+                            method="GET",
+                            category="CRAWLER",
+                            source="hakrawler"
+                        ))
+                if meta_hk and meta_hk.raw_output_file:
+                    self.tool_logs.append(meta_hk.raw_output_file)
+        except Exception as e:
+            logger.debug(f"hakrawler error: {e}")
+
+        # 1e. GAU - Get All URLs from AlienVault, Wayback, CommonCrawl
+        try:
+            gau_urls, meta_gau = await self.master_tools.execute_artifact(
+                "gau", {"domain": self.domain}, self.engagement_mgr, "07_urls", input_source=f"domain: {self.domain}"
+            )
+            for gu in gau_urls:
+                if isinstance(gu, str) and gu.startswith("http") and self.domain in gu and gu not in seen_urls:
+                    seen_urls.add(gu)
+                    p_gu = urlparse(gu)
+                    endpoints.append(EndpointRecord(
+                        url=gu,
+                        path=p_gu.path,
+                        method="GET",
+                        category="ARCHIVE",
+                        source="gau"
+                    ))
+            if meta_gau and meta_gau.raw_output_file:
+                self.tool_logs.append(meta_gau.raw_output_file)
+        except Exception as e:
+            logger.debug(f"gau error: {e}")
+
+        # 2. Directory Fuzzing — ffuf (primary) with gobuster and dirsearch fallbacks
         if self.profile == "passive":
             fuzz_lines, meta_fuzz = [], None
             self.engagement_mgr.record_timeline_event(
@@ -746,9 +789,32 @@ class HunterPipelineOrchestrator:
             )
         else:
             resolved_wl = self.wordlist_mgr.get_wordlist("directories", profile=self.profile)
+            # Primary fuzzer: ffuf (faster, smarter filtering)
             fuzz_lines, meta_fuzz = await self.master_tools.execute_artifact(
-                "gobuster", {"url": self.base_url, "wordlist": resolved_wl}, self.engagement_mgr, "06_content", input_source="04_alive/alive_hosts.txt"
+                "ffuf", {"url": self.base_url, "wordlist": resolved_wl}, self.engagement_mgr, "06_content", input_source="04_alive/alive_hosts.txt"
             )
+            # If ffuf not available, try feroxbuster (recursive)
+            if not fuzz_lines:
+                fuzz_lines, meta_fuzz = await self.master_tools.execute_artifact(
+                    "feroxbuster", {"url": self.base_url, "wordlist": resolved_wl}, self.engagement_mgr, "06_content", input_source="04_alive/alive_hosts.txt"
+                )
+            # Last resort: gobuster
+            if not fuzz_lines:
+                fuzz_lines, meta_fuzz = await self.master_tools.execute_artifact(
+                    "gobuster", {"url": self.base_url, "wordlist": resolved_wl}, self.engagement_mgr, "06_content", input_source="04_alive/alive_hosts.txt"
+                )
+            # Dirsearch for extra coverage on deep scans (extensions-aware)
+            if self.profile in ("full", "hunter", "deep"):
+                try:
+                    ds_lines, meta_ds = await self.master_tools.execute_artifact(
+                        "dirsearch", {"url": self.base_url}, self.engagement_mgr, "06_content", input_source="04_alive/alive_hosts.txt"
+                    )
+                    fuzz_lines.extend([l for l in ds_lines if l not in fuzz_lines])
+                    if meta_ds and meta_ds.raw_output_file:
+                        self.tool_logs.append(meta_ds.raw_output_file)
+                except Exception as e:
+                    logger.debug(f"dirsearch error: {e}")
+
         if meta_fuzz and meta_fuzz.raw_output_file:
             self.tool_logs.append(meta_fuzz.raw_output_file)
         self._save_stage_artifact("06_content", "directory_fuzz.txt", "\n".join(fuzz_lines))
@@ -1085,6 +1151,88 @@ class HunterPipelineOrchestrator:
                                     self.findings.append(f_obj)
                 except Exception as e:
                     logger.debug(f"Nuclei test error: {e}")
+
+            # 4. Dalfox XSS Scanning on discovered endpoints with parameters
+            if self.profile in ("full", "hunter", "deep"):
+                try:
+                    xss_targets = [p for p in self.parameters if "XSS" in p.potential_classes][:5]
+                    for xss_p in xss_targets:
+                        dalfox_url = xss_p.endpoint
+                        dalf_lines, meta_dalf = await self.master_tools.execute_artifact(
+                            "dalfox", {"url": dalfox_url}, self.engagement_mgr, "12_vulnerabilities", input_source=dalfox_url
+                        )
+                        if meta_dalf and meta_dalf.raw_output_file:
+                            self.tool_logs.append(meta_dalf.raw_output_file)
+                        for dl in dalf_lines:
+                            if isinstance(dl, str) and dl:
+                                from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
+                                is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                                    title=f"XSS Confirmed: {xss_p.parameter}",
+                                    asset=self.domain,
+                                    endpoint=dalfox_url,
+                                    vuln_type="XSS",
+                                    raw_evidence=dl,
+                                    source_tool="dalfox",
+                                    verifier_result={"reproduced": True, "is_reflection": False}
+                                )
+                                if is_q and f_obj:
+                                    self.findings.append(f_obj)
+                except Exception as e:
+                    logger.debug(f"Dalfox XSS error: {e}")
+
+            # 5. Nikto Web Server Vulnerability Scan
+            if self.profile in ("full", "hunter", "deep"):
+                try:
+                    for target_live in self.live_assets[:2]:
+                        nikto_lines, meta_nikto = await self.master_tools.execute_artifact(
+                            "nikto", {"url": target_live.url}, self.engagement_mgr, "12_vulnerabilities", input_source=target_live.url
+                        )
+                        if meta_nikto and meta_nikto.raw_output_file:
+                            self.tool_logs.append(meta_nikto.raw_output_file)
+                        for nk in nikto_lines:
+                            if isinstance(nk, str) and "OSVDB" in nk or "CVE" in str(nk):
+                                from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
+                                is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                                    title=f"Nikto: {nk[:80]}",
+                                    asset=self.domain,
+                                    endpoint=target_live.url,
+                                    vuln_type="MisconfigExposure",
+                                    raw_evidence=nk,
+                                    source_tool="nikto",
+                                    verifier_result={"reproduced": True, "is_reflection": False}
+                                )
+                                if is_q and f_obj:
+                                    self.findings.append(f_obj)
+                except Exception as e:
+                    logger.debug(f"Nikto scan error: {e}")
+
+            # 6. FFUF Hidden Parameter Discovery
+            if self.profile in ("full", "hunter", "deep") and self.live_assets:
+                try:
+                    params_wl = self.wordlist_mgr.get_wordlist("parameters", profile=self.profile)
+                    target_url = self.live_assets[0].url
+                    ffuf_params_lines, meta_ffuf_p = await self.master_tools.execute_artifact(
+                        "ffuf_params", {
+                            "url": target_url,
+                            "wordlist": params_wl,
+                            "content_size": 0
+                        }, self.engagement_mgr, "08_parameters", input_source=target_url
+                    )
+                    for fp in ffuf_params_lines:
+                        if isinstance(fp, str) and fp:
+                            from hunter_ai.pipeline.schemas import ParameterRecord
+                            self.parameters.append(ParameterRecord(
+                                parameter=fp.strip(),
+                                endpoint=target_url,
+                                method="GET",
+                                source="ffuf_discovery",
+                                potential_classes=["GeneralFuzz"],
+                                sample_value="test"
+                            ))
+                    if meta_ffuf_p and meta_ffuf_p.raw_output_file:
+                        self.tool_logs.append(meta_ffuf_p.raw_output_file)
+                except Exception as e:
+                    logger.debug(f"ffuf_params error: {e}")
 
         # Add any high-confidence secrets (Shannon entropy validated)
         for s in self.secrets:

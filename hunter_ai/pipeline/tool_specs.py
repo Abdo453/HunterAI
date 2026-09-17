@@ -361,6 +361,268 @@ class MasterToolRegistry:
             risk_level="ACTIVE"
         )
 
+        # ─────────────────────────────────────────────────────────────────────────
+        # 17. FFUF — Fast Web Fuzzer (Directories, Parameters, Vhosts)
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["ffuf"] = ToolSpec(
+            name="ffuf",
+            stage="08_DIRECTORY_DISCOVERY",
+            purpose="Ultra-fast multi-mode HTTP fuzzer: directories, parameters, vhosts, and content discovery",
+            input_desc="Target URL with FUZZ keyword and wordlist",
+            output_desc="Discovered paths, parameters, and vhosts with status codes and sizes",
+            command_template="ffuf -u {url}/FUZZ -w {wordlist} -mc 200,201,204,301,302,307,401,403,405 -t 40 -of json -o /tmp/ffuf_out.json -s",
+            prerequisites=["ffuf"],
+            timeout=300,
+            fallback_tool="python_dir_fuzz",
+            parser=lambda out: [l.strip() for l in out.splitlines() if l.strip() and "Status:" in l],
+            confidence=0.93,
+            next_stage="09_URL_DISCOVERY",
+            risk_level="AUDIT"
+        )
+
+        # 17b. FFUF Parameter Discovery mode
+        self.specs["ffuf_params"] = ToolSpec(
+            name="ffuf_params",
+            stage="10_PARAMETER_DISCOVERY",
+            purpose="Discover hidden GET/POST parameters using FFUF",
+            input_desc="Target URL with FUZZ keyword substituted into parameter position",
+            output_desc="Valid parameter names that produce different HTTP responses",
+            command_template="ffuf -u {url}?FUZZ=testvalue -w {wordlist} -mc 200,302 -fs {content_size} -t 30 -s",
+            prerequisites=["ffuf"],
+            timeout=240,
+            fallback_tool="python_param_extract",
+            parser=lambda out: [l.strip().split(" ")[0] for l in out.splitlines() if l.strip() and "200" in l],
+            confidence=0.88,
+            next_stage="17_VULNERABILITY_ROUTER",
+            risk_level="AUDIT"
+        )
+
+        # 17c. FFUF Vhost Discovery mode
+        self.specs["ffuf_vhost"] = ToolSpec(
+            name="ffuf_vhost",
+            stage="02_CERTIFICATE_OSINT",
+            purpose="Virtual host discovery by fuzzing Host header for hidden vhosts",
+            input_desc="Base URL and wordlist of hostnames",
+            output_desc="Discovered virtual hosts with different response sizes",
+            command_template="ffuf -u {url} -H 'Host: FUZZ.{domain}' -w {wordlist} -mc 200,302,400 -fs {content_size} -t 30 -s",
+            prerequisites=["ffuf"],
+            timeout=240,
+            fallback_tool="crtsh",
+            parser=lambda out: [l.strip() for l in out.splitlines() if "FUZZ" in l or ".{" not in l],
+            confidence=0.85,
+            next_stage="05_NORMALIZE",
+            risk_level="AUDIT"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 18. Feroxbuster — Recursive Directory Bruteforcer
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["feroxbuster"] = ToolSpec(
+            name="feroxbuster",
+            stage="08_DIRECTORY_DISCOVERY",
+            purpose="Fast recursive directory discovery with automatic recursion into found paths",
+            input_desc="Target base URL and wordlist",
+            output_desc="Recursively discovered directories and files with status codes",
+            command_template="feroxbuster -u {url} -w {wordlist} --silent --status-codes 200,201,204,301,302,401,403 --depth 3 --threads 50",
+            prerequisites=["feroxbuster"],
+            timeout=300,
+            fallback_tool="python_dir_fuzz",
+            parser=lambda out: [l.strip() for l in out.splitlines() if l.strip() and any(c in l for c in ["200", "301", "401", "403"])],
+            confidence=0.90,
+            next_stage="09_URL_DISCOVERY",
+            risk_level="AUDIT"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 19. Amass — Deep Subdomain Intelligence
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["amass"] = ToolSpec(
+            name="amass",
+            stage="01_PASSIVE_RECON",
+            purpose="Comprehensive subdomain enumeration using DNS brute-forcing, certificate transparency, and OSINT APIs",
+            input_desc="Root domain",
+            output_desc="Comprehensive list of subdomains from multi-source intelligence gathering",
+            command_template="amass enum -passive -d {domain} -silent",
+            prerequisites=["amass"],
+            timeout=300,
+            fallback_tool="crtsh",
+            parser=lambda out: [l.strip().lower() for l in out.splitlines() if l.strip() and "." in l],
+            confidence=0.95,
+            next_stage="05_NORMALIZE",
+            risk_level="SAFE"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 20. DNSRecon — DNS Enumeration and Zone Transfer Checks
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["dnsrecon"] = ToolSpec(
+            name="dnsrecon",
+            stage="03_DNS_ENUM",
+            purpose="DNS zone transfer attempts, record enumeration (A, MX, NS, TXT, SRV, SOA), and DNSSEC checks",
+            input_desc="Target domain",
+            output_desc="DNS records, zone transfer results, and subdomain enumeration",
+            command_template="dnsrecon -d {domain} -t std,axfr,brt -D {wordlist} --csv /tmp/dnsrecon_out.csv -q",
+            prerequisites=["dnsrecon"],
+            timeout=180,
+            fallback_tool="crtsh",
+            parser=lambda out: [l.strip() for l in out.splitlines() if l.strip() and any(t in l for t in ["A ", "MX ", "NS ", "TXT ", "CNAME", "SOA "])],
+            confidence=0.90,
+            next_stage="05_NORMALIZE",
+            risk_level="AUDIT"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 21. Nikto — Web Server Vulnerability Scanner
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["nikto"] = ToolSpec(
+            name="nikto",
+            stage="16_NUCLEI_TRIAGE",
+            purpose="Comprehensive web server scanner for misconfigurations, default files, dangerous headers, and CVEs",
+            input_desc="Target URL",
+            output_desc="Identified vulnerabilities, misconfigurations, and information disclosures",
+            command_template="nikto -h {url} -nointeractive -Cgidirs all -Format txt",
+            prerequisites=["nikto"],
+            timeout=300,
+            fallback_tool="python_exposure_check",
+            parser=lambda out: [l.strip() for l in out.splitlines() if l.strip().startswith("+") and "OK" not in l],
+            confidence=0.78,
+            next_stage="17_VULNERABILITY_ROUTER",
+            risk_level="AUDIT"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 22. Dalfox — XSS Vulnerability Scanner
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["dalfox"] = ToolSpec(
+            name="dalfox",
+            stage="18_ACTIVE_TESTING",
+            purpose="Parameter-aware XSS vulnerability scanning with DOM analysis and reflection detection",
+            input_desc="Target URL with parameter",
+            output_desc="Verified XSS injection points with working payloads",
+            command_template="dalfox url {url} --skip-bav --no-spinner --silence",
+            prerequisites=["dalfox"],
+            timeout=180,
+            fallback_tool="python_xss_probe",
+            parser=lambda out: [l.strip() for l in out.splitlines() if "[POC]" in l or "[VERIFIED]" in l or "Triggered!" in l],
+            confidence=0.95,
+            next_stage="19_VERIFICATION",
+            risk_level="ACTIVE"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 23. kxss — Reflected Parameter XSS Scanner
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["kxss"] = ToolSpec(
+            name="kxss",
+            stage="18_ACTIVE_TESTING",
+            purpose="Fast reflected XSS detection by testing special character reflection in HTTP responses",
+            input_desc="Target URLs piped via stdin",
+            output_desc="URLs reflecting dangerous characters unencoded",
+            command_template="echo {url} | kxss",
+            prerequisites=["kxss"],
+            timeout=60,
+            fallback_tool="python_xss_probe",
+            parser=lambda out: [l.strip() for l in out.splitlines() if "Param:" in l or "URL:" in l],
+            confidence=0.85,
+            next_stage="19_VERIFICATION",
+            risk_level="ACTIVE"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 24. Hakrawler — Fast Web Crawler
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["hakrawler"] = ToolSpec(
+            name="hakrawler",
+            stage="09_URL_DISCOVERY",
+            purpose="Fast, focused web crawler for links, forms, JS sources, and API endpoints",
+            input_desc="Target URL",
+            output_desc="Discovered URLs, forms, and API endpoints",
+            command_template="echo {url} | hakrawler -depth 3 -plain",
+            prerequisites=["hakrawler"],
+            timeout=120,
+            fallback_tool="python_crawler",
+            parser=lambda out: [l.strip() for l in out.splitlines() if l.strip().startswith("http")],
+            confidence=0.88,
+            next_stage="10_PARAMETER_DISCOVERY",
+            risk_level="SAFE"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 25. TruffleHog — Secrets & Credentials Scanner
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["trufflehog"] = ToolSpec(
+            name="trufflehog",
+            stage="09_JAVASCRIPT",
+            purpose="Deep secrets detection in git repos, S3, and web content using Shannon entropy and regex patterns",
+            input_desc="GitHub repo URL or target domain URL",
+            output_desc="Exposed API keys, tokens, passwords, and credentials with source location",
+            command_template="trufflehog git {url} --only-verified --json",
+            prerequisites=["trufflehog"],
+            timeout=180,
+            fallback_tool="python_secret_scan",
+            parser=lambda out: [l.strip() for l in out.splitlines() if "DetectorName" in l or "Raw:" in l],
+            confidence=0.92,
+            next_stage="19_VERIFICATION",
+            risk_level="SAFE"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 26. SSRFmap — SSRF Vulnerability Scanner
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["ssrfmap"] = ToolSpec(
+            name="ssrfmap",
+            stage="18_ACTIVE_TESTING",
+            purpose="SSRF vulnerability detection and exploitation via automatic payload injection",
+            input_desc="Target URL with SSRF parameter",
+            output_desc="SSRF confirmation with out-of-band interaction proof",
+            command_template="python3 ssrfmap.py -r {request_file} -p {param} -m all",
+            prerequisites=["ssrfmap"],
+            timeout=120,
+            fallback_tool="python_ssrf_probe",
+            parser=lambda out: [l.strip() for l in out.splitlines() if "[+]" in l or "VULNERABLE" in l.upper()],
+            confidence=0.90,
+            next_stage="19_VERIFICATION",
+            risk_level="ACTIVE"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 27. Httprobe — Live Host Prober
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["httprobe"] = ToolSpec(
+            name="httprobe",
+            stage="06_HTTPX_LIVE_HOSTS",
+            purpose="Fast HTTP/HTTPS alive host prober — pipes subdomain list and returns live URLs only",
+            input_desc="List of subdomains from file or stdin",
+            output_desc="Live HTTP/HTTPS URLs confirmed with 200/301 responses",
+            command_template="cat {targets_file} | httprobe -c 50",
+            prerequisites=["httprobe"],
+            timeout=120,
+            fallback_tool="python_http_probe",
+            parser=lambda out: [l.strip() for l in out.splitlines() if l.strip().startswith("http")],
+            confidence=0.95,
+            next_stage="08_DIRECTORY_DISCOVERY",
+            risk_level="SAFE"
+        )
+
+        # ─────────────────────────────────────────────────────────────────────────
+        # 28. Shodan CLI — Public IP Intelligence
+        # ─────────────────────────────────────────────────────────────────────────
+        self.specs["shodan"] = ToolSpec(
+            name="shodan",
+            stage="01_PASSIVE_RECON",
+            purpose="Shodan internet-wide scan intelligence: open ports, CVEs, banners, and exposed services",
+            input_desc="Target domain or IP",
+            output_desc="Open ports, banners, and known CVEs from Shodan database",
+            command_template="shodan domain {domain}",
+            prerequisites=["shodan"],
+            timeout=30,
+            fallback_tool="crtsh",
+            parser=lambda out: [l.strip() for l in out.splitlines() if l.strip()],
+            confidence=0.90,
+            next_stage="05_NORMALIZE",
+            risk_level="SAFE"
+        )
+
     def is_available(self, tool_name: str) -> bool:
         spec = self.specs.get(tool_name)
         if not spec:
