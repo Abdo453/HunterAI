@@ -1,23 +1,17 @@
 """
-HunterAI External Ground-Truth Benchmark Harness
-=================================================
-Independent evaluation harness testing HunterAI against industry-standard
-external vulnerable applications with pre-defined external ground truth:
+HunterAI Ground-Truth Specification & Invariant Verification Harness
+===================================================================
+In-process deterministic specification harness verifying HunterAI epistemic
+decision logic (EvidenceLevelEvaluator, invariant satisfaction, and evidence tiers)
+against cataloged vulnerability ground-truth schemas (Juice Shop, DVWA, WebGoat).
 
-Supported Targets:
-1. OWASP Juice Shop (Modern API, Angular, Node.js/Express, SQLite)
-2. DVWA (Classic PHP/MySQL LAMP Stack)
-3. WebGoat (Java Spring Boot Enterprise Target)
-4. PortSwigger Academy Ground Truth Catalog
-
-Quantitative Forensic Metrics:
-- True Positives (TP)
-- False Positives (FP) — Target: Strictly 0.0%
-- False Negatives (FN)
-- Precision & Recall
-- Forensic Evidence Level Distribution (E0..E5)
-- Mean Evidence Level (Score: 0.0 - 5.0)
-- Decision Drift (Verdict Stability across Replays)
+NOTE ON EXECUTION PROFILE:
+- This suite executes in-process specification contracts to verify decision-tree
+  invariants, evidence levels (E0-E5), and false-positive resistance deterministically.
+- It does NOT invoke external live network containers.
+- For physical wire-level HTTP socket testing against live local endpoints with
+  measured network latency and Burp Suite gateway integration, see:
+  `run_unified_live_session.py` and `tests/test_unified_live_session.py`.
 """
 from __future__ import annotations
 
@@ -226,9 +220,8 @@ class ExternalBenchmarkHarness:
         for case in cases:
             is_vuln_expected = case.category != "BENIGN"
 
-            # Evaluate with EvidenceLevelEvaluator
+            # Evaluate contract specification against EvidenceLevelEvaluator rules
             if is_vuln_expected:
-                # Simulating verified proof for standard ground-truth case
                 eval_res = EvidenceLevelEvaluator.evaluate(
                     finding_data={
                         "title": case.name,
@@ -241,7 +234,10 @@ class ExternalBenchmarkHarness:
                     has_sealed_bundle=True,
                     has_standalone_replay=True,
                 )
-                tp += 1
+                if eval_res.is_confirmed_eligible:
+                    tp += 1
+                else:
+                    fn += 1
                 distribution[eval_res.code] += 1
                 total_evidence_score += int(eval_res.level)
             else:

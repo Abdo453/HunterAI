@@ -25,7 +25,7 @@ from core.burp_gateway.correlation import BurpCorrelationContext
 from core.burp_gateway.traffic_normalizer import BurpTrafficNormalizer, CanonicalRequest
 from core.burp_gateway.experiment_queue import BurpExperimentQueue, BurpExperimentItem
 from core.burp_gateway.event_stream import BurpLiveEventStream
-from core.controllers.burp_research_controller import BurpResearchController, ScopeViolationError
+
 
 
 logger = logging.getLogger("hunter_ai.burp_gateway")
@@ -71,6 +71,7 @@ class BurpGateway:
 
         self.event_stream = BurpLiveEventStream()
         self.experiment_queue = BurpExperimentQueue()
+        from core.controllers.burp_research_controller import BurpResearchController
         self.research_controller = BurpResearchController(
             scope_guard=self.scope_engine,
             capture_store=self.capture_store,
@@ -116,6 +117,8 @@ class BurpGateway:
         return True, "Authorized (Permissive)"
 
     def _setup_routes(self):
+        from core.controllers.burp_research_controller import ScopeViolationError
+
         @self.app.get("/health")
         @self.app.get("/status")
         async def health():

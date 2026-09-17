@@ -6,12 +6,12 @@
 
 ## 🧭 Attack Surface Visibility Breakdown
 
-| Epistemic Sector | Coverage (%) | Description | Current Strategy |
+| Epistemic Sector | Operational Status | Boundary & Capabilities | Governance & Verification Strategy |
 | :--- | :---: | :--- | :--- |
-| **Known & Tested** | `72.0%` | Standard HTTP/1.1 & HTTP/2 REST APIs, JSON endpoints, common injection sinks (SQLi, CMDI, SSRF, XSS), BOLA/IDOR object authorization checks. | Automated sensory verification with tripartite proof contracts. |
-| **Known & Untested** | `14.0%` | High-risk endpoints requiring operator consent, multi-factor authenticated routes, payment state mutations. | Queued in operator consent queue (`hunter assets --approve`). |
-| **Blocked by Policy** | `8.0%` | External CDNs, cloud metadata boundaries (`169.254.169.254`), out-of-scope third-party dependencies. | Strictly blocked by Scope Firewall and RFC1918 boundary rules. |
-| **Official Unknowns** | `6.0%` | Proprietary binary sockets, opaque CAPTCHAs, hardware tokens, undocumented legacy protocols. | Formal status classified as `UNKNOWN` rather than guessing `SAFE`. |
+| **Known & Testable Surface** | `ACTIVE_IN_SCOPE` | Standard HTTP/1.1 & HTTP/2 REST APIs, JSON endpoints, common injection sinks (SQLi, CMDI, SSRF, XSS), BOLA/IDOR object authorization checks. | Automated causal experimentation via Metamorphic Triad contracts & Evidence Court adjudication. |
+| **High-Impact State Mutations** | `OPERATOR_GATED` | Destructive mutations, payment state transitions, multi-factor authenticated routes, administrative account deletions. | Queued in operator consent queue (`hunter assets --approve`) with dry-run verification. |
+| **Policy-Restricted Boundaries** | `STRICTLY_BLOCKED` | External CDNs, cloud metadata boundaries (`169.254.169.254`), out-of-scope third-party dependencies, production infrastructure. | Pre-execution enforcement by Scope Firewall, RFC1918 rules, and Capability Gate. |
+| **Epistemic Unknowns** | `EXPLICIT_UNKNOWN` | Proprietary binary sockets, opaque CAPTCHAs, hardware tokens, undocumented legacy protocols. | Classified formally as `UNKNOWN` in Attack Surface Graph; never falsely marked as `SAFE`. |
 
 ---
 

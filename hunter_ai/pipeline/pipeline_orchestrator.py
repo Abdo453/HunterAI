@@ -291,6 +291,7 @@ class HunterPipelineOrchestrator:
 
         # Discover Program Intelligence (BBP vs VDP, Platform vs Self-Hosted, security.txt)
         try:
+            from core.program_intelligence import ProgramIntelligence
             self.program_metadata = await ProgramIntelligence.discover_program(self.domain, proxy=self.proxy)
             self.scope_config.program_type = self.program_metadata.program_type
             self.scope_config.program_platform = self.program_metadata.platform
@@ -1150,6 +1151,7 @@ class HunterPipelineOrchestrator:
         # Program-Specific Deliverables (BBP vs VDP)
         if self.program_metadata:
             try:
+                from core.program_intelligence import ProgramIntelligence
                 if self.program_metadata.program_type in (ProgramType.BBP, ProgramType.SELF_HOSTED_BBP):
                     h1_rep = ProgramIntelligence.generate_hackerone_report(self.domain, findings_data, self.program_metadata)
                     with open(os.path.join(reports_dir, "hackerone_bounty_submission.md"), "w", encoding="utf-8") as f:

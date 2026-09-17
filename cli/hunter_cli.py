@@ -221,7 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
     bs_p.add_argument("--json", action="store_true", help="Output blindspots in raw JSON")
 
     # External Arena command
-    ea_p = subparsers.add_parser("external-arena", help="Run evaluation against external ground truth targets (Juice Shop, DVWA)")
+    ea_p = subparsers.add_parser("external-arena", help="Run in-process specification evaluation against ground truth schemas (Juice Shop, DVWA)")
     ea_p.add_argument("--app", default="juice_shop", choices=["juice_shop", "dvwa"], help="Target application catalog")
     ea_p.add_argument("--json", action="store_true", help="Output scorecard in raw JSON")
 

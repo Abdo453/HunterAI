@@ -6,7 +6,7 @@
 [![Tests](https://img.shields.io/badge/Unit%20Tests-42%2F42%20Passing-success?style=for-the-badge&logo=pytest)](tests/)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)](https://python.org)
 [![Architecture](https://img.shields.io/badge/Engine-Evidence%20Court%20%2B%20Code%20Intel-orange?style=for-the-badge)]()
-[![License](https://img.shields.io/badge/License-MIT%20%2F%20Defensive-purple?style=for-the-badge)]()
+[![License](https://img.shields.io/badge/License-MIT-purple?style=for-the-badge)](LICENSE)
 
 **The next-generation, zero-speculation autonomous pentesting agent governed by an Evidence Court, Proof-of-Execution Engine, and Client-Side Code Intelligence.**
 
