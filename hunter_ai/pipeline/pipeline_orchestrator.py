@@ -365,8 +365,9 @@ class HunterPipelineOrchestrator:
 
         # 2. subfinder -> 02_subdomains
         try:
+            sf_tool = "subfinder_deep" if self.profile in ("full", "hunter", "deep") else "subfinder"
             subs_sf, meta_sf = await self.master_tools.execute_artifact(
-                "subfinder", {"domain": self.domain}, self.engagement_mgr, "02_subdomains", input_source=f"domain: {self.domain}"
+                sf_tool, {"domain": self.domain}, self.engagement_mgr, "02_subdomains", input_source=f"domain: {self.domain}"
             )
             for s in subs_sf:
                 raw_records.setdefault(s.lower(), set()).add("subfinder")
@@ -377,6 +378,20 @@ class HunterPipelineOrchestrator:
                 self.tool_logs.append(meta_sf.raw_output_file)
         except Exception as e:
             logger.debug(f"subfinder error: {e}")
+
+        # 2a. assetfinder (Passive archives scraping) -> 02_subdomains
+        if self.profile in ("full", "hunter", "deep", "active"):
+            try:
+                subs_af, meta_af = await self.master_tools.execute_artifact(
+                    "assetfinder", {"domain": self.domain}, self.engagement_mgr, "02_subdomains", input_source=f"domain: {self.domain}"
+                )
+                for s in subs_af:
+                    raw_records.setdefault(s.lower(), set()).add("assetfinder")
+                    self.engagement_mgr.record_lineage(asset_id=s.lower(), asset_value=s.lower(), asset_type="domain", tool="assetfinder", stage="02_subdomains", parent_id=self.domain)
+                if meta_af and meta_af.raw_output_file:
+                    self.tool_logs.append(meta_af.raw_output_file)
+            except Exception as e:
+                logger.debug(f"assetfinder error: {e}")
 
         # 2b. Active DNS Wordlist Brute-forcing (SecLists) -> 02_subdomains
         if self.profile in ("full", "hunter", "deep", "active"):
@@ -414,8 +429,9 @@ class HunterPipelineOrchestrator:
                 message="Port scanning skipped under passive profile"
             )
         else:
+            nmap_tool = "nmap_deep" if self.profile in ("full", "hunter", "deep") else "nmap"
             open_ports, meta_nmap = await self.master_tools.execute_artifact(
-                "nmap", {"host": self.domain}, self.engagement_mgr, "05_ports", input_source="03_dns/resolved.txt"
+                nmap_tool, {"host": self.domain}, self.engagement_mgr, "05_ports", input_source="03_dns/resolved.txt"
             )
         self._save_stage_artifact("05_ports", "nmap.txt", "\n".join(open_ports))
         self._save_stage_artifact("05_ports", "open_ports.json", [{"port_line": p} for p in open_ports])
@@ -675,6 +691,50 @@ class HunterPipelineOrchestrator:
                         )
             except Exception:
                 continue
+
+        # 1b. Wayback Machine Historical URL Archive
+        try:
+            wb_urls, meta_wb = await self.master_tools.execute_artifact(
+                "waybackurls", {"domain": self.domain}, self.engagement_mgr, "07_urls", input_source=f"domain: {self.domain}"
+            )
+            for u in wb_urls:
+                if isinstance(u, str) and u.startswith("http") and self.domain in u and u not in seen_urls:
+                    seen_urls.add(u)
+                    parsed_u = urlparse(u)
+                    endpoints.append(EndpointRecord(
+                        url=u,
+                        path=parsed_u.path,
+                        method="GET",
+                        category="ARCHIVE",
+                        source="waybackurls"
+                    ))
+            if meta_wb and meta_wb.raw_output_file:
+                self.tool_logs.append(meta_wb.raw_output_file)
+        except Exception as e:
+            logger.debug(f"waybackurls error: {e}")
+
+        # 1c. Katana Active Crawler (for deep profile)
+        if self.profile in ("full", "hunter", "deep", "active"):
+            try:
+                for target_live in self.live_assets[:3]:
+                    k_urls, meta_k = await self.master_tools.execute_artifact(
+                        "katana", {"url": target_live.url}, self.engagement_mgr, "07_urls", input_source=target_live.url
+                    )
+                    for ku in k_urls:
+                        if isinstance(ku, str) and ku.startswith("http") and ku not in seen_urls:
+                            seen_urls.add(ku)
+                            p_ku = urlparse(ku)
+                            endpoints.append(EndpointRecord(
+                                url=ku,
+                                path=p_ku.path,
+                                method="GET",
+                                category="CRAWLER",
+                                source="katana"
+                            ))
+                    if meta_k and meta_k.raw_output_file:
+                        self.tool_logs.append(meta_k.raw_output_file)
+            except Exception as e:
+                logger.debug(f"katana error: {e}")
 
         # 2. Directory Fuzzing
         if self.profile == "passive":
@@ -998,6 +1058,33 @@ class HunterPipelineOrchestrator:
                         })
                 except Exception as e:
                     logger.debug(f"CmdInjection skill test failed: {e}")
+
+            # 3. Nuclei Active Vulnerability Scan (Critical, High, Medium CVEs)
+            if self.profile in ("full", "hunter", "deep"):
+                try:
+                    for target_live in self.live_assets[:3]:
+                        nuc_lines, meta_nuc = await self.master_tools.execute_artifact(
+                            "nuclei", {"url": target_live.url}, self.engagement_mgr, "12_vulnerabilities", input_source=target_live.url
+                        )
+                        if meta_nuc and meta_nuc.raw_output_file:
+                            self.tool_logs.append(meta_nuc.raw_output_file)
+                        for nline in nuc_lines:
+                            if isinstance(nline, str) and "[" in nline:
+                                from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
+                                title_part = nline.split("]")[0].strip("[]")
+                                is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                                    title=f"Nuclei: {title_part}",
+                                    asset=self.domain,
+                                    endpoint=target_live.url,
+                                    vuln_type="NucleiExposure",
+                                    raw_evidence=nline,
+                                    source_tool="nuclei",
+                                    verifier_result={"reproduced": True, "is_reflection": False}
+                                )
+                                if is_q and f_obj:
+                                    self.findings.append(f_obj)
+                except Exception as e:
+                    logger.debug(f"Nuclei test error: {e}")
 
         # Add any high-confidence secrets (Shannon entropy validated)
         for s in self.secrets:

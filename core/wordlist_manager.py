@@ -49,6 +49,7 @@ class WordlistManager:
                 "Discovery/DNS/subdomains-top1million-20000.txt",
                 "Discovery/DNS/dns-Jhaddix.txt",
                 "Discovery/DNS/subdomains-top1million-5000.txt",
+                "dnsmap.txt",
                 "subdomains.txt",
             ],
             "standard": [
@@ -57,12 +58,14 @@ class WordlistManager:
                 "Discovery/DNS/bitquark-subdomains-top100000.txt",
                 "Discovery/DNS/subdomains-top1million-5000.txt",
                 "Discovery/DNS/namelist.txt",
+                "dnsmap.txt",
                 "subdomains.txt",
             ],
             "safe": [
                 "Discovery/DNS/subdomains-top1million-5000.txt",
                 "Discovery/DNS/namelist.txt",
                 "Discovery/DNS/dns-Jhaddix.txt",
+                "dnsmap.txt",
                 "subdomains.txt",
             ],
         },
@@ -71,6 +74,7 @@ class WordlistManager:
                 "Discovery/Web-Content/raft-large-directories.txt",
                 "Discovery/Web-Content/directory-list-2.3-medium.txt",
                 "Discovery/Web-Content/raft-medium-directories.txt",
+                "dirb/big.txt",
                 "Discovery/Web-Content/common.txt",
                 "dirb/common.txt",
                 "common.txt",
@@ -78,6 +82,7 @@ class WordlistManager:
             "standard": [
                 "Discovery/Web-Content/directory-list-2.3-medium.txt",
                 "Discovery/Web-Content/raft-medium-directories.txt",
+                "dirb/big.txt",
                 "Discovery/Web-Content/common.txt",
                 "dirb/common.txt",
                 "common.txt",

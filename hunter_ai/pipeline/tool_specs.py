@@ -65,6 +65,23 @@ class MasterToolRegistry:
             risk_level="SAFE"
         )
 
+        # 1b. Subfinder Deep (All OSINT Sources)
+        self.specs["subfinder_deep"] = ToolSpec(
+            name="subfinder_deep",
+            stage="01_PASSIVE_RECON",
+            purpose="Comprehensive passive subdomain enumeration querying all sources (-all)",
+            input_desc="Root domain",
+            output_desc="Comprehensive list of unique subdomains",
+            command_template="subfinder -d {domain} -all -silent",
+            prerequisites=["subfinder"],
+            timeout=300,
+            fallback_tool="crtsh",
+            parser=lambda out: [l.strip().lower() for l in out.splitlines() if l.strip() and "." in l],
+            confidence=0.95,
+            next_stage="05_NORMALIZE",
+            risk_level="SAFE"
+        )
+
         # 2. Assetfinder
         self.specs["assetfinder"] = ToolSpec(
             name="assetfinder",
@@ -141,6 +158,23 @@ class MasterToolRegistry:
             command_template="nmap -sV -T4 --open -p 80,443,8080,8443,8000,8888,3000,5000,21,22,25,3306,5432 {host}",
             prerequisites=["nmap"],
             timeout=120,
+            fallback_tool="python_socket_scan",
+            parser=lambda out: [l.strip() for l in out.splitlines() if "/tcp" in l and "open" in l],
+            confidence=0.98,
+            next_stage="08_DIRECTORY_DISCOVERY",
+            risk_level="AUDIT"
+        )
+
+        # 5b. Nmap Deep (Top 1000 Ports)
+        self.specs["nmap_deep"] = ToolSpec(
+            name="nmap_deep",
+            stage="07_PORT_DISCOVERY",
+            purpose="Deep port scanning across top 1000 ports with service version detection",
+            input_desc="Clean Hostname or IP",
+            output_desc="Open ports, protocol names, and service versions",
+            command_template="nmap -sV -T4 --open --top-ports 1000 {host}",
+            prerequisites=["nmap"],
+            timeout=600,
             fallback_tool="python_socket_scan",
             parser=lambda out: [l.strip() for l in out.splitlines() if "/tcp" in l and "open" in l],
             confidence=0.98,
