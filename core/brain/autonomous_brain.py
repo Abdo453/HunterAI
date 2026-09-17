@@ -666,6 +666,166 @@ async def _run_csrf_skill(brain: "AutonomousBrain", target: str, params: list = 
     return findings
 
 
+async def _run_ssti_skill(brain: "AutonomousBrain", target: str, params: list = None,
+                          proxy: str = "", **kwargs) -> list:
+    """تشغيل SSTI (Server-Side Template Injection) Autonomous Skill"""
+    from agents.skills.ssti_skill import SSTISkill
+    skill = SSTISkill(proxy=proxy or None)
+    findings = []
+    test_params = params or ["q", "name", "search", "template", "view", "msg", "content"]
+    for param in test_params:
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"SSTISkill failed on {param}")
+    return findings
+
+
+async def _run_xxe_skill(brain: "AutonomousBrain", target: str, params: list = None,
+                         proxy: str = "", **kwargs) -> list:
+    """تشغيل XXE (XML External Entity) Autonomous Skill"""
+    from agents.skills.xxe_skill import XXESkill
+    skill = XXESkill(proxy=proxy or None)
+    findings = []
+    test_params = params or ["xml", "data", "payload", "body", "doc"]
+    for param in test_params[:2]:
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"XXESkill failed on {param}")
+    return findings
+
+
+async def _run_cors_skill(brain: "AutonomousBrain", target: str, proxy: str = "", **kwargs) -> list:
+    """تشغيل CORS Misconfiguration Autonomous Skill"""
+    from agents.skills.cors_skill import CORSSkill
+    skill = CORSSkill(proxy=proxy or None)
+    findings = []
+    try:
+        res = await skill.run(target)
+        for lg in res.logs:
+            await brain._log(lg)
+        if res.verified:
+            findings.append(res.to_dict())
+    except Exception:
+        log.exception(f"CORSSkill failed on {target}")
+    return findings
+
+
+async def _run_file_upload_skill(brain: "AutonomousBrain", target: str, params: list = None,
+                                 proxy: str = "", **kwargs) -> list:
+    """تشغيل Arbitrary File Upload Autonomous Skill"""
+    from agents.skills.file_upload_skill import FileUploadSkill
+    skill = FileUploadSkill(proxy=proxy or None)
+    findings = []
+    test_params = params or ["file", "upload", "avatar", "attachment", "doc"]
+    for param in test_params[:2]:
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"FileUploadSkill failed on {param}")
+    return findings
+
+
+async def _run_jwt_skill(brain: "AutonomousBrain", target: str, auth: dict = None,
+                         params: list = None, proxy: str = "", **kwargs) -> list:
+    """تشغيل JWT / OAuth Security Autonomous Skill"""
+    from agents.skills.jwt_oauth_skill import JWTOAuthSkill
+    skill = JWTOAuthSkill(proxy=proxy or None)
+    findings = []
+    try:
+        res = await skill.run(target, auth=auth or {}, **kwargs)
+        for lg in res.logs:
+            await brain._log(lg)
+        if res.verified:
+            findings.append(res.to_dict())
+    except Exception:
+        log.exception(f"JWTOAuthSkill failed on {target}")
+    return findings
+
+
+async def _run_race_skill(brain: "AutonomousBrain", target: str, params: list = None,
+                          proxy: str = "", **kwargs) -> list:
+    """تشغيل Race Condition & Concurrency Autonomous Skill"""
+    from agents.skills.race_condition_skill import RaceConditionSkill
+    skill = RaceConditionSkill(proxy=proxy or None)
+    findings = []
+    test_params = params or ["coupon", "transfer", "code", "vote"]
+    for param in test_params[:1]:
+        try:
+            res = await skill.run(target, param, **kwargs)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"RaceConditionSkill failed on {param}")
+    return findings
+
+
+async def _run_graphql_skill(brain: "AutonomousBrain", target: str, proxy: str = "", **kwargs) -> list:
+    """تشغيل GraphQL Introspection & Batching Autonomous Skill"""
+    from agents.skills.graphql_skill import GraphQLSkill
+    skill = GraphQLSkill(proxy=proxy or None)
+    findings = []
+    try:
+        res = await skill.run(target, **kwargs)
+        for lg in res.logs:
+            await brain._log(lg)
+        if res.verified:
+            findings.append(res.to_dict())
+    except Exception:
+        log.exception(f"GraphQLSkill failed on {target}")
+    return findings
+
+
+async def _run_websocket_skill(brain: "AutonomousBrain", target: str, proxy: str = "", **kwargs) -> list:
+    """تشغيل WebSocket Handshake & CSWSH Security Autonomous Skill"""
+    from agents.skills.websocket_skill import WebSocketSkill
+    skill = WebSocketSkill(proxy=proxy or None)
+    findings = []
+    try:
+        res = await skill.run(target, **kwargs)
+        for lg in res.logs:
+            await brain._log(lg)
+        if res.verified:
+            findings.append(res.to_dict())
+    except Exception:
+        log.exception(f"WebSocketSkill failed on {target}")
+    return findings
+
+
+async def _run_idor_matrix_skill(brain: "AutonomousBrain", target: str, params: list = None,
+                                 proxy: str = "", **kwargs) -> list:
+    """تشغيل Multi-Tenant Authorization Matrix IDOR Skill"""
+    from agents.skills.idor_skill import IDORMatrixSkill
+    skill = IDORMatrixSkill(proxy=proxy or None)
+    findings = []
+    test_params = params or ["id", "user_id", "account_id", "doc_id"]
+    for param in test_params[:1]:
+        try:
+            res = await skill.run(target, param, **kwargs)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"IDORMatrixSkill failed on {param}")
+    return findings
+
+
 TOOL_REGISTRY: Dict[str, Callable] = {
     "VulnerabilityEngine": _run_vuln_engine,
     "LFISkill":           _run_lfi_skill,
@@ -673,18 +833,27 @@ TOOL_REGISTRY: Dict[str, Callable] = {
     "CSRFSkill":          _run_csrf_skill,
     "SmartPoC":           _run_smartpoc,
     "SQLiSkill":          _run_sqli_skill,
-    "SSRFSkill":      _run_ssrf_skill,
-    "IDORSkill":      _run_idor_skill,
-    "XSSSkill":       _run_xss_skill,
-    "ReconAgent":     _run_recon,
-    "BugBountyAgent": _run_bugbounty,
-    "BrowserAgent":   _run_browser,
-    "WebAgent":       _run_webagent,
-    "nuclei":         _run_nuclei,
-    "sqlmap":         _run_sqlmap,
-    "dalfox":         _run_dalfox,
-    "gobuster":       _run_gobuster,
-    "nmap":           _run_nmap,
+    "SSRFSkill":          _run_ssrf_skill,
+    "IDORSkill":          _run_idor_skill,
+    "IDORMatrixSkill":    _run_idor_matrix_skill,
+    "XSSSkill":           _run_xss_skill,
+    "SSTISkill":          _run_ssti_skill,
+    "XXESkill":           _run_xxe_skill,
+    "CORSSkill":          _run_cors_skill,
+    "FileUploadSkill":    _run_file_upload_skill,
+    "JWTOAuthSkill":      _run_jwt_skill,
+    "RaceConditionSkill": _run_race_skill,
+    "GraphQLSkill":       _run_graphql_skill,
+    "WebSocketSkill":     _run_websocket_skill,
+    "ReconAgent":         _run_recon,
+    "BugBountyAgent":     _run_bugbounty,
+    "BrowserAgent":       _run_browser,
+    "WebAgent":           _run_webagent,
+    "nuclei":             _run_nuclei,
+    "sqlmap":             _run_sqlmap,
+    "dalfox":             _run_dalfox,
+    "gobuster":           _run_gobuster,
+    "nmap":               _run_nmap,
     "subfinder":      _run_subfinder,
 }
 
@@ -1894,6 +2063,16 @@ class AutonomousBrain:
                 "bola": "HORIZONTAL_BOLA_IDOR",
                 "authz": "CROSS_TENANT_ISOLATION_BREACH",
                 "race_condition": "DOUBLE_EXECUTION",
+                "race": "DOUBLE_EXECUTION",
+                "ssti": "SSTI",
+                "xxe": "XXE_INJECTION",
+                "cors": "INSECURE_CORS",
+                "file_upload": "ARBITRARY_FILE_UPLOAD",
+                "upload": "ARBITRARY_FILE_UPLOAD",
+                "jwt": "BROKEN_AUTHENTICATION",
+                "oauth": "BROKEN_AUTHENTICATION",
+                "graphql": "GRAPHQL_ABUSE",
+                "websocket": "WEBSOCKET_HIJACKING",
             }
             for h in si_hypotheses:
                 h_type = getattr(h, "vulnerability_type", "general").lower()

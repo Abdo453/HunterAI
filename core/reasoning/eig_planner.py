@@ -97,6 +97,13 @@ class DeterministicEIGPlanner:
             "DOUBLE_EXECUTION": 0.50,
             "STEP_SKIPPING": 0.50,
             "REVOKED_SESSION_REUSE": 0.50,
+            "SSTI": 0.50,
+            "ARBITRARY_FILE_UPLOAD": 0.50,
+            "XXE_INJECTION": 0.50,
+            "INSECURE_CORS": 0.50,
+            "GRAPHQL_ABUSE": 0.50,
+            "WEBSOCKET_HIJACKING": 0.50,
+            "BROKEN_AUTHENTICATION": 0.50,
         }
 
     def _is_in_scope(self, endpoint: str) -> bool:
@@ -114,11 +121,18 @@ class DeterministicEIGPlanner:
             "COMMAND_INJECTION": 1.00,
             "CROSS_TENANT_ISOLATION_BREACH": 1.00,
             "SQLI": 0.95,
+            "SSTI": 0.95,
+            "ARBITRARY_FILE_UPLOAD": 0.95,
             "VERTICAL_PRIVILEGE_ESCALATION": 0.95,
             "HORIZONTAL_BOLA_IDOR": 0.90,
+            "XXE_INJECTION": 0.90,
+            "BROKEN_AUTHENTICATION": 0.90,
             "DOUBLE_EXECUTION": 0.85,
+            "WEBSOCKET_HIJACKING": 0.80,
             "STEP_SKIPPING": 0.80,
+            "GRAPHQL_ABUSE": 0.75,
             "REVOKED_SESSION_REUSE": 0.75,
+            "INSECURE_CORS": 0.70,
         }
         return weights.get(category, 0.60)
 

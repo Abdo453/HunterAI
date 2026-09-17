@@ -22,6 +22,8 @@ from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 import httpx
 
+from agents.skills.base_skill import BaseSkill, SkillResult
+
 log = logging.getLogger("idor_skill")
 
 
@@ -284,3 +286,53 @@ class IDORSkill:
 async def run_idor_skill(target_url: str, param_name: str, proxy: Optional[str] = None) -> Dict[str, Any]:
     skill = IDORSkill(proxy=proxy)
     return await skill.run(target_url, param_name)
+
+
+
+class IDORMatrixSkill(BaseSkill):
+    name: str = "IDORMatrixSkill"
+    vuln_type: str = "idor_matrix"
+    cwe: str = "CWE-639"
+    owasp_top10: str = "A01:2021 — Broken Access Control"
+    default_severity: str = "High"
+
+    async def run(self, target_url: str, param_name: str = "id", **kwargs) -> SkillResult:
+        """Executes multi-identity differential authorization testing via MultiIdentityReplayer"""
+        from core.identity.identity_graph import IdentityGraph, MultiIdentityReplayer
+        logs = [f"[IDOR_MATRIX] Testing multi-tenant authorization matrix on {target_url} (param={param_name})"]
+        graph = IdentityGraph()
+        replayer = MultiIdentityReplayer(identity_graph=graph)
+
+        # Run matrix replay
+        results = replayer.replay_authorization_matrix(
+            endpoint=target_url,
+            method="GET",
+            target_object_id=str(kwargs.get("object_id", "42")),
+            owner_identity_id="user_a"
+        )
+        anomalies = [r for r in results if r.is_anomaly]
+        if anomalies:
+            top = anomalies[0]
+            logs.append(f"[IDOR_MATRIX] Confirmed anomaly: {top.details}")
+            return SkillResult(
+                verified=True,
+                vuln_type="idor_bola",
+                title=f"Multi-Tenant BOLA/IDOR Violation ({top.anomaly_type.value})",
+                severity="High",
+                endpoint=target_url,
+                param_name=param_name,
+                evidence=top.details,
+                payload_used=f"Cross-identity request as {top.actor_identity_id}",
+                remediation="Enforce object-level ownership verification against authenticated session identity.",
+                confidence=0.95,
+                tool=self.name,
+                evidence_sources=[f"{self.name}/IdentityMatrix"],
+                cwe=self.cwe,
+                owasp_top10=self.owasp_top10,
+                logs=logs
+            )
+
+        logs.append("[IDOR_MATRIX] Authorization matrix validated cleanly")
+        return SkillResult(verified=False, vuln_type=self.vuln_type, endpoint=target_url,
+                           param_name=param_name, tool=self.name, logs=logs)
+

@@ -19,11 +19,18 @@ ALLOWED_TOOLS: frozenset = frozenset({
     "SmartPoC", "BugBountyAgent", "ReconAgent",
     "BrowserAgent", "WebAgent", "dalfox", "sqlmap",
     "nuclei", "subfinder", "nmap", "gobuster",
+    "VulnerabilityEngine", "LFISkill", "CmdInjectionSkill",
+    "CSRFSkill", "SQLiSkill", "SSRFSkill", "IDORSkill", "XSSSkill",
+    "SSTISkill", "XXESkill", "CORSSkill", "FileUploadSkill",
+    "JWTOAuthSkill", "RaceConditionSkill", "GraphQLSkill",
+    "WebSocketSkill", "IDORMatrixSkill",
 })
 
 # فقط هذه القيم مقبولة لـ primary_focus
 ALLOWED_FOCUSES: frozenset = frozenset({
     "xss", "sqli", "ssrf", "idor", "auth", "recon", "api", "rce",
+    "ssti", "xxe", "cors", "file_upload", "graphql", "websocket",
+    "jwt", "race", "csrf", "lfi", "cmdi",
 })
 
 # فقط هذه القيم مقبولة لـ target_type

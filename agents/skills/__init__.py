@@ -40,6 +40,16 @@ from agents.skills.xss_skill import (
     run_xss_skill,
 )
 
+from agents.skills.ssti_skill import SSTISkill
+from agents.skills.xxe_skill import XXESkill
+from agents.skills.cors_skill import CORSSkill
+from agents.skills.file_upload_skill import FileUploadSkill
+from agents.skills.jwt_oauth_skill import JWTOAuthSkill
+from agents.skills.race_condition_skill import RaceConditionSkill
+from agents.skills.graphql_skill import GraphQLSkill
+from agents.skills.websocket_skill import WebSocketSkill
+from agents.skills.idor_skill import IDORMatrixSkill
+
 __all__ = [
     "SQLiSkill",
     "SQLiState",
@@ -62,6 +72,7 @@ __all__ = [
     "SSRFSkill",
     "SSRFState",
     "IDORSkill",
+    "IDORMatrixSkill",
     "IDORState",
     "IDType",
     "run_idor_skill",
@@ -70,5 +81,14 @@ __all__ = [
     "XSSState",
     "XSSContextType",
     "run_xss_skill",
+    "SSTISkill",
+    "XXESkill",
+    "CORSSkill",
+    "FileUploadSkill",
+    "JWTOAuthSkill",
+    "RaceConditionSkill",
+    "GraphQLSkill",
+    "WebSocketSkill",
 ]
+
 
