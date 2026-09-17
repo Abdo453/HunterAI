@@ -1680,6 +1680,32 @@ class AutonomousBrain:
                 ep_path = urlparse(ep_url).path if "://" in ep_url else ep_url
                 self.security_state.add_endpoint(path=ep_path, url=ep_url)
 
+        # V27 Attack Surface Graph: register observed endpoints as SurfaceNodes
+        if self.attack_surface_graph is not None:
+            from core.reasoning.attack_surface_graph import SurfaceNode, EpistemicStatus
+            if target not in self.attack_surface_graph.nodes:
+                self.attack_surface_graph.add_node(
+                    SurfaceNode(
+                        node_id=target,
+                        node_type="ENDPOINT",
+                        name=target,
+                        epistemic_status=EpistemicStatus.OBSERVED,
+                        attributes={"params": params_from_page}
+                    )
+                )
+            for ep in discovered_endpoints:
+                ep_url = ep.get("url") if isinstance(ep, dict) else str(ep)
+                if ep_url not in self.attack_surface_graph.nodes:
+                    self.attack_surface_graph.add_node(
+                        SurfaceNode(
+                            node_id=ep_url,
+                            node_type="ENDPOINT",
+                            name=ep_url,
+                            epistemic_status=EpistemicStatus.OBSERVED,
+                            attributes={"params": params_from_page}
+                        )
+                    )
+
         manifest_obj = exploration_res.get("manifest", {}) if isinstance(exploration_res.get("manifest"), dict) else {}
         pages_val = manifest_obj.get("pages_visited", 0)
         browser_pages_count = len(pages_val) if isinstance(pages_val, (list, set, dict)) else int(pages_val or 0)
@@ -1736,6 +1762,18 @@ class AutonomousBrain:
                     for p in ep.get("parameters", []):
                         if p and p not in params_from_page:
                             params_from_page.append(p)
+                    if self.attack_surface_graph is not None:
+                        from core.reasoning.attack_surface_graph import SurfaceNode, EpistemicStatus
+                        if full_ep_url not in self.attack_surface_graph.nodes:
+                            self.attack_surface_graph.add_node(
+                                SurfaceNode(
+                                    node_id=full_ep_url,
+                                    node_type="ENDPOINT",
+                                    name=full_ep_url,
+                                    epistemic_status=EpistemicStatus.OBSERVED,
+                                    attributes={"params": ep.get("parameters", [])}
+                                )
+                            )
             m = code_intel_res.get("manifest", {})
             await self._log(
                 f"[CODE_INTEL] Analyzed {m.get('js_analyzed', 0)} scripts | "
@@ -1786,6 +1824,23 @@ class AutonomousBrain:
                     if self.security_state:
                         for h in si_hypotheses:
                             self.security_state.add_unknown(f"Is {h.target_endpoint} vulnerable to {h.vulnerability_type}?")
+                    if self.attack_surface_graph is not None:
+                        from core.reasoning.attack_surface_graph import SurfaceEdge, EpistemicStatus
+                        for h in si_hypotheses:
+                            target_ep = getattr(h, "target_endpoint", None) or target
+                            edge_id = f"HYP-{getattr(h, 'vulnerability_type', 'VULN')}-{abs(hash(target_ep))%100000}"
+                            if edge_id not in self.attack_surface_graph.edges:
+                                self.attack_surface_graph.add_edge(
+                                    SurfaceEdge(
+                                        edge_id=edge_id,
+                                        source_node_id=target_ep,
+                                        target_node_id=getattr(h, "vulnerability_type", "UNKNOWN"),
+                                        relation_type="CANDIDATE_VIOLATION",
+                                        epistemic_status=EpistemicStatus.CANDIDATE,
+                                        conditions={"parameters": getattr(h, "parameters", [])},
+                                        evidence_refs=[str(getattr(h, "hypothesis_id", ""))]
+                                    )
+                                )
                 self._audit(
                     "security_intelligence_oriented",
                     hypotheses=[h.model_dump() for h in si_hypotheses[:5]],
@@ -1826,6 +1881,42 @@ class AutonomousBrain:
             plan["intelligence_focus"] = top_focus
             if not plan.get("primary_focus") or plan.get("primary_focus") == "xss":
                 plan["primary_focus"] = top_focus
+
+        # V27 Deterministic EIG Planner: rank candidate hypotheses deterministically
+        if self.eig_planner is not None and si_hypotheses:
+            from core.burp_gateway.experiment_contract import ExperimentContract
+            cat_map = {
+                "sql_injection": "SQLI",
+                "sqli": "SQLI",
+                "command_injection": "COMMAND_INJECTION",
+                "cmdi": "COMMAND_INJECTION",
+                "idor": "HORIZONTAL_BOLA_IDOR",
+                "bola": "HORIZONTAL_BOLA_IDOR",
+                "authz": "CROSS_TENANT_ISOLATION_BREACH",
+                "race_condition": "DOUBLE_EXECUTION",
+            }
+            for h in si_hypotheses:
+                h_type = getattr(h, "vulnerability_type", "general").lower()
+                c_cat = cat_map.get(h_type, "GENERAL")
+                target_ep = getattr(h, "target_endpoint", None) or target
+                params_dict = {p: "probe_token" for p in getattr(h, "parameters", []) if p}
+                contract = ExperimentContract(
+                    hypothesis_id=str(getattr(h, "hypothesis_id", f"hypo_{int(time.time()*1000)%100000}")),
+                    source_request_id=f"tx_obs_{abs(hash(target_ep))%100000}",
+                    target_endpoint=target_ep,
+                    identity_context=getattr(h, "identity_context", "ANONYMOUS") or "ANONYMOUS",
+                    category=c_cat,
+                    risk_budget=float(getattr(h, "risk_budget", 0.5)),
+                    mutation_plan={"parameters": params_dict},
+                    expected_observation=f"Differential deviation for {h_type}"
+                )
+                self.eig_planner.evaluate_and_enqueue(contract)
+
+            eig_selected = self.eig_planner.select_next_experiment()
+            if eig_selected:
+                await self._log(f"[EIG_PLANNER] Highest information-gain experiment: {eig_selected.hypothesis_id} on {eig_selected.target_endpoint} (Category: {eig_selected.category})")
+                plan["eig_prioritized_hypothesis"] = eig_selected.hypothesis_id
+                plan["eig_prioritized_target"] = eig_selected.target_endpoint
 
 
         # ── KB Augmentation: use learned knowledge to improve the plan ──────
@@ -2038,6 +2129,26 @@ class AutonomousBrain:
                     )
                     self._audit("finding_rejected", reason=ruling.final_verdict,
                                 param=param, rationale=ruling.chief_justification)
+                    if self.negative_ledger is not None:
+                        from core.reasoning.negative_evidence import BoundaryScope
+                        self.negative_ledger.record_negative_observation(
+                            scope=BoundaryScope(
+                                endpoint=target,
+                                http_method="GET",
+                                mutation_parameter=param,
+                            ),
+                            status_code=poc_result.get("status_code", 200),
+                            body_snippet=str(p_reason)[:120],
+                            conclusion="BOUNDARY_ENFORCED_FOR_TESTED_CONTEXT"
+                        )
+                    if self.attack_surface_graph is not None:
+                        from core.reasoning.attack_surface_graph import EpistemicStatus
+                        self.attack_surface_graph.update_status(
+                            target_id=target,
+                            new_status=EpistemicStatus.REJECTED,
+                            evidence_ref=case_id,
+                            rationale=ruling.chief_justification,
+                        )
                     continue
 
                 finding = {
@@ -2058,6 +2169,26 @@ class AutonomousBrain:
                 findings.append(finding)
                 self._audit("finding_added", title=finding["title"], severity=finding["severity"], verdict=ruling.final_verdict)
                 await self._emit("finding", **finding)
+                if self.attack_surface_graph is not None:
+                    from core.reasoning.attack_surface_graph import EpistemicStatus
+                    self.attack_surface_graph.update_status(
+                        target_id=target,
+                        new_status=EpistemicStatus.CONFIRMED,
+                        evidence_ref=case_id,
+                        rationale=ruling.chief_justification,
+                        confidence=0.95,
+                    )
+                if self.experiment_ledger is not None:
+                    from core.reasoning.experiment_ledger import ExperimentRecord
+                    exp_rec = ExperimentRecord(
+                        experiment_id=case_id,
+                        hypothesis_id=f"HYP-{vt}-{param}",
+                        source_transaction={"target": target, "param": param},
+                        observations=[p_reason or ruling.chief_justification],
+                        causal_strength=0.95,
+                        execution_provenance=[{"stage": "EvidenceCourt.CONFIRMED"}]
+                    )
+                    self.experiment_ledger.append(exp_rec)
                 # ── Feedback Loop: save confirmed finding to Knowledge Base ──
                 if self.knowledge:
                     try:
@@ -2159,6 +2290,26 @@ class AutonomousBrain:
                         self._audit("finding_rejected", reason="tool_agreement_rejection", title=f_title)
                         if self.coverage_ledger:
                             self.coverage_ledger.record_probed(f.get("endpoint", "/"), f.get("method", "GET"), f.get("param", ""), verified_finding=False)
+                        if self.negative_ledger is not None:
+                            from core.reasoning.negative_evidence import BoundaryScope
+                            self.negative_ledger.record_negative_observation(
+                                scope=BoundaryScope(
+                                    endpoint=f.get("url", target),
+                                    http_method=f.get("method", "GET"),
+                                    mutation_parameter=f.get("param", ""),
+                                ),
+                                status_code=f.get("status_code", 200),
+                                body_snippet=str(agreement.get("reason", ""))[:120],
+                                conclusion="BOUNDARY_ENFORCED_FOR_TESTED_CONTEXT"
+                            )
+                        if self.attack_surface_graph is not None:
+                            from core.reasoning.attack_surface_graph import EpistemicStatus
+                            self.attack_surface_graph.update_status(
+                                target_id=f.get("url", target),
+                                new_status=EpistemicStatus.REJECTED,
+                                evidence_ref=f_id,
+                                rationale=agreement.get("reason", "Tool agreement rejected finding")
+                            )
                         continue
                 except Exception as e:
                     log.debug(f"Tool agreement check bypassed: {e}")
@@ -2276,6 +2427,27 @@ class AutonomousBrain:
                     except Exception as e:
                         log.debug(f"Could not export investigation bundle for {f_id}: {e}")
 
+                if self.attack_surface_graph is not None:
+                    from core.reasoning.attack_surface_graph import EpistemicStatus
+                    self.attack_surface_graph.update_status(
+                        target_id=f.get("url", target),
+                        new_status=EpistemicStatus.CONFIRMED,
+                        evidence_ref=f_id,
+                        rationale=f_title,
+                        confidence=float(f.get("confidence", 0.95))
+                    )
+                if self.experiment_ledger is not None:
+                    from core.reasoning.experiment_ledger import ExperimentRecord
+                    exp_rec = ExperimentRecord(
+                        experiment_id=f_id,
+                        hypothesis_id=f.get("hypothesis_id", f"HYP-{f_id}"),
+                        source_transaction={"target": f.get("url", target), "param": f.get("param", "")},
+                        observations=[str(f.get("evidence", ""))[:120]],
+                        causal_strength=float(f.get("confidence", 0.95)),
+                        execution_provenance=[{"stage": "Phase3.VERIFIED"}]
+                    )
+                    self.experiment_ledger.append(exp_rec)
+
                 verified.append(f)
                 await self._log(
                     f"[VERIFY] Confirmed: {f_title} "
@@ -2388,6 +2560,14 @@ class AutonomousBrain:
             "browser_exploration": getattr(self, "_last_browser_exploration", {}),
             "exploration_coverage": getattr(self, "_last_browser_exploration", {}).get("coverage", {}),
             "exploration_memory": getattr(self, "_last_browser_exploration", {}).get("memory", {}),
+            "attack_surface_graph": self.attack_surface_graph.export_graph() if self.attack_surface_graph else None,
+            "experiment_ledger": self.experiment_ledger.export_ledger() if self.experiment_ledger else None,
+            "experiment_ledger_integrity": (self.experiment_ledger.verify_chain_integrity()[0] if self.experiment_ledger else True),
+            "eig_planner_metrics": {
+                "queued_count": len(self.eig_planner.queue),
+                "risk_consumed": self.eig_planner.risk_consumed,
+                "global_risk_budget": self.eig_planner.global_risk_budget,
+            } if self.eig_planner else None,
         }
 
     async def explore_discovered_endpoint(self, endpoint_url_or_path: str) -> Dict[str, Any]:

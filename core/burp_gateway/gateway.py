@@ -86,6 +86,21 @@ class BurpGateway:
             capture_store=self.capture_store,
         )
 
+        # V27.2 Epistemic Engines
+        from core.reasoning.attack_surface_graph import AttackSurfaceGraph
+        from core.reasoning.experiment_ledger import TamperEvidentExperimentLedger
+        from core.reasoning.negative_evidence import NuancedNegativeEvidenceLedger
+        from core.reasoning.eig_planner import DeterministicEIGPlanner
+
+        self.attack_surface_graph = AttackSurfaceGraph()
+        self.negative_ledger = NuancedNegativeEvidenceLedger()
+        self.experiment_ledger = TamperEvidentExperimentLedger()
+        self.eig_planner = DeterministicEIGPlanner(
+            surface_graph=self.attack_surface_graph,
+            negative_ledger=self.negative_ledger,
+            allowed_scope=list(self.active_scope["include"]) if self.active_scope.get("include") else None,
+        )
+
         self.app = FastAPI(title="HunterAI Burp Suite Gateway Bridge", docs_url=None, redoc_url=None)
         self._server = None
         self._setup_routes()
@@ -106,6 +121,8 @@ class BurpGateway:
             self.research_controller.scope_guard = self.scope_engine
         if hasattr(self, "bcsl"):
             self.bcsl.scope_guard = self.scope_engine
+        if hasattr(self, "eig_planner") and self.eig_planner is not None:
+            self.eig_planner.allowed_scope = list(self.active_scope["include"])
 
     def check_scope(self, target: str, url: Optional[str] = None) -> tuple[bool, str]:
         """Checks target or full URL against configured scope engine"""
@@ -476,6 +493,137 @@ class BurpGateway:
                 contract = ExperimentContract.from_dict(data)
                 record = self.bcsl.submit_experiment(contract)
                 return record.to_dict()
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        # ── V27.2 METAMORPHIC TRIAD, ATTACK SURFACE GRAPH, & LEDGER REST APIs ──
+        @self.app.get("/api/v27/attack-surface")
+        async def v27_attack_surface():
+            """Returns the complete epistemic Attack Surface Graph"""
+            return self.attack_surface_graph.export_graph()
+
+        @self.app.get("/api/v27/ledger/blocks")
+        async def v27_ledger_blocks():
+            """Returns cryptographically chained forensic experiment records & validity check"""
+            is_valid, err = self.experiment_ledger.verify_chain_integrity()
+            return {
+                "is_valid": is_valid,
+                "error": err,
+                "blocks_count": len(self.experiment_ledger),
+                "blocks": self.experiment_ledger.export_ledger(),
+            }
+
+        @self.app.post("/api/v27/triad/execute")
+        async def v27_triad_execute(req: Request):
+            """Executes 4-probe Metamorphic Triad (B x C x E1 x E2) across physical wire via BCSL"""
+            try:
+                data = await req.json()
+                from core.burp_gateway.experiment_contract import TriadExperimentContract
+                from core.burp_gateway.capture_store import CapturedTransaction
+
+                src_id = data.get("source_request_id", "src_baseline_01")
+                if "baseline_tx" in data and data["baseline_tx"]:
+                    b_tx = data["baseline_tx"]
+                    tx_obj = CapturedTransaction(**b_tx) if isinstance(b_tx, dict) else b_tx
+                    self.bcsl.ingest_captured(tx_obj)
+                elif src_id not in self.bcsl.controller._transactions and data.get("target_endpoint"):
+                    target_ep = data["target_endpoint"]
+                    fallback_tx = CapturedTransaction(
+                        tx_id=src_id,
+                        target_host=target_ep,
+                        method=data.get("http_method", "GET"),
+                        url=target_ep,
+                        status_code=200,
+                        req_body="",
+                        resp_body="Baseline response",
+                    )
+                    self.bcsl.ingest_captured(fallback_tx)
+
+                valid_keys = {
+                    "hypothesis_id", "source_request_id", "target_endpoint", "triad_id",
+                    "http_method", "identity_context", "baseline_mutation", "control_mutation",
+                    "experiment_1_mutation", "experiment_2_mutation", "invariant_id",
+                    "expected_observation", "risk_tier", "risk_budget", "category",
+                    "negative_observables", "correlation_id", "scope_requirements"
+                }
+                filtered_contract = {k: v for k, v in data.items() if k in valid_keys}
+                contract = TriadExperimentContract(**filtered_contract)
+
+                inv_obj = None
+                inv_name = data.get("invariant_id") or data.get("invariant_name")
+                if inv_name == "CommandExecutionInvariant":
+                    from core.reasoning.causal_invariants import CommandExecutionInvariant
+                    inv_obj = CommandExecutionInvariant()
+
+                record = self.bcsl.execute_triad_contract(contract, invariant=inv_obj)
+
+                from core.reasoning.experiment_ledger import ExperimentRecord
+                exp_rec = ExperimentRecord(
+                    experiment_id=record.triad_id,
+                    hypothesis_id=record.hypothesis_id,
+                    source_transaction={"tx_id": record.source_request_id},
+                    baseline_b=record.baseline_response,
+                    control_c=record.control_response,
+                    experiment_e1=record.experiment_1_response,
+                    experiment_e2=record.experiment_2_response,
+                    observations=[record.triad_verification_result.get("rationale", "")],
+                    invariant_result=record.invariant_result,
+                    causal_strength=float(record.triad_verification_result.get("confidence_score", 0.0)),
+                    execution_provenance=[{"stage": p} for p in record.provenance],
+                )
+                self.experiment_ledger.append(exp_rec)
+
+                if contract.target_endpoint:
+                    from core.reasoning.attack_surface_graph import EpistemicStatus, SurfaceNode
+                    if contract.target_endpoint not in self.attack_surface_graph.nodes:
+                        self.attack_surface_graph.add_node(
+                            SurfaceNode(
+                                node_id=contract.target_endpoint,
+                                node_type="ENDPOINT",
+                                name=contract.target_endpoint,
+                                epistemic_status=EpistemicStatus.OBSERVED
+                            )
+                        )
+                    verdict = record.triad_verification_result.get("epistemic_verdict")
+                    status_map = {
+                        "CONFIRMED": EpistemicStatus.CONFIRMED,
+                        "REJECTED": EpistemicStatus.REJECTED,
+                        "PARTIALLY_VERIFIED": EpistemicStatus.PARTIALLY_VERIFIED,
+                        "UNVERIFIED": EpistemicStatus.TESTED,
+                    }
+                    ep_status = status_map.get(verdict, EpistemicStatus.TESTED)
+                    self.attack_surface_graph.update_status(
+                        target_id=contract.target_endpoint,
+                        new_status=ep_status,
+                        evidence_ref=record.triad_id,
+                        rationale=record.triad_verification_result.get("rationale", ""),
+                        confidence=record.triad_verification_result.get("confidence_score"),
+                    )
+
+                return record.to_dict()
+            except Exception as e:
+                logger.exception("Triad execution failed via gateway")
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.app.get("/api/v27/eig/queue")
+        async def v27_eig_queue():
+            """Returns current queue and risk metrics from Deterministic EIG Planner"""
+            return {
+                "queue_length": len(self.eig_planner.queue),
+                "risk_consumed": self.eig_planner.risk_consumed,
+                "global_risk_budget": self.eig_planner.global_risk_budget,
+                "items": [item.to_dict() for item in self.eig_planner.queue],
+            }
+
+        @self.app.post("/api/v27/eig/enqueue")
+        async def v27_eig_enqueue(req: Request):
+            """Enqueues candidate contract into Deterministic EIG Planner"""
+            try:
+                data = await req.json()
+                from core.burp_gateway.experiment_contract import ExperimentContract
+                contract = ExperimentContract.from_dict(data)
+                planned = self.eig_planner.evaluate_and_enqueue(contract)
+                return {"status": "ENQUEUED", "planned": planned.to_dict()}
             except Exception as e:
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
