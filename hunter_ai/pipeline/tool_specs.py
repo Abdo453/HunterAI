@@ -347,10 +347,13 @@ class MasterToolRegistry:
             res = await self.tm.execute(cmd)
             return ([res.stdout] if res.stdout else [], res.output_file)
 
+        mult = getattr(self, "timeout_multiplier", float(os.getenv("TOOL_TIMEOUT_MULTIPLIER", "1.0")))
+        effective_timeout = int(spec.timeout * mult) if spec else 300
+
         # Check if primary tool is available
         if self.is_available(tool_name) and spec.command_template:
             cmd = spec.command_template.format(**context)
-            res = await self.tm.execute(cmd, timeout=spec.timeout)
+            res = await self.tm.execute(cmd, timeout=effective_timeout)
             parsed = spec.parser(res.stdout) if spec.parser else res.stdout.splitlines()
             return (parsed, res.output_file)
 
@@ -377,6 +380,8 @@ class MasterToolRegistry:
         """
         import time
         spec = self.specs.get(tool_name)
+        mult = getattr(self, "timeout_multiplier", float(os.getenv("TOOL_TIMEOUT_MULTIPLIER", "1.0")))
+        effective_timeout = int(spec.timeout * mult) if spec else 300
         cmd_str = spec.command_template.format(**context) if (spec and spec.command_template) else (context.get("command") or tool_name)
         t0 = time.time()
 
@@ -387,7 +392,7 @@ class MasterToolRegistry:
 
         try:
             if self.is_available(tool_name) and spec and spec.command_template:
-                res = await self.tm.execute(cmd_str, timeout=spec.timeout)
+                res = await self.tm.execute(cmd_str, timeout=effective_timeout)
                 raw_str = res.output
                 parsed = spec.parser(res.stdout) if spec.parser else res.stdout.splitlines()
                 if not res.success:

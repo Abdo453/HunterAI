@@ -99,6 +99,7 @@ class HunterPipelineOrchestrator:
         mode: str = "web",
         use_triad: bool = False,
         allow_private_ips: bool = False,
+        timeout_multiplier: float = 1.0,
     ):
         self.raw_target = target.strip()
         self.session_id = session_id or f"hunter_{int(time.time())}"
@@ -113,6 +114,11 @@ class HunterPipelineOrchestrator:
         self.mode = mode
         self.scope_file = scope_file
         self.profile = profile.lower() if profile else "safe"
+        if self.profile in ("deep", "patient", "full") and timeout_multiplier == 1.0:
+            timeout_multiplier = 5.0
+        self.timeout_multiplier = max(0.5, float(timeout_multiplier))
+        self.master_tools.timeout_multiplier = self.timeout_multiplier
+        os.environ["TOOL_TIMEOUT_MULTIPLIER"] = str(self.timeout_multiplier)
         self.rate_limit_rps = max(0.1, rate_limit_rps)
         self.require_human_approval = require_human_approval
         self.no_destructive_tests = no_destructive_tests

@@ -37,7 +37,9 @@ def main():
     p.add_argument("--hunter", action="store_true", help="Launch via HunterAI Agentic Scaffolding Runtime")
     p.add_argument("--authorized", action="store_true", help="Authorize active verification and vulnerability testing")
     p.add_argument("--workflow", "-w", default=None, help="HunterAI workflow: full, recon, enum, vuln, passive, active")
-    p.add_argument("--profile", default="safe", choices=["safe", "passive", "active-safe"], help="Execution profile: safe (default), passive (zero active probes), active-safe")
+    p.add_argument("--profile", default="safe", choices=["safe", "passive", "active-safe", "deep", "full", "patient"], help="Execution profile: safe (default), passive, active-safe, deep, full, patient")
+    p.add_argument("--deep", action="store_true", help="Enable patient deep scan mode with extended tool timeouts and thorough discovery")
+    p.add_argument("--timeout-multiplier", type=float, default=1.0, help="Multiplier for tool execution timeouts (e.g. 5.0 or 10.0 for thorough scans)")
     p.add_argument("--scope-file", default=None, help="Path to scope.yaml or scope.json policy definition file")
     p.add_argument("--rate-limit", type=float, default=2.0, help="Per-domain token bucket rate limit in requests per second (default: 2.0 rps)")
     p.add_argument("--no-destructive-tests", action="store_true", default=True, help="Block all potentially destructive payloads (enabled by default)")
@@ -62,14 +64,16 @@ def main():
 
     if args.target:
         import asyncio
-        if args.hunter or args.workflow or args.mode in ("hunter", "bugbounty") or args.profile != "safe" or args.scope_file or args.triad or args.lab_mode or args.proxy:
+        if args.hunter or args.workflow or args.mode in ("hunter", "bugbounty") or args.profile != "safe" or args.scope_file or args.triad or args.lab_mode or args.proxy or args.deep or args.timeout_multiplier > 1.0:
+            effective_profile = "deep" if args.deep else args.profile
+            effective_mult = max(args.timeout_multiplier, 5.0 if (args.deep or effective_profile in ("deep", "patient")) else 1.0)
             from hunter_ai.pipeline import HunterPipelineOrchestrator
             orch = HunterPipelineOrchestrator(
                 target=args.target,
                 authorized=args.authorized,
                 workflow=args.workflow or "full",
                 mode=args.mode,
-                profile=args.profile,
+                profile=effective_profile,
                 scope_file=args.scope_file,
                 rate_limit_rps=args.rate_limit,
                 require_human_approval=args.require_human_approval,
@@ -78,6 +82,7 @@ def main():
                 use_triad=args.triad,
                 allow_private_ips=args.lab_mode,
                 proxy=args.proxy,
+                timeout_multiplier=effective_mult,
             )
             res = asyncio.run(orch.run())
             if res.get("status") == "aborted":
