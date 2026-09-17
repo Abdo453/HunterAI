@@ -65,8 +65,20 @@ def main():
     if args.target:
         import asyncio
         if args.hunter or args.workflow or args.mode in ("hunter", "bugbounty") or args.profile != "safe" or args.scope_file or args.triad or args.lab_mode or args.proxy or args.deep or args.timeout_multiplier > 1.0:
-            effective_profile = "deep" if args.deep else args.profile
-            effective_mult = max(args.timeout_multiplier, 5.0 if (args.deep or effective_profile in ("deep", "patient")) else 1.0)
+            # Auto-upgrade profile: --hunter or --mode full/bugbounty → "hunter"
+            if args.hunter or args.mode in ("hunter", "bugbounty"):
+                effective_profile = "hunter"
+            elif args.deep or args.profile in ("deep", "patient"):
+                effective_profile = "deep"
+            elif args.mode == "full" or args.profile == "full":
+                effective_profile = "full"
+            else:
+                effective_profile = args.profile
+
+            effective_mult = max(
+                args.timeout_multiplier,
+                10.0 if effective_profile == "hunter" else (5.0 if effective_profile in ("deep", "full", "patient") else 1.0)
+            )
 
             def console_progress(ev: dict):
                 msg = ev.get("message")

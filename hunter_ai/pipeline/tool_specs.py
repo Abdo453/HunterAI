@@ -631,6 +631,55 @@ class MasterToolRegistry:
             return True  # Built-in python fallback available
         return any(self.tm.is_available(p) for p in spec.prerequisites)
 
+    def print_tools_status(self, profile: str = "hunter") -> None:
+        """
+        Print a clear real-time tool availability diagnostic.
+        Shows which tools will run natively vs fall back to python.
+        """
+        # Tools relevant to each profile
+        PROFILE_TOOLS = {
+            "hunter": [
+                "crtsh", "subfinder_deep", "subfinder", "assetfinder", "amass",
+                "gobuster_dns", "theharvester", "nmap_deep", "nmap",
+                "ffuf", "feroxbuster", "gobuster", "dirsearch",
+                "katana", "hakrawler", "waybackurls", "gau",
+                "nuclei", "nikto", "dalfox", "kxss", "sqlmap",
+                "subzy", "trufflehog", "httprobe", "shodan",
+            ],
+            "deep": [
+                "subfinder_deep", "assetfinder", "amass", "gobuster_dns",
+                "nmap_deep", "ffuf", "feroxbuster", "katana", "waybackurls", "gau",
+                "nuclei", "nikto", "dalfox",
+            ],
+            "safe": ["subfinder", "gobuster", "nmap", "katana", "nuclei"],
+        }
+        tools_to_check = PROFILE_TOOLS.get(profile, PROFILE_TOOLS["hunter"])
+
+        live, fallback, missing = [], [], []
+        for t in tools_to_check:
+            spec = self.specs.get(t)
+            if spec and spec.prerequisites:
+                if self.is_available(t):
+                    live.append(t)
+                elif spec.fallback_tool:
+                    fallback.append(f"{t} → {spec.fallback_tool}")
+                else:
+                    missing.append(t)
+            elif spec and not spec.prerequisites:
+                live.append(f"{t} [built-in]")
+
+        print("\n" + "─" * 60)
+        print(f"  🛠  TOOL STATUS CHECK  (profile={profile})")
+        print("─" * 60)
+        if live:
+            print(f"  ✅  LIVE ({len(live)}): {', '.join(live)}")
+        if fallback:
+            print(f"  🔄  FALLBACK ({len(fallback)}): {', '.join(fallback)}")
+        if missing:
+            print(f"  ❌  MISSING / NO FALLBACK ({len(missing)}): {', '.join(missing)}")
+        print("─" * 60 + "\n")
+
+
     async def execute(self, tool_name: str, context: Dict[str, Any]) -> Tuple[List[Any], Optional[str]]:
         """
         Execute tool with automatic fallback handling.

@@ -408,6 +408,66 @@ class HunterPipelineOrchestrator:
             except Exception as e:
                 logger.debug(f"gobuster_dns error: {e}")
 
+        # 2c. Amass — Deep Multi-source Intelligence
+        if self.profile in ("full", "hunter", "deep"):
+            try:
+                subs_am, meta_am = await self.master_tools.execute_artifact(
+                    "amass", {"domain": self.domain}, self.engagement_mgr, "02_subdomains", input_source=f"domain: {self.domain}"
+                )
+                for s in subs_am:
+                    if isinstance(s, str) and self.domain in s:
+                        raw_records.setdefault(s.lower(), set()).add("amass")
+                        self.engagement_mgr.record_lineage(asset_id=s.lower(), asset_value=s.lower(), asset_type="domain", tool="amass", stage="02_subdomains", parent_id=self.domain)
+                if meta_am and meta_am.raw_output_file:
+                    self.tool_logs.append(meta_am.raw_output_file)
+            except Exception as e:
+                logger.debug(f"amass error: {e}")
+
+        # 2d. theHarvester — Email, Host & VHost OSINT
+        if self.profile in ("full", "hunter", "deep"):
+            try:
+                harv_results, meta_harv = await self.master_tools.execute_artifact(
+                    "theharvester", {"domain": self.domain}, self.engagement_mgr, "01_osint", input_source=f"domain: {self.domain}"
+                )
+                for item in harv_results:
+                    if isinstance(item, str) and self.domain in item and "." in item:
+                        raw_records.setdefault(item.lower().strip(), set()).add("theharvester")
+                if meta_harv and meta_harv.raw_output_file:
+                    self.tool_logs.append(meta_harv.raw_output_file)
+            except Exception as e:
+                logger.debug(f"theHarvester error: {e}")
+
+        # 2e. Subzy — Subdomain Takeover Detection
+        if self.profile in ("full", "hunter", "deep") and raw_records:
+            try:
+                import tempfile
+                sub_list = list(raw_records.keys())
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tf:
+                    tf.write("\n".join(sub_list))
+                    targets_file = tf.name
+                subzy_res, meta_subzy = await self.master_tools.execute_artifact(
+                    "subzy", {"targets_file": targets_file}, self.engagement_mgr, "04_attack_surface", input_source="02_subdomains/unique_subdomains.txt"
+                )
+                for line in subzy_res:
+                    if isinstance(line, str) and ("VULNERABLE" in line.upper() or "[VUL" in line):
+                        from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
+                        is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                            title=f"Subdomain Takeover: {line[:80]}",
+                            asset=self.domain,
+                            endpoint=line.split()[0] if line.split() else self.domain,
+                            vuln_type="SubdomainTakeover",
+                            raw_evidence=line,
+                            source_tool="subzy",
+                            verifier_result={"reproduced": True, "is_reflection": False}
+                        )
+                        if is_q and f_obj:
+                            self.findings.append(f_obj)
+                self._save_stage_artifact("04_attack_surface", "subdomain_takeover.txt", "\n".join(subzy_res))
+                if meta_subzy and meta_subzy.raw_output_file:
+                    self.tool_logs.append(meta_subzy.raw_output_file)
+            except Exception as e:
+                logger.debug(f"subzy error: {e}")
+
         # Always include target domain
         raw_records.setdefault(self.domain.lower(), set()).add("target_input")
 
@@ -1562,12 +1622,16 @@ class HunterPipelineOrchestrator:
         t0 = time.time()
         await self._emit("pipeline_start", target=self.raw_target, message=f"Starting HunterAI Pipeline on {self.domain}")
 
+        # 🔬 Print tool availability diagnostic so user knows what runs natively
+        self.master_tools.print_tools_status(profile=self.profile)
+
         # Step 0: Scope
         if not await self.stage_scope_check():
             return {"status": "aborted", "reason": "out_of_scope", "target": self.raw_target}
 
         # Step 1: Recon & Subdomains
         await self.stage_recon()
+
 
         # Step 2: Live Assets
         await self.stage_live_probing()
