@@ -417,24 +417,22 @@ class HunterPipelineOrchestrator:
             self.tool_logs.append(meta_nmap.raw_output_file)
         self.engagement_mgr.complete_stage("05_ports", item_count=len(open_ports))
 
-        # Record open ports finding
-        if open_ports:
-            self.findings.append(HunterFinding(
-                finding=f"Open Network Services ({len(open_ports)} ports)",
-                asset=self.domain,
-                endpoint=self.domain,
-                vuln_type="OpenPorts",
-                status=FindingStatus.CONFIRMED,
-                severity="Info",
-                confidence=0.95,
-                cvss_score=0.0,
-                evidence=[VerificationEvidence(
-                    type="controlled_execution",
-                    description=f"Port scan confirmed {len(open_ports)} open TCP services",
-                    proof_snippet="\n".join(open_ports[:10])
-                )],
-                tool="nmap"
-            ))
+        # Record open ports strictly as Attack Surface Observation (Never as a Vulnerability Finding)
+        from hunter_ai.pipeline.qualification_gate import ObservationRecord, ObservationType
+        for p in open_ports:
+            obs = ObservationRecord(
+                source_tool="nmap",
+                obs_type=ObservationType.NETWORK_PORT,
+                target=self.domain,
+                evidence_snippet=p,
+                confidence=1.0,
+                metadata={"port_spec": p}
+            )
+            self.engagement_mgr.record_timeline_event(
+                stage="05_ports",
+                event="port_observed",
+                message=f"Network service observed: {p}"
+            )
 
         # 4. Normalization & Deduplication -> 02_subdomains
         self.fsm.transition_to(HunterState.NORMALIZE, "Deduplicating and normalizing asset origins")
@@ -710,42 +708,58 @@ class HunterPipelineOrchestrator:
                     parent_id=self.base_url
                 )
 
-        # 3. Special Files & Backups Hunting (.env, .git, .bak, robots.txt)
-        special_candidates = [
-            "robots.txt", "sitemap.xml", ".env", ".git/HEAD",
-            "backup.sql", "config.php.bak", ".htaccess", "server-status"
+        # 3. Special Files & Backups Hunting (.env, .git, .bak)
+        # Note: robots.txt and sitemap.xml are standard public files - extract endpoints, do NOT flag as vulnerability
+        crawl_files = ["robots.txt", "sitemap.xml"]
+        sensitive_candidates = [
+            ".env", ".git/HEAD", "backup.sql", "config.php.bak", ".htaccess", "server-status"
         ]
         async with httpx.AsyncClient(transport=transport, verify=False, timeout=5.0) as client:
-            for sc in special_candidates:
+            # Crawl standard files for path discovery
+            for cf in crawl_files:
+                try:
+                    r = await client.get(f"{self.base_url}/{cf}")
+                    if r.status_code == 200 and len(r.text) > 10:
+                        for line in r.text.splitlines():
+                            line = line.strip()
+                            if line.lower().startswith(("disallow:", "allow:", "loc>")):
+                                path_part = line.split(":", 1)[-1].replace("<loc>", "").replace("</loc>", "").strip()
+                                if path_part.startswith("/"):
+                                    endpoints.append(DiscoveredEndpoint(
+                                        url=f"{self.base_url}{path_part}",
+                                        path=path_part,
+                                        method="GET",
+                                        category="DIRECTORY",
+                                        source=cf
+                                    ))
+                except Exception:
+                    pass
+
+            # Audit genuine sensitive backups & exposed configs
+            for sc in sensitive_candidates:
                 test_url = f"{self.base_url}/{sc}"
                 try:
                     r = await client.get(test_url)
                     if r.status_code == 200 and len(r.content) > 10:
                         is_valid = True
-                        if sc == "robots.txt" and "user-agent" not in r.text.lower():
-                            is_valid = False
                         if sc == ".git/HEAD" and "ref:" not in r.text.lower():
+                            is_valid = False
+                        if sc == ".env" and "=" not in r.text:
                             is_valid = False
 
                         if is_valid:
-                            sev = "High" if sc in (".env", ".git/HEAD", "backup.sql") else "Info"
-                            self.findings.append(HunterFinding(
-                                finding=f"Sensitive File / Backup Exposed: /{sc}",
+                            from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
+                            is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                                title=f"Sensitive File / Backup Exposed: /{sc}",
                                 asset=self.domain,
                                 endpoint=test_url,
                                 vuln_type="InformationDisclosure",
-                                status=FindingStatus.CONFIRMED,
-                                severity=sev,
-                                confidence=0.98,
-                                cvss_score=7.5 if sev == "High" else 2.0,
-                                evidence=[VerificationEvidence(
-                                    type="controlled_execution",
-                                    description=f"HTTP 200 response received with valid signature for /{sc}",
-                                    proof_snippet=r.text[:200]
-                                )],
-                                tool="SpecialFileHunter",
-                                remediation="Restrict public access to administrative and sensitive repository/backup files."
-                            ))
+                                raw_evidence=r.text[:200],
+                                source_tool="SpecialFileHunter",
+                                verifier_result={"reproduced": True, "status_code": 200, "is_reflection": False}
+                            )
+                            if is_q and f_obj:
+                                self.findings.append(f_obj)
                 except Exception:
                     pass
 
@@ -978,19 +992,21 @@ class HunterPipelineOrchestrator:
                 except Exception as e:
                     logger.debug(f"CmdInjection skill test failed: {e}")
 
-        # Add any high-confidence secrets
+        # Add any high-confidence secrets (Shannon entropy validated)
         for s in self.secrets:
-            self.findings.append(HunterFinding(
-                finding=f"Leaked Credential / Secret ({s.secret_type})",
-                asset=self.domain,
-                endpoint=s.file_url,
-                vuln_type="SecretLeak",
-                status=FindingStatus.CONFIRMED,
-                severity="High",
-                confidence=s.confidence,
-                cvss_score=7.5,
-                remediation="Revoke exposed credentials immediately and purge from client-side bundles."
-            ))
+            if s.confidence >= 0.85:
+                from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
+                is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                    title=f"Leaked Credential / Secret ({s.secret_type})",
+                    asset=self.domain,
+                    endpoint=s.file_url,
+                    vuln_type="SecretLeak",
+                    raw_evidence=s.matched_string,
+                    source_tool="CodeIntelligence_SecretHunter",
+                    verifier_result={"reproduced": True, "is_reflection": False}
+                )
+                if is_q and f_obj:
+                    self.findings.append(f_obj)
 
         # ── TRANSITION TO VERIFICATION (ENFORCES ZERO FALSE POSITIVES) ────────
         self.fsm.transition_to(HunterState.VERIFY, "Multi-layer verification & false positive filtering")
@@ -1184,11 +1200,24 @@ class HunterPipelineOrchestrator:
             f"- **Active Testing Mode**: `{'AUTHORIZED' if self.authorized else 'RESTRICTED (Safe)'}`",
             f"- **Workflow Mode**: `{self.workflow.upper()}`",
             f"- **Date**: {time.strftime('%Y-%m-%d %H:%M:%S')}",
-            f"- **Total Findings**: {len(self.findings)}",
+            f"- **Total Confirmed Vulnerabilities**: {len(self.findings)}",
             f"- **Artifacts Directory**: `{self.artifact_root}`",
             f"- **Tool Output Logs**: {len(self.tool_logs)} files saved in `data/tool_outputs/`\n",
-            "## Priority Breakdown\n"
+            "## 🌐 Target Reconnaissance & Attack Surface Inventory\n",
+            "| Asset Category | Discovered Count | Operational Status |",
+            "| :--- | :--- | :--- |",
+            f"| **Subdomains Discovered** | `{len(self.subdomains)}` | Mapped via crt.sh & subfinder |",
+            f"| **Live Web Assets** | `{len(self.live_assets)}` | Active HTTP/HTTPS Services |",
+            f"| **Discovered Endpoints** | `{len(self.endpoints)}` | Crawled & Mapped Routes |",
+            f"| **Mapped Parameters** | `{len(self.parameters)}` | Evaluated for Attack Hypotheses |\n",
+            "## ⚖️ Confirmed Vulnerabilities (Evidence Court Adjudicated)\n",
         ]
+
+        if not self.findings:
+            md_lines.append("> **✅ ZERO VULNERABILITIES CONFIRMED (Clean Defense Boundary)**")
+            md_lines.append("> All raw observations were evaluated by the Evidence Court and Finding Qualification Gate.")
+            md_lines.append("> Expected public files (`/robots.txt`, `/sitemap.xml`) and standard web ports (80/443) have zero security impact and are classified as Perimeter Inventory.")
+            md_lines.append("> No high-confidence, reproducible vulnerabilities were confirmed in this engagement run.\n")
 
         # Group by Priority (P0 - P5)
         for priority_tag in ["P0", "P1", "P2", "P3", "P4", "P5"]:

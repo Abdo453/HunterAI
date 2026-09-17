@@ -37,4 +37,13 @@ __all__ = [
     "HunterFinding",
     "FindingTier",
     "ProfileMode",
+    "FindingQualificationGate",
+    "ObservationRecord",
+    "ObservationType",
 ]
+
+from hunter_ai.pipeline.qualification_gate import (
+    FindingQualificationGate,
+    ObservationRecord,
+    ObservationType,
+)
