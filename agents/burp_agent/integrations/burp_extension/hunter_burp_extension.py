@@ -19,32 +19,48 @@ Deep Bi-Directional Integration between Burp Suite and HunterAI:
     - Ingested request and confirmed vulnerability counter
     - One-click "Import Confirmed Issues into Burp"
 """
-from burp import (
-    IBurpExtender,
-    IContextMenuFactory,
-    IHttpListener,
-    IScanIssue,
-    IScannerListener,
-    ITab,
-)
+try:
+    from burp import (
+        IBurpExtender,
+        IContextMenuFactory,
+        IHttpListener,
+        IScanIssue,
+        IScannerListener,
+        ITab,
+    )
+except ImportError:
+    class IBurpExtender(object): pass
+    class IContextMenuFactory(object): pass
+    class IHttpListener(object): pass
+    class IScanIssue(object): pass
+    class IScannerListener(object): pass
+    class ITab(object): pass
+
 import json
-import urllib2
-from java.awt import BorderLayout, Dimension, FlowLayout, Font, GridLayout
-from java.io import ByteArrayInputStream
-from java.util import ArrayList
-from javax.swing import (
-    BorderFactory,
-    Box,
-    BoxLayout,
-    JButton,
-    JCheckBox,
-    JLabel,
-    JMenuItem,
-    JPanel,
-    JScrollPane,
-    JTextArea,
-    JTextField,
-)
+try:
+    import urllib2
+except ImportError:
+    import urllib.request as urllib2
+
+try:
+    from java.awt import BorderLayout, Dimension, FlowLayout, Font, GridLayout
+    from java.io import ByteArrayInputStream
+    from java.util import ArrayList
+    from javax.swing import (
+        BorderFactory,
+        Box,
+        BoxLayout,
+        JButton,
+        JCheckBox,
+        JLabel,
+        JMenuItem,
+        JPanel,
+        JScrollPane,
+        JTextArea,
+        JTextField,
+    )
+except ImportError:
+    pass
 
 DEFAULT_GATEWAY = "http://127.0.0.1:8085"
 

@@ -56,7 +56,6 @@ from hunter_ai.pipeline.schemas import (
     ProgramVisibility,
     ProgramMetadata,
 )
-from core.program_intelligence import ProgramIntelligence
 from core.evidence_graph import EvidenceGraph, DeterministicEvidenceValidator, NodeStatus, StageManifest
 from hunter_ai.protocol.context_compressor import ContextCompressor, CompressedKnowledgePackage
 from hunter_ai.pipeline.engagement_manager import EngagementManager

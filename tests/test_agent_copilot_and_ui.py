@@ -1,5 +1,5 @@
 import pytest
-from starlette.testclient import TestClient
+from fastapi.testclient import TestClient
 from ui.web.app import app, copilot_state
 from core.brain.autonomous_brain import AutonomousBrain
 from unittest.mock import MagicMock

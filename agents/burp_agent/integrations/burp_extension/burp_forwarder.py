@@ -3,9 +3,17 @@
 HunterAI Burp Suite Jython Extension
 Forwards live Burp HTTP traffic to HunterAI BurpAgent (http://127.0.0.1:8085/api/traffic)
 """
-from burp import IBurpExtender, IHttpListener
+try:
+    from burp import IBurpExtender, IHttpListener
+except ImportError:
+    class IBurpExtender(object): pass
+    class IHttpListener(object): pass
+
 import json
-import urllib2
+try:
+    import urllib2
+except ImportError:
+    import urllib.request as urllib2
 
 AGENT_ENDPOINT = "http://127.0.0.1:8085/api/traffic"
 

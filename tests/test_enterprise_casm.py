@@ -258,3 +258,4 @@ async def test_orchestrator_passive_profile_and_diff():
     with open(diff_md, "r", encoding="utf-8") as f:
         diff_text = f.read()
     assert "HunterAI Temporal Diff" in diff_text
+    await asyncio.sleep(0.1)
