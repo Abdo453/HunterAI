@@ -1056,6 +1056,37 @@ class AutonomousBrain:
         except Exception as e:
             log.warning(f"[BRAIN] V26.0 Bidirectional Burp Control Plane could not be attached: {e}")
 
+        # V27.0 / V27.1 Causal Verification, Attack Surface Graph, and Metamorphic Triad Engines
+        self.attack_surface_graph = None
+        self.eig_planner = None
+        self.negative_ledger = None
+        self.experiment_ledger = None
+        self.triad_verifier = None
+        self.bcsl = None
+        try:
+            from core.reasoning.attack_surface_graph import AttackSurfaceGraph
+            from core.reasoning.eig_planner import DeterministicEIGPlanner
+            from core.reasoning.negative_evidence import NuancedNegativeEvidenceLedger
+            from core.reasoning.experiment_ledger import TamperEvidentExperimentLedger
+            from core.reasoning.triad_verifier import TriadVerifier
+            from core.burp_gateway.bcsl import BurpControlSensorLayer
+
+            self.attack_surface_graph = AttackSurfaceGraph()
+            self.negative_ledger = NuancedNegativeEvidenceLedger()
+            self.eig_planner = DeterministicEIGPlanner(
+                surface_graph=self.attack_surface_graph,
+                negative_ledger=self.negative_ledger,
+            )
+            self.experiment_ledger = TamperEvidentExperimentLedger()
+            self.triad_verifier = TriadVerifier
+            self.bcsl = BurpControlSensorLayer(
+                research_controller=self.burp_research_controller,
+                event_stream=self.burp_event_stream,
+            )
+            log.info("[BRAIN] V27.1 Causal Verification & BCSL Engines attached (AttackSurfaceGraph, EIGPlanner, NegativeLedger, ExperimentLedger, TriadVerifier, BCSL)")
+        except Exception as e:
+            log.warning(f"[BRAIN] V27.1 Causal Verification Engines could not be attached: {e}")
+
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
         self.burp_sensor = sensor
@@ -1106,6 +1137,58 @@ class AutonomousBrain:
             self._audit("pentester_flow_scenario_completed", scenario=str(scenario), verdict=ruling.court_verdict)
             return ruling
         return None
+
+    def execute_triad_experiment(
+        self,
+        contract: Any,
+        invariant: Optional[Any] = None,
+    ) -> Any:
+        """
+        Dispatches a 4-probe Metamorphic Triad (B x C x E1 x E2) through BCSL,
+        records the resulting execution in the TamperEvidentExperimentLedger,
+        and updates the epistemic state of the AttackSurfaceGraph.
+        """
+        if not self.bcsl:
+            raise RuntimeError("BCSL is not attached to AutonomousBrain.")
+
+        record = self.bcsl.execute_triad_contract(contract, invariant=invariant)
+
+        if self.experiment_ledger is not None:
+            from core.reasoning.experiment_ledger import ExperimentRecord
+            exp_rec = ExperimentRecord(
+                experiment_id=record.triad_id,
+                hypothesis_id=record.hypothesis_id,
+                source_transaction={"tx_id": record.source_request_id},
+                baseline_b=record.baseline_response,
+                control_c=record.control_response,
+                experiment_e1=record.experiment_1_response,
+                experiment_e2=record.experiment_2_response,
+                observations=[record.triad_verification_result.get("rationale", "")],
+                invariant_result=record.invariant_result,
+                causal_strength=float(record.triad_verification_result.get("confidence_score", 0.0)),
+                execution_provenance=[{"stage": p} for p in record.provenance],
+            )
+            self.experiment_ledger.append(exp_rec)
+
+        if self.attack_surface_graph is not None and getattr(contract, "target_endpoint", None):
+            from core.reasoning.attack_surface_graph import EpistemicStatus
+            verdict = record.triad_verification_result.get("epistemic_verdict")
+            status_map = {
+                "CONFIRMED": EpistemicStatus.CONFIRMED,
+                "REJECTED": EpistemicStatus.REJECTED,
+                "PARTIALLY_VERIFIED": EpistemicStatus.PARTIALLY_VERIFIED,
+                "UNVERIFIED": EpistemicStatus.TESTED,
+            }
+            ep_status = status_map.get(verdict, EpistemicStatus.TESTED)
+            self.attack_surface_graph.update_status(
+                target_id=contract.target_endpoint,
+                new_status=ep_status,
+                evidence_ref=record.triad_id,
+                rationale=record.triad_verification_result.get("rationale", ""),
+                confidence=record.triad_verification_result.get("confidence_score"),
+            )
+
+        return record
 
     def add_user_hint(self, hint: str) -> None:
         """إضافة نصيحة أو توجيه من المستخدم للـ Agent أثناء التخطيط والتنفيذ"""

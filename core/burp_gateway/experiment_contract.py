@@ -116,3 +116,60 @@ class ExperimentExecutionRecord:
             "provenance": self.provenance,
             "audit_hash": self.audit_hash,
         }
+
+
+@dataclass
+class TriadExperimentContract:
+    """
+    Formal 4-part Metamorphic Triad Experiment Contract (B x C x E1 x E2).
+    """
+    hypothesis_id: str
+    source_request_id: str
+    target_endpoint: str
+    triad_id: Optional[str] = None
+    http_method: str = "GET"
+    identity_context: str = "ANONYMOUS"
+    baseline_mutation: Optional[Dict[str, Any]] = None
+    control_mutation: Dict[str, Any] = field(default_factory=dict)
+    experiment_1_mutation: Dict[str, Any] = field(default_factory=dict)
+    experiment_2_mutation: Dict[str, Any] = field(default_factory=dict)
+    invariant_id: Optional[str] = None
+    expected_observation: str = ""
+    risk_tier: str = "MEDIUM_RISK"
+    risk_budget: float = 1.0
+    category: str = "BUSINESS_LOGIC"
+    negative_observables: Dict[str, Any] = field(default_factory=dict)
+    correlation_id: str = field(default_factory=lambda: f"triad_{uuid.uuid4().hex[:8]}")
+    created_at: float = field(default_factory=time.time)
+    scope_requirements: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class TriadExecutionRecord:
+    """
+    Full Forensic Result of 4-Part Metamorphic Triad Execution across physical wire.
+    """
+    triad_id: str
+    hypothesis_id: str
+    correlation_id: str
+    source_request_id: str
+    baseline_request: Dict[str, Any]
+    baseline_response: Dict[str, Any]
+    control_request: Dict[str, Any]
+    control_response: Dict[str, Any]
+    experiment_1_request: Dict[str, Any]
+    experiment_1_response: Dict[str, Any]
+    experiment_2_request: Dict[str, Any]
+    experiment_2_response: Dict[str, Any]
+    triad_verification_result: Dict[str, Any]
+    invariant_result: Dict[str, Any]
+    execution_status: str  # EXECUTED, BLOCKED_SCOPE, FAILED
+    provenance: List[str] = field(default_factory=list)
+    audit_hash: str = ""
+    timestamp: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)

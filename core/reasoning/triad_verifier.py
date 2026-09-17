@@ -174,22 +174,9 @@ class TriadVerifier:
                     epistemic_verdict="PARTIALLY_VERIFIED",
                 )
 
-        # 2. Check for Zero Differentiation (E1 produced no change from B or C)
-        if e1.status_code == b.status_code and e1.status_code == c.status_code and len_diff_ce1 < 5 and abs(e1.body_length - b.body_length) < 5:
-            return TriadVerificationResult(
-                is_causally_differentiated=False,
-                control_divergence_explained=True,
-                metamorphic_consistency=False,
-                contradiction_detected=False,
-                confidence_score=0.1,
-                rationale="Probe E1 produced no meaningful differentiation from Baseline (B) or Control (C).",
-                diff_metrics=diff_metrics,
-                epistemic_verdict="UNVERIFIED",
-            )
-
-        # 3. Check for Control Equivalence (C produced the exact same shift as E1 and E2)
-        # If adding benign text causes identical response as E1, behavior is benign input handling.
-        if e1.status_code == c.status_code and abs(e1.body_length - c.body_length) < 5 and e1.body == c.body:
+        # 2. Check for Control Equivalence (C produced the exact same response as E1)
+        # If adding benign text causes identical response as E1, behavior is benign input handling / noise.
+        if e1.status_code == c.status_code and e1.body == c.body:
             return TriadVerificationResult(
                 is_causally_differentiated=False,
                 control_divergence_explained=False,
@@ -199,6 +186,19 @@ class TriadVerifier:
                 rationale="Control mutation (C) produced identical response as security probe (E1). Effect is benign input handling or noise.",
                 diff_metrics=diff_metrics,
                 epistemic_verdict="REJECTED",
+            )
+
+        # 3. Check for Zero Differentiation (E1 produced no change from Baseline)
+        if e1.status_code == b.status_code and e1.body == b.body and not custom_invariant_evaluator:
+            return TriadVerificationResult(
+                is_causally_differentiated=False,
+                control_divergence_explained=True,
+                metamorphic_consistency=False,
+                contradiction_detected=False,
+                confidence_score=0.1,
+                rationale="Probe E1 produced no meaningful differentiation from Baseline (B) or Control (C).",
+                diff_metrics=diff_metrics,
+                epistemic_verdict="UNVERIFIED",
             )
 
         # 4. Successful Causal Differentiation

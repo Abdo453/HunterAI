@@ -21,7 +21,20 @@ from core.burp_gateway.experiment_contract import (
     ExperimentContract,
     ExperimentExecutionRecord,
     StateSnapshot,
+    TriadExperimentContract,
+    TriadExecutionRecord,
 )
+from core.reasoning.triad_verifier import (
+    TransactionSnapshot,
+    TriadBundle,
+    TriadVerifier,
+    TriadVerificationResult,
+)
+from core.reasoning.causal_invariants import (
+    CausalInvariant,
+    InvariantEvaluationResult,
+)
+from dataclasses import asdict
 from core.burp_gateway.traffic_normalizer import (
     CanonicalRequest,
     CanonicalResponse,
@@ -275,6 +288,286 @@ class BurpControlSensorLayer:
     ) -> str:
         """Provisions an interactive research tab in Burp Repeater."""
         return self.controller.send_to_repeater(request_or_tx_id, tab_name=tab_caption)
+
+    def execute_triad_contract(
+        self,
+        triad_contract: TriadExperimentContract,
+        invariant: Optional[Any] = None,
+    ) -> TriadExecutionRecord:
+        """
+        Executes a formal 4-part Metamorphic Triad (B x C x E1 x E2) across the physical wire.
+        Enforces ScopeGuard, tracks 7-stage causal provenance, and evaluates causal differentiation.
+        """
+        triad_id = triad_contract.triad_id or f"triad_{uuid.uuid4().hex[:8]}"
+        base_tx = self.controller._transactions.get(triad_contract.source_request_id)
+
+        provenance = [
+            f"[STAGE-1] Hypothesis Formulation: {triad_contract.hypothesis_id}",
+            f"[STAGE-2] Source Baseline Binding: {triad_contract.source_request_id}",
+            f"[STAGE-3] Metamorphic Triad Contract (B x C x E1 x E2) Submitted to BCSL: {triad_id}",
+        ]
+
+        if not base_tx:
+            provenance.append("[STAGE-4] Aborted: Source baseline request not found in BCSL memory")
+            return self._create_triad_error_record(
+                triad_id=triad_id,
+                contract=triad_contract,
+                status="FAILED_MISSING_BASELINE",
+                provenance=provenance,
+            )
+
+        # ── SCOPE & RISK POLICY GATES ────────────────────────────────────────
+        target_url = triad_contract.target_endpoint or base_tx.request.url
+        is_allowed, scope_reason = self.scope_guard.is_allowed(target_url)
+        if not is_allowed:
+            provenance.append(f"[STAGE-4] SCOPE VIOLATION BLOCKED: {scope_reason}")
+            logger.warning(f"[BCSL] Scope violation blocked triad {triad_id}: {scope_reason}")
+            return self._create_triad_error_record(
+                triad_id=triad_id,
+                contract=triad_contract,
+                status="BLOCKED_SCOPE",
+                provenance=provenance,
+            )
+
+        provenance.append(f"[STAGE-4] Policy & Scope Verification: PASSED ({target_url})")
+
+        # ── PHYSICAL WIRE EXECUTION (B x C x E1 x E2) ────────────────────────
+        try:
+            # 1. Baseline (B)
+            if triad_contract.baseline_mutation:
+                corr_b = BurpCorrelationContext(
+                    hypothesis_id=triad_contract.hypothesis_id,
+                    experiment_id=f"{triad_id}_B",
+                    parent_transaction_id=triad_contract.source_request_id,
+                    identity_id=triad_contract.identity_context,
+                    intent=f"Triad Baseline: {triad_contract.expected_observation}",
+                    action_type="TRIAD_BASELINE",
+                )
+                exec_b = self.controller.replay(
+                    request_id=triad_contract.source_request_id,
+                    mutation=triad_contract.baseline_mutation,
+                    correlation=corr_b,
+                    reason="Triad Baseline Replay",
+                )
+                tx_b = exec_b.transaction
+            else:
+                tx_b = base_tx
+
+            # 2. Control (C)
+            corr_c = BurpCorrelationContext(
+                hypothesis_id=triad_contract.hypothesis_id,
+                experiment_id=f"{triad_id}_C",
+                parent_transaction_id=triad_contract.source_request_id,
+                identity_id=triad_contract.identity_context,
+                intent=f"Triad Control: {triad_contract.expected_observation}",
+                action_type="TRIAD_CONTROL",
+            )
+            exec_c = self.controller.replay(
+                request_id=triad_contract.source_request_id,
+                mutation=triad_contract.control_mutation,
+                correlation=corr_c,
+                reason="Triad Harmless Control",
+            )
+            tx_c = exec_c.transaction
+
+            # 3. Experiment 1 (E1)
+            corr_e1 = BurpCorrelationContext(
+                hypothesis_id=triad_contract.hypothesis_id,
+                experiment_id=f"{triad_id}_E1",
+                parent_transaction_id=triad_contract.source_request_id,
+                identity_id=triad_contract.identity_context,
+                intent=f"Triad Experiment 1: {triad_contract.expected_observation}",
+                action_type="TRIAD_EXPERIMENT_1",
+            )
+            exec_e1 = self.controller.replay(
+                request_id=triad_contract.source_request_id,
+                mutation=triad_contract.experiment_1_mutation,
+                correlation=corr_e1,
+                reason="Triad Security Probe 1",
+            )
+            tx_e1 = exec_e1.transaction
+
+            # 4. Experiment 2 (E2)
+            corr_e2 = BurpCorrelationContext(
+                hypothesis_id=triad_contract.hypothesis_id,
+                experiment_id=f"{triad_id}_E2",
+                parent_transaction_id=triad_contract.source_request_id,
+                identity_id=triad_contract.identity_context,
+                intent=f"Triad Experiment 2: {triad_contract.expected_observation}",
+                action_type="TRIAD_EXPERIMENT_2",
+            )
+            exec_e2 = self.controller.replay(
+                request_id=triad_contract.source_request_id,
+                mutation=triad_contract.experiment_2_mutation,
+                correlation=corr_e2,
+                reason="Triad Metamorphic Probe 2",
+            )
+            tx_e2 = exec_e2.transaction
+
+        except ScopeViolationError as sve:
+            provenance.append(f"[STAGE-5] Burp Wire Execution BLOCKED: {sve}")
+            return self._create_triad_error_record(
+                triad_id=triad_id,
+                contract=triad_contract,
+                status="BLOCKED_SCOPE",
+                provenance=provenance,
+            )
+        except Exception as exc:
+            provenance.append(f"[STAGE-5] Burp Wire Execution FAILED: {exc}")
+            return self._create_triad_error_record(
+                triad_id=triad_id,
+                contract=triad_contract,
+                status="FAILED_EXECUTION",
+                provenance=provenance,
+            )
+
+        snap_b = self._tx_to_snapshot(tx_b)
+        snap_c = self._tx_to_snapshot(tx_c)
+        snap_e1 = self._tx_to_snapshot(tx_e1)
+        snap_e2 = self._tx_to_snapshot(tx_e2)
+
+        provenance.append(
+            f"[STAGE-5] Burp Wire Execution: 4 Probes Executed "
+            f"(B: HTTP {snap_b.status_code}, C: HTTP {snap_c.status_code}, "
+            f"E1: HTTP {snap_e1.status_code}, E2: HTTP {snap_e2.status_code})"
+        )
+
+        # ── METAMORPHIC BUNDLE & VERIFICATION ────────────────────────────────
+        bundle = TriadBundle(
+            hypothesis_id=triad_contract.hypothesis_id,
+            target_endpoint=target_url,
+            baseline=snap_b,
+            control=snap_c,
+            experiment_1=snap_e1,
+            experiment_2=snap_e2,
+            expected_metamorphic_relation=triad_contract.expected_observation,
+            metadata={"triad_id": triad_id, "correlation_id": triad_contract.correlation_id},
+        )
+
+        inv_result_dict: Dict[str, Any] = {}
+        custom_evaluator = None
+        if invariant is not None:
+            if isinstance(invariant, CausalInvariant):
+                inv_res = invariant.evaluate(bundle)
+                inv_result_dict = inv_res.to_dict()
+                custom_evaluator = lambda e1_snap, e2_snap: (inv_res.passed, inv_res.reason)
+            elif callable(invariant):
+                custom_evaluator = invariant
+
+        verification_res = TriadVerifier.verify_triad(
+            bundle,
+            custom_invariant_evaluator=custom_evaluator,
+        )
+
+        provenance.append(
+            f"[STAGE-6] Metamorphic Triad Verification: Verdict={verification_res.epistemic_verdict} "
+            f"(Causal Diff={verification_res.is_causally_differentiated}, "
+            f"Metamorphic={verification_res.metamorphic_consistency})"
+        )
+        provenance.append(f"[STAGE-7] Invariant Committed to Ledger: {verification_res.rationale}")
+
+        audit_raw = f"{triad_id}:{triad_contract.hypothesis_id}:{verification_res.epistemic_verdict}:{time.time()}"
+        audit_hash = hashlib.sha256(audit_raw.encode()).hexdigest()[:16]
+
+        record = TriadExecutionRecord(
+            triad_id=triad_id,
+            hypothesis_id=triad_contract.hypothesis_id,
+            correlation_id=triad_contract.correlation_id,
+            source_request_id=triad_contract.source_request_id,
+            baseline_request=self._canonical_req_to_dict(tx_b.request),
+            baseline_response=self._canonical_resp_to_dict(tx_b.response),
+            control_request=self._canonical_req_to_dict(tx_c.request),
+            control_response=self._canonical_resp_to_dict(tx_c.response),
+            experiment_1_request=self._canonical_req_to_dict(tx_e1.request),
+            experiment_1_response=self._canonical_resp_to_dict(tx_e1.response),
+            experiment_2_request=self._canonical_req_to_dict(tx_e2.request),
+            experiment_2_response=self._canonical_resp_to_dict(tx_e2.response),
+            triad_verification_result=verification_res.to_dict(),
+            invariant_result=inv_result_dict,
+            execution_status="EXECUTED",
+            provenance=provenance,
+            audit_hash=audit_hash,
+            timestamp=time.time(),
+        )
+
+        if self.event_stream and hasattr(self.event_stream, "publish_event"):
+            self.event_stream.publish_event("BCSL_TRIAD_EXPERIMENT_COMPLETED", record.to_dict())
+
+        return record
+
+    def _tx_to_snapshot(self, tx: CanonicalTransaction) -> TransactionSnapshot:
+        """Converts a CanonicalTransaction into a TransactionSnapshot."""
+        if not tx or not tx.response:
+            return TransactionSnapshot(request_id=tx.tx_id if tx else "")
+        body = tx.response.body or ""
+        return TransactionSnapshot(
+            request_id=tx.tx_id,
+            status_code=int(tx.response.status_code),
+            headers={str(k).lower(): str(v) for k, v in (tx.response.headers or {}).items()},
+            body=body,
+            body_length=len(body),
+            round_trip_ms=float(getattr(tx.response, "round_trip_ms", 0.0) or 0.0),
+        )
+
+    def _canonical_req_to_dict(self, req: Any) -> Dict[str, Any]:
+        if hasattr(req, "to_dict"):
+            return req.to_dict()
+        try:
+            return asdict(req)
+        except Exception:
+            return {
+                "method": getattr(req, "method", "GET"),
+                "url": getattr(req, "url", ""),
+                "headers": getattr(req, "headers", {}),
+                "body": getattr(req, "body", ""),
+            }
+
+    def _canonical_resp_to_dict(self, resp: Any) -> Dict[str, Any]:
+        if hasattr(resp, "to_dict"):
+            return resp.to_dict()
+        try:
+            return asdict(resp)
+        except Exception:
+            return {
+                "status_code": getattr(resp, "status_code", 0),
+                "headers": getattr(resp, "headers", {}),
+                "body": getattr(resp, "body", ""),
+            }
+
+    def _create_triad_error_record(
+        self,
+        triad_id: str,
+        contract: TriadExperimentContract,
+        status: str,
+        provenance: List[str],
+    ) -> TriadExecutionRecord:
+        empty_req = {"url": contract.target_endpoint, "method": contract.http_method}
+        empty_resp = {"status_code": 0, "body": ""}
+        return TriadExecutionRecord(
+            triad_id=triad_id,
+            hypothesis_id=contract.hypothesis_id,
+            correlation_id=contract.correlation_id,
+            source_request_id=contract.source_request_id,
+            baseline_request=empty_req,
+            baseline_response=empty_resp,
+            control_request=empty_req,
+            control_response=empty_resp,
+            experiment_1_request=empty_req,
+            experiment_1_response=empty_resp,
+            experiment_2_request=empty_req,
+            experiment_2_response=empty_resp,
+            triad_verification_result={
+                "epistemic_verdict": "REJECTED" if status == "BLOCKED_SCOPE" else "UNVERIFIED",
+                "is_causally_differentiated": False,
+                "confidence_score": 0.0,
+                "rationale": f"Triad execution aborted: {status}",
+            },
+            invariant_result={},
+            execution_status=status,
+            provenance=provenance,
+            audit_hash="",
+            timestamp=time.time(),
+        )
 
     def _create_error_record(
         self,

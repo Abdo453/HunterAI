@@ -391,6 +391,14 @@ class BurpResearchController:
             if not base_tx:
                 raise ValueError(f"Transaction {request_or_tx_id} not found.")
             req = copy.deepcopy(base_tx.request)
+        elif isinstance(request_or_tx_id, dict):
+            from core.burp_gateway.traffic_normalizer import CanonicalRequest
+            req = CanonicalRequest(
+                method=request_or_tx_id.get("method", "GET"),
+                url=request_or_tx_id.get("url", ""),
+                headers=dict(request_or_tx_id.get("headers", {})),
+                body=str(request_or_tx_id.get("body", "")),
+            )
         else:
             req = copy.deepcopy(request_or_tx_id)
 

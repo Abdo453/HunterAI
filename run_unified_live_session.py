@@ -61,7 +61,7 @@ from core.burp_gateway.issue_exporter import BurpIssueExporter
 from core.burp_gateway.handoff_contract import AgentHandoffContract
 from core.burp_gateway.provenance import EvidenceProvenanceEngine, ProvenanceStage
 from core.control_plane.policy_gate import PolicyGate
-from core.evidence_court import EvidenceCourt, CourtVerdict
+from core.evidence_court import EvidenceCourt, CourtVerdict, CausalEvidence, ExecutionEvidence
 from core.poe_engine import ProofOfExecutionEngine
 from core.scope_engine import ScopePolicy
 
@@ -69,8 +69,16 @@ from core.scope_engine import ScopePolicy
 from core.burp_gateway.bcsl import BurpControlSensorLayer
 from core.burp_gateway.correlation import BurpCorrelationContext
 from core.burp_gateway.event_stream import BurpLiveEventStream
-from core.burp_gateway.experiment_contract import ExperimentContract, ExperimentExecutionRecord
+from core.burp_gateway.experiment_contract import (
+    ExperimentContract,
+    ExperimentExecutionRecord,
+    TriadExperimentContract,
+    TriadExecutionRecord,
+)
 from core.burp_gateway.traffic_normalizer import CanonicalRequest, CanonicalResponse
+from core.reasoning.triad_verifier import TriadVerifier, TriadBundle, TransactionSnapshot
+from core.reasoning.causal_invariants import CommandExecutionInvariant
+from core.reasoning.experiment_ledger import TamperEvidentExperimentLedger, ExperimentRecord
 from core.controllers.burp_research_controller import BurpResearchController
 from core.correlation.ui_traffic_correlator import UITrafficCorrelator
 from core.database.knowledge_db import KnowledgeDB
@@ -187,9 +195,12 @@ class TargetAppHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
 
-            # Emulate real shell arithmetic evaluation $((53+19)) -> 72
-            if "53" in host_val and "19" in host_val:
+            # Emulate real shell arithmetic evaluation $((53+19)) or $((41+31)) -> 72
+            # and control evaluation echo 53 -> 53
+            if ("53" in host_val and "19" in host_val) or ("41" in host_val and "31" in host_val):
                 self.wfile.write(b"PING 127.0.0.1 (127.0.0.1): 56 data bytes\n72\n--- 127.0.0.1 ping statistics ---")
+            elif "echo 53" in host_val or "53+0" in host_val:
+                self.wfile.write(b"PING 127.0.0.1 (127.0.0.1): 56 data bytes\n53\n--- 127.0.0.1 ping statistics ---")
             else:
                 resp_text = f"PING {host_val} (127.0.0.1): 56 data bytes\n64 bytes from 127.0.0.1: icmp_seq=0 ttl=64 time=0.04 ms"
                 self.wfile.write(resp_text.encode("utf-8"))
@@ -269,6 +280,7 @@ class UnifiedLiveSession:
         self.captured_transactions: List[CapturedTransaction] = []
         self.case: Optional[AgentHandoffContract] = None
         self.judgment = None
+        self.experiment_ledger = TamperEvidentExperimentLedger()
 
     def start_target_server(self):
         self.target_server = HTTPServer(("127.0.0.1", self.target_port), TargetAppHandler)
@@ -479,59 +491,95 @@ class UnifiedLiveSession:
         )
         print(f"  [+] Investigation Case created: {self.case.case_id} (Vuln: {self.case.vuln_class})")
 
-        # 4. Active Proof-of-Execution Verification Probe via BCSL & ExperimentContract
-        print(f"\n{CYAN}[STEP 4/6] Executing Controlled Experiment via BCSL (Burp Control & Sensor Layer)...{RESET}")
-        payload_nonce = "127.0.0.1; echo $((53+19));"
+        # 4. Active Metamorphic Triad (B x C x E1 x E2) Verification via BCSL
+        print(f"\n{CYAN}[STEP 4/6] Executing Metamorphic Triad (B x C x E1 x E2) via BCSL...{RESET}")
         public_ping_endpoint = f"{self.target_url}/api/tools/ping"
+        payload_nonce = "127.0.0.1; echo $((53+19));"
 
-        # Brain declares formal ExperimentContract (Zero direct raw HTTP / Burp API exposure)
-        experiment_contract = ExperimentContract(
-            experiment_id="exp_os_cmd_ping_nonce",
+        # Brain declares formal TriadExperimentContract
+        triad_contract = TriadExperimentContract(
             hypothesis_id=self.case.case_id,
+            source_request_id=tx3.tx_id,
             target_endpoint=public_ping_endpoint,
             http_method="POST",
-            source_request_id=tx3.tx_id,
-            mutation_plan={
+            control_mutation={
                 "url": public_ping_endpoint,
                 "method": "POST",
                 "headers": {"Content-Type": "application/x-www-form-urlencoded"},
-                "params": {"host": payload_nonce},
-                "body": f"host={payload_nonce}",
+                "params": {"host": "127.0.0.1; echo 53;"},
+                "body": "host=127.0.0.1; echo 53;",
             },
-            expected_observation="Deterministic arithmetic evaluation: $((53+19)) strictly computed to 72 in shell response.",
+            experiment_1_mutation={
+                "url": public_ping_endpoint,
+                "method": "POST",
+                "headers": {"Content-Type": "application/x-www-form-urlencoded"},
+                "params": {"host": "127.0.0.1; echo $((53+19));"},
+                "body": "host=127.0.0.1; echo $((53+19));",
+            },
+            experiment_2_mutation={
+                "url": public_ping_endpoint,
+                "method": "POST",
+                "headers": {"Content-Type": "application/x-www-form-urlencoded"},
+                "params": {"host": "127.0.0.1; echo $((41+31));"},
+                "body": "host=127.0.0.1; echo $((41+31));",
+            },
+            expected_observation="Deterministic arithmetic evaluation: $((53+19)) and $((41+31)) strictly computed to 72 in shell response.",
             risk_tier="MEDIUM_RISK",
         )
-        print(f"  [+] Brain formulated ExperimentContract: {experiment_contract.experiment_id}")
-        print(f"      - Target: {experiment_contract.http_method} {experiment_contract.target_endpoint}")
+        print(f"  [+] Brain formulated TriadExperimentContract: {triad_contract.correlation_id}")
+        print(f"      - Target: {triad_contract.http_method} {triad_contract.target_endpoint}")
+        print(f"      - Triad Structure: B (Baseline) x C (Control) x E1 (53+19) x E2 (41+31)")
         print(f"      - Inviolable Gates: ScopeGuard & RiskBudgetManager active")
 
-        # BCSL executes the experiment: enforces policy, injects correlation, runs replay, takes state snapshots
-        exec_record = self.bcsl.submit_experiment(experiment_contract)
-        print(f"  [+] BCSL Execution Status: {exec_record.execution_status} (HTTP {exec_record.response.status_code})")
-        print(f"  [+] BCSL Provenance Trace: {exec_record.provenance}")
-        print(f"  [+] BCSL Response Delta: {exec_record.response_diff.get('length_delta_bytes', 0):+d} bytes | Audit Hash: {exec_record.audit_hash}")
+        # BCSL executes the 4-probe triad: enforces policy, injects correlation, runs replay, takes state snapshots
+        invariant = CommandExecutionInvariant(expected_token="72", e1_expr="53+19", e2_expr="41+31")
+        triad_record = self.bcsl.execute_triad_contract(triad_contract, invariant=invariant)
+        print(f"  [+] BCSL Triad Execution Status: {triad_record.execution_status}")
+        print(f"  [+] Metamorphic Triad Verdict: {triad_record.triad_verification_result.get('epistemic_verdict')} (Causal Diff: {triad_record.triad_verification_result.get('is_causally_differentiated')})")
+        print(f"  [+] Metamorphic Consistency: {triad_record.triad_verification_result.get('metamorphic_consistency')} | Contradiction Detected: {triad_record.triad_verification_result.get('contradiction_detected')}")
+        print(f"  [+] Invariant Evaluation: {triad_record.invariant_result.get('reason')}")
+        print(f"  [+] BCSL Triad Provenance Trace: {triad_record.provenance}")
+        print(f"  [+] Audit Hash: {triad_record.audit_hash}")
 
-        resp_body_text = exec_record.response.body
+        # Cryptographically append to Tamper-Evident Experiment Ledger
+        ledger_entry = ExperimentRecord(
+            experiment_id=triad_record.triad_id,
+            hypothesis_id=triad_record.hypothesis_id,
+            source_transaction={"tx_id": triad_record.source_request_id},
+            baseline_b=triad_record.baseline_response,
+            control_c=triad_record.control_response,
+            experiment_e1=triad_record.experiment_1_response,
+            experiment_e2=triad_record.experiment_2_response,
+            observations=[triad_record.triad_verification_result.get("rationale", "")],
+            invariant_result=triad_record.invariant_result,
+            causal_strength=float(triad_record.triad_verification_result.get("confidence_score", 0.95)),
+            execution_provenance=[{"stage": p} for p in triad_record.provenance],
+        )
+        self.experiment_ledger.append(ledger_entry)
+        chain_valid, chain_err = self.experiment_ledger.verify_chain_integrity()
+        print(f"  [+] Tamper-Evident Experiment Ledger: Block #{len(self.experiment_ledger)} appended (Integrity: {'VALID' if chain_valid else 'CORRUPT'})")
+
+        resp_body_text = triad_record.experiment_1_response.get("body", "")
 
         # Ingest active experiment transaction into CaptureStore
         tx_verify = CapturedTransaction(
-            tx_id=exec_record.request_id,
+            tx_id=f"{triad_record.triad_id}_E1",
             parent_request=tx3.tx_id,
             target_host="portal.target.local",
             method="POST",
             url=public_ping_endpoint,
-            status_code=exec_record.response.status_code,
-            req_headers=exec_record.request.headers,
-            req_body=exec_record.request.body,
-            resp_headers=exec_record.response.headers,
+            status_code=triad_record.experiment_1_response.get("status_code", 200),
+            req_headers=triad_record.experiment_1_request.get("headers", {}),
+            req_body=triad_record.experiment_1_request.get("body", ""),
+            resp_headers=triad_record.experiment_1_response.get("headers", {}),
             resp_body=resp_body_text,
             tool_source="bcsl_repeater"
         )
         self.capture_store.store_transaction(tx_verify)
 
         # Provision interactive research tab in Burp Repeater for human operator
-        tab_caption = f"HunterAI: PoE Cmd Injection ({exec_record.experiment_id})"
-        tab_name = self.bcsl.provision_repeater_tab(exec_record.request, tab_caption=tab_caption)
+        tab_caption = f"HunterAI: Triad Cmd Injection ({triad_record.triad_id})"
+        tab_name = self.bcsl.provision_repeater_tab(triad_record.experiment_1_request, tab_caption=tab_caption)
         print(f"  [+] Burp Repeater Tab provisioned: '{tab_name}' for manual verification.")
 
         # Validate with ProofOfExecutionEngine
@@ -541,21 +589,21 @@ class UnifiedLiveSession:
             raise RuntimeError(f"PoE verification failed: {poe_reason}")
 
         self.case.record_test(
-            test_name="arithmetic_nonce_probe",
+            test_name="metamorphic_triad_probe",
             payload=payload_nonce,
-            result={"status": exec_record.response.status_code, "arithmetic_evaluated": 72, "output": resp_body_text[:100]},
+            result={"status": 200, "arithmetic_evaluated": 72, "output": resp_body_text[:100]},
             succeeded=True
         )
         self.case.transfer(to_agent="VerifierAgent", next_action="ADJUDICATE", confidence_delta=0.99)
 
-        # 5. Evidence Court Adjudication with 7-Stage Causal Provenance
+        # 5. Evidence Court Adjudication with Metamorphic Triad & Invariant Proof
         print(f"\n{CYAN}[STEP 5/6] Submitting to Evidence Court for Multi-Party Adjudication...{RESET}")
         finder_claim = {
             "claim": "OS Command Injection via ping tool parameter",
-            "raw_request": f"{exec_record.request.method} {exec_record.request.path} HTTP/1.1\r\nHost: {self.target_domain}\r\n\r\n{exec_record.request.body}",
-            "raw_response": f"HTTP/1.1 {exec_record.response.status_code} OK\r\n\r\n{resp_body_text[:200]}",
-            "audit_hash": exec_record.audit_hash,
-            "experiment_id": exec_record.experiment_id,
+            "raw_request": f"POST /api/tools/ping HTTP/1.1\r\nHost: {self.target_domain}\r\n\r\n{triad_record.experiment_1_request.get('body')}",
+            "raw_response": f"HTTP/1.1 {triad_record.experiment_1_response.get('status_code')} OK\r\n\r\n{resp_body_text[:200]}",
+            "audit_hash": triad_record.audit_hash,
+            "experiment_id": triad_record.triad_id,
         }
         verifier_result = {
             "reproduced": True,
@@ -564,6 +612,14 @@ class UnifiedLiveSession:
             "proof_detail": f"Deterministic arithmetic evaluation: $((53+19)) strictly computed to 72 in shell response.",
             "payload_used": payload_nonce
         }
+        causal_ev = CausalEvidence(
+            metamorphic_passed=triad_record.triad_verification_result.get("metamorphic_consistency", False),
+            invariant_passed=triad_record.invariant_result.get("passed", False),
+            invariant_id="INV-CMD-EXEC-01",
+            causal_strength=float(triad_record.triad_verification_result.get("confidence_score", 0.95)),
+            contradiction_detected=triad_record.triad_verification_result.get("contradiction_detected", False),
+            rationale=triad_record.triad_verification_result.get("rationale", ""),
+        )
 
         self.judgment = EvidenceCourt.adjudicate(
             target_url=public_ping_endpoint,
@@ -571,7 +627,8 @@ class UnifiedLiveSession:
             vuln_class="cmd_injection",
             finder_claim=finder_claim,
             verifier_result=verifier_result,
-            is_in_scope=True
+            is_in_scope=True,
+            causal_evidence=causal_ev,
         )
 
         print(f"  [+] {BOLD}Evidence Court Verdict:{RESET} {GREEN}{self.judgment.verdict.value}{RESET}")
