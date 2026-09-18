@@ -179,9 +179,12 @@ class PlaywrightBrowserController:
             logger.info(f"Playwright {browser_type.upper()} launched successfully (proxy={self.proxy})")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to launch Playwright browser: {e}")
-            await self.close()
+        except BaseException as e:
+            logger.warning(f"Playwright browser initialization failed ({type(e).__name__}: {e}). Gracefully falling back to HTTP/HTML crawling.")
+            try:
+                await self.close()
+            except Exception:
+                pass
             return False
 
     def _attach_listeners(self, page: Page) -> None:
