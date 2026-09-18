@@ -70,6 +70,7 @@ from core.tool_registry import ToolRegistry, CapabilityMatrix
 from core.decision_core import DecisionCore
 from core.control_plane.action_loop import AutonomousActionLoop
 from core.wordlist_manager import WordlistManager
+from hunter_ai.pipeline.investigation_controller import InvestigationController
 
 logger = logging.getLogger("hunter_ai.pipeline")
 
@@ -1256,150 +1257,20 @@ class HunterPipelineOrchestrator:
         elif not self.authorized:
             await self._emit("safety_notice", message="🛡️ Active testing disabled (--authorized flag not provided). Running read-only passive analysis only.")
         else:
-            # Active Testing:
-            # 1. SQLi via SQLiSkill
-            for hyp in [h for h in hypotheses if h["vuln_type"] == "SQLi"][:3]:
-                try:
-                    from agents.skills.sqli_skill import run_sqli_skill
-                    sqli_res = await run_sqli_skill(
-                        target_url=hyp["target_url"],
-                        param_name=hyp["param"],
-                        proxy=self.proxy
-                    )
-                    if sqli_res.get("state") == "COMPLETE" or sqli_res.get("extracted_data"):
-                        raw_probe_findings.append({
-                            "vuln_type": "SQLi",
-                            "target_url": hyp["target_url"],
-                            "param": hyp["param"],
-                            "extracted": sqli_res.get("extracted_data", ""),
-                            "payload": sqli_res.get("union_payload", ""),
-                            "dbms": sqli_res.get("dbms", "generic")
-                        })
-                except Exception as e:
-                    logger.debug(f"SQLi skill test failed: {e}")
+            # ── 1. Autonomous Investigation Controller (OODA Loop) ─────────
+            try:
+                controller = InvestigationController(orchestrator=self)
+                inv_budget = min(1800.0, self.timeout_multiplier * 300.0)
+                inv_summary = await controller.run(budget_seconds=inv_budget)
+                logger.info(
+                    f"[InvestigationController] Completed: {inv_summary.confirmed} confirmed, "
+                    f"{inv_summary.rejected} rejected, {inv_summary.tests_executed} tests, "
+                    f"{inv_summary.ai_calls} AI calls in {inv_summary.duration_sec}s"
+                )
+            except Exception as e:
+                logger.warning(f"[InvestigationController] Loop execution error: {e}", exc_info=True)
 
-            # 2. CmdInjection via CmdInjectionSkill
-            for hyp in [h for h in hypotheses if h["vuln_type"] == "CmdInjection"][:3]:
-                try:
-                    from agents.skills.cmd_injection_skill import CmdInjectionSkill
-                    cmd_skill = CmdInjectionSkill(proxy=self.proxy)
-                    cmd_res = await cmd_skill.run(hyp["target_url"], hyp["param"])
-                    if cmd_res.get("state") == "COMPLETE" and cmd_res.get("verified_execution"):
-                        raw_probe_findings.append({
-                            "vuln_type": "CmdInjection",
-                            "target_url": hyp["target_url"],
-                            "param": hyp["param"],
-                            "proof": cmd_res.get("proof_reason", ""),
-                            "payload": cmd_res.get("payload_used", ""),
-                            "cvss": cmd_res.get("cvss", 9.8)
-                        })
-                except Exception as e:
-                    logger.debug(f"CmdInjection skill test failed: {e}")
-
-            # 3a. XSS Skill — Context-Aware Cross-Site Scripting (reflected / stored / DOM)
-            for hyp in [h for h in hypotheses if h["vuln_type"] in ("XSS", "Reflected_XSS")][:5]:
-                try:
-                    from agents.skills.xss_skill import XSSSkill
-                    xss_skill = XSSSkill(proxy=self.proxy, timeout=self.timeout_multiplier * 12.0)
-                    xss_res = await xss_skill.run(hyp["target_url"], hyp["param"])
-                    await self._emit("skill_run", skill="XSSSkill", param=hyp["param"], url=hyp["target_url"])
-                    if xss_res.get("objective_met") or xss_res.get("state") == "COMPLETE":
-                        raw_probe_findings.append({
-                            "vuln_type": "XSS",
-                            "target_url": hyp["target_url"],
-                            "param": hyp["param"],
-                            "payload": xss_res.get("vulnerable_payload", ""),
-                            "evidence": xss_res.get("evidence_snippet", ""),
-                            "confidence": xss_res.get("confidence", 0.9),
-                            "context": xss_res.get("context", "html_body"),
-                        })
-                        logger.info(f"[XSSSkill] XSS CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
-                except Exception as e:
-                    logger.debug(f"XSS skill test failed: {e}")
-
-            # 3b. IDOR / BOLA Skill — Broken Object Level Authorization
-            for hyp in [h for h in hypotheses if h["vuln_type"] in ("IDOR", "BOLA", "BFLA")][:5]:
-                try:
-                    from agents.skills.idor_skill import IDORSkill
-                    idor_skill = IDORSkill(proxy=self.proxy, timeout=self.timeout_multiplier * 15.0)
-                    idor_res = await idor_skill.run(hyp["target_url"], hyp["param"])
-                    await self._emit("skill_run", skill="IDORSkill", param=hyp["param"], url=hyp["target_url"])
-                    if idor_res.verified:
-                        raw_probe_findings.append({
-                            "vuln_type": "IDOR",
-                            "target_url": hyp["target_url"],
-                            "param": hyp["param"],
-                            "payload": idor_res.payload_used,
-                            "evidence": idor_res.evidence,
-                            "confidence": idor_res.confidence,
-                            "cvss": 8.1,
-                        })
-                        logger.info(f"[IDORSkill] IDOR CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
-                except Exception as e:
-                    logger.debug(f"IDOR skill test failed: {e}")
-
-            # 3c. LFI / Path Traversal Skill
-            for hyp in [h for h in hypotheses if h["vuln_type"] in ("LFI", "PathTraversal", "FileInclusion")][:5]:
-                try:
-                    from agents.skills.lfi_skill import LFISkill
-                    lfi_skill = LFISkill(proxy=self.proxy, timeout=self.timeout_multiplier * 12.0)
-                    lfi_res = await lfi_skill.run(hyp["target_url"], hyp["param"])
-                    await self._emit("skill_run", skill="LFISkill", param=hyp["param"], url=hyp["target_url"])
-                    if lfi_res.verified:
-                        raw_probe_findings.append({
-                            "vuln_type": "LFI",
-                            "target_url": hyp["target_url"],
-                            "param": hyp["param"],
-                            "payload": lfi_res.payload_used,
-                            "evidence": lfi_res.evidence,
-                            "confidence": lfi_res.confidence,
-                            "cvss": 9.1,
-                        })
-                        logger.info(f"[LFISkill] LFI CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
-                except Exception as e:
-                    logger.debug(f"LFI skill test failed: {e}")
-
-            # 3d. SSRF Skill — Server-Side Request Forgery
-            for hyp in [h for h in hypotheses if h["vuln_type"] in ("SSRF", "OpenRedirect")][:5]:
-                try:
-                    from agents.skills.ssrf_skill import SSRFSkill
-                    ssrf_skill = SSRFSkill(proxy=self.proxy, timeout=self.timeout_multiplier * 12.0)
-                    ssrf_res = await ssrf_skill.run(hyp["target_url"], hyp["param"])
-                    await self._emit("skill_run", skill="SSRFSkill", param=hyp["param"], url=hyp["target_url"])
-                    if ssrf_res.verified:
-                        raw_probe_findings.append({
-                            "vuln_type": "SSRF",
-                            "target_url": hyp["target_url"],
-                            "param": hyp["param"],
-                            "payload": ssrf_res.payload_used,
-                            "evidence": ssrf_res.evidence,
-                            "confidence": ssrf_res.confidence,
-                            "cvss": 8.6,
-                        })
-                        logger.info(f"[SSRFSkill] SSRF CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
-                except Exception as e:
-                    logger.debug(f"SSRF skill test failed: {e}")
-
-            # 3e. SSTI Skill — Server-Side Template Injection
-            for hyp in [h for h in hypotheses if h["vuln_type"] in ("SSTI", "TemplateInjection")][:5]:
-                try:
-                    from agents.skills.ssti_skill import SSTISkill
-                    ssti_skill = SSTISkill(proxy=self.proxy, timeout=self.timeout_multiplier * 12.0)
-                    ssti_res = await ssti_skill.run(hyp["target_url"], hyp["param"])
-                    await self._emit("skill_run", skill="SSTISkill", param=hyp["param"], url=hyp["target_url"])
-                    if ssti_res.verified:
-                        raw_probe_findings.append({
-                            "vuln_type": "SSTI",
-                            "target_url": hyp["target_url"],
-                            "param": hyp["param"],
-                            "payload": ssti_res.payload_used,
-                            "evidence": ssti_res.evidence,
-                            "confidence": ssti_res.confidence,
-                            "cvss": 9.3,
-                        })
-                        logger.info(f"[SSTISkill] SSTI CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
-                except Exception as e:
-                    logger.debug(f"SSTI skill test failed: {e}")
+            # ── 2. Active Vulnerability Scanners (Nuclei / Dalfox / Nikto) ──────
 
             # 3. Nuclei Active Vulnerability Scan (Critical, High, Medium CVEs)
             if self.profile in ("full", "hunter", "deep"):
