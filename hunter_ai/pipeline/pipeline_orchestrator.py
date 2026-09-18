@@ -1117,14 +1117,23 @@ class HunterPipelineOrchestrator:
         for ep in endpoints:
             parsed = urlparse(ep.url)
             if "?" in ep.url:
+                static_exts = (".webp", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".bmp", ".tiff", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".mp3", ".css", ".map", ".js")
+                media_params = {"q", "w", "h", "f", "fit", "quality", "width", "height", "format", "v", "ver", "version"}
+                path_lower = parsed.path.lower()
+                is_static_path = any(path_lower.endswith(ext) for ext in static_exts)
+
                 qs = parsed.query.split("&")
                 for q in qs:
                     if "=" in q:
                         p_name, p_val = q.split("=", 1)
                         p_name = p_name.strip()
                         if p_name:
-                            potentials = []
                             p_low = p_name.lower()
+                            # Skip non-injectable image resizing parameters on static assets
+                            if is_static_path and p_low in media_params:
+                                continue
+
+                            potentials = []
                             if p_low in ("id", "user_id", "uid", "account", "order", "item"):
                                 potentials.extend(["IDOR", "SQLi"])
                             elif p_low in ("url", "dest", "redirect", "src", "feed", "link", "target"):

@@ -39,6 +39,7 @@ class LocalTriadAgent:
             raw = f"http://{raw}"
         raw = raw.replace("://0.0.0.0:", "://127.0.0.1:")
         self.ollama_host = raw
+        self._ollama_online: Optional[bool] = None
 
     async def _query_ollama(
         self,
@@ -49,6 +50,9 @@ class LocalTriadAgent:
         timeout: int = 300
     ) -> str:
         """Direct, reliable HTTP query to local Ollama instance"""
+        if self._ollama_online is False:
+            return ""
+
         url = f"{self.ollama_host}/api/chat"
         payload = {
             "model": model,
@@ -70,11 +74,16 @@ class LocalTriadAgent:
 
         def _do_request():
             try:
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                with urllib.request.urlopen(req, timeout=min(timeout, 10)) as resp:
                     res = json.loads(resp.read().decode("utf-8"))
+                    self._ollama_online = True
                     return res.get("message", {}).get("content", "").strip()
             except Exception as e:
-                logger.error(f"Error querying local model '{model}': {e}")
+                if self._ollama_online is None:
+                    logger.info(f"[AI] Local Ollama offline at {self.ollama_host} ({e}) — deterministic heuristics active.")
+                    self._ollama_online = False
+                else:
+                    logger.debug(f"Error querying local model '{model}': {e}")
                 return ""
 
         return await loop.run_in_executor(None, _do_request)

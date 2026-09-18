@@ -146,17 +146,17 @@ class InvestigationTrace:
         )
 
     @property
-    def observations(self) -> int: return self._obs_n
+    def observation_count(self) -> int: return self._obs_n
     @property
-    def hypotheses(self) -> int: return self._hyp_n
+    def hypothesis_count(self) -> int: return self._hyp_n
     @property
-    def tests(self) -> int: return self._test_n
+    def test_count(self) -> int: return self._test_n
     @property
-    def ai_calls(self) -> int: return self._ai_n
+    def ai_call_count(self) -> int: return self._ai_n
     @property
-    def confirmed(self) -> int: return self._conf_n
+    def confirmed_count(self) -> int: return self._conf_n
     @property
-    def rejected(self) -> int: return self._rej_n
+    def rejected_count(self) -> int: return self._rej_n
 
 
 # ---------------------------------------------------------------------------
@@ -302,9 +302,21 @@ class InvestigationController:
             pass
 
     # -- Seeding Hypotheses --
+    _STATIC_EXTS = {
+        ".webp", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".bmp", ".tiff",
+        ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".mp3", ".css", ".map", ".js"
+    }
+    _MEDIA_PARAMS = {"q", "w", "h", "f", "fit", "quality", "width", "height", "format", "v", "ver", "version"}
+
     def _seed_from_parameters(self) -> int:
         seeded = 0
+        from urllib.parse import urlparse as _up
         for p in self.orc.parameters:
+            # Filter out non-injectable media parameters on static asset paths
+            parsed_path = _up(p.endpoint).path.lower()
+            if any(parsed_path.endswith(ext) for ext in self._STATIC_EXTS) and p.parameter.lower() in self._MEDIA_PARAMS:
+                continue
+
             for vtype in (p.potential_classes or []):
                 if vtype not in _VULN_SKILL_MAP:
                     continue
@@ -731,14 +743,14 @@ class InvestigationController:
         logger.info(summary_text)
         summary = InvestigationSummary(
             duration_sec=round(self._elapsed(), 2),
-            observations=self.trace.observations,
+            observations=self.trace.observation_count,
             hypotheses_seeded=total_seeded,
             hypotheses_total=self._hyp_serial,
-            tests_executed=self.trace.tests,
+            tests_executed=self.trace.test_count,
             followups_spawned=self.trace._fu_n,
-            ai_calls=self.trace.ai_calls,
-            confirmed=self.trace.confirmed,
-            rejected=self.trace.rejected,
+            ai_calls=self.trace.ai_call_count,
+            confirmed=self.trace.confirmed_count,
+            rejected=self.trace.rejected_count,
             confirmed_findings=self._confirmed_findings,
         )
 
