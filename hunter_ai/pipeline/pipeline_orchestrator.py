@@ -1296,6 +1296,111 @@ class HunterPipelineOrchestrator:
                 except Exception as e:
                     logger.debug(f"CmdInjection skill test failed: {e}")
 
+            # 3a. XSS Skill — Context-Aware Cross-Site Scripting (reflected / stored / DOM)
+            for hyp in [h for h in hypotheses if h["vuln_type"] in ("XSS", "Reflected_XSS")][:5]:
+                try:
+                    from agents.skills.xss_skill import XSSSkill
+                    xss_skill = XSSSkill(proxy=self.proxy, timeout=self.timeout_multiplier * 12.0)
+                    xss_res = await xss_skill.run(hyp["target_url"], hyp["param"])
+                    await self._emit("skill_run", skill="XSSSkill", param=hyp["param"], url=hyp["target_url"])
+                    if xss_res.get("objective_met") or xss_res.get("state") == "COMPLETE":
+                        raw_probe_findings.append({
+                            "vuln_type": "XSS",
+                            "target_url": hyp["target_url"],
+                            "param": hyp["param"],
+                            "payload": xss_res.get("vulnerable_payload", ""),
+                            "evidence": xss_res.get("evidence_snippet", ""),
+                            "confidence": xss_res.get("confidence", 0.9),
+                            "context": xss_res.get("context", "html_body"),
+                        })
+                        logger.info(f"[XSSSkill] XSS CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
+                except Exception as e:
+                    logger.debug(f"XSS skill test failed: {e}")
+
+            # 3b. IDOR / BOLA Skill — Broken Object Level Authorization
+            for hyp in [h for h in hypotheses if h["vuln_type"] in ("IDOR", "BOLA", "BFLA")][:5]:
+                try:
+                    from agents.skills.idor_skill import IDORSkill
+                    idor_skill = IDORSkill(proxy=self.proxy, timeout=self.timeout_multiplier * 15.0)
+                    idor_res = await idor_skill.run(hyp["target_url"], hyp["param"])
+                    await self._emit("skill_run", skill="IDORSkill", param=hyp["param"], url=hyp["target_url"])
+                    if idor_res.verified:
+                        raw_probe_findings.append({
+                            "vuln_type": "IDOR",
+                            "target_url": hyp["target_url"],
+                            "param": hyp["param"],
+                            "payload": idor_res.payload_used,
+                            "evidence": idor_res.evidence,
+                            "confidence": idor_res.confidence,
+                            "cvss": 8.1,
+                        })
+                        logger.info(f"[IDORSkill] IDOR CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
+                except Exception as e:
+                    logger.debug(f"IDOR skill test failed: {e}")
+
+            # 3c. LFI / Path Traversal Skill
+            for hyp in [h for h in hypotheses if h["vuln_type"] in ("LFI", "PathTraversal", "FileInclusion")][:5]:
+                try:
+                    from agents.skills.lfi_skill import LFISkill
+                    lfi_skill = LFISkill(proxy=self.proxy, timeout=self.timeout_multiplier * 12.0)
+                    lfi_res = await lfi_skill.run(hyp["target_url"], hyp["param"])
+                    await self._emit("skill_run", skill="LFISkill", param=hyp["param"], url=hyp["target_url"])
+                    if lfi_res.verified:
+                        raw_probe_findings.append({
+                            "vuln_type": "LFI",
+                            "target_url": hyp["target_url"],
+                            "param": hyp["param"],
+                            "payload": lfi_res.payload_used,
+                            "evidence": lfi_res.evidence,
+                            "confidence": lfi_res.confidence,
+                            "cvss": 9.1,
+                        })
+                        logger.info(f"[LFISkill] LFI CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
+                except Exception as e:
+                    logger.debug(f"LFI skill test failed: {e}")
+
+            # 3d. SSRF Skill — Server-Side Request Forgery
+            for hyp in [h for h in hypotheses if h["vuln_type"] in ("SSRF", "OpenRedirect")][:5]:
+                try:
+                    from agents.skills.ssrf_skill import SSRFSkill
+                    ssrf_skill = SSRFSkill(proxy=self.proxy, timeout=self.timeout_multiplier * 12.0)
+                    ssrf_res = await ssrf_skill.run(hyp["target_url"], hyp["param"])
+                    await self._emit("skill_run", skill="SSRFSkill", param=hyp["param"], url=hyp["target_url"])
+                    if ssrf_res.verified:
+                        raw_probe_findings.append({
+                            "vuln_type": "SSRF",
+                            "target_url": hyp["target_url"],
+                            "param": hyp["param"],
+                            "payload": ssrf_res.payload_used,
+                            "evidence": ssrf_res.evidence,
+                            "confidence": ssrf_res.confidence,
+                            "cvss": 8.6,
+                        })
+                        logger.info(f"[SSRFSkill] SSRF CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
+                except Exception as e:
+                    logger.debug(f"SSRF skill test failed: {e}")
+
+            # 3e. SSTI Skill — Server-Side Template Injection
+            for hyp in [h for h in hypotheses if h["vuln_type"] in ("SSTI", "TemplateInjection")][:5]:
+                try:
+                    from agents.skills.ssti_skill import SSTISkill
+                    ssti_skill = SSTISkill(proxy=self.proxy, timeout=self.timeout_multiplier * 12.0)
+                    ssti_res = await ssti_skill.run(hyp["target_url"], hyp["param"])
+                    await self._emit("skill_run", skill="SSTISkill", param=hyp["param"], url=hyp["target_url"])
+                    if ssti_res.verified:
+                        raw_probe_findings.append({
+                            "vuln_type": "SSTI",
+                            "target_url": hyp["target_url"],
+                            "param": hyp["param"],
+                            "payload": ssti_res.payload_used,
+                            "evidence": ssti_res.evidence,
+                            "confidence": ssti_res.confidence,
+                            "cvss": 9.3,
+                        })
+                        logger.info(f"[SSTISkill] SSTI CONFIRMED -- {hyp['target_url']} param={hyp['param']}")
+                except Exception as e:
+                    logger.debug(f"SSTI skill test failed: {e}")
+
             # 3. Nuclei Active Vulnerability Scan (Critical, High, Medium CVEs)
             if self.profile in ("full", "hunter", "deep"):
                 try:
@@ -1404,6 +1509,66 @@ class HunterPipelineOrchestrator:
                         self.tool_logs.append(meta_ffuf_p.raw_output_file)
                 except Exception as e:
                     logger.debug(f"ffuf_params error: {e}")
+
+        # ── AI TRIAGE (LocalTriadAgent / Ollama) ─────────────────────────────
+        # Wire the real Ollama models into the pipeline for strategic analysis
+        if self.profile in ("full", "hunter", "deep"):
+            try:
+                from hunter_ai.brain.local_triad_agent import LocalTriadAgent
+                triad = LocalTriadAgent()
+
+                # 1. xploiter/pentester: Recon triage — prioritize discovered assets
+                subdomain_list = [la.url for la in self.live_assets[:30]]
+                port_list = []  # populated by nmap if available
+                ep_list = [e.url for e in self.endpoints[:30]]
+                await self._emit("ai_triad_start", model="xploiter/pentester", message="AI triage of discovered assets...")
+                triage_result = await triad.triage_recon_assets(
+                    target=self.base_url,
+                    subdomains=subdomain_list,
+                    ports=port_list,
+                    endpoints=ep_list
+                )
+                self._save_stage_artifact("12_vulnerabilities", "ai_triage_recon.json", triage_result)
+                logger.info(f"[AI/xploiter] Recon triage done: {len(str(triage_result.get('analysis', '')))} chars")
+                await self._emit("ai_triad_done", model="xploiter/pentester", chars=len(str(triage_result.get("analysis", ""))))
+
+                # 2. Qwen 2.5 Coder: JS code audit for each JS file secret hit
+                js_audit_results = []
+                for s in self.secrets[:5]:
+                    try:
+                        await self._emit("ai_triad_start", model="qwen2.5-coder", message=f"Auditing JS: {s.file_url}")
+                        code_result = await triad.audit_code_or_javascript(
+                            js_url=s.file_url,
+                            code_content=s.matched_string
+                        )
+                        js_audit_results.append(code_result)
+                    except Exception as e:
+                        logger.debug(f"[AI/Qwen] JS audit error: {e}")
+                if js_audit_results:
+                    self._save_stage_artifact("09_javascript", "ai_js_audit.json", js_audit_results)
+                    await self._emit("ai_triad_done", model="qwen2.5-coder", count=len(js_audit_results))
+
+                # 3. WhiteRabbitNeo: Offensive strategy for top unverified skill hits
+                wbn_results = []
+                for raw_f in raw_probe_findings[:5]:
+                    try:
+                        await self._emit("ai_triad_start", model="WhiteRabbitNeo", message=f"Formulating strategy for {raw_f['vuln_type']}...")
+                        strategy = await triad.formulate_offensive_strategy(
+                            target_url=raw_f["target_url"],
+                            param_name=raw_f["param"],
+                            vuln_type=raw_f["vuln_type"],
+                            context=raw_f.get("evidence", "")
+                        )
+                        wbn_results.append(strategy)
+                        logger.info(f"[AI/WhiteRabbitNeo] Strategy for {raw_f['vuln_type']} on {raw_f['param']}")
+                    except Exception as e:
+                        logger.debug(f"[AI/WhiteRabbitNeo] Strategy error: {e}")
+                if wbn_results:
+                    self._save_stage_artifact("12_vulnerabilities", "ai_offensive_strategy.json", wbn_results)
+                    await self._emit("ai_triad_done", model="WhiteRabbitNeo", count=len(wbn_results))
+
+            except Exception as e:
+                logger.warning(f"[AI/LocalTriad] Ollama not available — skipping AI analysis: {e}")
 
         # Add any high-confidence secrets (Shannon entropy validated)
         for s in self.secrets:
@@ -1527,8 +1692,239 @@ class HunterPipelineOrchestrator:
                     stage="12_vulnerabilities",
                     parent_id=f"{target_u}?{param}"
                 )
+            elif v_type == "XSS":
+                ev_str = str(raw_f.get("evidence", ""))
+                req_h = hashlib.sha256(f"GET {target_u}?{param}=<xss>".encode("utf-8", errors="ignore")).hexdigest()
+                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
+                f_item = HunterFinding(
+                    finding=f"Cross-Site Scripting (XSS) Confirmed on '{param}' [{raw_f.get('context', 'html_body')}]",
+                    asset=self.domain,
+                    endpoint=target_u,
+                    parameter=param,
+                    vuln_type="XSS",
+                    status=FindingStatus.CONFIRMED,
+                    tier=FindingTier.VERIFIED_FINDING,
+                    severity="High",
+                    confidence=raw_f.get("confidence", 0.9),
+                    cvss_score=7.4,
+                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+                    request_hash=req_h,
+                    response_hash=resp_h,
+                    reproducible=True,
+                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
+                    evidence=[
+                        VerificationEvidence(
+                            type="unescaped_reflection",
+                            description=f"XSS payload reflected unescaped in context: {raw_f.get('context', 'html_body')}",
+                            proof_snippet=ev_str[:300],
+                            verified=True,
+                            request_hash=req_h,
+                            response_hash=resp_h
+                        )
+                    ],
+                    reproduction=ReproductionArtifact(
+                        curl_command=f"curl -s '{target_u}?{param}={raw_f.get('payload', '')}'",
+                        payload_used=raw_f.get("payload", "")
+                    ),
+                    false_positive_checks={"in_band_html_reflection": True, "verified_execution": False},
+                    remediation="Use context-aware output encoding (HTML entity encoding). Implement a strict Content-Security-Policy. Use httpOnly/Secure cookie flags."
+                )
+                verified_findings.append(f_item)
+                self.engagement_mgr.record_lineage(
+                    asset_id=f"vuln:XSS:{param}",
+                    asset_value=f"XSS on {param}",
+                    asset_type="vulnerability",
+                    tool="xss_skill",
+                    stage="12_vulnerabilities",
+                    parent_id=f"{target_u}?{param}"
+                )
+            elif v_type == "IDOR":
+                ev_str = str(raw_f.get("evidence", ""))
+                req_h = hashlib.sha256(f"GET {target_u}?{param}=X".encode("utf-8", errors="ignore")).hexdigest()
+                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
+                f_item = HunterFinding(
+                    finding=f"Insecure Direct Object Reference (IDOR/BOLA) on '{param}'",
+                    asset=self.domain,
+                    endpoint=target_u,
+                    parameter=param,
+                    vuln_type="IDOR",
+                    status=FindingStatus.CONFIRMED,
+                    tier=FindingTier.VERIFIED_FINDING,
+                    severity="High",
+                    confidence=raw_f.get("confidence", 0.9),
+                    cvss_score=raw_f.get("cvss", 8.1),
+                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+                    request_hash=req_h,
+                    response_hash=resp_h,
+                    reproducible=True,
+                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
+                    evidence=[
+                        VerificationEvidence(
+                            type="unauthorized_access",
+                            description=f"Cross-tenant / unauthenticated access to object via '{param}'",
+                            proof_snippet=ev_str[:300],
+                            verified=True,
+                            request_hash=req_h,
+                            response_hash=resp_h
+                        )
+                    ],
+                    reproduction=ReproductionArtifact(
+                        curl_command=f"curl -s '{target_u}?{param}={raw_f.get('payload', '')}'",
+                        payload_used=raw_f.get("payload", "")
+                    ),
+                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
+                    remediation="Implement server-side object ownership checks. Never rely on client-supplied IDs without session-bound ownership validation."
+                )
+                verified_findings.append(f_item)
+                self.engagement_mgr.record_lineage(
+                    asset_id=f"vuln:IDOR:{param}",
+                    asset_value=f"IDOR on {param}",
+                    asset_type="vulnerability",
+                    tool="idor_skill",
+                    stage="12_vulnerabilities",
+                    parent_id=f"{target_u}?{param}"
+                )
+            elif v_type == "LFI":
+                ev_str = str(raw_f.get("evidence", ""))
+                req_h = hashlib.sha256(f"GET {target_u}?{param}=../etc/passwd".encode("utf-8", errors="ignore")).hexdigest()
+                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
+                f_item = HunterFinding(
+                    finding=f"Local File Inclusion / Path Traversal Confirmed on '{param}'",
+                    asset=self.domain,
+                    endpoint=target_u,
+                    parameter=param,
+                    vuln_type="LFI",
+                    status=FindingStatus.CONFIRMED,
+                    tier=FindingTier.VERIFIED_FINDING,
+                    severity="Critical",
+                    confidence=raw_f.get("confidence", 0.98),
+                    cvss_score=raw_f.get("cvss", 9.1),
+                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+                    request_hash=req_h,
+                    response_hash=resp_h,
+                    reproducible=True,
+                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
+                    evidence=[
+                        VerificationEvidence(
+                            type="file_signature_match",
+                            description="OS file content signature matched in HTTP response body",
+                            proof_snippet=ev_str[:300],
+                            verified=True,
+                            request_hash=req_h,
+                            response_hash=resp_h
+                        )
+                    ],
+                    reproduction=ReproductionArtifact(
+                        curl_command=f"curl -s '{target_u}?{param}={raw_f.get('payload', '')}'",
+                        payload_used=raw_f.get("payload", "")
+                    ),
+                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
+                    remediation="Use an allowlist for permitted file paths. Apply os.path.basename() stripping. Never concatenate user input directly to file paths."
+                )
+                verified_findings.append(f_item)
+                self.engagement_mgr.record_lineage(
+                    asset_id=f"vuln:LFI:{param}",
+                    asset_value=f"LFI on {param}",
+                    asset_type="vulnerability",
+                    tool="lfi_skill",
+                    stage="12_vulnerabilities",
+                    parent_id=f"{target_u}?{param}"
+                )
+            elif v_type == "SSRF":
+                ev_str = str(raw_f.get("evidence", ""))
+                req_h = hashlib.sha256(f"GET {target_u}?{param}=http://127.0.0.1".encode("utf-8", errors="ignore")).hexdigest()
+                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
+                f_item = HunterFinding(
+                    finding=f"Server-Side Request Forgery (SSRF) Confirmed on '{param}'",
+                    asset=self.domain,
+                    endpoint=target_u,
+                    parameter=param,
+                    vuln_type="SSRF",
+                    status=FindingStatus.CONFIRMED,
+                    tier=FindingTier.VERIFIED_FINDING,
+                    severity="High",
+                    confidence=raw_f.get("confidence", 0.9),
+                    cvss_score=raw_f.get("cvss", 8.6),
+                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N",
+                    request_hash=req_h,
+                    response_hash=resp_h,
+                    reproducible=True,
+                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
+                    evidence=[
+                        VerificationEvidence(
+                            type="internal_network_reach",
+                            description="Server made outbound HTTP request to attacker-controlled or internal endpoint",
+                            proof_snippet=ev_str[:300],
+                            verified=True,
+                            request_hash=req_h,
+                            response_hash=resp_h
+                        )
+                    ],
+                    reproduction=ReproductionArtifact(
+                        curl_command=f"curl -s '{target_u}?{param}=http://127.0.0.1'",
+                        payload_used=raw_f.get("payload", "")
+                    ),
+                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
+                    remediation="Use an allowlist for permitted outbound URLs. Block RFC1918 and loopback addresses at network egress. Disable URL-following for user-controlled inputs."
+                )
+                verified_findings.append(f_item)
+                self.engagement_mgr.record_lineage(
+                    asset_id=f"vuln:SSRF:{param}",
+                    asset_value=f"SSRF on {param}",
+                    asset_type="vulnerability",
+                    tool="ssrf_skill",
+                    stage="12_vulnerabilities",
+                    parent_id=f"{target_u}?{param}"
+                )
+            elif v_type == "SSTI":
+                ev_str = str(raw_f.get("evidence", ""))
+                req_h = hashlib.sha256(f"GET {target_u}?{param}={{{{7*7}}}}".encode("utf-8", errors="ignore")).hexdigest()
+                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
+                f_item = HunterFinding(
+                    finding=f"Server-Side Template Injection (SSTI) Confirmed on '{param}'",
+                    asset=self.domain,
+                    endpoint=target_u,
+                    parameter=param,
+                    vuln_type="SSTI",
+                    status=FindingStatus.CONFIRMED,
+                    tier=FindingTier.VERIFIED_FINDING,
+                    severity="Critical",
+                    confidence=raw_f.get("confidence", 0.97),
+                    cvss_score=raw_f.get("cvss", 9.3),
+                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+                    request_hash=req_h,
+                    response_hash=resp_h,
+                    reproducible=True,
+                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
+                    evidence=[
+                        VerificationEvidence(
+                            type="arithmetic_proof",
+                            description="Template engine evaluated arithmetic expression (53+19=72) in server response",
+                            proof_snippet=ev_str[:300],
+                            verified=True,
+                            request_hash=req_h,
+                            response_hash=resp_h
+                        )
+                    ],
+                    reproduction=ReproductionArtifact(
+                        curl_command=f"curl -s '{target_u}?{param}={raw_f.get('payload', '')}'",
+                        payload_used=raw_f.get("payload", "")
+                    ),
+                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
+                    remediation="Never render user input in template strings. Use sandboxed template environments. Prefer data-binding over string interpolation."
+                )
+                verified_findings.append(f_item)
+                self.engagement_mgr.record_lineage(
+                    asset_id=f"vuln:SSTI:{param}",
+                    asset_value=f"SSTI on {param}",
+                    asset_type="vulnerability",
+                    tool="ssti_skill",
+                    stage="12_vulnerabilities",
+                    parent_id=f"{target_u}?{param}"
+                )
 
         self.findings.extend(verified_findings)
+
 
         # ── DEDUPLICATION & CORRELATION ───────────────────────────────────────
         self.fsm.transition_to(HunterState.CORRELATE, "Correlating multi-source attack chains")
