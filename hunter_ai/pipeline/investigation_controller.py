@@ -32,6 +32,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from hunter_ai.pipeline.parameter_intelligence import ParameterRole, inject_url_parameter
+
 logger = logging.getLogger("hunter_ai.investigation_controller")
 
 
@@ -312,7 +314,18 @@ class InvestigationController:
         seeded = 0
         from urllib.parse import urlparse as _up
         for p in self.orc.parameters:
-            # Filter out non-injectable media parameters on static asset paths
+            ctx = getattr(p, "context", None) or {}
+            is_active = ctx.get("is_active_candidate", True)
+            role = ctx.get("role", "GENERIC_INPUT")
+
+            # Gating check: Skip non-active candidates (media transformation, tracking noise)
+            if not is_active or role in (ParameterRole.IMAGE_TRANSFORMATION.value, ParameterRole.TRACKING_METRIC.value):
+                self.trace.observation(
+                    f"Parameter '{p.parameter}' classified as {role} (noise) -- gated from active testing"
+                )
+                continue
+
+            # Filter out non-injectable media parameters on static asset paths as defense in depth
             parsed_path = _up(p.endpoint).path.lower()
             if any(parsed_path.endswith(ext) for ext in self._STATIC_EXTS) and p.parameter.lower() in self._MEDIA_PARAMS:
                 continue
@@ -325,19 +338,21 @@ class InvestigationController:
                     vuln_type=vtype,
                     target_url=p.endpoint,
                     param=p.parameter,
-                    rationale=f"Parameter '{p.parameter}' classified as {vtype} candidate",
+                    rationale=f"Parameter '{p.parameter}' ({role}) mapped to {vtype} candidate",
                     priority=_VULN_PRIORITY.get(vtype, 0.50),
                     source="Seed",
                     provenance={
                         "source": p.source,
                         "method": p.method,
                         "sample_value": p.sample_value,
+                        "role": role,
+                        "family_pattern": ctx.get("family_pattern", ""),
                         "first_seen": datetime.utcnow().isoformat() + "Z",
                     },
                 )
                 if self.queue.push(hyp):
                     self.trace.observation(
-                        f"Parameter '{p.parameter}' -> {vtype} candidate (source={p.source}, endpoint={p.endpoint})"
+                        f"Parameter '{p.parameter}' -> {vtype} candidate (source={p.source}, role={role}, endpoint={p.endpoint})"
                     )
                     self.trace.hypothesis_created(hyp)
                     seeded += 1
@@ -604,7 +619,8 @@ class InvestigationController:
                 cwe = "CWE-20"
                 owasp = "A03:2021"
 
-            req_h = hashlib.sha256(f"GET {hyp.target_url}?{hyp.param}={payload}".encode("utf-8", "ignore")).hexdigest()
+            clean_test_url = inject_url_parameter(hyp.target_url, hyp.param, str(payload))
+            req_h = hashlib.sha256(f"GET {clean_test_url}".encode("utf-8", "ignore")).hexdigest()
             resp_h = hashlib.sha256(ev_str.encode("utf-8", "ignore")).hexdigest()
             cvss_score, cvss_vector, severity = _CVSS_DEFAULTS.get(
                 hyp.vuln_type, (6.5, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", "Medium")
@@ -641,7 +657,7 @@ class InvestigationController:
                     )
                 ],
                 reproduction=ReproductionArtifact(
-                    curl_command=f"curl -s '{hyp.target_url}?{hyp.param}={payload}'",
+                    curl_command=f"curl -s '{clean_test_url}'",
                     payload_used=payload,
                 ),
                 false_positive_checks={"investigation_loop": True, "skill_confirmed": True},

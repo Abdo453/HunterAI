@@ -71,6 +71,13 @@ from core.decision_core import DecisionCore
 from core.control_plane.action_loop import AutonomousActionLoop
 from core.wordlist_manager import WordlistManager
 from hunter_ai.pipeline.investigation_controller import InvestigationController
+from hunter_ai.pipeline.url_canonicalizer import URLCanonicalizer, CanonicalEndpointFamily
+from hunter_ai.pipeline.parameter_intelligence import (
+    ParameterIntelligenceEngine,
+    ParameterClassification,
+    ParameterRole,
+    inject_url_parameter,
+)
 
 logger = logging.getLogger("hunter_ai.pipeline")
 
@@ -699,9 +706,15 @@ class HunterPipelineOrchestrator:
         self.fsm.transition_to(HunterState.SURFACE, "Discovering URLs, endpoints, directories, and parameters")
         await self._emit("surface_start", message="Crawling attack surface and discovering endpoints...")
 
-        endpoints: List[EndpointRecord] = []
+        raw_crawled_urls: Set[str] = set()
         js_urls: Set[str] = set()
-        seen_urls: Set[str] = set()
+        fuzz_lines: List[str] = []
+
+        # Always include base_url and live asset URLs
+        raw_crawled_urls.add(self.base_url)
+        for la in self.live_assets:
+            if la.url:
+                raw_crawled_urls.add(la.url)
 
         transport = httpx.AsyncHTTPTransport(proxy=self.proxy, verify=False) if self.proxy else None
 
@@ -723,16 +736,24 @@ class HunterPipelineOrchestrator:
 
                     launched = await browser_ctrl.launch(browser_type="chromium")
                     if launched:
-                        browser_endpoint_count = 0
-                        for target_live in self.live_assets[:5]:
-                            is_valid, _ = self.strict_scope_engine.validate_url(target_live.url)
+                        browser_url_count = 0
+                        # Prioritize base URL and top live endpoints
+                        targets_to_visit = [self.base_url]
+                        for la in self.live_assets:
+                            if la.url not in targets_to_visit:
+                                targets_to_visit.append(la.url)
+
+                        for target_url in targets_to_visit[:5]:
+                            is_valid, _ = self.strict_scope_engine.validate_url(target_url)
                             if not is_valid:
                                 continue
                             try:
-                                ok, nav_msg = await browser_ctrl.goto(target_live.url, wait_until="networkidle", timeout=30000)
+                                ok, nav_msg = await browser_ctrl.goto(target_url, wait_until="domcontentloaded", timeout=20000)
                                 if ok:
+                                    await asyncio.sleep(1.0)
                                     # Take screenshot as evidence
-                                    screenshot_name = f"{target_live.host.replace('.', '_')}.png"
+                                    host_name = urlparse(target_url).netloc.replace(".", "_").replace(":", "_")
+                                    screenshot_name = f"{host_name}.png"
                                     await browser_ctrl.screenshot(name=screenshot_name)
 
                                     # Extract all links from the DOM
@@ -742,12 +763,9 @@ class HunterPipelineOrchestrator:
                                               .filter(h => h.startsWith('http'))
                                     """) or []
                                     for link in links_raw:
-                                        if isinstance(link, str) and self.domain in link and link not in seen_urls:
-                                            seen_urls.add(link)
-                                            p_link = urlparse(link)
-                                            cat = "API" if "/api" in p_link.path else ("ADMIN" if "admin" in p_link.path else "WEB")
-                                            endpoints.append(EndpointRecord(url=link, path=p_link.path, method="GET", category=cat, source="playwright"))
-                                            browser_endpoint_count += 1
+                                        if isinstance(link, str) and self.domain in link:
+                                            raw_crawled_urls.add(link)
+                                            browser_url_count += 1
 
                                     # Extract JS script sources
                                     scripts_raw = await browser_ctrl.evaluate_js("""
@@ -761,27 +779,21 @@ class HunterPipelineOrchestrator:
                                     forms = await browser_ctrl.extract_forms()
                                     for form in forms:
                                         form_action = form.get("action", "")
-                                        if form_action and self.domain in form_action and form_action not in seen_urls:
-                                            seen_urls.add(form_action)
-                                            p_fa = urlparse(form_action)
-                                            endpoints.append(EndpointRecord(
-                                                url=form_action, path=p_fa.path,
-                                                method=form.get("method", "POST"),
-                                                category="FORM", source="playwright_form"
-                                            ))
-                                            browser_endpoint_count += 1
+                                        if form_action and self.domain in form_action:
+                                            raw_crawled_urls.add(form_action)
+                                            browser_url_count += 1
 
                                     # Save cookies + storage
                                     await browser_ctrl.save_storage_state()
 
-                                    await self._emit("browser_page_done", url=target_live.url,
-                                        message=f"🌐 Browser: {target_live.url} → {len(links_raw)} links, {len(forms)} forms, {len(scripts_raw)} scripts")
+                                    await self._emit("browser_page_done", url=target_url,
+                                        message=f"🌐 Browser: {target_url} → {len(links_raw)} links, {len(forms)} forms, {len(scripts_raw)} scripts")
                             except Exception as be:
-                                logger.debug(f"Playwright page error on {target_live.url}: {be}")
+                                logger.debug(f"Playwright page error on {target_url}: {be}")
 
                         await browser_ctrl.close()
 
-                        # Parse XHR/Fetch requests from requests.jsonl (captured by network hooks)
+                        # Parse all requests from requests.jsonl (captured by network hooks)
                         req_log = os.path.join(browser_dir, "requests.jsonl")
                         if os.path.isfile(req_log):
                             with open(req_log, encoding="utf-8") as rf:
@@ -790,22 +802,16 @@ class HunterPipelineOrchestrator:
                                         req_rec = json.loads(line)
                                         req_url = req_rec.get("url", "")
                                         req_type = req_rec.get("resource_type", "")
-                                        req_method = req_rec.get("method", "GET")
-                                        if req_url and self.domain in req_url and req_type in ("xhr", "fetch") and req_url not in seen_urls:
-                                            seen_urls.add(req_url)
-                                            p_r = urlparse(req_url)
-                                            endpoints.append(EndpointRecord(
-                                                url=req_url, path=p_r.path,
-                                                method=req_method, category="API", source="playwright_xhr"
-                                            ))
-                                            browser_endpoint_count += 1
+                                        if req_url and self.domain in req_url:
+                                            raw_crawled_urls.add(req_url)
+                                            browser_url_count += 1
+                                            if req_type == "script" or req_url.endswith(".js"):
+                                                js_urls.add(req_url)
                                     except Exception:
                                         pass
 
-                        self._save_stage_artifact("15_browser", "playwright_endpoints.json",
-                            [e.model_dump() for e in endpoints if "playwright" in e.source])
                         await self._emit("browser_done",
-                            message=f"🌐 Playwright done — {browser_endpoint_count} endpoints captured (screenshots + cookies in 15_browser/)")
+                            message=f"🌐 Playwright done — {browser_url_count} URLs captured (screenshots + cookies in 15_browser/)")
                     else:
                         print("[!] [BROWSER] Playwright launch failed — run: playwright install chromium")
                 else:
@@ -814,12 +820,10 @@ class HunterPipelineOrchestrator:
                 logger.debug(f"Playwright browser controller error: {e}")
                 print(f"[!] [BROWSER] Playwright error: {e}")
 
-
         # 1. HTML Crawling
         for live in self.live_assets[:10]:
             is_valid_url, _ = self.strict_scope_engine.validate_url(live.url)
             if not is_valid_url:
-
                 continue
             try:
                 await self.rate_limiter.acquire(live.host)
@@ -829,38 +833,13 @@ class HunterPipelineOrchestrator:
                     links = re.findall(r'href=[\'"]([^\'"]+)[\'"]', resp.text, re.IGNORECASE)
                     for lk in links:
                         full_url = urljoin(live.url, lk)
-                        if self.domain in full_url and full_url not in seen_urls:
-                            seen_urls.add(full_url)
-                            parsed_u = urlparse(full_url)
-                            ep_rec = EndpointRecord(
-                                url=full_url,
-                                path=parsed_u.path,
-                                method="GET",
-                                category="API" if "/api" in parsed_u.path else ("ADMIN" if "admin" in parsed_u.path else "WEB"),
-                                source="html_crawl"
-                            )
-                            endpoints.append(ep_rec)
-                            self.engagement_mgr.record_lineage(
-                                asset_id=full_url,
-                                asset_value=full_url,
-                                asset_type="endpoint",
-                                tool="crawler",
-                                stage="07_urls",
-                                parent_id=live.url
-                            )
+                        if self.domain in full_url:
+                            raw_crawled_urls.add(full_url)
 
                     js_matches = re.findall(r'src=[\'"]([^\'"]+\.js(?:\?[^\'"]*)?)[\'"]', resp.text, re.IGNORECASE)
                     for jm in js_matches:
                         js_full = urljoin(live.url, jm)
                         js_urls.add(js_full)
-                        self.engagement_mgr.record_lineage(
-                            asset_id=js_full,
-                            asset_value=js_full,
-                            asset_type="javascript",
-                            tool="crawler",
-                            stage="09_javascript",
-                            parent_id=live.url
-                        )
             except Exception:
                 continue
 
@@ -870,16 +849,8 @@ class HunterPipelineOrchestrator:
                 "waybackurls", {"domain": self.domain}, self.engagement_mgr, "07_urls", input_source=f"domain: {self.domain}"
             )
             for u in wb_urls:
-                if isinstance(u, str) and u.startswith("http") and self.domain in u and u not in seen_urls:
-                    seen_urls.add(u)
-                    parsed_u = urlparse(u)
-                    endpoints.append(EndpointRecord(
-                        url=u,
-                        path=parsed_u.path,
-                        method="GET",
-                        category="ARCHIVE",
-                        source="waybackurls"
-                    ))
+                if isinstance(u, str) and u.startswith("http") and self.domain in u:
+                    raw_crawled_urls.add(u)
             if meta_wb and meta_wb.raw_output_file:
                 self.tool_logs.append(meta_wb.raw_output_file)
         except Exception as e:
@@ -893,16 +864,8 @@ class HunterPipelineOrchestrator:
                         "katana", {"url": target_live.url}, self.engagement_mgr, "07_urls", input_source=target_live.url
                     )
                     for ku in k_urls:
-                        if isinstance(ku, str) and ku.startswith("http") and ku not in seen_urls:
-                            seen_urls.add(ku)
-                            p_ku = urlparse(ku)
-                            endpoints.append(EndpointRecord(
-                                url=ku,
-                                path=p_ku.path,
-                                method="GET",
-                                category="CRAWLER",
-                                source="katana"
-                            ))
+                        if isinstance(ku, str) and ku.startswith("http") and self.domain in ku:
+                            raw_crawled_urls.add(ku)
                     if meta_k and meta_k.raw_output_file:
                         self.tool_logs.append(meta_k.raw_output_file)
             except Exception as e:
@@ -915,16 +878,8 @@ class HunterPipelineOrchestrator:
                     "hakrawler", {"url": target_live.url}, self.engagement_mgr, "07_urls", input_source=target_live.url
                 )
                 for hu in hk_urls:
-                    if isinstance(hu, str) and hu.startswith("http") and hu not in seen_urls:
-                        seen_urls.add(hu)
-                        p_hu = urlparse(hu)
-                        endpoints.append(EndpointRecord(
-                            url=hu,
-                            path=p_hu.path,
-                            method="GET",
-                            category="CRAWLER",
-                            source="hakrawler"
-                        ))
+                    if isinstance(hu, str) and hu.startswith("http") and self.domain in hu:
+                        raw_crawled_urls.add(hu)
                 if meta_hk and meta_hk.raw_output_file:
                     self.tool_logs.append(meta_hk.raw_output_file)
         except Exception as e:
@@ -936,16 +891,8 @@ class HunterPipelineOrchestrator:
                 "gau", {"domain": self.domain}, self.engagement_mgr, "07_urls", input_source=f"domain: {self.domain}"
             )
             for gu in gau_urls:
-                if isinstance(gu, str) and gu.startswith("http") and self.domain in gu and gu not in seen_urls:
-                    seen_urls.add(gu)
-                    p_gu = urlparse(gu)
-                    endpoints.append(EndpointRecord(
-                        url=gu,
-                        path=p_gu.path,
-                        method="GET",
-                        category="ARCHIVE",
-                        source="gau"
-                    ))
+                if isinstance(gu, str) and gu.startswith("http") and self.domain in gu:
+                    raw_crawled_urls.add(gu)
             if meta_gau and meta_gau.raw_output_file:
                 self.tool_logs.append(meta_gau.raw_output_file)
         except Exception as e:
@@ -997,24 +944,9 @@ class HunterPipelineOrchestrator:
             if "(Status:" in line:
                 part = line.split()[0].lstrip("/")
                 fuzz_url = f"{self.base_url}/{part}"
-                endpoints.append(EndpointRecord(
-                    url=fuzz_url,
-                    path=f"/{part}",
-                    method="GET",
-                    category="ADMIN" if "admin" in part else ("API" if "api" in part else "DIRECTORY"),
-                    source="fuzzer"
-                ))
-                self.engagement_mgr.record_lineage(
-                    asset_id=fuzz_url,
-                    asset_value=fuzz_url,
-                    asset_type="endpoint",
-                    tool="gobuster",
-                    stage="06_content",
-                    parent_id=self.base_url
-                )
+                raw_crawled_urls.add(fuzz_url)
 
         # 3. Special Files & Backups Hunting (.env, .git, .bak)
-        # Note: robots.txt and sitemap.xml are standard public files - extract endpoints, do NOT flag as vulnerability
         crawl_files = ["robots.txt", "sitemap.xml"]
         sensitive_candidates = [
             ".env", ".git/HEAD", "backup.sql", "config.php.bak", ".htaccess", "server-status"
@@ -1030,13 +962,7 @@ class HunterPipelineOrchestrator:
                             if line.lower().startswith(("disallow:", "allow:", "loc>")):
                                 path_part = line.split(":", 1)[-1].replace("<loc>", "").replace("</loc>", "").strip()
                                 if path_part.startswith("/"):
-                                    endpoints.append(DiscoveredEndpoint(
-                                        url=f"{self.base_url}{path_part}",
-                                        path=path_part,
-                                        method="GET",
-                                        category="DIRECTORY",
-                                        source=cf
-                                    ))
+                                    raw_crawled_urls.add(f"{self.base_url}{path_part}")
                 except Exception:
                     pass
 
@@ -1112,71 +1038,58 @@ class HunterPipelineOrchestrator:
         self._save_stage_artifact("09_javascript", "discovered_secrets.json", [s.model_dump() for s in self.secrets])
         self._save_stage_artifact("05_js_intelligence", "discovered_secrets.json", [s.model_dump() for s in self.secrets])
 
-        # 5. Parameter Database
-        parameters: List[ParameterRecord] = []
-        for ep in endpoints:
-            parsed = urlparse(ep.url)
-            if "?" in ep.url:
-                static_exts = (".webp", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".bmp", ".tiff", ".woff", ".woff2", ".ttf", ".eot", ".otf", ".mp4", ".mp3", ".css", ".map", ".js")
-                media_params = {"q", "w", "h", "f", "fit", "quality", "width", "height", "format", "v", "ver", "version"}
-                path_lower = parsed.path.lower()
-                is_static_path = any(path_lower.endswith(ext) for ext in static_exts)
+        # 5. URL Canonicalization, Clustering & Parameter Intelligence Database
+        live_hosts = {la.host for la in self.live_assets if la.host}
+        if not live_hosts:
+            live_hosts = {self.domain}
 
-                qs = parsed.query.split("&")
-                for q in qs:
-                    if "=" in q:
-                        p_name, p_val = q.split("=", 1)
-                        p_name = p_name.strip()
-                        if p_name:
-                            p_low = p_name.lower()
-                            # Skip non-injectable image resizing parameters on static assets
-                            if is_static_path and p_low in media_params:
-                                continue
+        canon_endpoints, canon_parameters, endpoint_families = URLCanonicalizer.process_url_inventory(
+            raw_urls=list(raw_crawled_urls),
+            live_hosts=live_hosts,
+            target_domain=self.domain,
+        )
 
-                            potentials = []
-                            if p_low in ("id", "user_id", "uid", "account", "order", "item"):
-                                potentials.extend(["IDOR", "SQLi"])
-                            elif p_low in ("url", "dest", "redirect", "src", "feed", "link", "target"):
-                                potentials.extend(["SSRF", "OpenRedirect"])
-                            elif p_low in ("file", "path", "folder", "doc", "page", "include"):
-                                potentials.extend(["LFI", "PathTraversal"])
-                            elif p_low in ("cmd", "exec", "ping", "query", "run", "host"):
-                                potentials.extend(["CmdInjection", "RCE"])
-                            elif p_low in ("search", "q", "query", "name", "msg", "comment"):
-                                potentials.extend(["XSS", "SSTI"])
-                            else:
-                                potentials.append("GeneralFuzz")
-
-                            param_rec = ParameterRecord(
-                                parameter=p_name,
-                                endpoint=ep.url,
-                                method=ep.method,
-                                source="url_query",
-                                potential_classes=potentials,
-                                sample_value=p_val
-                            )
-                            parameters.append(param_rec)
-                            self.engagement_mgr.record_lineage(
-                                asset_id=f"{ep.url}?{p_name}",
-                                asset_value=p_name,
-                                asset_type="parameter",
-                                tool="crawler",
-                                stage="08_parameters",
-                                parent_id=ep.url
-                            )
+        # Record lineage for canonical endpoints and parameters
+        for ep in canon_endpoints:
+            self.engagement_mgr.record_lineage(
+                asset_id=ep.url,
+                asset_value=ep.url,
+                asset_type="endpoint",
+                tool="url_canonicalizer",
+                stage="07_urls",
+                parent_id=self.domain
+            )
+        for p in canon_parameters:
+            self.engagement_mgr.record_lineage(
+                asset_id=f"{p.endpoint}?{p.parameter}",
+                asset_value=p.parameter,
+                asset_type="parameter",
+                tool="parameter_intelligence",
+                stage="08_parameters",
+                parent_id=p.endpoint
+            )
 
         # Fallback parameters if none discovered via crawl
-        if not parameters:
+        if not canon_parameters:
             for fallback_p, p_classes in [("category", ["SQLi"]), ("search", ["XSS", "SQLi"]), ("url", ["SSRF"])]:
+                fb_url = f"{self.base_url}/filter?{fallback_p}=test"
+                fb_cls = ParameterIntelligenceEngine.classify(fb_url, fallback_p, "test")
                 fb_rec = ParameterRecord(
                     parameter=fallback_p,
-                    endpoint=f"{self.base_url}/filter?{fallback_p}=test",
+                    endpoint=fb_url,
                     method="GET",
                     source="inferred_fallback",
-                    potential_classes=p_classes,
-                    sample_value="test"
+                    potential_classes=fb_cls.potential_vulns,
+                    sample_value="test",
+                    context={
+                        "role": fb_cls.role.value,
+                        "risk_level": fb_cls.risk_level,
+                        "is_active_candidate": fb_cls.is_active_candidate,
+                        "rationale": fb_cls.rationale,
+                        "family_pattern": "/filter",
+                    },
                 )
-                parameters.append(fb_rec)
+                canon_parameters.append(fb_rec)
                 self.engagement_mgr.record_lineage(
                     asset_id=f"{self.base_url}/filter?{fallback_p}",
                     asset_value=fallback_p,
@@ -1186,18 +1099,35 @@ class HunterPipelineOrchestrator:
                     parent_id=self.base_url
                 )
 
-        self.endpoints = endpoints
-        self.parameters = parameters
+        self.endpoints = canon_endpoints
+        self.parameters = canon_parameters
 
         # Discovered endpoints in 07_urls
         all_eps_text = "\n".join([e.url for e in self.endpoints])
         self._save_stage_artifact("07_urls", "all_urls.txt", all_eps_text)
         self._save_stage_artifact("07_urls", "discovered_endpoints.json", [e.model_dump() for e in self.endpoints])
+        self._save_stage_artifact("15_browser", "playwright_endpoints.json", [e.model_dump() for e in self.endpoints if "playwright" in e.source])
 
-        # Discovered parameters in 08_parameters
-        all_params_text = "\n".join([f"{p.endpoint} -> {p.parameter} ({','.join(p.potential_classes)})" for p in self.parameters])
+        # Discovered parameters & endpoint families in 08_parameters
+        all_params_text = "\n".join([
+            f"{p.endpoint} -> {p.parameter} (role={p.context.get('role', 'unknown') if p.context else 'unknown'}, classes={','.join(p.potential_classes)}, active={p.context.get('is_active_candidate', True) if p.context else True})"
+            for p in self.parameters
+        ])
         self._save_stage_artifact("08_parameters", "all_parameters.txt", all_params_text)
         self._save_stage_artifact("08_parameters", "discovered_parameters.json", [p.model_dump() for p in self.parameters])
+        self._save_stage_artifact("08_parameters", "endpoint_families.json", [
+            {
+                "pattern_id": f.pattern_id,
+                "sample_url": f.sample_url,
+                "path_pattern": f.path_pattern,
+                "method": f.method,
+                "category": f.category,
+                "raw_urls_count": f.raw_urls_count,
+                "live_host": f.live_host,
+                "parameters": {k: v.to_dict() for k, v in f.parameters.items()}
+            }
+            for f in endpoint_families
+        ])
 
         # API Endpoints in 10_api
         api_eps = [e for e in self.endpoints if e.category == "API" or "/api" in e.path]
@@ -1232,13 +1162,16 @@ class HunterPipelineOrchestrator:
         self._save_stage_artifact("06_testing", "correlated_attack_surface.json", correlated)
 
         hypotheses = []
-        for p in self.parameters[:10]:
+        for p in self.parameters:
+            ctx = getattr(p, "context", None) or {}
+            if not ctx.get("is_active_candidate", True):
+                continue
             for p_class in p.potential_classes:
                 hypotheses.append({
                     "target_url": p.endpoint,
                     "param": p.parameter,
                     "vuln_type": p_class,
-                    "rationale": f"Parameter '{p.parameter}' maps to {p_class} vulnerability pattern"
+                    "rationale": f"Parameter '{p.parameter}' ({ctx.get('role', 'input')}) maps to {p_class} vulnerability pattern"
                 })
 
         self._save_stage_artifact("12_vulnerabilities", "vulnerability_hypotheses.json", hypotheses)
@@ -1375,15 +1308,23 @@ class HunterPipelineOrchestrator:
                         }, self.engagement_mgr, "08_parameters", input_source=target_url
                     )
                     for fp in ffuf_params_lines:
-                        if isinstance(fp, str) and fp:
-                            from hunter_ai.pipeline.schemas import ParameterRecord
+                        if isinstance(fp, str) and fp.strip():
+                            p_name = fp.strip()
+                            fp_cls = ParameterIntelligenceEngine.classify(target_url, p_name, "test")
                             self.parameters.append(ParameterRecord(
-                                parameter=fp.strip(),
+                                parameter=p_name,
                                 endpoint=target_url,
                                 method="GET",
                                 source="ffuf_discovery",
-                                potential_classes=["GeneralFuzz"],
-                                sample_value="test"
+                                potential_classes=fp_cls.potential_vulns,
+                                sample_value="test",
+                                context={
+                                    "role": fp_cls.role.value,
+                                    "risk_level": fp_cls.risk_level,
+                                    "is_active_candidate": fp_cls.is_active_candidate,
+                                    "rationale": fp_cls.rationale,
+                                    "family_pattern": urlparse(target_url).path or "/",
+                                }
                             ))
                     if meta_ffuf_p and meta_ffuf_p.raw_output_file:
                         self.tool_logs.append(meta_ffuf_p.raw_output_file)
