@@ -79,6 +79,7 @@ from hunter_ai.pipeline.parameter_intelligence import (
     inject_url_parameter,
 )
 from hunter_ai.brain.ai_preflight import AIPreflightGate, AIPreflightResult
+from hunter_ai.pipeline.desktop_exporter import DesktopExportManager
 
 logger = logging.getLogger("hunter_ai.pipeline")
 
@@ -1999,29 +2000,32 @@ class HunterPipelineOrchestrator:
         except Exception as e:
             logger.debug(f"Could not compute diff: {e}")
 
-        # Automatically export master reports directly to Desktop for convenient user access
-        desktop_target_dir = None
+        # Structured Comprehensive Desktop Workspace Export
+        reports_dict = {"json": json_path, "markdown": md_path, "html": html_path, **diff_info}
         try:
-            desktop_dir = Path.home() / "Desktop"
-            if desktop_dir.is_dir():
-                clean_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', self.domain)
-                target_folder = f"HunterAI_{clean_name}"
-                desktop_target = desktop_dir / target_folder
-                desktop_target.mkdir(parents=True, exist_ok=True)
-                for f_path in [md_path, html_path, json_path]:
-                    if os.path.isfile(f_path):
-                        shutil.copy2(f_path, desktop_target / os.path.basename(f_path))
-                if diff_info.get("diff_md") and os.path.isfile(diff_info["diff_md"]):
-                    shutil.copy2(diff_info["diff_md"], desktop_target / "temporal_diff.md")
-                desktop_target_dir = str(desktop_target)
+            desktop_target_dir = DesktopExportManager.export_engagement(
+                domain=self.domain,
+                artifact_root=self.artifact_root,
+                reports_dict=reports_dict,
+                subdomains=self.subdomains,
+                live_assets=self.live_assets,
+                endpoints=self.endpoints,
+                parameters=self.parameters,
+                findings=self.findings,
+                tool_logs=self.tool_logs,
+                workflow=self.workflow,
+                profile=self.profile,
+                ai_status=self.ai_preflight_result.to_dict() if self.ai_preflight_result else None,
+            )
+            if desktop_target_dir:
                 diff_info["desktop_export"] = desktop_target_dir
-                print(f"\n[+] 📁 Desktop Export Created: {desktop_target}")
-                logger.info(f"Exported final reports to Desktop: {desktop_target}")
+                reports_dict["desktop_export"] = desktop_target_dir
         except Exception as e:
-            logger.debug(f"Could not copy reports to Desktop: {e}")
+            logger.debug(f"Could not generate Desktop export workspace: {e}")
 
+        self.last_reports = reports_dict
         self.engagement_mgr.complete_stage("14_reports", item_count=len(self.findings))
-        return {"json": json_path, "markdown": md_path, "html": html_path, **diff_info}
+        return reports_dict
 
     async def run(self) -> Dict[str, Any]:
         """Execute full HunterAI Master Pipeline end-to-end"""
