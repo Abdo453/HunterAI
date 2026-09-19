@@ -112,6 +112,8 @@ class HunterPipelineOrchestrator:
         timeout_multiplier: float = 1.0,
         allow_no_ai: bool = False,
         ollama_host: Optional[str] = None,
+        skip_ai_probe: bool = False,
+        inference_timeout: Optional[float] = None,
     ):
         self.raw_target = target.strip()
         self.session_id = session_id or f"hunter_{int(time.time())}"
@@ -139,6 +141,8 @@ class HunterPipelineOrchestrator:
         self.allow_private_ips = allow_private_ips
         self.allow_no_ai = allow_no_ai
         self.ollama_host = ollama_host
+        self.skip_ai_probe = skip_ai_probe
+        self.inference_timeout = inference_timeout
         self.ai_preflight_result: Optional[AIPreflightResult] = None
         self.ai_degraded: bool = False
         self.program_metadata: Optional[ProgramMetadata] = None
@@ -277,12 +281,16 @@ class HunterPipelineOrchestrator:
 
         self.fsm.transition_to(HunterState.AI_CONNECTING, f"Checking connectivity to {self.ollama_host or 'default host'}")
 
+        # Compute dynamic inference timeout with cold-start tolerance
+        inf_timeout = self.inference_timeout or max(45.0, min(120.0, 15.0 * self.timeout_multiplier))
+
         # Run 3-tier preflight check asynchronously
         result = await AIPreflightGate.run_preflight_async(
             host=self.ollama_host,
             allow_degraded=self.allow_no_ai,
-            timeout_sec=3.0,
-            inference_timeout_sec=10.0,
+            timeout_sec=5.0,
+            inference_timeout_sec=inf_timeout,
+            skip_inference_test=self.skip_ai_probe,
         )
         self.ai_preflight_result = result
         self.ai_degraded = result.degraded

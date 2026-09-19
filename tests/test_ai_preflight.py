@@ -154,7 +154,7 @@ class TestAIPreflightGate:
         banner = AIPreflightGate.format_status_banner(res)
         assert "AI COGNITIVE PREFLIGHT GATE" in banner
         assert "Operating Mode" in banner
-        assert ("DEGRADED" in banner or "AI_READY" in banner or "BLOCKED" in banner)
+        assert ("DEGRADED" in banner or "AI_READY" in banner or "BLOCKED" in banner or "AI_POWERED" in banner)
 
 
 class TestPreflightStateMachine:

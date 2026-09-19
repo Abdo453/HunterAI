@@ -87,6 +87,7 @@ class AIPreflightResult:
     all_available_tags: List[str] = field(default_factory=list)
     inference_ok: bool = False
     inference_latency_ms: float = 0.0
+    inference_model: Optional[str] = None
     inference_probe_output: str = ""
     status: str = "FAILED"  # "AI_READY", "DEGRADED", "FAILED"
     allowed: bool = False
@@ -103,6 +104,7 @@ class AIPreflightResult:
             "all_available_tags": self.all_available_tags,
             "inference_ok": self.inference_ok,
             "inference_latency_ms": round(self.inference_latency_ms, 2),
+            "inference_model": self.inference_model,
             "inference_probe_output": self.inference_probe_output,
             "status": self.status,
             "allowed": self.allowed,
@@ -182,7 +184,7 @@ class AIPreflightGate:
         cls,
         host: str,
         model_name: str,
-        timeout_sec: float = 8.0,
+        timeout_sec: float = 45.0,
         probe_phrase: str = "HUNTERAI_AI_READY"
     ) -> Tuple[bool, float, str, Optional[str]]:
         """
@@ -199,7 +201,7 @@ class AIPreflightGate:
                 }
             ],
             "stream": False,
-            "keep_alive": "2m",
+            "keep_alive": "5m",
             "options": {
                 "temperature": 0.0,
                 "num_ctx": 256,
@@ -231,12 +233,12 @@ class AIPreflightGate:
         cls,
         host: Optional[str] = None,
         allow_degraded: bool = False,
-        timeout_sec: float = 3.0,
-        inference_timeout_sec: float = 10.0,
+        timeout_sec: float = 5.0,
+        inference_timeout_sec: float = 45.0,
         skip_inference_test: bool = False
     ) -> AIPreflightResult:
         """
-        Executes synchronous 3-Tier Preflight check.
+        Executes synchronous 3-Tier Preflight check with multi-model fallback.
         """
         endpoint = cls.normalize_host(host)
         res = AIPreflightResult(endpoint=endpoint)
@@ -272,30 +274,34 @@ class AIPreflightGate:
 
         # Tier 3: Active Inference
         if any_model_available and not skip_inference_test:
-            # Pick highest priority available model tag to probe
-            probe_tag = None
+            # Build list of probe candidates in priority order: reasoning, code, recon
+            probe_candidates = []
             for role in ["reasoning", "code", "recon"]:
                 if model_results.get(role) and model_results[role].matched_tag:
-                    probe_tag = model_results[role].matched_tag
-                    break
+                    probe_candidates.append(model_results[role].matched_tag)
+            for t in tags:
+                if t not in probe_candidates:
+                    probe_candidates.append(t)
 
-            if not probe_tag and tags:
-                probe_tag = tags[0]
-
-            if probe_tag:
+            last_err = None
+            for candidate in probe_candidates:
                 inf_ok, inf_lat, inf_out, inf_err = cls.test_inference(
-                    endpoint, probe_tag, timeout_sec=inference_timeout_sec
+                    endpoint, candidate, timeout_sec=inference_timeout_sec
                 )
-                res.inference_ok = inf_ok
-                res.inference_latency_ms = inf_lat
-                res.inference_probe_output = inf_out
-                if not inf_ok:
-                    res.error_message = f"Model inference probe failed on '{probe_tag}': {inf_err}"
-            else:
-                res.inference_ok = False
-                res.error_message = "No matching models found to run inference probe."
+                if inf_ok:
+                    res.inference_ok = True
+                    res.inference_latency_ms = inf_lat
+                    res.inference_probe_output = inf_out
+                    res.inference_model = candidate
+                    break
+                else:
+                    last_err = f"Model '{candidate}' probe failed: {inf_err}"
+
+            if not res.inference_ok:
+                res.error_message = last_err or "Inference probe failed on all candidates."
         elif skip_inference_test and any_model_available:
             res.inference_ok = True
+            res.inference_model = "probe_skipped"
         else:
             res.inference_ok = False
             res.error_message = "No models available in local Ollama repository."
@@ -313,6 +319,7 @@ class AIPreflightGate:
             if missing_roles:
                 pull_cmds = [f"ollama pull {REQUIRED_MODELS[k]['canonical']}" for k, v in model_results.items() if not v.available]
                 res.remediation_steps.extend(pull_cmds)
+            res.remediation_steps.append("If model is loading into VRAM on cold start, re-run scan or use '--skip-ai-probe' / '--inference-timeout 90'.")
             res.remediation_steps.append("Or pass '--allow-no-ai' to proceed without AI assistance.")
 
             if allow_degraded:
@@ -331,8 +338,8 @@ class AIPreflightGate:
         cls,
         host: Optional[str] = None,
         allow_degraded: bool = False,
-        timeout_sec: float = 3.0,
-        inference_timeout_sec: float = 10.0,
+        timeout_sec: float = 5.0,
+        inference_timeout_sec: float = 45.0,
         skip_inference_test: bool = False
     ) -> AIPreflightResult:
         """Asynchronous execution wrapper for asyncio loops"""
@@ -385,7 +392,11 @@ class AIPreflightGate:
         # Inference Line
         if result.online:
             inf_icon = dot_green if result.inference_ok else dot_red
-            inf_str = f"PASS ({result.inference_latency_ms:.1f}ms)" if result.inference_ok else f"FAIL ({result.error_message or 'No output'})"
+            if result.inference_ok:
+                model_lbl = f" ({result.inference_model.split(':')[0]})" if result.inference_model and result.inference_model != "probe_skipped" else ""
+                inf_str = f"PASS{model_lbl} ({result.inference_latency_ms:.0f}ms)"
+            else:
+                inf_str = f"FAIL ({result.error_message or 'No output'})"
             lines.append(f"║  Active Inference : {inf_icon} {inf_str:<50} ║")
 
         # Mode Line

@@ -49,6 +49,8 @@ def main():
     p.add_argument("--triad", action="store_true", help="Run with 100%% Local AI Triad (WhiteRabbitNeo + xploiter + Qwen 2.5 Coder)")
     p.add_argument("--allow-no-ai", "--no-ai", "--degraded", dest="allow_no_ai", action="store_true", help="Allow pipeline to run in degraded heuristic mode if local AI model server is offline or models are missing")
     p.add_argument("--ollama-host", default=None, help="Custom Ollama host endpoint (default: http://127.0.0.1:11434)")
+    p.add_argument("--skip-ai-probe", "--skip-inference-probe", dest="skip_ai_probe", action="store_true", help="Skip live inference prompt test during AI Preflight Gate")
+    p.add_argument("--inference-timeout", type=float, default=None, help="Timeout in seconds for live AI inference probe (default: 45s, scales with --timeout-multiplier)")
     p.add_argument("--proxy", "--burp", dest="proxy", default=None, help="Upstream HTTP/Burp Suite proxy (e.g. http://127.0.0.1:8080)")
     p.add_argument("--ask", help="Directly query the Local Triad Agent with a security question, code snippet, or target")
     p.add_argument("--max-steps", type=int, default=15, help="Max steps budget for HunterAI runtime")
@@ -66,7 +68,7 @@ def main():
 
     if args.target:
         import asyncio
-        if args.hunter or args.workflow or args.mode in ("hunter", "bugbounty") or args.profile != "safe" or args.scope_file or args.triad or args.lab_mode or args.proxy or args.deep or args.dry_run or args.timeout_multiplier > 1.0 or args.allow_no_ai:
+        if args.hunter or args.workflow or args.mode in ("hunter", "bugbounty") or args.profile != "safe" or args.scope_file or args.triad or args.lab_mode or args.proxy or args.deep or args.dry_run or args.timeout_multiplier > 1.0 or args.allow_no_ai or args.skip_ai_probe:
             # Auto-upgrade profile: --hunter or --mode full/bugbounty → "hunter"
             if args.hunter or args.mode in ("hunter", "bugbounty"):
                 effective_profile = "hunter"
@@ -107,6 +109,8 @@ def main():
                 timeout_multiplier=effective_mult,
                 allow_no_ai=args.allow_no_ai,
                 ollama_host=args.ollama_host,
+                skip_ai_probe=args.skip_ai_probe,
+                inference_timeout=args.inference_timeout,
             )
             res = asyncio.run(orch.run())
             if res.get("status") == "aborted":
