@@ -46,7 +46,7 @@ def main():
     p.add_argument("--require-human-approval", action="store_true", help="Require interactive human confirmation before executing test payloads")
     p.add_argument("--dry-run", action="store_true", help="Simulate pipeline plan without sending active network packets")
     p.add_argument("--lab-mode", "--allow-private-ips", dest="lab_mode", action="store_true", help="Allow RFC1918 private IP subnets (10.x, 172.16.x, 192.168.x) for authorized local labs")
-    p.add_argument("--triad", action="store_true", help="Run with 100%% Local AI Triad (WhiteRabbitNeo + xploiter + Qwen 2.5 Coder)")
+    p.add_argument("--triad", "--use-triad", "--cognitive-council", dest="triad", action="store_true", help="Run with 100%% Local AI Triad (WhiteRabbitNeo + xploiter + Qwen 2.5 Coder)")
     p.add_argument("--allow-no-ai", "--no-ai", "--degraded", dest="allow_no_ai", action="store_true", help="Allow pipeline to run in degraded heuristic mode if local AI model server is offline or models are missing")
     p.add_argument("--ollama-host", default=None, help="Custom Ollama host endpoint (default: http://127.0.0.1:11434)")
     p.add_argument("--skip-ai-probe", "--skip-inference-probe", dest="skip_ai_probe", action="store_true", help="Skip live inference prompt test during AI Preflight Gate")
