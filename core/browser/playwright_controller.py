@@ -108,8 +108,8 @@ class PlaywrightBrowserController:
         self.traces_dir.mkdir(parents=True, exist_ok=True)
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
 
-    async def launch(self, browser_type: str = "chromium") -> bool:
-        """Launch the browser with configured proxy and event hooks"""
+    async def launch(self, browser_type: str = "firefox") -> bool:
+        """Launch the browser (Firefox, Chromium) with configured proxy and event hooks"""
         if not PLAYWRIGHT_AVAILABLE:
             logger.error("Playwright is not installed in the current environment.")
             return False
@@ -117,51 +117,79 @@ class PlaywrightBrowserController:
         self._ensure_dirs()
         try:
             self._pw = await async_playwright().start()
-            launcher = getattr(self._pw, browser_type, self._pw.chromium)
 
-            launch_options: Dict[str, Any] = {
-                "headless": self.headless,
-                "args": ["--no-sandbox", "--disable-dev-shm-usage", "--ignore-certificate-errors"],
-            }
+            # Priority: requested browser first, then fallback
+            primary = (browser_type or os.getenv("BROWSER_TYPE", "firefox")).lower()
+            fallback = "chromium" if primary == "firefox" else "firefox"
+            candidate_types = [primary, fallback]
 
-            # Configure Burp / upstream proxy
-            if self.proxy:
-                launch_options["proxy"] = {"server": self.proxy}
+            for b_type in candidate_types:
+                launcher = getattr(self._pw, b_type, None)
+                if not launcher:
+                    continue
 
-            try:
-                self._browser = await launcher.launch(**launch_options)
-            except Exception as e:
-                err_msg = str(e)
-                if "Executable doesn't exist" in err_msg or "playwright install" in err_msg:
-                    logger.info("Playwright browser binary missing; searching for system browser or provisioning...")
-                    system_browsers = [
-                        "/usr/bin/chromium",
-                        "/usr/bin/chromium-browser",
-                        "/usr/bin/google-chrome",
-                        "/usr/bin/firefox-esr",
-                        "/usr/bin/firefox",
-                    ]
-                    sys_bin = next((b for b in system_browsers if os.path.isfile(b) and os.access(b, os.X_OK)), None)
-                    if sys_bin:
-                        try:
-                            logger.info(f"Using system browser fallback: {sys_bin}")
-                            launch_options["executable_path"] = sys_bin
-                            self._browser = await launcher.launch(**launch_options)
-                        except Exception:
-                            launch_options.pop("executable_path", None)
-
-                    if not self._browser:
-                        import subprocess
-                        import sys
-                        logger.info("Running automatic provisioning: 'playwright install chromium'...")
-                        try:
-                            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True, timeout=180)
-                            self._browser = await launcher.launch(**launch_options)
-                        except Exception as inst_err:
-                            logger.error(f"Playwright auto-install failed: {inst_err}")
-                            raise RuntimeError("Playwright browser missing. Please run 'playwright install chromium' in your terminal.") from e
+                launch_options: Dict[str, Any] = {
+                    "headless": self.headless,
+                }
+                if b_type == "chromium":
+                    launch_options["args"] = ["--no-sandbox", "--disable-dev-shm-usage", "--ignore-certificate-errors"]
                 else:
-                    raise
+                    launch_options["firefox_user_prefs"] = {"security.cert_pinning.enforcement_level": 0}
+
+                # Configure Burp / upstream proxy
+                if self.proxy:
+                    launch_options["proxy"] = {"server": self.proxy}
+
+                try:
+                    self._browser = await launcher.launch(**launch_options)
+                    self._active_browser_type = b_type
+                    break
+                except Exception as e:
+                    err_msg = str(e)
+                    if "Executable doesn't exist" in err_msg or "playwright install" in err_msg:
+                        logger.info(f"Playwright {b_type} binary missing; searching for system browser or provisioning...")
+                        system_browsers = [
+                            "/usr/bin/firefox-esr",
+                            "/usr/bin/firefox",
+                            "/usr/bin/chromium",
+                            "/usr/bin/chromium-browser",
+                            "/usr/bin/google-chrome",
+                        ] if b_type == "firefox" else [
+                            "/usr/bin/chromium",
+                            "/usr/bin/chromium-browser",
+                            "/usr/bin/google-chrome",
+                            "/usr/bin/firefox-esr",
+                            "/usr/bin/firefox",
+                        ]
+                        sys_bin = next((b for b in system_browsers if os.path.isfile(b) and os.access(b, os.X_OK)), None)
+                        if sys_bin:
+                            try:
+                                logger.info(f"Using system browser fallback: {sys_bin}")
+                                launch_options["executable_path"] = sys_bin
+                                self._browser = await launcher.launch(**launch_options)
+                                self._active_browser_type = b_type
+                                break
+                            except Exception:
+                                launch_options.pop("executable_path", None)
+
+                        if not self._browser:
+                            import subprocess
+                            import sys
+                            logger.info(f"Running automatic provisioning: 'playwright install {b_type}'...")
+                            try:
+                                subprocess.run([sys.executable, "-m", "playwright", "install", b_type], check=True, timeout=180)
+                                self._browser = await launcher.launch(**launch_options)
+                                self._active_browser_type = b_type
+                                break
+                            except Exception as inst_err:
+                                logger.warning(f"Playwright auto-install for {b_type} failed: {inst_err}")
+                    else:
+                        logger.warning(f"Failed to launch {b_type}: {e}")
+
+            if not self._browser:
+                logger.warning("Could not launch any browser engine (Firefox/Chromium). Gracefully falling back to HTTP/HTML crawling.")
+                return False
+
             self._context = await self._browser.new_context(
                 ignore_https_errors=True,
                 viewport={"width": 1280, "height": 800},
@@ -176,7 +204,7 @@ class PlaywrightBrowserController:
             self._page = await self._context.new_page()
             self._attach_listeners(self._page)
             self._is_running = True
-            logger.info(f"Playwright {browser_type.upper()} launched successfully (proxy={self.proxy})")
+            logger.info(f"Playwright {getattr(self, '_active_browser_type', browser_type).upper()} launched successfully (proxy={self.proxy})")
             return True
 
         except BaseException as e:

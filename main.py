@@ -30,6 +30,9 @@ def main():
     p.add_argument("--target", "-t")
     p.add_argument("--mode", "-m", default="full", choices=["recon","web","full","ctf","hunter","bugbounty"])
     p.add_argument("--browser", "-b", action="store_true")
+    p.add_argument("--browser-type", choices=["firefox", "chromium", "webkit"], default=os.getenv("BROWSER_TYPE", "firefox"), help="Headless browser engine (default: firefox)")
+    p.add_argument("--firefox", dest="browser_type", action="store_const", const="firefox", help="Force Firefox browser engine (recommended for Kali Linux)")
+    p.add_argument("--chromium", "--chrome", dest="browser_type", action="store_const", const="chromium", help="Use Chromium browser engine")
     p.add_argument("--port", type=int, default=int(os.getenv("WEB_PORT","7070")))
     p.add_argument("--host", default=os.getenv("WEB_HOST", "127.0.0.1"), help="Host to bind Web UI")
     # Keep the dashboard local by default. This does not affect Burp Suite or
@@ -111,6 +114,7 @@ def main():
                 ollama_host=args.ollama_host,
                 skip_ai_probe=args.skip_ai_probe,
                 inference_timeout=args.inference_timeout,
+                browser_type=args.browser_type,
             )
             res = asyncio.run(orch.run())
             if res.get("status") == "aborted":

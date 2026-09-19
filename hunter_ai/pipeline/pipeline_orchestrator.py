@@ -117,6 +117,7 @@ class HunterPipelineOrchestrator:
         ollama_host: Optional[str] = None,
         skip_ai_probe: bool = False,
         inference_timeout: Optional[float] = None,
+        browser_type: str = "firefox",
     ):
         self.raw_target = target.strip()
         self.session_id = session_id or f"hunter_{int(time.time())}"
@@ -127,6 +128,7 @@ class HunterPipelineOrchestrator:
         self.master_tools = MasterToolRegistry(self.tm)
         self.proxy = proxy
         self.authorized = authorized
+        self.browser_type = browser_type or os.getenv("BROWSER_TYPE", "firefox")
         self.workflow = workflow
         self.mode = mode
         self.scope_file = scope_file
@@ -987,7 +989,7 @@ class HunterPipelineOrchestrator:
             try:
                 from core.browser.playwright_controller import PlaywrightBrowserController, PLAYWRIGHT_AVAILABLE
                 if PLAYWRIGHT_AVAILABLE:
-                    await self._emit("browser_start", message="🌐 Launching Playwright headless browser for JS-rendered crawl...")
+                    await self._emit("browser_start", message=f"🌐 Launching Playwright {self.browser_type.title()} headless browser for JS-rendered crawl...")
                     browser_dir = os.path.join(self.artifact_root, "15_browser")
                     os.makedirs(browser_dir, exist_ok=True)
 
@@ -998,7 +1000,7 @@ class HunterPipelineOrchestrator:
                         headless=True,
                     )
 
-                    launched = await browser_ctrl.launch(browser_type="chromium")
+                    launched = await browser_ctrl.launch(browser_type=self.browser_type)
                     if launched:
                         browser_url_count = 0
                         # Prioritize base URL and top live endpoints
@@ -1077,9 +1079,9 @@ class HunterPipelineOrchestrator:
                         await self._emit("browser_done",
                             message=f"🌐 Playwright done — {browser_url_count} URLs captured (screenshots + cookies in 15_browser/)")
                     else:
-                        print("[!] [BROWSER] Playwright launch failed — run: playwright install chromium")
+                        print(f"[!] [BROWSER] Playwright launch failed — run: playwright install {self.browser_type}")
                 else:
-                    print("[!] [BROWSER] ⚠️  Playwright not installed — run: pip install playwright && playwright install chromium")
+                    print(f"[!] [BROWSER] ⚠️  Playwright not installed — run: pip install playwright && playwright install {self.browser_type}")
             except Exception as e:
                 logger.debug(f"Playwright browser controller error: {e}")
                 print(f"[!] [BROWSER] Playwright error: {e}")

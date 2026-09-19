@@ -7,7 +7,7 @@ load_dotenv()
 
 from core.confidence_checker import ConfidenceChecker
 
-async def test():
+async def run_confidence_test():
     async def cb(ev):
         t = ev.get('event', '')
         if t == 'model_verdict':
@@ -43,4 +43,5 @@ async def test():
     print()
     print(checker.format_report(result))
 
-asyncio.run(test())
+if __name__ == "__main__":
+    asyncio.run(run_confidence_test())

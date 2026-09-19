@@ -444,7 +444,8 @@ class InvestigationController:
                             output_dir=str(pathlib.Path(self.orc.artifact_root) / "15_browser"),
                             proxy=self.orc.proxy,
                         )
-                        if await bc.launch(browser_type="chromium"):
+                        browser_target = getattr(self.orc, "browser_type", "firefox")
+                        if await bc.launch(browser_type=browser_target):
                             ok, _ = await bc.goto(self.orc.base_url, wait_until="load", timeout=30_000)
                             if ok:
                                 links_raw = await bc.evaluate_js(
