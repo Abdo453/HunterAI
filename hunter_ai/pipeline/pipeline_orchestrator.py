@@ -79,6 +79,7 @@ from hunter_ai.pipeline.parameter_intelligence import (
     inject_url_parameter,
 )
 from hunter_ai.brain.ai_preflight import AIPreflightGate, AIPreflightResult
+from hunter_ai.brain.cognitive_council import CognitiveCouncil, CouncilRole
 from hunter_ai.pipeline.desktop_exporter import DesktopExportManager
 from core.wordlist_intelligence import WordlistIntelligenceAgent, WordlistCategory, AttackPhase
 
@@ -210,6 +211,7 @@ class HunterPipelineOrchestrator:
         self.wordlist_mgr = WordlistManager()
         self.wordlist_agent = WordlistIntelligenceAgent(target=self.domain, auto_index=False)
         self.wordlist_mgr.intelligence = self.wordlist_agent
+        self.council = CognitiveCouncil(target_domain=self.domain, ollama_host=self.ollama_host)
         self.tool_registry = ToolRegistry(
             capability_matrix=CapabilityMatrix(authorized=self.authorized)
         )
@@ -1328,6 +1330,33 @@ class HunterPipelineOrchestrator:
                 })
 
         self._save_stage_artifact("12_vulnerabilities", "vulnerability_hypotheses.json", hypotheses)
+
+        # ── Cognitive Council Dialectic Peer Review & Debate ──
+        if self.use_triad and not self.ai_degraded:
+            try:
+                self.council.state.update_recon(
+                    subdomains=[r.asset for r in self.subdomains],
+                    live_assets=[la.model_dump() for la in self.live_assets],
+                    technologies=[t for la in self.live_assets for t in (la.technologies or [])]
+                )
+                self.council.state.update_surface(
+                    endpoints=[e.model_dump() for e in self.endpoints],
+                    parameters=[p.model_dump() for p in self.parameters],
+                    secrets=[s.model_dump() for s in self.secrets]
+                )
+                debated_records = []
+                for hypo in hypotheses[:5]:
+                    d_res = await self.council.debate_hypothesis(
+                        vuln_type=hypo.get("vuln_type", "Unknown"),
+                        endpoint=hypo.get("target_url", self.base_url),
+                        parameter=hypo.get("param"),
+                        initial_observation=hypo.get("rationale", ""),
+                    )
+                    debated_records.append(d_res.to_dict())
+                self._save_stage_artifact("12_vulnerabilities", "cognitive_council_debates.json", debated_records)
+                await self._emit("council_debate_done", count=len(debated_records), message=f"Cognitive Council evaluated {len(debated_records)} hypotheses.")
+            except Exception as e:
+                logger.debug(f"Cognitive Council debate notice: {e}")
 
         self.fsm.transition_to(HunterState.TEST, "Executing targeted vulnerability skills")
         await self._emit("test_start", count=len(hypotheses), message="Dispatching testing skills with context...")
