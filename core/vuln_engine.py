@@ -307,47 +307,59 @@ class VulnerabilityEngine:
 
                     elif skill_key == "ssrf":
                         ssrf_res = await skill.run(probe_url, param_name)
-                        for lg in ssrf_res.get("logs", []):
-                            await self._log(f"   {lg}")
-                        if ssrf_res.get("state") == "COMPLETE":
-                            res_dict = {
-                                "type": "ssrf",
-                                "vuln_type": "ssrf",
-                                "param_name": param_name,
-                                "endpoint": probe_url,
-                                "title": f"SSRF — Server-Side Request Forgery ({ssrf_res.get('impact', 'Internal Access')})",
-                                "severity": "High" if "metadata" in ssrf_res.get("impact", "").lower() else "Medium",
-                                "evidence": ssrf_res.get("evidence_snippet", "SSRF access verified"),
-                                "payload_used": ssrf_res.get("vulnerable_payload", "?"),
-                                "remediation": "Enforce strict allowlist on URLs and block internal IPs (169.254.169.254, 127.0.0.1).",
-                                "cwe": "CWE-918",
-                                "owasp_top10": "A10:2021 — Server-Side Request Forgery",
-                                "confidence": 0.95,
-                                "tool": "SSRFSkill",
-                                "evidence_sources": ["SSRFSkill/StateMachine"],
-                            }
+                        if isinstance(ssrf_res, SkillResult):
+                            for lg in ssrf_res.logs:
+                                await self._log(f"   {lg}")
+                            if ssrf_res.verified:
+                                res_dict = ssrf_res.to_dict()
+                        elif isinstance(ssrf_res, dict):
+                            for lg in ssrf_res.get("logs", []):
+                                await self._log(f"   {lg}")
+                            if ssrf_res.get("state") == "COMPLETE":
+                                res_dict = {
+                                    "type": "ssrf",
+                                    "vuln_type": "ssrf",
+                                    "param_name": param_name,
+                                    "endpoint": probe_url,
+                                    "title": f"SSRF — Server-Side Request Forgery ({ssrf_res.get('impact', 'Internal Access')})",
+                                    "severity": "High" if "metadata" in ssrf_res.get("impact", "").lower() else "Medium",
+                                    "evidence": ssrf_res.get("evidence_snippet", "SSRF access verified"),
+                                    "payload_used": ssrf_res.get("vulnerable_payload", "?"),
+                                    "remediation": "Enforce strict allowlist on URLs and block internal IPs (169.254.169.254, 127.0.0.1).",
+                                    "cwe": "CWE-918",
+                                    "owasp_top10": "A10:2021 — Server-Side Request Forgery",
+                                    "confidence": 0.95,
+                                    "tool": "SSRFSkill",
+                                    "evidence_sources": ["SSRFSkill/StateMachine"],
+                                }
 
                     elif skill_key == "idor":
                         idor_res = await skill.run(probe_url, param_name)
-                        for lg in idor_res.get("logs", []):
-                            await self._log(f"   {lg}")
-                        if idor_res.get("state") == "COMPLETE":
-                            res_dict = {
-                                "type": "idor",
-                                "vuln_type": "idor",
-                                "param_name": param_name,
-                                "endpoint": probe_url,
-                                "title": f"IDOR/BOLA in parameter {param_name!r}",
-                                "severity": "High",
-                                "evidence": idor_res.get("evidence_snippet", "Cross-object access confirmed"),
-                                "payload_used": f"ID mutation to {idor_res.get('vulnerable_id')}",
-                                "remediation": "Implement robust server-side object-level access control (RBAC/ABAC).",
-                                "cwe": "CWE-639",
-                                "owasp_top10": "A01:2021 — Broken Access Control",
-                                "confidence": idor_res.get("confidence", 0.90),
-                                "tool": "IDORSkill",
-                                "evidence_sources": ["IDORSkill/MatrixChecker"],
-                            }
+                        if isinstance(idor_res, SkillResult):
+                            for lg in idor_res.logs:
+                                await self._log(f"   {lg}")
+                            if idor_res.verified:
+                                res_dict = idor_res.to_dict()
+                        elif isinstance(idor_res, dict):
+                            for lg in idor_res.get("logs", []):
+                                await self._log(f"   {lg}")
+                            if idor_res.get("state") == "COMPLETE":
+                                res_dict = {
+                                    "type": "idor",
+                                    "vuln_type": "idor",
+                                    "param_name": param_name,
+                                    "endpoint": probe_url,
+                                    "title": f"IDOR/BOLA in parameter {param_name!r}",
+                                    "severity": "High",
+                                    "evidence": idor_res.get("evidence_snippet", "Cross-object access confirmed"),
+                                    "payload_used": f"ID mutation to {idor_res.get('vulnerable_id')}",
+                                    "remediation": "Implement robust server-side object-level access control (RBAC/ABAC).",
+                                    "cwe": "CWE-639",
+                                    "owasp_top10": "A01:2021 — Broken Access Control",
+                                    "confidence": idor_res.get("confidence", 0.90),
+                                    "tool": "IDORSkill",
+                                    "evidence_sources": ["IDORSkill/MatrixChecker"],
+                                }
 
                     if res_dict:
                         # Adjudicate via Evidence Court

@@ -47,6 +47,8 @@ def main():
     p.add_argument("--dry-run", action="store_true", help="Simulate pipeline plan without sending active network packets")
     p.add_argument("--lab-mode", "--allow-private-ips", dest="lab_mode", action="store_true", help="Allow RFC1918 private IP subnets (10.x, 172.16.x, 192.168.x) for authorized local labs")
     p.add_argument("--triad", action="store_true", help="Run with 100%% Local AI Triad (WhiteRabbitNeo + xploiter + Qwen 2.5 Coder)")
+    p.add_argument("--allow-no-ai", "--no-ai", "--degraded", dest="allow_no_ai", action="store_true", help="Allow pipeline to run in degraded heuristic mode if local AI model server is offline or models are missing")
+    p.add_argument("--ollama-host", default=None, help="Custom Ollama host endpoint (default: http://127.0.0.1:11434)")
     p.add_argument("--proxy", "--burp", dest="proxy", default=None, help="Upstream HTTP/Burp Suite proxy (e.g. http://127.0.0.1:8080)")
     p.add_argument("--ask", help="Directly query the Local Triad Agent with a security question, code snippet, or target")
     p.add_argument("--max-steps", type=int, default=15, help="Max steps budget for HunterAI runtime")
@@ -64,7 +66,7 @@ def main():
 
     if args.target:
         import asyncio
-        if args.hunter or args.workflow or args.mode in ("hunter", "bugbounty") or args.profile != "safe" or args.scope_file or args.triad or args.lab_mode or args.proxy or args.deep or args.timeout_multiplier > 1.0:
+        if args.hunter or args.workflow or args.mode in ("hunter", "bugbounty") or args.profile != "safe" or args.scope_file or args.triad or args.lab_mode or args.proxy or args.deep or args.dry_run or args.timeout_multiplier > 1.0 or args.allow_no_ai:
             # Auto-upgrade profile: --hunter or --mode full/bugbounty → "hunter"
             if args.hunter or args.mode in ("hunter", "bugbounty"):
                 effective_profile = "hunter"
@@ -103,10 +105,14 @@ def main():
                 allow_private_ips=args.lab_mode,
                 proxy=args.proxy,
                 timeout_multiplier=effective_mult,
+                allow_no_ai=args.allow_no_ai,
+                ollama_host=args.ollama_host,
             )
             res = asyncio.run(orch.run())
             if res.get("status") == "aborted":
                 print(f"\n[!] HunterAI Pipeline Aborted: {res.get('reason')} (Target: {res.get('target')})")
+                if res.get("error"):
+                    print(f"[!] Detail: {res.get('error')}")
                 return
             print(f"\n[*] HunterAI Pipeline Complete! Status: {res['status']}")
             print(f"[*] Profile: {effective_profile} (Timeout Multiplier: {effective_mult}x) | Rate Limit: {args.rate_limit} rps")

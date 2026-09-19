@@ -78,6 +78,7 @@ from hunter_ai.pipeline.parameter_intelligence import (
     ParameterRole,
     inject_url_parameter,
 )
+from hunter_ai.brain.ai_preflight import AIPreflightGate, AIPreflightResult
 
 logger = logging.getLogger("hunter_ai.pipeline")
 
@@ -109,6 +110,8 @@ class HunterPipelineOrchestrator:
         use_triad: bool = False,
         allow_private_ips: bool = False,
         timeout_multiplier: float = 1.0,
+        allow_no_ai: bool = False,
+        ollama_host: Optional[str] = None,
     ):
         self.raw_target = target.strip()
         self.session_id = session_id or f"hunter_{int(time.time())}"
@@ -134,6 +137,10 @@ class HunterPipelineOrchestrator:
         self.dry_run = dry_run
         self.use_triad = use_triad
         self.allow_private_ips = allow_private_ips
+        self.allow_no_ai = allow_no_ai
+        self.ollama_host = ollama_host
+        self.ai_preflight_result: Optional[AIPreflightResult] = None
+        self.ai_degraded: bool = False
         self.program_metadata: Optional[ProgramMetadata] = None
 
         # Target normalization
@@ -262,7 +269,70 @@ class HunterPipelineOrchestrator:
             logger.error(f"Failed to save artifact {filename}: {e}")
             return file_path
 
-    # ── STAGE 00: SCOPE & SAFETY ───────────────────────────────────────────────
+    # ── STAGE 00: AI PREFLIGHT GATE ────────────────────────────────────────────
+    async def stage_ai_preflight(self) -> bool:
+        self.engagement_mgr.start_stage("00_preflight")
+        self.fsm.transition_to(HunterState.PREFLIGHT, "Initiating AI Preflight Gate")
+        await self._emit("preflight_start", message="Probing Local AI Model Server & Cognitive Triad Readiness")
+
+        self.fsm.transition_to(HunterState.AI_CONNECTING, f"Checking connectivity to {self.ollama_host or 'default host'}")
+
+        # Run 3-tier preflight check asynchronously
+        result = await AIPreflightGate.run_preflight_async(
+            host=self.ollama_host,
+            allow_degraded=self.allow_no_ai,
+            timeout_sec=3.0,
+            inference_timeout_sec=10.0,
+        )
+        self.ai_preflight_result = result
+        self.ai_degraded = result.degraded
+
+        # Advance state machine based on result
+        if not result.online:
+            self.fsm.transition_to(HunterState.AI_UNAVAILABLE, result.error_message or "Ollama host unreachable")
+            if self.allow_no_ai:
+                self.fsm.transition_to(HunterState.DEGRADED_MODE, "Continuing in deterministic heuristic mode (--allow-no-ai)")
+            else:
+                self.fsm.transition_to(HunterState.ABORTED, "Scan aborted due to AI Preflight failure")
+        else:
+            self.fsm.transition_to(HunterState.MODEL_VERIFYING, "Verifying local model catalog")
+            any_model = any(m.available for m in result.models.values())
+            if not any_model:
+                self.fsm.transition_to(HunterState.MODEL_MISSING, "No Triad models found in Ollama")
+                if self.allow_no_ai:
+                    self.fsm.transition_to(HunterState.DEGRADED_MODE, "Continuing in deterministic heuristic mode (--allow-no-ai)")
+                else:
+                    self.fsm.transition_to(HunterState.ABORTED, "Scan aborted: required models missing")
+            else:
+                self.fsm.transition_to(HunterState.INFERENCE_VERIFYING, "Executing live inference probe")
+                if result.inference_ok:
+                    self.fsm.transition_to(HunterState.AI_READY, "All preflight checks certified")
+                else:
+                    self.fsm.transition_to(HunterState.INFERENCE_FAILED, result.error_message or "Inference probe failed")
+                    if self.allow_no_ai:
+                        self.fsm.transition_to(HunterState.DEGRADED_MODE, "Continuing in deterministic heuristic mode (--allow-no-ai)")
+                    else:
+                        self.fsm.transition_to(HunterState.ABORTED, "Scan aborted: live inference failed")
+
+        banner = AIPreflightGate.format_status_banner(result)
+        print(f"\n{banner}\n")
+
+        # Save artifacts
+        self._save_stage_artifact("00_preflight", "ai_status.json", result.to_dict())
+        self._save_stage_artifact("00_preflight", "preflight_banner.txt", banner)
+        self.engagement_mgr.complete_stage("00_preflight", item_count=len(result.models))
+
+        if not result.allowed:
+            await self._emit("preflight_failed", message=f"AI Preflight Gate FAILED ({result.error_message or 'Server down'}). Pipeline aborted.")
+            return False
+
+        if result.degraded:
+            await self._emit("preflight_degraded", message="AI Preflight Gate: Operating in DEGRADED_MODE (Deterministic Heuristics Only)")
+        else:
+            await self._emit("preflight_passed", message=f"AI Preflight Gate: AI_READY (Latency: {result.latency_ms:.1f}ms, Inference: {result.inference_latency_ms:.1f}ms)")
+
+        return True
+
     # ── STAGE 00: SCOPE & SAFETY ───────────────────────────────────────────────
     async def stage_scope_check(self) -> bool:
         self.engagement_mgr.start_stage("00_scope")
@@ -1974,7 +2044,17 @@ class HunterPipelineOrchestrator:
                 logger.debug(f"BurpAgent startup error: {be}")
                 print(f"[!] [BURP] BurpAgent could not start: {be}")
 
-        # Step 0: Scope
+        # Step 0: AI Preflight Gate (3-Tier Check: Host, Models, Live Inference)
+        if not await self.stage_ai_preflight():
+            return {
+                "status": "aborted",
+                "reason": "ai_preflight_failed",
+                "target": self.raw_target,
+                "error": self.ai_preflight_result.error_message if self.ai_preflight_result else "AI server offline",
+                "preflight": self.ai_preflight_result.to_dict() if self.ai_preflight_result else {},
+            }
+
+        # Step 1: Scope
         if not await self.stage_scope_check():
             return {"status": "aborted", "reason": "out_of_scope", "target": self.raw_target}
 

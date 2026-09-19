@@ -31,10 +31,12 @@ class SSTISkill(BaseSkill):
     }
 
     PROBE_TRIADS = [
+        ("{{53+19}}", "{{41+31}}", "72", "Jinja2/Twig"),
         ("{{9871*43}}", "{{424453//43}}", "424453", "Jinja2/Twig"),
+        ("${53+19}", "${41+31}", "72", "Java EL / Spring Expression"),
         ("${9871*43}", "${424453//43}", "424453", "Java EL / Spring Expression"),
-        ("<%= 9871*43 %>", "<%= 424453/43 %>", "424453", "Ruby ERB / EJS"),
-        ("#{9871*43}", "#{424453//43}", "424453", "Ruby / SpEL"),
+        ("<%= 53+19 %>", "<%= 41+31 %>", "72", "Ruby ERB / EJS"),
+        ("#{53+19}", "#{41+31}", "72", "Ruby / SpEL"),
     ]
 
     async def run(self, target_url: str, param_name: str = "q", **kwargs) -> SkillResult:
