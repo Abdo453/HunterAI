@@ -1013,7 +1013,34 @@ class HunterPipelineOrchestrator:
                 message="Directory fuzzing skipped under passive profile"
             )
         else:
-            resolved_wl = self.wordlist_mgr.get_wordlist("directories", profile=self.profile)
+            # ── Wordlist Intelligence Selection & Tailored Hybrid Compilation ──
+            custom_cands = self.wordlist_agent.generate_custom_candidates(WordlistCategory.DIRECTORIES, max_candidates=500)
+            static_wl = self.wordlist_agent.resolve_wordlist_path(WordlistCategory.DIRECTORIES, profile=self.profile)
+            
+            # Print prominent Wordlist Intelligence Banner
+            print("\n" + "─"*60)
+            print("  🧠 [WORDLIST_INTEL] Attack Surface Wordlist Intelligence")
+            print(f"  🎯 Target Context: {self.domain} | Profile: {self.profile.upper()}")
+            if self.wordlist_agent.context.detected_tech:
+                print(f"  🧩 Detected Technologies: {', '.join(sorted(list(self.wordlist_agent.context.detected_tech)))}")
+            print(f"  📚 Base Selected Wordlist: {os.path.basename(static_wl)}")
+            print(f"  🧬 Target Mutated Candidates: {len(custom_cands)} tokens generated")
+            
+            # Compile tailored hybrid list
+            tailored_wl_path = os.path.join(self.artifact_root, "06_content", "tailored_fuzz_wordlist.txt")
+            try:
+                resolved_wl = self.wordlist_agent.build_custom_wordlist_file(
+                    destination_path=tailored_wl_path,
+                    category=WordlistCategory.DIRECTORIES,
+                    include_base_static=True,
+                    max_candidates=1000 if self.profile in ("full", "hunter", "deep") else 300
+                )
+                print(f"  🚀 Active Hybrid Wordlist: {tailored_wl_path}")
+            except Exception as e:
+                resolved_wl = static_wl
+                print(f"  ⚠️ Hybrid compilation fallback: {resolved_wl} ({e})")
+            print("─"*60 + "\n")
+
             # Primary fuzzer: ffuf (faster, smarter filtering)
             fuzz_lines, meta_fuzz = await self.master_tools.execute_artifact(
                 "ffuf", {"url": self.base_url, "wordlist": resolved_wl}, self.engagement_mgr, "06_content", input_source="04_alive/alive_hosts.txt"

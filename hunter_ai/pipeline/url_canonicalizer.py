@@ -104,9 +104,10 @@ class URLCanonicalizer:
 
             path = parts.path or "/"
             path_pat = cls.get_path_pattern(path)
-            category = "API" if ("/api" in path or path.startswith("/v1") or path.startswith("/v2")) else (
-                "ADMIN" if "admin" in path else (
-                    "IMAGE" if any(path.endswith(ext) for ext in ParameterIntelligenceEngine.STATIC_EXTENSIONS) else "WEB"
+            is_static = any(path.lower().endswith(ext) for ext in ParameterIntelligenceEngine.STATIC_EXTENSIONS)
+            category = "STATIC" if is_static else (
+                "API" if ("/api" in path or path.startswith("/v1") or path.startswith("/v2")) else (
+                    "ADMIN" if "admin" in path else "WEB"
                 )
             )
 
@@ -125,10 +126,10 @@ class URLCanonicalizer:
             else:
                 families[fam_key].raw_urls_count += 1
 
-            # Only add distinct canonical URLs to endpoints (max 10 per family cluster)
+            # Only add distinct canonical URLs to endpoints (skip static media, max 10 per family cluster)
             if canon_u not in seen_canonical:
                 seen_canonical.add(canon_u)
-                if families[fam_key].raw_urls_count <= 10:
+                if not is_static and families[fam_key].raw_urls_count <= 10:
                     endpoints.append(EndpointRecord(
                         url=canon_u,
                         path=path,
