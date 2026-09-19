@@ -120,6 +120,7 @@ class CouncilState:
         self.endpoints: List[Dict[str, Any]] = []
         self.parameters: List[Dict[str, Any]] = []
         self.javascript_secrets: List[Dict[str, Any]] = []
+        self.traffic_transactions: List[Dict[str, Any]] = []
         self.hypotheses: Dict[str, CouncilHypothesis] = {}
         self.confirmed_findings: List[Dict[str, Any]] = []
         self.rejected_claims: List[Dict[str, Any]] = []
@@ -150,11 +151,26 @@ class CouncilState:
         if secrets:
             self.javascript_secrets.extend(secrets)
 
+    def update_traffic(self, transactions: Optional[List[Dict[str, Any]]] = None) -> None:
+        """Ingests live HTTP transactions from Burp Suite / Browser proxy."""
+        if transactions:
+            self.traffic_transactions.extend(transactions)
+
     def get_context_slice_for_role(self, role: CouncilRole, claim: Optional[CouncilHypothesis] = None) -> Dict[str, Any]:
         """Provides a tailored, compact context slice suited for the model's specialty."""
         base_ctx = {
             "target": self.domain,
             "technologies": sorted(list(self.detected_technologies)),
+            "traffic_count": len(self.traffic_transactions),
+            "recent_traffic_samples": [
+                {
+                    "method": t.get("method", "GET"),
+                    "url": t.get("url", ""),
+                    "status_code": t.get("status_code", 200),
+                    "tool": t.get("tool_source", "proxy"),
+                }
+                for t in self.traffic_transactions[-5:]
+            ] if self.traffic_transactions else [],
         }
 
         if role == CouncilRole.OFFENSIVE_STRATEGIST:
@@ -164,6 +180,9 @@ class CouncilState:
                 "claim": claim.to_dict() if claim else None,
                 "high_risk_params": [p for p in self.parameters if p.get("context", {}).get("risk_level") in ("CRITICAL", "HIGH")][:15],
                 "active_endpoints": [e.get("url") for e in self.endpoints if e.get("category") in ("API", "ADMIN")][:20],
+                "burp_interesting_requests": [
+                    t for t in self.traffic_transactions if t.get("status_code", 200) not in (404, 301, 302)
+                ][-5:],
             }
 
         elif role == CouncilRole.CODE_AUDITOR:

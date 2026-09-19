@@ -29,29 +29,6 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from core.burp_gateway.correlation import (
-    BurpCorrelationContext,
-    HDR_ENGAGEMENT_ID,
-    HDR_TRANSACTION_ID,
-    HDR_HYPOTHESIS_ID,
-    HDR_EXPERIMENT_ID,
-    HDR_PARENT_ID,
-    HDR_IDENTITY_ID,
-    HDR_INTENT,
-    HDR_ACTION_TYPE,
-)
-from core.burp_gateway.traffic_normalizer import (
-    BurpTrafficNormalizer,
-    CanonicalIdentity,
-    CanonicalRequest,
-    CanonicalResponse,
-    CanonicalTransaction,
-    TargetStateContext,
-    TrafficSource,
-)
-from core.governance.risk_budget_queue import RiskBudgetManager, RiskTier
-from core.scope_guard import ScopeGuard
-
 logger = logging.getLogger("hunter_ai.burp_research_controller")
 
 
@@ -89,6 +66,30 @@ class ControlActionReceipt:
             "audit_hash": self.audit_hash,
             "timestamp": self.timestamp,
         }
+
+
+from core.burp_gateway.correlation import (
+    BurpCorrelationContext,
+    HDR_ENGAGEMENT_ID,
+    HDR_TRANSACTION_ID,
+    HDR_HYPOTHESIS_ID,
+    HDR_EXPERIMENT_ID,
+    HDR_PARENT_ID,
+    HDR_IDENTITY_ID,
+    HDR_INTENT,
+    HDR_ACTION_TYPE,
+)
+from core.burp_gateway.traffic_normalizer import (
+    BurpTrafficNormalizer,
+    CanonicalIdentity,
+    CanonicalRequest,
+    CanonicalResponse,
+    CanonicalTransaction,
+    TargetStateContext,
+    TrafficSource,
+)
+from core.governance.risk_budget_queue import RiskBudgetManager, RiskTier
+from core.scope_guard import ScopeGuard
 
 
 @dataclass

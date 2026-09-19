@@ -105,7 +105,8 @@ class DesktopExportManager:
                 "05_Browser_and_Screenshots": target_dir / "05_Browser_and_Screenshots",
                 "06_Vulnerabilities_and_Findings": target_dir / "06_Vulnerabilities_and_Findings",
                 "07_Reports": target_dir / "07_Reports",
-                "08_Raw_Tool_Logs": target_dir / "08_Raw_Tool_Logs",
+                "08_Burp_Suite": target_dir / "08_Burp_Suite",
+                "09_Raw_Tool_Logs": target_dir / "09_Raw_Tool_Logs",
             }
             for f in folders.values():
                 f.mkdir(parents=True, exist_ok=True)
@@ -228,6 +229,26 @@ class DesktopExportManager:
                         if item.is_file():
                             shutil.copy2(item, folders["07_Reports"] / item.name)
 
+            # ── 9. Burp Suite Traffic & Experiments ───────────────────────────
+            for src_f in ["08_burp_suite"]:
+                src = artifact_path / src_f
+                if src.is_dir():
+                    for item in src.glob("*"):
+                        if item.is_file():
+                            shutil.copy2(item, folders["08_Burp_Suite"] / item.name)
+
+            # Copy burp specific files from 04_attack_surface and 12_vulnerabilities
+            for extra_src in [
+                artifact_path / "04_attack_surface" / "burp_traffic.json",
+                artifact_path / "12_vulnerabilities" / "burp_repeater_experiments.json",
+                artifact_path / "burp_traffic.db"
+            ]:
+                if extra_src.is_file():
+                    try:
+                        shutil.copy2(extra_src, folders["08_Burp_Suite"] / extra_src.name)
+                    except Exception:
+                        pass
+
             # Copy top-level Master Reports directly to root of target folder
             md_src = reports_dict.get("markdown")
             html_src = reports_dict.get("html")
@@ -243,15 +264,15 @@ class DesktopExportManager:
             if diff_src and os.path.isfile(diff_src):
                 shutil.copy2(diff_src, target_dir / "📈_TEMPORAL_DIFF.md")
 
-            # ── 9. Tool Logs ──────────────────────────────────────────────────
+            # ── 10. Tool Logs ─────────────────────────────────────────────────
             for tl in tool_logs:
                 if tl and os.path.isfile(tl):
                     try:
-                        shutil.copy2(tl, folders["08_Raw_Tool_Logs"] / os.path.basename(tl))
+                        shutil.copy2(tl, folders["09_Raw_Tool_Logs"] / os.path.basename(tl))
                     except Exception:
                         pass
 
-            # ── 10. Generate Top-Level OVERVIEW.md ─────────────────────────────
+            # ── 11. Generate Top-Level OVERVIEW.md ────────────────────────────
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             ai_mode_str = "AI_POWERED (Local Cognitive Triad)" if (ai_status and ai_status.get("allowed") and not ai_status.get("degraded")) else "DEGRADED_MODE (Deterministic Heuristics)"
 

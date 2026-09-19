@@ -43,7 +43,6 @@ from core.burp_gateway.traffic_normalizer import (
 )
 from core.controllers.burp_research_controller import (
     ActionStatus,
-    BurpResearchController,
     ScopeViolationError,
 )
 from core.governance.risk_budget_queue import RiskBudgetManager, RiskTier
@@ -60,7 +59,7 @@ class BurpControlSensorLayer:
 
     def __init__(
         self,
-        research_controller: Optional[BurpResearchController] = None,
+        research_controller: Optional[Any] = None,
         scope_guard: Optional[ScopeGuard] = None,
         risk_budget: Optional[RiskBudgetManager] = None,
         event_stream: Optional[Any] = None,
@@ -70,12 +69,16 @@ class BurpControlSensorLayer:
         self.risk_budget = risk_budget or RiskBudgetManager()
         self.event_stream = event_stream
         self.capture_store = capture_store
-        self.controller = research_controller or BurpResearchController(
-            scope_guard=self.scope_guard,
-            risk_budget_manager=self.risk_budget,
-            capture_store=self.capture_store,
-            event_stream=self.event_stream,
-        )
+        if research_controller is not None:
+            self.controller = research_controller
+        else:
+            from core.controllers.burp_research_controller import BurpResearchController
+            self.controller = BurpResearchController(
+                scope_guard=self.scope_guard,
+                risk_budget_manager=self.risk_budget,
+                capture_store=self.capture_store,
+                event_stream=self.event_stream,
+            )
 
     def submit_experiment(self, contract: ExperimentContract) -> ExperimentExecutionRecord:
         """

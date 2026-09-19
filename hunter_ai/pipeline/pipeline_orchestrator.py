@@ -22,7 +22,7 @@ import shutil
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, parse_qs
 
 import httpx
 
@@ -242,6 +242,162 @@ class HunterPipelineOrchestrator:
         self.secrets: List[SecretFindingRecord] = []
         self.findings: List[HunterFinding] = []
         self.tool_logs: List[str] = []
+
+        # Burp Suite Sensory & Control Subsystem
+        self.burp_detected: bool = False
+        self._burp_agent: Optional[Any] = None
+        self.burp_controller: Optional[Any] = None
+        self.burp_research_controller: Optional[Any] = None
+        self.burp_transactions: List[Dict[str, Any]] = []
+        self.burp_repeater_experiments: List[Dict[str, Any]] = []
+        self._triad_instance: Optional[Any] = None
+
+    async def _init_burp_agent_subsystem(self):
+        """
+        Auto-detects active Burp Suite proxy (127.0.0.1:8080) and initializes
+        BurpAgent & BurpGateway on port 8085 with bidirectional event wiring.
+        """
+        import socket
+        burp_proxy_host = "127.0.0.1"
+        burp_proxy_port = 8080
+
+        # 1. Auto-detect Burp Proxy if self.proxy is not explicitly provided
+        if not self.proxy:
+            try:
+                with socket.create_connection((burp_proxy_host, burp_proxy_port), timeout=0.3):
+                    self.proxy = f"http://{burp_proxy_host}:{burp_proxy_port}"
+                    self.burp_detected = True
+                    logger.info(f"[BURP] Auto-detected active Burp Suite proxy on {self.proxy}")
+                    print(f"\n[+] [BURP SUITE] Auto-detected active Burp Suite proxy on {self.proxy}")
+            except (socket.timeout, ConnectionRefusedError, OSError):
+                pass
+
+        # 2. Initialize BurpAgent, BurpController, and BurpResearchController
+        try:
+            from agents.burp_agent.burp_agent import BurpAgent
+            from core.controllers.burp_controller import BurpController
+
+            burp_gw_port = 8085
+            self._burp_agent = BurpAgent(
+                db_path=str(Path(self.artifact_root) / "burp_traffic.db"),
+                port=burp_gw_port,
+                scope_includes=[self.domain, f"*.{self.domain}"],
+            )
+            self.burp_controller = BurpController()
+            self.burp_research_controller = getattr(self._burp_agent.gateway, "research_controller", None)
+
+            # Hook real-time traffic ingestion into Orchestrator endpoints, parameters & Council
+            async def _on_burp_traffic(payload: Dict[str, Any]):
+                await self._process_burp_traffic_event(payload)
+
+            orig_cb = self._burp_agent.gateway.on_traffic_cb
+            async def _chained_traffic_cb(p: Dict[str, Any]):
+                if orig_cb:
+                    try:
+                        await orig_cb(p)
+                    except Exception:
+                        pass
+                await _on_burp_traffic(p)
+
+            self._burp_agent.gateway.on_traffic_cb = _chained_traffic_cb
+
+            # Start background AI pipeline and HTTP REST listener
+            await self._burp_agent.start_background_workers()
+
+            print(f"[+] [BURP SUITE] Gateway listener active on port {burp_gw_port}")
+            print(f"[+] [BURP SUITE] Extension endpoint: http://127.0.0.1:{burp_gw_port}")
+            if self.proxy:
+                print(f"[+] [BURP SUITE] All Playwright browser & HTTP client traffic routing via: {self.proxy}\n")
+            await self._emit("burp_started", message=f"Burp Suite Agent active on :{burp_gw_port} (Proxy: {self.proxy or 'None'})")
+
+        except Exception as be:
+            logger.warning(f"[BURP] BurpAgent startup notice: {be}")
+
+    async def _process_burp_traffic_event(self, payload: Dict[str, Any]):
+        """
+        Parses incoming Burp traffic, dynamically extracting endpoints,
+        query/body parameters, and feeding AgentEvidence to the Council & Triad.
+        """
+        try:
+            req_str = payload.get("request", "")
+            host = payload.get("host", self.domain)
+            port = int(payload.get("port", 80))
+            proto = payload.get("protocol", "http")
+
+            if not req_str:
+                return
+
+            first_line = req_str.split("\n", 1)[0].strip()
+            parts = first_line.split()
+            method = parts[0] if parts else "GET"
+            raw_path = parts[1] if len(parts) > 1 else "/"
+            full_url = f"{proto}://{host}:{port}{raw_path}" if port not in (80, 443) else f"{proto}://{host}{raw_path}"
+
+            # Scope validation
+            is_valid, _ = self.strict_scope_engine.validate_url(full_url)
+            if not is_valid:
+                return
+
+            tx_record = {
+                "method": method,
+                "url": full_url,
+                "host": host,
+                "tool_source": payload.get("tool", "proxy"),
+                "status_code": payload.get("status_code", 200),
+                "timestamp": time.time(),
+            }
+            self.burp_transactions.append(tx_record)
+
+            # Discover endpoint
+            clean_url = full_url.split("?")[0]
+            clean_path = urlparse(clean_url).path or "/"
+            if not any(e.url == clean_url for e in self.endpoints):
+                ep = EndpointRecord(
+                    url=clean_url,
+                    path=clean_path,
+                    method=method,
+                    source="burp_proxy",
+                    status_code=200,
+                    category="BURP_INGESTION"
+                )
+                self.endpoints.append(ep)
+
+            # Discover query parameters
+            parsed_u = urlparse(full_url)
+            if parsed_u.query:
+                q_params = parse_qs(parsed_u.query)
+                for qk, qvals in q_params.items():
+                    if not any(p.endpoint == clean_url and p.parameter == qk for p in self.parameters):
+                        pr = ParameterRecord(
+                            parameter=qk,
+                            endpoint=clean_url,
+                            method=method,
+                            source="burp_proxy",
+                            potential_classes=["IDOR", "Injection", "SSRF"],
+                            sample_value=qvals[0] if qvals else "",
+                            context={"role": "input", "risk_level": "MEDIUM", "is_active_candidate": True}
+                        )
+                        self.parameters.append(pr)
+
+            # Feed to Cognitive Council State
+            if hasattr(self, "council") and self.council and hasattr(self.council, "state"):
+                self.council.state.update_traffic([tx_record])
+
+            # Feed to Triad EvidenceBus if active
+            if hasattr(self, "_triad_instance") and self._triad_instance and hasattr(self._triad_instance, "bus"):
+                from hunter_ai.brain.local_triad_agent import AgentEvidence
+                self._triad_instance.bus.publish_evidence(
+                    AgentEvidence(
+                        source="burp_proxy",
+                        category="traffic",
+                        observation=f"Intercepted {method} {clean_url} with params {list(q_params.keys()) if parsed_u.query else []}",
+                        evidence_data=tx_record,
+                    )
+                )
+
+            await self._emit("burp_traffic_ingested", method=method, url=clean_url)
+        except Exception as e:
+            logger.debug(f"[BurpTraffic] Processing error: {e}")
 
     async def _emit(self, event: str, **data):
         payload = {"event": event, "session_id": self.session_id, "state": self.fsm.current_state.value, **data}
@@ -1294,6 +1450,12 @@ class HunterPipelineOrchestrator:
         self._save_stage_artifact("04_attack_surface", "discovered_endpoints.json", [e.model_dump() for e in self.endpoints])
         self._save_stage_artifact("04_attack_surface", "discovered_parameters.json", [p.model_dump() for p in self.parameters])
 
+        # Burp Traffic Artifacts
+        if self.burp_transactions:
+            self._save_stage_artifact("04_attack_surface", "burp_traffic.json", self.burp_transactions)
+            self._save_stage_artifact("08_burp_suite", "burp_proxy_traffic.json", self.burp_transactions)
+            self._save_stage_artifact("08_burp_suite", "traffic_summary.txt", f"Intercepted {len(self.burp_transactions)} in-scope HTTP transactions from Burp Suite / Proxy.\n")
+
         self.engagement_mgr.complete_stage("06_content", item_count=len(fuzz_lines))
         self.engagement_mgr.complete_stage("07_urls", item_count=len(self.endpoints))
         self.engagement_mgr.complete_stage("08_parameters", item_count=len(self.parameters))
@@ -1357,6 +1519,36 @@ class HunterPipelineOrchestrator:
                 await self._emit("council_debate_done", count=len(debated_records), message=f"Cognitive Council evaluated {len(debated_records)} hypotheses.")
             except Exception as e:
                 logger.debug(f"Cognitive Council debate notice: {e}")
+
+        # ── Burp Repeater Controlled Differential Probing ────────────────────
+        if self.burp_controller and not self.dry_run and self.authorized:
+            try:
+                for hypo in hypotheses[:5]:
+                    h_url = hypo.get("target_url")
+                    h_param = hypo.get("param")
+                    h_type = hypo.get("vuln_type", "Generic")
+                    if not h_url:
+                        continue
+
+                    exp = self.burp_controller.create_repeater_experiment(
+                        base_tx_id=f"tx_{int(time.time())}",
+                        hypothesis=f"Testing {h_type} differential behavior on {h_param}",
+                        mutation_description=f"Differential probe for {h_type}",
+                        mutated_request={
+                            "method": "GET",
+                            "url": inject_url_parameter(h_url, h_param, "' OR '1'='1") if h_param else h_url,
+                            "headers": {"User-Agent": "HunterAI-Burp-Repeater/1.0", "X-Hunter-Probe": h_type}
+                        }
+                    )
+                    executed_exp = await self.burp_controller.execute_experiment(exp.experiment_id)
+                    self.burp_repeater_experiments.append(executed_exp.to_dict())
+
+                if self.burp_repeater_experiments:
+                    self._save_stage_artifact("12_vulnerabilities", "burp_repeater_experiments.json", self.burp_repeater_experiments)
+                    self._save_stage_artifact("08_burp_suite", "burp_repeater_experiments.json", self.burp_repeater_experiments)
+                    await self._emit("burp_repeater_done", count=len(self.burp_repeater_experiments), message=f"Burp Repeater executed {len(self.burp_repeater_experiments)} differential experiments.")
+            except Exception as e:
+                logger.debug(f"[BurpRepeater] Execution notice: {e}")
 
         self.fsm.transition_to(HunterState.TEST, "Executing targeted vulnerability skills")
         await self._emit("test_start", count=len(hypotheses), message="Dispatching testing skills with context...")
@@ -1518,7 +1710,8 @@ class HunterPipelineOrchestrator:
         if self.profile in ("full", "hunter", "deep"):
             try:
                 from hunter_ai.brain.local_triad_agent import LocalTriadAgent
-                triad = LocalTriadAgent()
+                triad = LocalTriadAgent(ollama_host=self.ollama_host)
+                self._triad_instance = triad
 
                 # 1. xploiter/pentester: Recon triage — prioritize discovered assets
                 subdomain_list = [la.url for la in self.live_assets[:30]]
@@ -1944,6 +2137,26 @@ class HunterPipelineOrchestrator:
         self._save_stage_artifact("13_evidence", "evidence_graph.json", self.evidence_graph.to_dict())
         self._save_stage_artifact("07_verification", "verification_proofs.json", findings_json)
 
+        # Register confirmed findings with Burp Gateway and export issues
+        burp_issues = []
+        if hasattr(self, "_burp_agent") and self._burp_agent and hasattr(self._burp_agent, "gateway"):
+            for f_obj in self.findings:
+                try:
+                    f_dict = f_obj.model_dump() if hasattr(f_obj, "model_dump") else f_obj
+                    self._burp_agent.gateway.register_confirmed_finding({
+                        "title": f_dict.get("finding", "Finding"),
+                        "severity": f_dict.get("severity", "HIGH"),
+                        "endpoint": f_dict.get("endpoint", self.base_url),
+                        "vuln_type": f_dict.get("vuln_type", "Vulnerability"),
+                        "description": f_dict.get("description", f_dict.get("finding", "")),
+                        "evidence": str(f_dict.get("evidence", "")),
+                    })
+                    burp_issues.append(f_dict)
+                except Exception as be:
+                    logger.debug(f"[BurpGateway] Finding registration notice: {be}")
+        if burp_issues:
+            self._save_stage_artifact("08_burp_suite", "burp_findings_issues.json", burp_issues)
+
         self.engagement_mgr.complete_stage("12_vulnerabilities", item_count=len(self.findings))
         self.engagement_mgr.complete_stage("13_evidence", item_count=len(proofs_json))
 
@@ -2138,26 +2351,8 @@ class HunterPipelineOrchestrator:
         # 🔬 Print tool availability diagnostic so user knows what runs natively
         self.master_tools.print_tools_status(profile=self.profile)
 
-        # 🔴 BurpAgent — Start background Burp Suite listener if --proxy is set
-        burp_agent_task = None
-        if self.proxy:
-            try:
-                from agents.burp_agent.burp_agent import BurpAgent
-                from agents.base_agent import AgentTask
-                burp_port = 8085
-                self._burp_agent = BurpAgent(
-                    db_path=str(Path(self.artifact_root) / "burp_traffic.db"),
-                    port=burp_port,
-                    scope_includes=[self.domain, f"*.{self.domain}"],
-                )
-                await self._burp_agent.start_background_workers()
-                print(f"\n[+] 🔴 [BURP SUITE] Traffic listener active on port {burp_port}")
-                print(f"[+] 🔴 [BURP SUITE] Configure Burp Extension → HunterAI → http://127.0.0.1:{burp_port}")
-                print(f"[+] 🔴 [BURP SUITE] All browser Playwright traffic will also route through: {self.proxy}\n")
-                await self._emit("burp_started", message=f"🔴 Burp Suite listener active on :{burp_port} — intercept all traffic via {self.proxy}")
-            except Exception as be:
-                logger.debug(f"BurpAgent startup error: {be}")
-                print(f"[!] [BURP] BurpAgent could not start: {be}")
+        # 🔴 BurpAgent & Gateway Subsystem (Auto-Detect 127.0.0.1:8080 & Launch Port 8085)
+        await self._init_burp_agent_subsystem()
 
         # Step 0: AI Preflight Gate (3-Tier Check: Host, Models, Live Inference)
         if not await self.stage_ai_preflight():
