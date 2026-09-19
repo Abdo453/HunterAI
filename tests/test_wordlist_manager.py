@@ -82,23 +82,23 @@ def test_simulated_kali_seclists_priority():
         
         # 1. DNS Deep Profile must pick 110,000 list
         res_dns_deep = wm.get_wordlist("dns", profile="deep")
-        assert res_dns_deep == str(f_dns_deep)
+        assert Path(res_dns_deep).resolve() == f_dns_deep.resolve()
         
         # 2. DNS Safe Profile must pick 5,000 list
         res_dns_safe = wm.get_wordlist("dns", profile="safe")
-        assert res_dns_safe == str(f_dns_quick)
+        assert Path(res_dns_safe).resolve() == f_dns_quick.resolve()
         
         # 3. Directory Deep Profile must pick directory-list-2.3-medium.txt
         res_dir_deep = wm.get_wordlist("directories", profile="deep")
-        assert res_dir_deep == str(f_web_med)
+        assert Path(res_dir_deep).resolve() == f_web_med.resolve()
         
         # 4. Directory Safe Profile must pick common.txt
         res_dir_safe = wm.get_wordlist("directories", profile="safe")
-        assert res_dir_safe == str(f_web_com)
+        assert Path(res_dir_safe).resolve() == f_web_com.resolve()
         
         # 5. Parameters must pick burp-parameter-names.txt
         res_params = wm.get_wordlist("parameters")
-        assert res_params == str(f_params)
+        assert Path(res_params).resolve() == f_params.resolve()
 
 
 def test_convenience_function():

@@ -80,6 +80,7 @@ from hunter_ai.pipeline.parameter_intelligence import (
 )
 from hunter_ai.brain.ai_preflight import AIPreflightGate, AIPreflightResult
 from hunter_ai.pipeline.desktop_exporter import DesktopExportManager
+from core.wordlist_intelligence import WordlistIntelligenceAgent, WordlistCategory, AttackPhase
 
 logger = logging.getLogger("hunter_ai.pipeline")
 
@@ -207,6 +208,8 @@ class HunterPipelineOrchestrator:
             storage_dir=str(Path(self.artifact_root) / "auth_context")
         )
         self.wordlist_mgr = WordlistManager()
+        self.wordlist_agent = WordlistIntelligenceAgent(target=self.domain, auto_index=False)
+        self.wordlist_mgr.intelligence = self.wordlist_agent
         self.tool_registry = ToolRegistry(
             capability_matrix=CapabilityMatrix(authorized=self.authorized)
         )
@@ -625,6 +628,15 @@ class HunterPipelineOrchestrator:
         self._save_stage_artifact("02_subdomains", "unique_subdomains.txt", unique_subs_text)
         self._save_stage_artifact("02_subdomains", "assets_inventory.json", [r.model_dump() for r in self.subdomains])
 
+        # Ingest subdomains into Wordlist Intelligence and generate domain mutations
+        try:
+            sub_names = [r.asset for r in self.subdomains]
+            mutated_subs = self.wordlist_agent.ingest_discovery("subdomain", sub_names)
+            if mutated_subs:
+                self._save_stage_artifact("02_subdomains", "mutated_subdomains.txt", "\n".join(mutated_subs))
+        except Exception as e:
+            logger.debug(f"Wordlist intelligence subdomains ingestion notice: {e}")
+
         # Backwards compatibility
         self._save_stage_artifact("01_recon", "all_subdomains.txt", all_subs_text)
         self._save_stage_artifact("02_normalized_assets", "assets_inventory.json", [r.model_dump() for r in self.subdomains])
@@ -764,6 +776,21 @@ class HunterPipelineOrchestrator:
         # Save to 11_technology
         self._save_stage_artifact("11_technology", "tech_stack.json", tech_json)
         self._save_stage_artifact("11_technology", "httpx_tech.json", tech_json)
+
+        # Ingest detected technologies into Wordlist Intelligence
+        try:
+            all_techs = []
+            for a in self.live_assets:
+                if a.technologies:
+                    all_techs.extend(a.technologies)
+                if a.server:
+                    all_techs.append(a.server)
+            if all_techs:
+                tech_mutations = self.wordlist_agent.ingest_discovery("technology", all_techs)
+                if tech_mutations:
+                    self._save_stage_artifact("11_technology", "tech_wordlist_candidates.txt", "\n".join(tech_mutations))
+        except Exception as e:
+            logger.debug(f"Wordlist intelligence technology ingestion notice: {e}")
 
         # Backwards compatibility
         self._save_stage_artifact("03_live_assets", "alive_hosts.txt", alive_txt)
@@ -1213,6 +1240,26 @@ class HunterPipelineOrchestrator:
         api_eps_text = "\n".join([e.url for e in api_eps]) if api_eps else ""
         self._save_stage_artifact("10_api", "api_endpoints.txt", api_eps_text)
         self._save_stage_artifact("10_api", "api_map.json", [e.model_dump() for e in api_eps])
+
+        # Ingest endpoints and parameters into Wordlist Intelligence and build customized target wordlists
+        try:
+            ep_urls = [e.url for e in self.endpoints]
+            param_names = [p.parameter for p in self.parameters]
+            if ep_urls:
+                self.wordlist_agent.ingest_discovery("endpoint", ep_urls)
+            if param_names:
+                self.wordlist_agent.ingest_discovery("parameter", param_names)
+
+            # Generate target-tailored custom wordlists
+            custom_dir_cands = self.wordlist_agent.generate_custom_candidates(WordlistCategory.DIRECTORIES, max_candidates=500)
+            if custom_dir_cands:
+                self._save_stage_artifact("06_content", "custom_target_wordlist.txt", "\n".join(custom_dir_cands))
+
+            custom_param_cands = self.wordlist_agent.generate_custom_candidates(WordlistCategory.PARAMETERS, max_candidates=500)
+            if custom_param_cands:
+                self._save_stage_artifact("08_parameters", "custom_parameters_wordlist.txt", "\n".join(custom_param_cands))
+        except Exception as e:
+            logger.debug(f"Wordlist intelligence attack surface ingestion notice: {e}")
 
         # Backwards compatibility
         self._save_stage_artifact("04_attack_surface", "discovered_endpoints.json", [e.model_dump() for e in self.endpoints])

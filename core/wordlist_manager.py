@@ -20,6 +20,8 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from core.wordlist_intelligence.agent import WordlistIntelligenceAgent
+
 logger = logging.getLogger("hunter_ai.wordlists")
 
 
@@ -180,6 +182,7 @@ class WordlistManager:
             self.roots.append(self.local_fallback_dir)
             
         self.ensure_fallbacks()
+        self.intelligence = WordlistIntelligenceAgent(custom_roots=self.roots, auto_index=False)
 
     def get_active_roots(self) -> List[Path]:
         """Returns list of roots that actually exist on the current filesystem."""
@@ -259,6 +262,14 @@ class WordlistManager:
             prof_mode = "safe"
         else:
             prof_mode = "standard"
+
+        # Check intelligence agent first
+        try:
+            intel_path = self.intelligence.resolve_wordlist_path(category_key, profile=prof_mode)
+            if intel_path and os.path.isfile(intel_path) and os.path.getsize(intel_path) > 0:
+                return intel_path
+        except Exception:
+            pass
 
         cat_candidates = self.WORDLIST_CANDIDATES.get(category_key, {})
         file_list = cat_candidates.get(prof_mode, cat_candidates.get("standard", []))
