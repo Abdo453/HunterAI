@@ -27,9 +27,10 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("hunter_ai.local_triad")
 
-MODEL_OFFENSIVE = "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest"
-MODEL_RECON = "xploiter/pentester:latest"
-MODEL_CODE = "qwen2.5-coder:14b"
+MODEL_OFFENSIVE = os.getenv("MODEL_OFFENSIVE", "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest")
+MODEL_RECON = os.getenv("MODEL_RECON", "xploiter/pentester:latest")
+MODEL_CODE = os.getenv("MODEL_CODE", "qwen2.5-coder:14b")
+MODEL_COORDINATOR = os.getenv("MODEL_COORDINATOR", "qwen3:8b")
 
 
 # ── 1. UNIFIED CONTRACTS & SCHEMAS ──────────────────────────────────────────
@@ -200,6 +201,29 @@ class LocalTriadAgent:
         self.ollama_host = raw
         self.bus = EvidenceBus()
         self._ollama_online: Optional[bool] = None
+        self._cached_tags: Optional[List[str]] = None
+
+    def _resolve_model(self, preferred: str, candidates: Optional[List[str]] = None) -> str:
+        """Dynamically matches installed Ollama tags (e.g. qwen3:8b, qwen2.5-coder:14b-tools)."""
+        if self._cached_tags is None:
+            try:
+                url = f"{self.ollama_host}/api/tags"
+                req = urllib.request.Request(url, headers={"User-Agent": "HunterAI/2.0"})
+                with urllib.request.urlopen(req, timeout=1.5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    self._cached_tags = [m.get("name", "") for m in data.get("models", [])]
+            except Exception:
+                self._cached_tags = []
+
+        tags = self._cached_tags or []
+        for t in tags:
+            if preferred.lower() == t.lower():
+                return t
+        for cand in (candidates or []):
+            for t in tags:
+                if cand.lower() in t.lower() or t.lower() in cand.lower():
+                    return t
+        return preferred
 
     async def _query_ollama(
         self,
@@ -213,9 +237,14 @@ class LocalTriadAgent:
         if self._ollama_online is False:
             return ""
 
+        resolved_model = self._resolve_model(
+            model,
+            [MODEL_COORDINATOR, MODEL_CODE, "qwen3:8b", "qwen2.5-coder:14b-tools", "qwen2.5-coder:14b", "whiterabbitneo", "xploiter"]
+        )
+
         url = f"{self.ollama_host}/api/chat"
         payload = {
-            "model": model,
+            "model": resolved_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -465,6 +494,11 @@ Evidence Package:
     async def process_prompt(self, user_prompt: str) -> Dict[str, Any]:
         """Routes generic prompts to the best specialist among the triad."""
         low = user_prompt.lower()
+        if any(w in low for w in ["orchestrat", "coordinat", "workflow", "plan", "decompose", "task"]):
+            system = "You are Qwen3 8B, master orchestrator and security reasoning coordinator. Break down tasks into structured execution plans, tool invocations, and agent assignments."
+            resp = await self._query_ollama(MODEL_COORDINATOR, system, user_prompt, temperature=0.2)
+            return {"assigned_model": MODEL_COORDINATOR, "role": "Master Orchestrator (Qwen3 8B)", "response": resp}
+
         if any(w in low for w in ["javascript", "js", "code", "regex", "parser", "ast", "deobfuscate"]):
             system = "You are Qwen 2.5 Coder 14B, specialized in security code analysis and AST parsing."
             resp = await self._query_ollama(MODEL_CODE, system, user_prompt, temperature=0.1)

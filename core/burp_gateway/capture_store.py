@@ -53,6 +53,8 @@ class CapturedTransaction:
     parent_request: Optional[str] = None
     endpoint_id: str = ""
     parameter_ids: List[str] = field(default_factory=list)
+    trace_id: str = ""          # Global trace ID propagated from Browser → Report
+    browser_action_id: str = "" # BA-XXXX linking browser click/submit to this request
 
     def __post_init__(self):
         if not self.tx_id and self.request_id:
@@ -130,6 +132,8 @@ class CaptureStore:
         self.timeline: List[Dict[str, Any]] = []
         self.findings: List[Dict[str, Any]] = []
         self.transactions: Dict[str, CapturedTransaction] = {}
+        self._trace_index: Dict[str, List[str]] = {}  # trace_id -> [tx_id, ...]
+        self._browser_action_index: Dict[str, List[str]] = {}  # browser_action_id -> [tx_id, ...]
 
         self._load_existing()
 
@@ -206,7 +210,9 @@ class CaptureStore:
                 "endpoint_id": tx.endpoint_id,
                 "parameter_ids": tx.parameter_ids,
                 "cookies": tx.cookies,
-                "auth_context": tx.auth_context
+                "auth_context": tx.auth_context,
+                "trace_id": tx.trace_id,
+                "browser_action_id": tx.browser_action_id
             }, f, indent=2)
 
         resp_path = self.root_dir / "responses" / f"{tx.tx_id}.json"
@@ -238,6 +244,11 @@ class CaptureStore:
         self.transactions[tx.tx_id] = tx
         if tx.request_id:
             self.transactions[tx.request_id] = tx
+
+        if tx.trace_id:
+            self._trace_index.setdefault(tx.trace_id, []).append(tx.tx_id)
+        if tx.browser_action_id:
+            self._browser_action_index.setdefault(tx.browser_action_id, []).append(tx.tx_id)
 
         # Log timeline event
         self.record_timeline_event("BURP_TRAFFIC_INGESTED", {
@@ -292,13 +303,35 @@ class CaptureStore:
                 content_type=resp_data.get("content_type", ""),
                 parent_request=r_data.get("parent_request"),
                 endpoint_id=r_data.get("endpoint_id", ""),
-                parameter_ids=r_data.get("parameter_ids", [])
+                parameter_ids=r_data.get("parameter_ids", []),
+                trace_id=r_data.get("trace_id", ""),
+                browser_action_id=r_data.get("browser_action_id", "")
             )
             self.transactions[request_id] = tx
             return tx
         except Exception as e:
             logger.debug(f"Failed to load transaction {request_id}: {e}")
             return None
+
+    def get_by_trace_id(self, trace_id: str) -> List[CapturedTransaction]:
+        """Returns all transactions associated with a trace_id"""
+        tx_ids = self._trace_index.get(trace_id, [])
+        results = []
+        for tid in tx_ids:
+            tx = self.get_transaction(tid)
+            if tx:
+                results.append(tx)
+        return results
+
+    def get_by_browser_action_id(self, browser_action_id: str) -> List[CapturedTransaction]:
+        """Returns all transactions triggered by a specific browser action"""
+        tx_ids = self._browser_action_index.get(browser_action_id, [])
+        results = []
+        for tid in tx_ids:
+            tx = self.get_transaction(tid)
+            if tx:
+                results.append(tx)
+        return results
 
     def correlate_requests(self, parent_id: str, child_id: str) -> bool:
         """Explicitly correlate two requests into parent-child lineage"""

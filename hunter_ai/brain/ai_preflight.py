@@ -50,11 +50,13 @@ REQUIRED_MODELS = {
     },
     "code": {
         "canonical": "qwen2.5-coder:14b",
-        "display_name": "Qwen 2.5 Coder 14B (Code & AST Intelligence)",
+        "display_name": "Qwen 2.5 Coder / Qwen3 (Code & AST Intelligence)",
         "patterns": [
             r"qwen2\.5-coder",
+            r"qwen3",
             r"qwen-coder",
             r"qwen2\.5",
+            r"qwen",
         ],
     },
 }
