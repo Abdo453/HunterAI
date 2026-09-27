@@ -263,9 +263,10 @@ class CognitiveCouncil:
     """
 
     DEFAULT_MODELS = {
-        CouncilRole.OFFENSIVE_STRATEGIST: "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
-        CouncilRole.CODE_AUDITOR: "qwen2.5-coder:14b",
-        CouncilRole.CRITIC_JUDGE: "xploiter/pentester:latest",
+        CouncilRole.CHAIRMAN: os.getenv("MODEL_COORDINATOR", "qwen3:8b"),
+        CouncilRole.OFFENSIVE_STRATEGIST: os.getenv("MODEL_OFFENSIVE", "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest"),
+        CouncilRole.CODE_AUDITOR: os.getenv("MODEL_CODE", "qwen2.5-coder:14b"),
+        CouncilRole.CRITIC_JUDGE: os.getenv("MODEL_RECON", "xploiter/pentester:latest"),
     }
 
     def __init__(
@@ -281,6 +282,38 @@ class CognitiveCouncil:
         self.models = {**self.DEFAULT_MODELS, **(custom_models or {})}
         self.state = CouncilState(target_domain)
         self._online_status: Optional[bool] = None
+        self._cached_tags: Optional[List[str]] = None
+
+    def _resolve_model(self, role: CouncilRole) -> str:
+        """Dynamically matches installed Ollama tags (e.g. qwen3:8b, qwen2.5-coder:14b-tools)."""
+        preferred = self.models.get(role, self.DEFAULT_MODELS[role])
+        if self._cached_tags is None:
+            try:
+                url = f"{self.ollama_host}/api/tags"
+                req = urllib.request.Request(url, headers={"User-Agent": "HunterAI/2.0"})
+                with urllib.request.urlopen(req, timeout=1.5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    self._cached_tags = [m.get("name", "") for m in data.get("models", [])]
+            except Exception:
+                self._cached_tags = []
+
+        tags = self._cached_tags or []
+        for t in tags:
+            if preferred.lower() == t.lower():
+                return t
+        
+        # Candidate fallbacks per role
+        role_fallbacks = {
+            CouncilRole.CHAIRMAN: ["qwen3:8b", "qwen2.5-coder:14b-tools", "qwen2.5-coder:14b", "qwen"],
+            CouncilRole.CODE_AUDITOR: ["qwen2.5-coder:14b-tools", "qwen2.5-coder:14b", "qwen3:8b", "qwen"],
+            CouncilRole.OFFENSIVE_STRATEGIST: ["whiterabbitneo", "white-rabbit-neo"],
+            CouncilRole.CRITIC_JUDGE: ["xploiter/pentester:latest", "xploiter", "pentester"],
+        }
+        for cand in role_fallbacks.get(role, []):
+            for t in tags:
+                if cand.lower() in t.lower() or t.lower() in cand.lower():
+                    return t
+        return preferred
 
     async def _query_model(
         self,
@@ -294,7 +327,7 @@ class CognitiveCouncil:
         if self._online_status is False:
             return ""
 
-        model_name = self.models.get(role, self.DEFAULT_MODELS[role])
+        model_name = self._resolve_model(role)
         url = f"{self.ollama_host}/api/chat"
         payload = {
             "model": model_name,

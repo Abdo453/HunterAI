@@ -50,6 +50,7 @@ def main():
     p.add_argument("--dry-run", action="store_true", help="Simulate pipeline plan without sending active network packets")
     p.add_argument("--lab-mode", "--allow-private-ips", dest="lab_mode", action="store_true", help="Allow RFC1918 private IP subnets (10.x, 172.16.x, 192.168.x) for authorized local labs")
     p.add_argument("--triad", "--use-triad", "--cognitive-council", dest="triad", action="store_true", help="Run with 100%% Local AI Triad (WhiteRabbitNeo + xploiter + Qwen 2.5 Coder)")
+    p.add_argument("--orchestrator", "--orchestrator-workers", "--blackboard", dest="orchestrator", action="store_true", help="Run with Master Orchestrator-Workers Engine (qwen3:8b + Shared Blackboard)")
     p.add_argument("--allow-no-ai", "--no-ai", "--degraded", dest="allow_no_ai", action="store_true", help="Allow pipeline to run in degraded heuristic mode if local AI model server is offline or models are missing")
     p.add_argument("--ollama-host", default=None, help="Custom Ollama host endpoint (default: http://127.0.0.1:11434)")
     p.add_argument("--skip-ai-probe", "--skip-inference-probe", dest="skip_ai_probe", action="store_true", help="Skip live inference prompt test during AI Preflight Gate")
@@ -58,6 +59,25 @@ def main():
     p.add_argument("--ask", help="Directly query the Local Triad Agent with a security question, code snippet, or target")
     p.add_argument("--max-steps", type=int, default=15, help="Max steps budget for HunterAI runtime")
     args = p.parse_args()
+
+    if args.orchestrator and args.target:
+        import asyncio
+        from hunter_ai.brain.orchestrator_workers import MasterOrchestratorEngine
+        print(f"\n[*] 🧠 Initializing Master Orchestrator Engine (qwen3:8b + Blackboard Architecture)...")
+        print(f"[*] Target: {args.target}")
+        engine = MasterOrchestratorEngine(
+            target=args.target,
+            ollama_host=args.ollama_host or os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
+            max_iterations=args.max_steps,
+        )
+        final_state = asyncio.run(engine.run_until_complete())
+        print(f"\n[+] ✅ Master Orchestrator completed. Final Phase: {final_state.phase.value}")
+        print(f"[+] Total Iterations: {final_state.iteration}")
+        print(f"[+] Subdomains Mapped: {len(final_state.subdomains)}")
+        print(f"[+] Endpoints Identified: {len(final_state.endpoints)}")
+        print(f"[+] Offensive Hypotheses: {len(final_state.hypotheses)}")
+        print(f"[+] Confirmed Findings: {len(final_state.confirmed_findings)}")
+        return
 
     if args.ask:
         import asyncio

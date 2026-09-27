@@ -2,7 +2,9 @@
   "mastered_concepts": [
     "Object-Level Access Control"
   ],
-  "weak_concepts": [],
+  "weak_concepts": [
+    "Object-Level Access Control"
+  ],
   "quiz_history": [
     {
       "topic": "BOLA / IDOR",
@@ -514,6 +516,41 @@
       "concept": "Object-Level Access Control",
       "score": 1.0,
       "timestamp": 1789509594.166819
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1789777276.010559
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1789777792.5479376
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1789792748.4967728
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": true,
+      "concept": "Object-Level Access Control",
+      "score": 1.0,
+      "timestamp": 1789793342.0038953
+    },
+    {
+      "topic": "BOLA / IDOR",
+      "is_correct": false,
+      "concept": "Object-Level Access Control",
+      "score": 0.2,
+      "timestamp": 1789793638.9259536
     }
   ],
   "lessons_completed": [
@@ -535,7 +572,8 @@
     "LSN-621aa1e7",
     "LSN-75ee32c8",
     "LSN-68ea0ea0",
-    "LSN-bd23287f"
+    "LSN-bd23287f",
+    "LSN-5c3ac44f"
   ],
   "overall_score": 0.0
 }

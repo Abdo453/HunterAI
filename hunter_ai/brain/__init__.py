@@ -16,6 +16,13 @@ from hunter_ai.brain.cognitive_council import (
     create_cognitive_council,
 )
 
+from hunter_ai.brain.orchestrator_workers import (
+    BlackboardPhase,
+    BlackboardState,
+    ModelWorkerRegistry,
+    MasterOrchestratorEngine,
+)
+
 __all__ = [
     "AIModelRouter",
     "RoutedModelSelection",
@@ -31,4 +38,8 @@ __all__ = [
     "VoteVerdict",
     "HypothesisStatus",
     "create_cognitive_council",
+    "BlackboardPhase",
+    "BlackboardState",
+    "ModelWorkerRegistry",
+    "MasterOrchestratorEngine",
 ]
