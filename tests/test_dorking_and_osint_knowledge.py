@@ -152,3 +152,23 @@ def test_knowledge_base_registration():
     assert "Google Hacking Database (GHDB) Dorking" in names
     assert "External OSINT & Origin IP Enumeration" in names
     assert "Full 13-Step Bug Bounty Workflow Playbook" in names
+
+
+def test_load_master_playbook():
+    # 1. Full load
+    full_content = DorkingAndOSINTKnowledge.load_master_playbook()
+    assert "HUNTERAI MASTER RECONNAISSANCE" in full_content
+    assert "SECTION 01: PASSIVE SUBDOMAIN ENUMERATION" in full_content
+    assert "subfinder" in full_content
+    assert "arjun" in full_content
+    assert "kiterunner" in full_content
+
+    # 2. Filtered section query
+    sec1 = DorkingAndOSINTKnowledge.load_master_playbook("SECTION 01")
+    assert "subfinder" in sec1
+    assert "assetfinder" in sec1
+
+    # 3. Keyword query
+    sec_api = DorkingAndOSINTKnowledge.load_master_playbook("kiterunner")
+    assert "kiterunner" in sec_api.lower()
+

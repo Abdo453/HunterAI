@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
@@ -453,3 +454,29 @@ class DorkingAndOSINTKnowledge:
             kb.flush_vectors()
 
         return count
+
+    @classmethod
+    def load_master_playbook(cls, section: Optional[str] = None) -> str:
+        """Loads and returns the comprehensive 20-stage Master Recon Playbook.
+        If a section (e.g. 'SECTION 01' or 'subfinder') is provided, filters for relevant lines."""
+        playbook_path = Path(__file__).parent / "master_recon_playbook.txt"
+        if not playbook_path.exists():
+            return "Playbook file not found."
+        try:
+            with open(playbook_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            if not section:
+                return content
+            matched_blocks = []
+            # Split by section headers
+            parts = re.split(r"(?m)^(?=SECTION \d+:)", content)
+            sec_lower = section.lower()
+            for part in parts:
+                if sec_lower in part.lower():
+                    # Strip leading/trailing banner borders
+                    clean_part = part.strip().strip("=").strip()
+                    matched_blocks.append(clean_part)
+            return "\n\n".join(matched_blocks) if matched_blocks else content[:3000]
+        except Exception as e:
+            return f"Error reading playbook: {e}"
+

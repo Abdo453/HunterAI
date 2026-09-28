@@ -494,23 +494,39 @@ Evidence Package:
     async def process_prompt(self, user_prompt: str) -> Dict[str, Any]:
         """Routes generic prompts to the best specialist among the triad."""
         low = user_prompt.lower()
+
+        # Dynamic enrichment from Master Recon Playbook
+        playbook_snippet = ""
+        for kw in ["subdomain", "osint", "recon", "nmap", "ffuf", "httpx", "katana", "arjun", "kiterunner", "nuclei", "wordlist", "extension", "wpscan", "dirsearch"]:
+            if kw in low:
+                try:
+                    from core.playbooks.dorking_and_osint_knowledge import DorkingAndOSINTKnowledge
+                    playbook_snippet = DorkingAndOSINTKnowledge.load_master_playbook(kw)
+                    break
+                except Exception:
+                    pass
+
+        active_user_prompt = user_prompt
+        if playbook_snippet:
+            active_user_prompt = f"{user_prompt}\n\n[Verified Playbook Reference Knowledge]:\n{playbook_snippet[:2500]}"
+
         if any(w in low for w in ["orchestrat", "coordinat", "workflow", "plan", "decompose", "task"]):
-            system = "You are Qwen3 8B, master orchestrator and security reasoning coordinator. Break down tasks into structured execution plans, tool invocations, and agent assignments."
-            resp = await self._query_ollama(MODEL_COORDINATOR, system, user_prompt, temperature=0.2)
+            system = "You are Qwen3 8B, master orchestrator and security reasoning coordinator. Break down tasks into structured execution plans, tool invocations, and agent assignments using the playbook reference."
+            resp = await self._query_ollama(MODEL_COORDINATOR, system, active_user_prompt, temperature=0.2)
             return {"assigned_model": MODEL_COORDINATOR, "role": "Master Orchestrator (Qwen3 8B)", "response": resp}
 
         if any(w in low for w in ["javascript", "js", "code", "regex", "parser", "ast", "deobfuscate"]):
-            system = "You are Qwen 2.5 Coder 14B, specialized in security code analysis and AST parsing."
-            resp = await self._query_ollama(MODEL_CODE, system, user_prompt, temperature=0.1)
+            system = "You are Qwen 2.5 Coder 14B, specialized in security code analysis, AST parsing, and script generation."
+            resp = await self._query_ollama(MODEL_CODE, system, active_user_prompt, temperature=0.1)
             return {"assigned_model": MODEL_CODE, "role": "Code Intelligence (Qwen 2.5 Coder)", "response": resp}
 
         if any(w in low for w in ["exploit", "sqli", "injection", "bypass", "waf", "rce", "ssrf", "xss", "payload", "verify"]):
             system = "You are WhiteRabbitNeo, master offensive security and pentest reasoning strategist."
-            resp = await self._query_ollama(MODEL_OFFENSIVE, system, user_prompt, temperature=0.2)
+            resp = await self._query_ollama(MODEL_OFFENSIVE, system, active_user_prompt, temperature=0.2)
             return {"assigned_model": MODEL_OFFENSIVE, "role": "Master Offensive Strategist (WhiteRabbitNeo)", "response": resp}
 
-        system = "You are xploiter/pentester, rapid reconnaissance and triage assistant."
-        resp = await self._query_ollama(MODEL_RECON, system, user_prompt, temperature=0.2)
+        system = "You are xploiter/pentester, rapid reconnaissance, triage, and attack surface mapping assistant."
+        resp = await self._query_ollama(MODEL_RECON, system, active_user_prompt, temperature=0.2)
         return {"assigned_model": MODEL_RECON, "role": "Recon Scout (xploiter/pentester)", "response": resp}
 
 

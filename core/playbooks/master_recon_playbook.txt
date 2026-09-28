@@ -1,0 +1,440 @@
+================================================================================
+HUNTERAI MASTER RECONNAISSANCE & ATTACK SURFACE METHODOLOGY PLAYBOOK
+================================================================================
+Version: 2.0 (Automated Multi-Model Security Intelligence Knowledge Base)
+Target Audience: HunterAI Autonomous Brain, Qwen3 Orchestrator, WhiteRabbitNeo 8B,
+                 xploiter/pentester, Qwen 2.5 Coder, and Human Security Researchers.
+
+This document serves as the canonical knowledge base for reconnaissance, asset
+discovery, content enumeration, parameter discovery, and attack surface mapping.
+Any AI agent or model can query, reference, and synthesize commands from this playbook.
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+SECTION 00: Specialized OSINT & Recon Intelligence Websites
+SECTION 01: Passive Subdomain Enumeration
+SECTION 02: Active Subdomain Enumeration
+SECTION 03: Subdomain Fuzzing
+SECTION 04: Virtual Host (VHost) Enumeration
+SECTION 05: Infrastructure Discovery (ASN, CIDR, Reverse DNS)
+SECTION 06: Data Merging & Deduplication Pipeline
+SECTION 07: Alive Host Detection & Web Probing
+SECTION 08: Subdomain Takeover Detection
+SECTION 09: Network Port & Service Scanning
+SECTION 10: Directory & Web Content Discovery
+SECTION 11: Historical & Active URL Discovery
+SECTION 12: JavaScript Recon & Secret Mining
+SECTION 13: API Route & Endpoint Discovery
+SECTION 14: Parameter Discovery & Mining
+SECTION 15: Secrets, Sensitive Files & Dorking
+SECTION 16: WordPress Vulnerability & User Enumeration
+SECTION 17: Automated Vulnerability & Exposure Scanning
+SECTION 18: System File Operations & Host Discovery
+SECTION 19: Exploitation & Post-Exploitation Reference
+SECTION 20: Comprehensive Extensions & Sensitive Wordlists Catalog
+
+================================================================================
+SECTION 00: SPECIALIZED OSINT & RECON INTELLIGENCE WEBSITES
+================================================================================
+Use these external platforms for passive intelligence gathering without touching
+the target directly:
+
+1. Subdomain Discovery & Historical DNS:
+   - https://subdomainfinder.c99.nl/       : Passive subdomain aggregator with historical indexing.
+   - https://shrewdeye.app/                : High-speed subdomain aggregation.
+   - https://securitytrails.com/list/apex_domain/{domain} : DNS history and subdomains.
+   - https://crt.sh                        : Public Certificate Transparency (CT) logs.
+   - https://www.ultimatedomains.com/extract-domains.php : Extract apex domains from bulk lists.
+
+2. Infrastructure, BGP, ASN & Origin IP:
+   - https://bgp.he.net/                   : BGP routing, ASN, and CIDR prefix lookups.
+   - https://search.dnslytics.com/cidr     : CIDR and IP block ownership intelligence.
+   - https://viewdns.info/reverseip/?host= : Reverse IP lookup for shared hosting.
+   - https://search.censys.io/             : Internet scanner to identify true Origin IPs behind CDNs.
+   - https://www.shodan.io/                : Exposed internet services, ports, and SSL certs.
+   - https://netlas.io/                    : IP, domain, and certificate mapping engine.
+   - https://www.favihash.com/             : Identify Origin web servers via Favicon MD5/Murmur3 hash.
+
+3. Historical Web Archives & Threat Intel:
+   - https://web.archive.org/cdx/search/cdx: Query Wayback Machine index for endpoints & JS.
+   - https://urlscan.io/                   : Web page scan archive, outbound HTTP calls, DOM dumps.
+   - https://otx.alienvault.com/           : AlienVault Open Threat Exchange domain telemetry.
+   - https://www.virustotal.com/           : Passive DNS resolution and threat reputation.
+
+================================================================================
+SECTION 01: PASSIVE SUBDOMAIN ENUMERATION
+================================================================================
+Gather subdomains from public third-party archives without sending packets to target:
+
+1. subfinder:
+   subfinder -d example.com -o Subs01.txt
+   subfinder -d example.com -all -recursive -o Subs01.txt
+   subfinder -dL targets.txt -all -recursive -o subs_all.txt
+
+2. assetfinder:
+   echo example.com | assetfinder -subs-only > Subs02.txt
+   cat targets.txt | assetfinder -subs-only >> Subs02.txt
+
+3. amass:
+   amass enum -passive -d example.com -o Subs03.txt
+   amass enum -d example.com -brute -w /usr/share/wordlists/seclists/Discovery/DNS/subdomains-top1million-110000.txt -o Subs03_brute.txt
+
+4. subenum:
+   ./subenum.sh -d example.com -u wayback,crt,abuseipdb,Findomain,Subfinder,Amass,Assetfinder -o Subs04.txt
+   ./subenum.sh -l targets.txt -u wayback,crt,abuseipdb,Findomain,Subfinder,Amass,Assetfinder -o Subs04.txt
+
+5. findomain:
+   findomain -t example.com -u Subs05.txt
+   findomain -f targets.txt -u Subs05.txt
+
+6. chaos (ProjectDiscovery Cloud):
+   export PDCP_API_KEY="your_api_key_here"
+   chaos -d example.com -o Subs06.txt
+
+7. github-subdomains:
+   github-subdomains -d example.com -t YOUR_GITHUB_TOKEN -o Subs_gh.txt
+
+8. Certificate Transparency (crt.sh API):
+   curl -s "https://crt.sh/?q=%25.example.com&output=json" \
+     | jq -r '.[].name_value' \
+     | sed 's/\*\.//g' \
+     | tr '\n' ',' | tr ',' '\n' \
+     | grep -oE "[A-Za-z0-9._-]+\.example\.com" \
+     | sort -u > Subs_crt.txt
+
+================================================================================
+SECTION 02: ACTIVE SUBDOMAIN ENUMERATION
+================================================================================
+Actively probe DNS nameservers using massive brute-force wordlists:
+
+1. dnscan:
+   python3 dnscan.py -d example.com -w /usr/share/wordlists/seclists/Discovery/DNS/subdomains-top1million-110000.txt -t 300 -o Subs07.txt
+
+2. puredns (Massive high-speed resolver brute-forcing):
+   # Download fresh public resolvers:
+   wget https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt -O resolvers.txt
+   puredns bruteforce wordlist.txt example.com -r resolvers.txt -w puredns_subs.txt
+   puredns resolve all_potential_subs.txt -r resolvers.txt -w resolved_subs.txt
+
+3. dnsx (Multi-purpose DNS query tool):
+   dnsx -silent -d example.com -w wordlist.txt -o dnsx_subs.txt
+   cat potential_subs.txt | dnsx -silent -a -aaaa -cname -resp -o dnsx_resolved.txt
+
+================================================================================
+SECTION 03: SUBDOMAIN FUZZING
+================================================================================
+Fuzzing patterns to find internal, staging, and microservice subdomains:
+
+ffuf -u https://FUZZ.example.com -w /usr/share/wordlists/seclists/Discovery/DNS/subdomains-top1million-5000.txt -mc 200,301,302,403
+ffuf -u https://FUZZ.hacked.example.com -w wordlist.txt
+ffuf -u https://FUZZ-example.com -w wordlist.txt
+ffuf -u https://FUZZ-hacked.example.com -w wordlist.txt
+ffuf -u https://hacked-FUZZ.example.com -w wordlist.txt
+ffuf -u https://FUZZwww.example.com -w wordlist.txt
+
+================================================================================
+SECTION 04: VIRTUAL HOST (VHOST) ENUMERATION
+================================================================================
+Identify multiple web applications hosted on the same IP via Host header manipulation:
+
+1. Standard VHost Fuzzing:
+   ffuf -u https://example.com -w /usr/share/wordlists/seclists/Discovery/DNS/subdomains-top1million-5000.txt -H "Host: FUZZ.example.com" -fs 0
+   ffuf -u http://<TARGET_IP> -w wordlist.txt -H "Host: FUZZ.example.com" -mc 200,301,302,403
+
+2. Manual hosts file entry for verification:
+   # Add to /etc/hosts:
+   # <TARGET_IP> internal.example.com admin.example.com
+
+================================================================================
+SECTION 05: INFRASTRUCTURE DISCOVERY (ASN, CIDR, REVERSE DNS)
+================================================================================
+Identify the organization's autonomous systems, IP blocks, and reverse DNS:
+
+1. asnmap (Map organization ASN to IP prefixes):
+   asnmap -a AS17012 -silent
+   asnmap -org "Target Org" -silent -o cidrs.txt
+
+2. whois (RADB / BGP routing queries):
+   whois -h whois.radb.net -- '-i origin AS17012' | grep -Eo "([0-9.]+){4}/[0-9]+" | sort -u > cidrs.txt
+
+3. hakrevdns (Reverse DNS over IP ranges):
+   cat cidrs.txt | mapcidr -silent | hakrevdns -r 1.1.1.1 -o revdns_subs.txt
+   echo "192.168.1.0/24" | hakrevdns -r 1.1.1.1
+   hakrevdns -d example.com -R resolvers.txt
+
+4. mapcidr (CIDR expansion and aggregation):
+   cat cidrs.txt | mapcidr -silent > ips.txt
+   mapcidr -cidr 192.168.0.0/16 -silent
+
+================================================================================
+SECTION 06: DATA MERGING & DEDUPLICATION PIPELINE
+================================================================================
+Standardized deduplication methodology to prevent duplicate tool execution:
+
+1. anew (Append only new lines):
+   cat Subs*.txt | anew AllSubs.txt
+   cat new_candidates.txt | anew AllSubs.txt
+
+2. sort (Unique sorting):
+   sort -u domains.txt -o unique_domains.txt
+   wc -l AllSubs.txt
+
+================================================================================
+SECTION 07: ALIVE HOST DETECTION & WEB PROBING
+================================================================================
+Filter alive web servers, grab headers, technology banners, and HTTP status codes:
+
+1. httpx:
+   cat AllSubs.txt | httpx -o AliveSubs.txt
+   cat AllSubs.txt | httpx -status-code -content-length -web-server -title -follow-redirects -o httpx_full.txt
+   cat AllSubs.txt | httpx -mc 200 -o AliveSubs_200.txt
+   cat AllSubs.txt | httpx -fc 400,404 -o AliveSubs_filtered.txt
+   cat AllSubs.txt | httpx -threads 100 -timeout 5 -o AliveSubs_fast.txt
+
+================================================================================
+SECTION 08: SUBDOMAIN TAKEOVER DETECTION
+================================================================================
+Identify dangling CNAME records pointing to unclaimed services (S3, GitHub, Azure, etc.):
+
+1. subzy:
+   subzy run --targets AllSubs.txt --hide_fails --vuln
+   subzy run --targets unique_subdomains.txt --vuln --hide_fails | grep -vi -E 'Akamai|AWS/S3|Airee\.ru|Anima|Bitbucket|Discourse|HatenaBlog|Help Juice|Help Scout|Helprace|Microsoft Azure|Smart JobBoard|Strikingly|Surge\.sh|SurveySparrow|Uberflip|Wordpress|Worksites'
+
+2. dig (Manual CNAME verification):
+   dig CNAME vulnerable-sub.example.com +short
+
+================================================================================
+SECTION 09: NETWORK PORT & SERVICE SCANNING
+================================================================================
+Discover open ports, listening daemons, and service versions:
+
+1. nmap:
+   # Service detection on alive subdomains:
+   nmap -iL AliveSubs.txt -p 80,443,8080,8443,8000,8888,9000 -sV --open -oN quick_ports.txt
+   # Deep scan on specific target:
+   nmap -p- -sV -sC -T4 -Pn example.com -oN deep_scan.nmap
+
+2. naabu (Ultra-fast port scanner):
+   naabu -list AliveSubs.txt -p - -rate 2000 -o open_ports.txt
+   naabu -list AliveSubs.txt -top-ports 1000 -o top_ports.txt
+
+3. rustscan:
+   rustscan -a 192.168.1.1 -- -sC -sV -oN scan.nmap
+
+================================================================================
+SECTION 10: DIRECTORY & WEB CONTENT DISCOVERY
+================================================================================
+Brute-force directories, backup files, and administrative interfaces:
+
+1. dirsearch:
+   dirsearch -u https://example.com -w /usr/share/wordlists/dirb/common.txt -t 100 -i 200 -e conf,config,bak,backup,swp,old,db,sql,asp,aspx,py,php,json,log,txt,zip,tar.gz
+   dirsearch -l AliveSubs.txt -o dirsearch_results.txt -i 200,301,302,403
+
+2. feroxbuster (Fast, recursive content discovery):
+   feroxbuster -u https://example.com -w /usr/share/wordlists/seclists/Discovery/Web-Content/raft-large-directories.txt -t 200 -k -d 3 -e -x php,html,json,js,log,txt,bak,old,zip,tar,gz
+
+3. ffuf:
+   ffuf -u https://example.com/FUZZ -w /usr/share/wordlists/seclists/Discovery/Web-Content/common.txt -mc 200,401,403 -c
+   ffuf -u https://example.com/FUZZ -w wordlist.txt -H "Host: FUZZ.example.com"
+
+4. gobuster:
+   gobuster dir -u https://example.com -w /usr/share/wordlists/dirb/common.txt -x php,txt,html -t 50
+
+================================================================================
+SECTION 11: HISTORICAL & ACTIVE URL DISCOVERY
+================================================================================
+Gather existing endpoint URLs from crawlers, sitemaps, and search engine caches:
+
+1. katana (Next-generation web crawler):
+   katana -u AliveSubs.txt -jc -kf all -d 5 -headless -fx -aff -fs rdn -f url -silent > KTN_urls.txt
+   katana -list AliveSubs_200.txt -o katana_out.txt
+
+2. waybackurls:
+   cat AliveSubs.txt | waybackurls | sort -u > wayback_urls.txt
+   waybackurls https://example.com | grep -E "\.xls|\.xlsx|\.csv|\.sql|\.db|\.bak|\.backup|\.old|\.tar\.gz|\.tgz|\.zip|\.7z|\.rar|\.env|\.json|\.xml|\.pem|\.key|\.php|\.swp" > sensitive_urls.txt
+
+3. gau / gauplus:
+   cat AliveSubs.txt | gau --threads 100 > gau_urls.txt
+   gauplus -t 100 -random-agent < AliveSubs.txt > gauplus_urls.txt
+
+4. gospider:
+   gospider -S AliveSubs.txt -t 20 -d 3 --js --sitemap --robots -o gospider_out
+
+5. hakrawler:
+   cat AliveSubs.txt | hakrawler -subs -u -insecure > hakrawler_urls.txt
+
+6. waymore:
+   waymore -i AliveSubs.txt -mode U -l 1000 -from 2021 -oU waymore_urls.txt
+
+7. CDX API (Wayback Machine direct query):
+   https://web.archive.org/cdx/search/cdx?url=*.example.com/*&collapse=urlkey&output=text&fl=original&filter=original:.*.js$
+
+================================================================================
+SECTION 12: JAVASCRIPT RECON & SECRET MINING
+================================================================================
+Extract API keys, tokens, hardcoded routes, and DOM sinks from client-side JS:
+
+1. subjs:
+   cat AllURLs.txt | subjs | sort -u > js_files.txt
+   cat AllURLs.txt | grep -i "\.js" | sort -u > js_files.txt
+
+2. mantra / jsluice / jsleak:
+   cat js_files.txt | mantra > mantra_secrets.txt
+   jsluice secrets js_files.txt
+   jsluice urls script.js
+   cat js_files.txt | xargs -P 20 -I {} jsleak -s -l -k -e {} >> jsleak_output.txt
+
+3. SecretFinder:
+   python3 SecretFinder.py -i https://example.com/bundle.js -o cli
+
+4. trufflehog (Filesystem & Repo Secret Scanning):
+   trufflehog filesystem js_files.txt --json > trufflehog_results.json
+   trufflehog github --org=example-org --results=verified
+
+5. Sensitive Regex Patterns:
+   grep -E "api[_-]?key|token|secret|password|bearer|auth|aws|s3" script.js
+
+================================================================================
+SECTION 13: API ROUTE & ENDPOINT DISCOVERY
+================================================================================
+Find hidden REST, GraphQL, and microservice routes using Assetnote Kiterunner:
+
+1. kiterunner (kr):
+   kr scan https://api.example.com -A=apiroutes-260227:10000 -x 8 -j 15 -v info
+   kr scan https://api.example.com -A=parameters-260227:5000 -x 5 -j 10 -v info
+   kr scan https://api.example.com -A=directories-260227:8000 -x 6 -j 12 -v info
+   kr scan targets.txt -A=directories-260227:8000 -x 6 -j 12 -v info
+   kr scan https://api.example.com -w /usr/share/wordlists/routes.txt -H 'x-access-token: 123'
+
+   Recommended Assetnote Route Wordlists:
+   - apiroutes-251027
+   - parameters-251027
+   - directories-251027
+   - subdomains-251027
+   - raft-large-directories
+   - best-dns-wordlist
+
+================================================================================
+SECTION 14: PARAMETER DISCOVERY & MINING
+================================================================================
+Identify hidden GET/POST parameters for IDOR, SSRF, SQLi, and XSS injection:
+
+1. arjun:
+   arjun -u https://example.com/test -m GET -o arjun_get.json
+   arjun -u https://example.com/test -m POST -o arjun_post.json
+   arjun -i AllURLs.txt -o arjun_all.json
+
+2. paramspider:
+   paramspider -d example.com -o PS_params.txt
+
+3. x8:
+   x8 -u "https://example.com/test" -w /usr/share/wordlists/parameters.txt -o x8_out.txt
+
+4. qsreplace (Transform URLs into fuzzable payload templates):
+   cat AllURLs.txt | grep "=" | qsreplace "FUZZ" | anew ParamURLs.txt
+   cat AllURLs.txt | grep '=' | sed 's/=[^&]*/=/g' | sort -u > param_patterns.txt
+
+================================================================================
+SECTION 15: SECRETS, SENSITIVE FILES & DORKING
+================================================================================
+Locate backup archives, .git repositories, and configuration exposures:
+
+1. originiphunter (Discover true origin IP behind CDN):
+   echo "example.com" | originiphunter
+   cat domains.txt | originiphunter
+
+2. Google Dorking for exposed documents & spreadsheets:
+   site:*.target.com intext:"docs.google.com/spreadsheets"
+   site:docs.google.com/spreadsheets "target.com"
+   site:docs.google.com/spreadsheets "password" "target.com"
+
+3. Git Dorking (GitDorker):
+   python3 GitDorker.py -tf tokens.txt -q example.com -d dorks/medium_dorks.txt -o git_leaks.txt
+
+4. Wayback Machine Sensitive Files Regex:
+   cat wayback_urls.txt | grep -E "\.env|\.git|\.htaccess|\.htpasswd|\.bak|\.backup|\.old|\.sql|\.db|\.zip|\.tar\.gz"
+
+================================================================================
+SECTION 16: WORDPRESS RECONNAISSANCE & USER EXPOSURE
+================================================================================
+Identify WordPress plugins, themes, users, and exposed configuration files:
+
+1. wpscan:
+   wpscan --url https://target.com/blog/ -e vp,vt,u --disable-tls-checks
+   wpscan --url https://target.com --api-token <TOKEN> -e at -e ap -e u --plugins-detection aggressive
+
+2. Common WordPress Username & Sensitive Leak Endpoints:
+   /wp-json/wp/v2/users
+   /wp-json/?rest_route=/wp/v2/users/
+   /index.php?rest_route=/wp/v2/users
+   /author-sitemap.xml
+   /wp-content/debug.log
+   /wp-login.php?action=register
+   /wp-content/uploads/
+
+================================================================================
+SECTION 17: AUTOMATED VULNERABILITY & EXPOSURE SCANNING
+================================================================================
+Run targeted exposure and misconfiguration scans:
+
+1. nuclei:
+   nuclei -l AliveSubs_200.txt -t /root/nuclei-templates/http/exposures/ -o nuclei_exposures.txt
+   nuclei -l js_files.txt -t /root/nuclei-templates/http/exposures/ -o nuclei_js.txt
+   nuclei -u https://example.com -t /root/nuclei-templates/cves/ -severity critical,high -o nuclei_cves.txt
+
+2. nikto:
+   nikto -h https://example.com -Tuning 123b -output nikto_results.txt
+
+3. smuggler (HTTP Request Smuggling):
+   python3 smuggler.py -u https://example.com
+
+4. 403 Bypass Testing:
+   ./dontgo403 -u https://example.com/admin
+   ./403-bypass.sh -u https://example.com/admin
+
+================================================================================
+SECTION 18: SYSTEM FILE OPERATIONS & HOST DISCOVERY
+================================================================================
+Local file enumeration, theHarvester, and sublist3r:
+
+1. theHarvester:
+   theHarvester -d example.com -l 200 -b google,bing,crtsh
+
+2. sublist3r:
+   sublist3r -d example.com -o sublist3r_subs.txt
+
+3. System Audit Patterns:
+   cat /etc/crontab
+   ftp -p <TARGET_IP> <PORT>
+
+================================================================================
+SECTION 19: EXPLOITATION & VERIFICATION REFERENCE
+================================================================================
+Security testing reference libraries:
+
+1. Metasploit Framework:
+   msfconsole -q
+   use <exploit_module>
+   set RHOSTS <target>
+   set LHOST <local_ip>
+   check
+   run
+
+2. Privilege Escalation & Invariant Reference:
+   - GTFOBins: https://gtfobins.github.io/ (Bypass local security restrictions via legitimate binaries)
+   - RevShells: https://www.revshells.com/ (Reference reverse shell syntax generation)
+
+================================================================================
+SECTION 20: COMPREHENSIVE EXTENSIONS & SENSITIVE WORDLISTS
+================================================================================
+Standard extensions catalog to append when fuzzing directories and files:
+
+conf, config, bak, backup, swp, old, db, sql, asp, aspx, aspx~, asp~, py, py~,
+rb, rb~, php, php~, bkp, cache, cgi, csv, html, inc, jar, js, json, jsp, jsp~,
+lock, log, rar, sql.gz, sql.zip, sql.tar.gz, sql~, swp~, tar, tar.bz2, tar.gz,
+txt, wadl, zip, .log, .xml, .js, .json, .env, .git, .yml, .yaml, .pem, .key
+
+================================================================================
+END OF PLAYBOOK
+================================================================================
