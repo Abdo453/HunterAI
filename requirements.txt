@@ -45,3 +45,5 @@ pwntools>=4.10.0
 # Utilities
 psutil>=5.9.0
 
+
+textual>=0.80.0
