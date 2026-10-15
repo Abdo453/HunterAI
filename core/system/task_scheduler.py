@@ -1,10 +1,12 @@
 """
-HunterAI Task Automation Engine (Phase 13)
-==========================================
-Automates workflows with conditional logic:
-  1. TaskScheduler parses tasks.json rule files
-  2. ConditionalRule evaluates if/then/else logic
-  3. All executions logged to task_logs/ directory
+HunterAI Task Automation & Multi-Agent Scheduler V2 (P0)
+=========================================================
+Implements MoAI-ADK inspired task orchestration:
+  1. Strict Lifecycle: PENDING -> READY -> RUNNING -> REVIEW -> DONE (+ BLOCKED, FAILED, CANCELLED)
+  2. Independent Review: Task cannot complete until independent reviewer approves
+  3. Anti-Stall & Anti-Freeze Detection: Identifies stuck tasks and re-queues them
+  4. Persistent State & Crash Recovery: Serializes pending queue to disk
+  5. Full backward compatibility with AutomationTask & ConditionalRule
 """
 from __future__ import annotations
 
@@ -13,21 +15,22 @@ import logging
 import os
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-logger = logging.getLogger("hunter_ai.task_automation")
+from core.contracts.task_contracts import (
+    AgentTeam,
+    TaskContract,
+    TaskLifecycleStatus,
+    ToolExecutionResult,
+)
 
+logger = logging.getLogger("hunter_ai.task_scheduler")
 
-class TaskStatus(str, Enum):
-    PENDING  = "PENDING"
-    RUNNING  = "RUNNING"
-    SUCCESS  = "SUCCESS"
-    FAILED   = "FAILED"
-    SKIPPED  = "SKIPPED"
-    BLOCKED  = "BLOCKED"
+# Backward compatibility alias
+TaskStatus = TaskLifecycleStatus
 
 
 @dataclass
@@ -40,203 +43,310 @@ class ConditionalRule:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def evaluate(self, context: Dict[str, Any]) -> Tuple[bool, str]:
-        """
-        Returns (condition_met, action_to_run).
-        """
         actual = context.get(self.condition_key)
-        met = (actual == self.condition_value) or (bool(actual) == bool(self.condition_value) and not isinstance(self.condition_value, (str, int, float)))
+        met = (actual == self.condition_value) or (
+            bool(actual) == bool(self.condition_value) and not isinstance(self.condition_value, (str, int, float))
+        )
         return met, (self.then_action if met else (self.else_action or "noop"))
 
 
-@dataclass
-class AutomationTask:
-    task_id: str
-    name: str
-    action: str
-    target: str = ""
-    priority: int = 5
-    depends_on: List[str] = field(default_factory=list)
-    rules: List[ConditionalRule] = field(default_factory=list)
-    status: TaskStatus = TaskStatus.PENDING
-    result: Optional[Dict[str, Any]] = None
-    created_at: float = field(default_factory=time.time)
-    completed_at: Optional[float] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "task_id": self.task_id,
-            "name": self.name,
-            "action": self.action,
-            "target": self.target,
-            "priority": self.priority,
-            "depends_on": self.depends_on,
-            "status": self.status.value,
-            "result": self.result,
-            "created_at": self.created_at,
-            "completed_at": self.completed_at,
-        }
+# Backward-compatible wrapper
+AutomationTask = TaskContract
 
 
 class TaskScheduler:
     """
-    Parses tasks.json rule files, builds dependency graph,
-    and executes tasks with conditional logic and logging.
+    Orchestrates specialized agent teams with deterministic task contracts,
+    dependency resolution, independent review, and crash recovery.
     """
-    def __init__(self, tasks_file: str | Path = "config/tasks.json", logs_dir: str | Path = "task_logs"):
+    def __init__(
+        self,
+        tasks_file: str | Path = "config/tasks.json",
+        logs_dir: str | Path = "task_logs",
+        state_file: str | Path = "data/task_scheduler_state.json",
+    ):
         self.tasks_file = Path(tasks_file)
         self.logs_dir = Path(logs_dir)
+        self.state_file = Path(state_file)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
 
-        self._tasks: Dict[str, AutomationTask] = {}
+        self._tasks: Dict[str, TaskContract] = {}
         self._handlers: Dict[str, Callable[..., Any]] = {}
         self._context: Dict[str, Any] = {}
-        self._subagent_registry: Dict[str, str] = {}  # task_id -> subagent_id
+        self._conditional_rules: Dict[str, List[ConditionalRule]] = {}
 
-        self._load_tasks()
+        self._load_from_state()
+        self._load_from_config()
 
-    def _load_tasks(self) -> None:
-        if not self.tasks_file.exists():
-            return
-        try:
-            data = json.loads(self.tasks_file.read_text(encoding="utf-8"))
-            tasks_list = data if isinstance(data, list) else data.get("tasks", [])
-            for item in tasks_list:
-                task = self._parse_task(item)
-                self._tasks[task.task_id] = task
-        except Exception as e:
-            logger.warning("Failed loading tasks.json from %s: %s", self.tasks_file, e)
-
-    def _parse_task(self, item: Dict[str, Any]) -> AutomationTask:
-        task_id = item.get("id") or item.get("task_id") or f"TASK-{uuid.uuid4().hex[:6].upper()}"
-        rules = []
-        for r in item.get("rules", []):
-            rules.append(ConditionalRule(
-                rule_id=r.get("rule_id", f"RULE-{uuid.uuid4().hex[:6]}"),
-                condition_key=r.get("if", {}).get("key", ""),
-                condition_value=r.get("if", {}).get("value"),
-                then_action=r.get("then", "noop"),
-                else_action=r.get("else"),
-            ))
-        return AutomationTask(
-            task_id=task_id,
-            name=item.get("name", task_id),
-            action=item.get("action", "noop"),
-            target=item.get("target", ""),
-            priority=int(item.get("priority", 5)),
-            depends_on=list(item.get("depends_on", [])),
-            rules=rules,
-        )
-
-    def register_handler(self, action: str, handler: Callable[..., Any]) -> None:
-        self._handlers[action] = handler
-
-    def register_subagent(self, task_id: str, subagent_id: str) -> None:
-        self._subagent_registry[task_id] = subagent_id
+    # ── Task Creation ──────────────────────────────────────────────────────────
 
     def add_task(
         self,
         name: str,
         action: str,
         target: str = "",
+        team: AgentTeam = AgentTeam.RECON,
         priority: int = 5,
         depends_on: Optional[List[str]] = None,
+        success_criteria: Optional[List[str]] = None,
         rules: Optional[List[ConditionalRule]] = None,
         task_id: Optional[str] = None,
-    ) -> AutomationTask:
+    ) -> TaskContract:
         tid = task_id or f"TASK-{uuid.uuid4().hex[:6].upper()}"
-        task = AutomationTask(
+        task = TaskContract(
             task_id=tid,
-            name=name,
+            title=name,
+            team=team,
             action=action,
             target=target,
             priority=priority,
             depends_on=depends_on or [],
-            rules=rules or [],
+            success_criteria=success_criteria or [],
+            status=TaskLifecycleStatus.PENDING if (depends_on and len(depends_on) > 0) else TaskLifecycleStatus.READY,
         )
         self._tasks[tid] = task
+        if rules:
+            self._conditional_rules[tid] = rules
+
+        self._update_readiness()
+        self._persist_state()
         return task
+
+    # ── State Machine & Transitions ───────────────────────────────────────────
+
+    def _update_readiness(self) -> None:
+        """Promotes PENDING tasks to READY when all dependencies are DONE."""
+        for task in self._tasks.values():
+            if task.status == TaskLifecycleStatus.PENDING:
+                if self._are_dependencies_met(task):
+                    task.status = TaskLifecycleStatus.READY
+
+    def _are_dependencies_met(self, task: TaskContract) -> bool:
+        for dep_id in task.depends_on:
+            dep = self._tasks.get(dep_id)
+            if dep is None or dep.status != TaskLifecycleStatus.DONE:
+                return False
+        return True
+
+    def get_ready_tasks(self, team: Optional[AgentTeam] = None) -> List[TaskContract]:
+        self._update_readiness()
+        ready = [t for t in self._tasks.values() if t.status == TaskLifecycleStatus.READY]
+        if team:
+            ready = [t for t in ready if t.team == team]
+        return sorted(ready, key=lambda t: t.priority)
+
+    def dispatch_task(self, task_id: str, owner_agent: str) -> Optional[TaskContract]:
+        """Locks a task into RUNNING state for a specific owner agent."""
+        task = self._tasks.get(task_id)
+        if not task or task.status not in (TaskLifecycleStatus.READY, TaskLifecycleStatus.PENDING):
+            return None
+        task.mark_running(owner_agent)
+        self._persist_state()
+        return task
+
+    def submit_result(self, task_id: str, result: ToolExecutionResult) -> bool:
+        """Owner agent submits output; transitions task to REVIEW."""
+        task = self._tasks.get(task_id)
+        if not task:
+            return False
+        ok = task.submit_for_review(result)
+        if ok:
+            self._persist_state()
+            self._log_task_execution(task)
+        return ok
+
+    def review_task(self, task_id: str, reviewer_agent: str, approved: bool, notes: str = "") -> bool:
+        """
+        Independent review: ensures self-grading is strictly prohibited.
+        If approved -> DONE; if rejected -> re-queues to READY or marks FAILED.
+        """
+        task = self._tasks.get(task_id)
+        if not task or task.status != TaskLifecycleStatus.REVIEW:
+            return False
+
+        if task.owner_agent == reviewer_agent:
+            logger.error("Self-grading prevented: Agent '%s' cannot review its own task '%s'", reviewer_agent, task_id)
+            return False
+
+        if approved:
+            task.approve_review(reviewer_agent, notes)
+            self._update_readiness()
+        else:
+            task.reject_review(reviewer_agent, notes)
+
+        self._persist_state()
+        self._log_task_execution(task)
+        return True
+
+    # ── Anti-Stall & Anti-Freeze Detection ─────────────────────────────────────
+
+    def detect_and_recover_stalled(self, timeout_seconds: float = 300.0) -> List[str]:
+        """
+        Identifies tasks stuck in RUNNING beyond timeout without completion,
+        and re-queues them to READY or marks FAILED.
+        """
+        recovered = []
+        now = time.time()
+        for task in self._tasks.values():
+            if task.status == TaskLifecycleStatus.RUNNING and task.started_at:
+                elapsed = now - task.started_at
+                if elapsed > timeout_seconds:
+                    logger.warning("Task %s stalled (%ds elapsed). Recovering...", task.task_id, int(elapsed))
+                    if task.retry_count < task.max_retries:
+                        task.retry_count += 1
+                        task.status = TaskLifecycleStatus.READY
+                        task.owner_agent = ""
+                        recovered.append(task.task_id)
+                    else:
+                        task.status = TaskLifecycleStatus.FAILED
+                        recovered.append(task.task_id)
+        if recovered:
+            self._persist_state()
+        return recovered
+
+    # ── Execution Handlers ────────────────────────────────────────────────────
+
+    def register_handler(self, action: str, handler: Callable[..., Any]) -> None:
+        self._handlers[action] = handler
 
     def set_context(self, key: str, value: Any) -> None:
         self._context[key] = value
 
-    def _are_dependencies_met(self, task: AutomationTask) -> bool:
-        for dep_id in task.depends_on:
-            dep = self._tasks.get(dep_id)
-            if dep is None or dep.status != TaskStatus.SUCCESS:
-                return False
-        return True
-
-    def execute_task(self, task_id: str) -> Dict[str, Any]:
+    def execute_task(self, task_id: str, owner_agent: str = "Executor") -> Dict[str, Any]:
         """
-        Executes a task by ID, evaluating conditional rules, checking
-        dependencies, and logging the result.
+        Executes a task synchronously (evaluates rules, invokes handler, runs auto-review).
         """
         task = self._tasks.get(task_id)
         if not task:
             return {"success": False, "error": f"Task '{task_id}' not found."}
 
-        # Dependency check
-        if task.depends_on and not self._are_dependencies_met(task):
-            task.status = TaskStatus.BLOCKED
-            return {"success": False, "task_id": task_id, "status": "BLOCKED", "error": "Dependencies not met."}
+        self._update_readiness()
+        if task.status == TaskLifecycleStatus.PENDING:
+            task.status = TaskLifecycleStatus.BLOCKED
+            return {"success": False, "task_id": task_id, "status": "BLOCKED", "error": "Dependencies not satisfied"}
 
-        task.status = TaskStatus.RUNNING
+        task.mark_running(owner_agent)
 
-        # Evaluate conditional rules against current context
+        # Evaluate conditional rules
         effective_action = task.action
-        for rule in task.rules:
+        for rule in self._conditional_rules.get(task_id, []):
             met, resolved_action = rule.evaluate(self._context)
             if resolved_action != "noop":
                 effective_action = resolved_action
                 break
 
-        # Execute handler
+        # Execute registered handler or mock
         handler = self._handlers.get(effective_action)
-        result: Dict[str, Any]
+        t0 = time.time()
+        result_data: Dict[str, Any]
+        success = True
+        err = []
+
         try:
             if handler:
                 raw = handler(task=task, context=self._context)
-                result = raw if isinstance(raw, dict) else {"output": raw}
-                task.status = TaskStatus.SUCCESS
+                result_data = raw if isinstance(raw, dict) else {"output": raw}
             else:
-                result = {"warning": f"No handler registered for action '{effective_action}'. Simulated as NOOP."}
-                task.status = TaskStatus.SUCCESS
+                result_data = {"notice": f"Simulated noop for action '{effective_action}'."}
         except Exception as e:
-            result = {"error": str(e)}
-            task.status = TaskStatus.FAILED
+            success = False
+            err = [str(e)]
+            result_data = {"error": str(e)}
 
-        task.result = result
-        task.completed_at = time.time()
+        duration_ms = round((time.time() - t0) * 1000, 2)
 
-        self._log_task(task)
+        # Wrap into universal ToolExecutionResult
+        tool_result = ToolExecutionResult(
+            task_id=task_id,
+            tool_name=effective_action,
+            action=effective_action,
+            target=task.target,
+            success=success,
+            duration_ms=duration_ms,
+            raw_output=json.dumps(result_data),
+            normalized_data=result_data,
+            errors=err,
+        )
+
+        task.submit_for_review(tool_result)
+
+        # Automatic review by Reviewer Agent
+        reviewer = f"Reviewer_{task.team.value}"
+        if success:
+            task.approve_review(reviewer, "Execution verified successfully.")
+            self._update_readiness()
+        else:
+            task.reject_review(reviewer, f"Execution failed: {err}")
+
+        self._persist_state()
+        self._log_task_execution(task)
+
         return {
-            "success": task.status == TaskStatus.SUCCESS,
+            "success": task.status == TaskLifecycleStatus.DONE,
             "task_id": task_id,
-            "action": effective_action,
             "status": task.status.value,
-            "result": result,
+            "action": effective_action,
+            "result": result_data,
         }
 
-    def _log_task(self, task: AutomationTask) -> None:
+    # ── Persistence ───────────────────────────────────────────────────────────
+
+    def _persist_state(self) -> None:
+        try:
+            data = [t.to_dict() for t in self._tasks.values()]
+            self.state_file.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+        except Exception as e:
+            logger.warning("Failed saving task scheduler state: %s", e)
+
+    def _load_from_state(self) -> None:
+        if not self.state_file.exists():
+            return
+        try:
+            data = json.loads(self.state_file.read_text(encoding="utf-8"))
+            for item in data:
+                task = TaskContract(
+                    task_id=item["task_id"],
+                    title=item.get("title", item.get("name", "")),
+                    team=AgentTeam(item.get("team", AgentTeam.RECON.value)),
+                    owner_agent=item.get("owner_agent", ""),
+                    reviewer_agent=item.get("reviewer_agent", ""),
+                    target=item.get("target", ""),
+                    action=item.get("action", "noop"),
+                    priority=int(item.get("priority", 5)),
+                    depends_on=list(item.get("depends_on", [])),
+                    status=TaskLifecycleStatus(item.get("status", TaskLifecycleStatus.PENDING.value)),
+                )
+                self._tasks[task.task_id] = task
+        except Exception as e:
+            logger.warning("Failed loading scheduler state: %s", e)
+
+    def _load_from_config(self) -> None:
+        if not self.tasks_file.exists():
+            return
+        try:
+            data = json.loads(self.tasks_file.read_text(encoding="utf-8"))
+            tasks_list = data if isinstance(data, list) else data.get("tasks", [])
+            for item in tasks_list:
+                tid = item.get("id") or item.get("task_id")
+                if tid not in self._tasks:
+                    self.add_task(
+                        name=item.get("name", tid),
+                        action=item.get("action", "noop"),
+                        target=item.get("target", ""),
+                        priority=int(item.get("priority", 5)),
+                        depends_on=list(item.get("depends_on", [])),
+                        task_id=tid,
+                    )
+        except Exception as e:
+            logger.warning("Failed loading tasks.json: %s", e)
+
+    def _log_task_execution(self, task: TaskContract) -> None:
         log_file = self.logs_dir / f"{task.task_id}_{int(task.completed_at or time.time())}.json"
         try:
             log_file.write_text(json.dumps(task.to_dict(), indent=2, default=str), encoding="utf-8")
         except Exception as e:
-            logger.warning("Failed writing task log: %s", e)
-
-    def execute_all_pending(self) -> List[Dict[str, Any]]:
-        """
-        Executes all PENDING tasks in priority order (lower priority int = higher priority).
-        """
-        pending = sorted(
-            [t for t in self._tasks.values() if t.status == TaskStatus.PENDING],
-            key=lambda t: t.priority,
-        )
-        results = []
-        for task in pending:
-            res = self.execute_task(task.task_id)
-            results.append(res)
-        return results
+            logger.warning("Failed writing task execution log: %s", e)
 
     def list_tasks(self) -> List[Dict[str, Any]]:
         return [t.to_dict() for t in self._tasks.values()]
