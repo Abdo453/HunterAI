@@ -361,3 +361,8 @@ class StrictScopeEngine:
     @property
     def out_of_scope(self) -> List[str]:
         return self.policy.excluded_targets
+
+
+# Backward-compatibility alias
+ScopeEngine = StrictScopeEngine
+

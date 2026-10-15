@@ -15,14 +15,16 @@ log = logging.getLogger("security_intelligence.learning_memory")
 class LearningMemory:
     """ذاكرة تقدم المستخدم التعليمي: المفاهيم المتقنة، نقاط الضعف، وسجل الاختبارات"""
 
-    def __init__(self, storage_file: Optional[str] = None):
+    def __init__(self, storage_file: Optional[str] = None, persist: bool = False):
         self.storage_file = storage_file or SecurityIntelligenceConfig.LEARNING_MEMORY_PATH
+        self.persist = persist
         self.mastered_concepts: List[str] = []
         self.weak_concepts: List[str] = []
         self.quiz_history: List[Dict[str, Any]] = []
         self.lessons_completed: List[str] = []
         self.overall_score: float = 0.0
-        self._load()
+        if self.persist:
+            self._load()
 
     def record_quiz_result(self, topic: str, is_correct: bool, concept_tested: str, score: float):
         self.quiz_history.append({
@@ -48,6 +50,8 @@ class LearningMemory:
             self._save()
 
     def _save(self):
+        if not self.persist:
+            return
         try:
             p = Path(self.storage_file)
             p.parent.mkdir(parents=True, exist_ok=True)

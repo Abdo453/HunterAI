@@ -11,7 +11,8 @@ async def test_request_response_correlation(gateway_client):
     
     import httpx
     
-    async with httpx.AsyncClient(app=gw.app, base_url="http://test") as ac:
+    transport = httpx.ASGITransport(app=gw.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         reqs = []
         for i in range(3):
             reqs.append(ac.post("/api/traffic", json={

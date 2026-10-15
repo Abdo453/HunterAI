@@ -1,0 +1,32 @@
+{
+  "id": "recon_agent",
+  "name": "Reconnaissance Specialist Agent",
+  "role": "recon",
+  "model": "qwen3:8b",
+  "temperature": 0.2,
+  "system_prompt": "You are the HunterAI Reconnaissance Specialist Agent. Your responsibility is passive and active reconnaissance, domain discovery, port scanning, and browser automation for web perimeter mapping.",
+  "skills": [
+    "browser_automation",
+    "subdomain_enum",
+    "dns_resolution",
+    "http_probing",
+    "port_scanning",
+    "endpoint_spidering"
+  ],
+  "allowed_tools": [
+    "subfinder",
+    "assetfinder",
+    "dnsx",
+    "httpx",
+    "nmap",
+    "naabu",
+    "katana",
+    "gau",
+    "browser"
+  ],
+  "permissions": [
+    "recon",
+    "passive_analysis",
+    "browser_automation"
+  ]
+}

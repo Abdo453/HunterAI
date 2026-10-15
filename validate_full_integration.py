@@ -14,14 +14,14 @@ def main():
     validator = BurpIntegrationValidatorV1()
     validator.run_check_01_syntax()
     validator.run_check_02_registration_contract()
-    validator.run_check_03_gateway_health()
-    validator.run_check_04_traffic_ingestion()
-    validator.run_check_05_capture_store_persistence()
-    validator.run_check_06_lineage_correlation()
+    validator.run_check_03_gateway_reachability()
+    validator.run_check_04_proxy_ingestion()
+    validator.run_check_05_persistent_storage()
+    validator.run_check_06_request_lineage()
     validator.run_check_07_eventbus_dispatch()
-    validator.run_check_08_autonomous_ingestion()
-    validator.run_check_09_evidence_court()
-    validator.run_check_10_target_tab_export()
+    validator.run_check_08_provenance_ingestion()
+    validator.run_check_09_court_adjudication()
+    validator.run_check_10_burp_target_export()
     
     # Map results
     validator_checks = {r.check_id: r for r in validator.results}

@@ -1,0 +1,212 @@
+"""
+HunterAI Safe Terminal Execution Bridge (Phase 7)
+=================================================
+Safely executes terminal commands with:
+1. Scope verification & catastrophic command prevention
+2. Output capture with automated credential & secret redaction
+3. Active process supervision and rogue process termination
+"""
+from __future__ import annotations
+
+import logging
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger("hunter_ai.terminal_bridge")
+
+# Catastrophic command patterns that must NEVER be executed
+BLOCKED_PATTERNS = [
+    re.compile(r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*\s+/(?:\s|$)", re.I),
+    re.compile(r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", re.I),  # fork bomb
+    re.compile(r"\bmkfs\b", re.I),
+    re.compile(r"\bdd\s+if=/dev/zero", re.I),
+    re.compile(r">\s*/dev/sd[a-z]", re.I),
+    re.compile(r"\b(shutdown|reboot|init\s+0|poweroff)\b", re.I),
+]
+
+# Sensitive information to redact from captured terminal output
+REDACT_PATTERNS = [
+    (re.compile(r"(Authorization:\s*Bearer\s+)[A-Za-z0-9\-_\.]+", re.I), r"\1[REDACTED]"),
+    (re.compile(r"(api[_\-]?key[=:\s]+)[A-Za-z0-9\-_]{16,}", re.I), r"\1[REDACTED]"),
+    (re.compile(r"(password[=:\s]+)\S+", re.I), r"\1[REDACTED]"),
+    (re.compile(r"(token[=:\s]+)[A-Za-z0-9\-_\.]{16,}", re.I), r"\1[REDACTED]"),
+]
+
+
+@dataclass
+class TrackedProcess:
+    pid: int
+    command: str
+    project_id: str
+    started_at: float = field(default_factory=time.time)
+    process_handle: Optional[subprocess.Popen] = None
+    is_active: bool = True
+
+
+class TerminalBridge:
+    """
+    Secure terminal execution layer with safety invariants and process supervisor.
+    """
+    def __init__(self, scope_engine: Optional[Any] = None, policy_gate: Optional[Any] = None):
+        self.scope_engine = scope_engine
+        self.policy_gate = policy_gate
+        self.active_processes: Dict[int, TrackedProcess] = {}
+        self.execution_history: List[Dict[str, Any]] = []
+
+    def capture_output(self, raw_text: str) -> str:
+        """Sanitizes terminal output by redacting credentials and tokens"""
+        if not raw_text:
+            return ""
+        text = raw_text
+        for pattern, repl in REDACT_PATTERNS:
+            text = pattern.sub(repl, text)
+        return text
+
+    def _is_command_safe(self, command: str) -> Tuple[bool, Optional[str]]:
+        for pat in BLOCKED_PATTERNS:
+            if pat.search(command):
+                return False, f"Catastrophic command signature blocked: {pat.pattern}"
+        return True, None
+
+    def execute_command(
+        self,
+        command: str,
+        project_id: str = "default",
+        timeout_seconds: float = 30.0,
+        shell: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Executes a terminal command with safety invariants, scope checks, and output redaction.
+        """
+        start_time = time.time()
+        
+        # 1. Safety check
+        safe, reason = self._is_command_safe(command)
+        if not safe:
+            entry = {
+                "command": command,
+                "project_id": project_id,
+                "status": "DENIED",
+                "returncode": -1,
+                "stdout": "",
+                "stderr": reason,
+                "duration_ms": 0.0,
+            }
+            self.execution_history.append(entry)
+            logger.warning("Terminal command denied: %s (reason: %s)", command, reason)
+            return entry
+
+        # 2. Scope check if scope engine available
+        if self.scope_engine and hasattr(self.scope_engine, "is_allowed"):
+            # Simple heuristic extraction of domain/IP
+            parts = command.split()
+            for part in parts:
+                if "." in part and not part.startswith("-"):
+                    cleaned = part.strip("\"'").split("/")[0].split(":")[0]
+                    allowed, scope_reason = self.scope_engine.is_allowed(cleaned)
+                    if not allowed:
+                        entry = {
+                            "command": command,
+                            "project_id": project_id,
+                            "status": "DENIED_SCOPE",
+                            "returncode": -1,
+                            "stdout": "",
+                            "stderr": f"Scope violation: {scope_reason}",
+                            "duration_ms": 0.0,
+                        }
+                        self.execution_history.append(entry)
+                        return entry
+
+        # 3. Execution
+        try:
+            # Run command with timeout
+            proc = subprocess.Popen(
+                command if shell else (shlex.split(command) if sys.platform != "win32" else command),
+                shell=shell or (sys.platform == "win32" and not isinstance(command, list)),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            
+            # Register in supervisor
+            self.active_processes[proc.pid] = TrackedProcess(
+                pid=proc.pid,
+                command=command,
+                project_id=project_id,
+                process_handle=proc,
+            )
+
+            stdout_raw, stderr_raw = proc.communicate(timeout=timeout_seconds)
+            returncode = proc.returncode
+            status = "SUCCESS" if returncode == 0 else "ERROR"
+            
+            # Clean from active processes
+            if proc.pid in self.active_processes:
+                self.active_processes[proc.pid].is_active = False
+
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout_raw, stderr_raw = proc.communicate()
+            returncode = -9
+            status = "TIMEOUT"
+            if proc.pid in self.active_processes:
+                self.active_processes[proc.pid].is_active = False
+
+        except Exception as e:
+            stdout_raw, stderr_raw = "", str(e)
+            returncode = -1
+            status = "EXCEPTION"
+
+        duration = (time.time() - start_time) * 1000.0
+        
+        # Redact output
+        stdout_safe = self.capture_output(stdout_raw)
+        stderr_safe = self.capture_output(stderr_raw)
+
+        record = {
+            "command": command,
+            "project_id": project_id,
+            "status": status,
+            "returncode": returncode,
+            "stdout": stdout_safe,
+            "stderr": stderr_safe,
+            "duration_ms": round(duration, 2),
+        }
+        self.execution_history.append(record)
+        return record
+
+    def process_supervisor(self, max_duration_seconds: float = 60.0) -> List[Dict[str, Any]]:
+        """
+        Monitors active background processes and terminates rogue / runaway executions.
+        """
+        now = time.time()
+        terminated: List[Dict[str, Any]] = []
+
+        for pid, tracked in list(self.active_processes.items()):
+            if tracked.is_active and tracked.process_handle:
+                # Check if still running
+                poll_result = tracked.process_handle.poll()
+                if poll_result is None:
+                    # Still running, check timeout
+                    if now - tracked.started_at > max_duration_seconds:
+                        tracked.process_handle.kill()
+                        tracked.is_active = False
+                        info = {
+                            "pid": pid,
+                            "command": tracked.command,
+                            "project_id": tracked.project_id,
+                            "action": "KILLED_ROGUE",
+                            "running_seconds": round(now - tracked.started_at, 2),
+                        }
+                        terminated.append(info)
+                        logger.warning("Process supervisor killed rogue process: %s", info)
+                else:
+                    tracked.is_active = False
+
+        return terminated

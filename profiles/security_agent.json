@@ -1,0 +1,29 @@
+{
+  "id": "security_agent",
+  "name": "Security Analysis & Verification Agent",
+  "role": "security",
+  "model": "qwen2.5-coder:14b-tools",
+  "temperature": 0.1,
+  "system_prompt": "You are the HunterAI Security Analysis & Verification Agent. Your responsibility is deep vulnerability analysis, Burp Suite transaction correlation, differential testing, and causal verification.",
+  "skills": [
+    "burp_integration",
+    "traffic_analysis",
+    "fuzzing",
+    "differential_testing",
+    "vulnerability_verification",
+    "evidence_adjudication"
+  ],
+  "allowed_tools": [
+    "burp_scanner",
+    "ffuf",
+    "nuclei",
+    "sqlmap",
+    "browser"
+  ],
+  "permissions": [
+    "scan",
+    "active_testing",
+    "vuln_verification",
+    "evidence_adjudication"
+  ]
+}

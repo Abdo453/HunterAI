@@ -1,0 +1,35 @@
+{
+  "active_tasks": [],
+  "agents": {},
+  "event_log": [
+    {
+      "agent": "recon_agent",
+      "level": "INFO",
+      "message": "Katana crawl started",
+      "ts": "11:10:59"
+    },
+    {
+      "agent": "dashboard",
+      "level": "WARNING",
+      "message": "System PAUSED by operator",
+      "ts": "11:10:59"
+    },
+    {
+      "agent": "dashboard",
+      "level": "INFO",
+      "message": "System RESUMED by operator",
+      "ts": "11:10:59"
+    }
+  ],
+  "metrics": {
+    "apis": 7,
+    "domains": 5,
+    "endpoints": 20,
+    "findings": 2,
+    "js_files": 4,
+    "live_hosts": 3
+  },
+  "paused": false,
+  "scope_locked": false,
+  "target": "example.com"
+}

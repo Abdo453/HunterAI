@@ -1,0 +1,17 @@
+{
+  "task_id": "TASK-2EE7AD",
+  "name": "Recon Subdomains",
+  "action": "subdomain_enum",
+  "target": "example.com",
+  "priority": 1,
+  "depends_on": [],
+  "status": "SUCCESS",
+  "result": {
+    "subdomains": [
+      "api.example.com",
+      "admin.example.com"
+    ]
+  },
+  "created_at": 1791792592.0485399,
+  "completed_at": 1791792592.0485399
+}

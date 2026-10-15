@@ -59,7 +59,7 @@ class HunterAgentManager:
     def __init__(
         self,
         base_storage_dir: str = "storage/jobs",
-        root_memory_dir: str = "memory"
+        root_memory_dir: Optional[str] = None
     ):
         self.blackboard = ThreeTierBlackboardMemory(base_storage_dir=base_storage_dir)
         self.memory = MemoryHierarchy(root_memory_dir=root_memory_dir)

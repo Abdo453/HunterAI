@@ -154,7 +154,7 @@ class EvidenceCourt:
         target_url: str,
         parameter: str,
         vuln_class: str,
-        finder_claim: Dict[str, Any],
+        finder_claim: Optional[Dict[str, Any]] = None,
         verifier_result: Optional[Dict[str, Any]] = None,
         is_in_scope: bool = True,
         is_blocked_by_waf: bool = False,
@@ -163,7 +163,17 @@ class EvidenceCourt:
         causal_evidence: Optional[CausalEvidence] = None,
         negative_evidence: Optional[Union[Dict[str, Any], NegativeEvidence]] = None,
         negative_observables: Optional[Dict[str, Any]] = None,
+        execution_evidence: Optional[ExecutionEvidence] = None,
+        provenance_trace: Optional[Any] = None,
     ) -> CourtJudgment:
+        finder_claim = finder_claim or {}
+        # Accept the structured execution object used by the public evidence API.
+        if execution_evidence is not None:
+            execution_result = execution_evidence.to_dict()
+            verifier_result = {**execution_result, **(verifier_result or {})}
+        if provenance_trace is not None and provenance_chain is None:
+            trace_data = provenance_trace.to_dict() if hasattr(provenance_trace, "to_dict") else provenance_trace
+            provenance_chain = trace_data.get("steps", []) if isinstance(trace_data, dict) else []
         judgment = CourtJudgment(
             target_url=target_url,
             parameter=parameter,

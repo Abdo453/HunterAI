@@ -15,10 +15,11 @@ log = logging.getLogger("security_intelligence.false_positive_memory")
 class FalsePositiveMemory:
     """بنك الأنماط الكاذبة السابقة: لمنع تكرار الإنذارات الكاذبة وتعلم السلوك الطبيعي للتطبيق"""
 
-    def __init__(self, storage_file: Optional[str] = SecurityIntelligenceConfig.FALSE_POSITIVE_MEMORY_PATH):
+    def __init__(self, storage_file: Optional[str] = None, persist: bool = False):
         self.storage_file = storage_file
+        self.persist = persist
         self.false_positive_records: List[Dict[str, Any]] = []
-        if self.storage_file:
+        if self.persist and self.storage_file:
             self._load()
 
 
@@ -40,7 +41,7 @@ class FalsePositiveMemory:
         return None
 
     def _save(self):
-        if not self.storage_file:
+        if not self.persist or not self.storage_file:
             return
         try:
             p = Path(self.storage_file)

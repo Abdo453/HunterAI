@@ -1,0 +1,58 @@
+[
+  {
+    "action": "CREATE_SNAPSHOT",
+    "snapshot_id": "SNAP-1D62F39D",
+    "label": "dashboard_triggered_checkpoint",
+    "timestamp": 1791792659.345261,
+    "checksum": "7c4fb6d49cb42088a489d9ca34a599906ca7b301908ef40efed43f92f3d1a768",
+    "file": "snapshots\\SNAP-1D62F39D.json",
+    "metadata": {
+      "triggered_by": "dashboard_api"
+    }
+  },
+  {
+    "action": "CREATE_SNAPSHOT",
+    "snapshot_id": "SNAP-99F54091",
+    "label": "e2e_final_checkpoint",
+    "timestamp": 1792106142.3051326,
+    "checksum": "5916f26b724c2c5296011295070430b2683f09efbd27742e4b37298b24a585ca",
+    "file": "snapshots\\SNAP-99F54091.json",
+    "metadata": {}
+  },
+  {
+    "action": "ROLLBACK",
+    "snapshot_id": "SNAP-99F54091",
+    "timestamp": 1792106142.3159058,
+    "status": "RESTORED"
+  },
+  {
+    "action": "CREATE_SNAPSHOT",
+    "snapshot_id": "SNAP-42A0D314",
+    "label": "e2e_final_checkpoint",
+    "timestamp": 1792106190.6576715,
+    "checksum": "5916f26b724c2c5296011295070430b2683f09efbd27742e4b37298b24a585ca",
+    "file": "snapshots\\SNAP-42A0D314.json",
+    "metadata": {}
+  },
+  {
+    "action": "ROLLBACK",
+    "snapshot_id": "SNAP-42A0D314",
+    "timestamp": 1792106190.6705263,
+    "status": "RESTORED"
+  },
+  {
+    "action": "CREATE_SNAPSHOT",
+    "snapshot_id": "SNAP-6384795E",
+    "label": "e2e_final_checkpoint",
+    "timestamp": 1792106232.7465298,
+    "checksum": "5916f26b724c2c5296011295070430b2683f09efbd27742e4b37298b24a585ca",
+    "file": "snapshots\\SNAP-6384795E.json",
+    "metadata": {}
+  },
+  {
+    "action": "ROLLBACK",
+    "snapshot_id": "SNAP-6384795E",
+    "timestamp": 1792106232.7501526,
+    "status": "RESTORED"
+  }
+]

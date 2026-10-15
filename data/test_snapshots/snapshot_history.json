@@ -1,0 +1,17 @@
+[
+  {
+    "action": "CREATE_SNAPSHOT",
+    "snapshot_id": "SNAP-A50CAAFC",
+    "label": "pre_attack_checkpoint",
+    "timestamp": 1791231393.0353432,
+    "checksum": "7fc5711c5c1b26bfa9047b56e8a2e9e06395b86fda7794470c8a8b8b1b65c1f0",
+    "file": "data\\test_snapshots\\SNAP-A50CAAFC.json",
+    "metadata": {}
+  },
+  {
+    "action": "ROLLBACK",
+    "snapshot_id": "SNAP-A50CAAFC",
+    "timestamp": 1791231393.040347,
+    "status": "RESTORED"
+  }
+]

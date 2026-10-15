@@ -1,0 +1,9 @@
+{
+  "endpoints": [
+    "/api/v1",
+    "/login"
+  ],
+  "findings_count": 5,
+  "phase": "SCAN",
+  "target": "example.com"
+}

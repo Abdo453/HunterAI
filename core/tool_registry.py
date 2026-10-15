@@ -111,10 +111,14 @@ class ToolRegistry:
     Registry of all security and Kali Linux tools with runtime availability detection.
     """
 
-    def __init__(self, capability_matrix: Optional[CapabilityMatrix] = None):
+    def __init__(self, capability_matrix: Optional[CapabilityMatrix] = None, config_path: Optional[str] = None):
         self.capabilities = capability_matrix or CapabilityMatrix()
+        self.config_path = config_path or "config/tools.json"
         self._tools: Dict[str, ToolDefinition] = {}
+        self.tool_metadata: Dict[str, Dict[str, Any]] = {}
+        self.usage_log: List[Dict[str, Any]] = []
         self._register_default_tools()
+        self._load_config_metadata()
         self._refresh_installed_status()
 
     def _register_default_tools(self) -> None:
@@ -140,15 +144,111 @@ class ToolRegistry:
             ToolDefinition("nuclei", "Vulnerability scanner powered by YAML templates", ToolCategory.VULN, "targets_list", "jsonl", RiskLevel.HIGH, True, ["raw", "json"], "nuclei -l {input_file} -silent -jsonl"),
             ToolDefinition("wpscan", "WordPress vulnerability scanner", ToolCategory.VULN, "url", "json", RiskLevel.HIGH, True, ["raw", "json"], "wpscan --url {target} --format json --stealthy"),
             ToolDefinition("sqlmap", "Automatic SQL injection detection & validation", ToolCategory.VULN, "url", "stdout", RiskLevel.HIGH, True, ["raw", "txt"], "sqlmap -u {target} --batch --banner"),
+            ToolDefinition("burp_scanner", "Burp Suite automated scanner integration", ToolCategory.VULN, "url", "json", RiskLevel.MEDIUM, True, ["raw", "json"], "burp --scan {target}"),
         ]
 
         for t in defaults:
             self._tools[t.name.lower()] = t
 
+    def _load_config_metadata(self) -> None:
+        """Loads additional tool metadata and permissions from config/tools.json if present"""
+        import json
+        from pathlib import Path
+        cfg_file = Path(self.config_path)
+        if cfg_file.exists():
+            try:
+                data = json.loads(cfg_file.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    for item in data:
+                        tool_id = item.get("id") or item.get("name")
+                        if tool_id:
+                            self.tool_metadata[tool_id.lower()] = item
+            except Exception as e:
+                logger.warning("Could not read tools config from %s: %s", self.config_path, e)
+
     def _refresh_installed_status(self) -> None:
         """Checks if CLI tools exist in current PATH"""
         for name, tool in self._tools.items():
             tool.is_installed = (shutil.which(name) is not None)
+
+    def discover_tools(self) -> Dict[str, Dict[str, Any]]:
+        """Scans environment and configuration for valid tools"""
+        self._refresh_installed_status()
+        self._load_config_metadata()
+        discovered: Dict[str, Dict[str, Any]] = {}
+        
+        # Tools in definitions
+        for name, t in self._tools.items():
+            meta = self.tool_metadata.get(name, {})
+            discovered[name] = {
+                "id": name,
+                "name": t.name,
+                "purpose": t.purpose,
+                "category": t.category.value,
+                "risk": t.risk.value,
+                "is_installed": t.is_installed,
+                "requires_authorization": t.requires_authorization,
+                "permissions": meta.get("permissions", ["recon" if t.risk == RiskLevel.LOW else "active_testing"]),
+                "type": meta.get("type", "security"),
+            }
+            
+        # Any additional from config
+        for tool_id, meta in self.tool_metadata.items():
+            if tool_id not in discovered:
+                discovered[tool_id] = {
+                    "id": tool_id,
+                    "name": meta.get("name", tool_id),
+                    "purpose": meta.get("purpose", ""),
+                    "category": meta.get("category", "recon"),
+                    "risk": meta.get("risk", "low"),
+                    "is_installed": shutil.which(tool_id) is not None,
+                    "requires_authorization": meta.get("requires_authorization", False),
+                    "permissions": meta.get("permissions", ["recon"]),
+                    "type": meta.get("type", "security"),
+                }
+        return discovered
+
+    def check_permissions(self, tool_id: str, project_permissions: Optional[List[str]] = None) -> Tuple[bool, Optional[str]]:
+        """Enforces project-scoped access and capability matrix gating"""
+        tool_key = tool_id.lower()
+        t = self.get_tool(tool_key)
+        meta = self.tool_metadata.get(tool_key, {})
+        
+        # Capability matrix check
+        allowed_by_cap, reason = self.is_action_allowed(tool_key)
+        if not allowed_by_cap:
+            return False, reason
+            
+        # Project-scoped permissions check
+        if project_permissions is not None:
+            tool_perms = meta.get("permissions", ["recon" if (t and t.risk == RiskLevel.LOW) else "active_testing"])
+            # If tool requires a permission that project doesn't have, block
+            if not any(p in project_permissions for p in tool_perms):
+                return False, f"Project lacks required permissions {tool_perms} for tool '{tool_id}'."
+                
+        return True, None
+
+    def log_tool_usage(
+        self,
+        tool_id: str,
+        action: str,
+        status: str = "SUCCESS",
+        project_id: str = "default",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Audits tool execution into runtime usage log"""
+        import time
+        entry = {
+            "timestamp": time.time(),
+            "tool_id": tool_id,
+            "action": action,
+            "status": status,
+            "project_id": project_id,
+            "details": details or {},
+        }
+        self.usage_log.append(entry)
+        logger.info("Tool usage audited: tool=%s action=%s status=%s project=%s", tool_id, action, status, project_id)
+        return entry
 
     def get_tool(self, name: str) -> Optional[ToolDefinition]:
         return self._tools.get(name.lower())

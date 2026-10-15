@@ -1,0 +1,145 @@
+[
+  {
+    "id": "burp_scanner",
+    "name": "burp_scanner",
+    "type": "security",
+    "category": "vuln",
+    "risk": "medium",
+    "permissions": ["recon", "scan", "active_testing"],
+    "purpose": "Burp Suite automated scanner integration for vulnerability discovery",
+    "requires_authorization": true,
+    "command_template": "burp --scan {target}"
+  },
+  {
+    "id": "subfinder",
+    "name": "subfinder",
+    "type": "recon",
+    "category": "dns",
+    "risk": "low",
+    "permissions": ["recon"],
+    "purpose": "Passive subdomain enumeration via multiple public sources",
+    "requires_authorization": false,
+    "command_template": "subfinder -d {target} -silent -json"
+  },
+  {
+    "id": "assetfinder",
+    "name": "assetfinder",
+    "type": "recon",
+    "category": "dns",
+    "risk": "low",
+    "permissions": ["recon"],
+    "purpose": "Fast asset and subdomain discovery using public archives",
+    "requires_authorization": false,
+    "command_template": "assetfinder --subs-only {target}"
+  },
+  {
+    "id": "dnsx",
+    "name": "dnsx",
+    "type": "recon",
+    "category": "dns",
+    "risk": "low",
+    "permissions": ["recon"],
+    "purpose": "High-throughput DNS query, resolution, and brute-forcer",
+    "requires_authorization": false,
+    "command_template": "dnsx -l {input_file} -silent -json"
+  },
+  {
+    "id": "httpx",
+    "name": "httpx",
+    "type": "recon",
+    "category": "http",
+    "risk": "low",
+    "permissions": ["recon"],
+    "purpose": "Fast HTTP probing, status code checking, and tech detection",
+    "requires_authorization": false,
+    "command_template": "httpx -l {input_file} -silent -json -tech-detect"
+  },
+  {
+    "id": "nmap",
+    "name": "nmap",
+    "type": "scanner",
+    "category": "ports",
+    "risk": "medium",
+    "permissions": ["recon", "scan"],
+    "purpose": "Network port scanning, OS detection, and service fingerprinter",
+    "requires_authorization": false,
+    "command_template": "nmap -sV -T3 -Pn --top-ports 100 {target}"
+  },
+  {
+    "id": "naabu",
+    "name": "naabu",
+    "type": "scanner",
+    "category": "ports",
+    "risk": "medium",
+    "permissions": ["recon", "scan"],
+    "purpose": "Fast SYN/CONNECT port scanner focused on reliability",
+    "requires_authorization": false,
+    "command_template": "naabu -host {target} -silent"
+  },
+  {
+    "id": "katana",
+    "name": "katana",
+    "type": "crawler",
+    "category": "crawling",
+    "risk": "low",
+    "permissions": ["recon", "crawling"],
+    "purpose": "Modern web crawler and endpoint spider supporting headless browser mode",
+    "requires_authorization": false,
+    "command_template": "katana -u {target} -silent -json"
+  },
+  {
+    "id": "gau",
+    "name": "gau",
+    "type": "crawler",
+    "category": "crawling",
+    "risk": "low",
+    "permissions": ["recon", "crawling"],
+    "purpose": "Fetch known URLs from AlienVault, Wayback Machine, and Common Crawl",
+    "requires_authorization": false,
+    "command_template": "gau {target} --subs"
+  },
+  {
+    "id": "ffuf",
+    "name": "ffuf",
+    "type": "fuzzer",
+    "category": "fuzzing",
+    "risk": "medium",
+    "permissions": ["fuzzing", "active_testing"],
+    "purpose": "Fast web fuzzer for directory, endpoint, and parameter discovery",
+    "requires_authorization": false,
+    "command_template": "ffuf -u {target}/FUZZ -w {wordlist} -of json -s"
+  },
+  {
+    "id": "nuclei",
+    "name": "nuclei",
+    "type": "security",
+    "category": "vuln",
+    "risk": "high",
+    "permissions": ["scan", "active_testing"],
+    "purpose": "Vulnerability scanner powered by community YAML templates",
+    "requires_authorization": true,
+    "command_template": "nuclei -l {input_file} -silent -jsonl"
+  },
+  {
+    "id": "sqlmap",
+    "name": "sqlmap",
+    "type": "security",
+    "category": "vuln",
+    "risk": "high",
+    "permissions": ["active_testing", "exploit_verify"],
+    "purpose": "Automatic SQL injection detection, verification, and database auditing",
+    "requires_authorization": true,
+    "command_template": "sqlmap -u {target} --batch --banner"
+  },
+  {
+    "id": "browser",
+    "name": "browser",
+    "type": "browser",
+    "category": "crawling",
+    "risk": "low",
+    "permissions": ["recon", "browser_automation"],
+    "purpose": "Playwright automated browser session controller for DOM analysis",
+    "requires_authorization": false,
+    "command_template": "playwright launch {target}"
+  }
+]

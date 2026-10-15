@@ -10,7 +10,8 @@ async def test_concurrency(gateway_client):
     client, gw = gateway_client
     import httpx
     
-    async with httpx.AsyncClient(app=gw.app, base_url="http://test") as ac:
+    transport = httpx.ASGITransport(app=gw.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         reqs = []
         for i in range(10):
             reqs.append(ac.post("/api/traffic", json={

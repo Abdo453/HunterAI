@@ -116,6 +116,7 @@ fi
 echo -e "${GREEN}"
 echo "======================================================================"
 echo " 🎉 PentestAI Unified Setup Complete!"
+echo " Tool readiness check: python3 scripts/verify_kali_toolchain.py --strict"
 echo " To start the Web UI on Kali:  python3 main.py"
 echo " To test the 3 models on Kali: python3 test_3_models.py ${OLLAMA_URL}"
 echo "======================================================================"

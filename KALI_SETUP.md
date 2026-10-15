@@ -127,6 +127,14 @@ source venv/bin/activate
 python3 test_connection.py
 ```
 
+### فحص الأدوات من نفس بيئة Kali
+
+```bash
+python3 scripts/verify_kali_toolchain.py --strict
+```
+
+هذا الفحص لا يتصل بأي موقع؛ يشغّل فقط `--version` أو `--help` لكل أداة ويخرج تقرير JSON مرتبًا. إذا كانت أداة مطلوبة مفقودة أو لا تعمل، ينتهي بكود خطأ بدل أن يبدأ الـAgent بفحص ناقص.
+
 المتوقع:
 ```
 [*] Testing Ollama at: http://192.168.72.1:11434

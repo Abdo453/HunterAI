@@ -15,8 +15,9 @@ log = logging.getLogger("security_intelligence.project_memory")
 class ProjectMemory:
     """ذاكرة المشروع: التقنيات، الأدوار، هيكل الـ APIs، والعلاقات المعمارية"""
 
-    def __init__(self, storage_file: Optional[str] = None):
+    def __init__(self, storage_file: Optional[str] = None, persist: bool = False):
         self.storage_file = storage_file or SecurityIntelligenceConfig.PROJECT_MEMORY_PATH
+        self.persist = persist
         self.technologies: List[str] = []
         self.domains: List[str] = []
         self.subdomains: List[str] = []
@@ -26,7 +27,8 @@ class ProjectMemory:
         self.attack_paths: List[Dict[str, Any]] = []
         self.architecture_summary: str = ""
         self.decisions_log: List[Dict[str, Any]] = []
-        self._load()
+        if self.persist:
+            self._load()
 
     def record_technology(self, tech_name: str):
         if tech_name and tech_name not in self.technologies:
@@ -75,6 +77,8 @@ class ProjectMemory:
         }
 
     def _save(self):
+        if not self.persist:
+            return
         try:
             p = Path(self.storage_file)
             p.parent.mkdir(parents=True, exist_ok=True)

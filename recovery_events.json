@@ -1,0 +1,56 @@
+[
+  {
+    "event_id": "REC-9958E3B1",
+    "timestamp": 1791792592.05065,
+    "component": "model:gpt-4",
+    "error_type": "ModelInferenceError",
+    "action_taken": "REROUTE_MODEL",
+    "detail": "Rerouting from 'gpt-4' to 'qwen3:8b'. Error: HTTP 503",
+    "success": true,
+    "metadata": {
+      "failed_model": "gpt-4",
+      "fallback_model": "qwen3:8b"
+    }
+  },
+  {
+    "event_id": "REC-B25210EA",
+    "timestamp": 1791792592.051629,
+    "component": "tool:nuclei",
+    "error_type": "ToolCrash",
+    "action_taken": "RESTART_TOOL",
+    "detail": "Tool 'nuclei' crashed. No restarter available. Error: Process killed by OOM",
+    "success": false,
+    "metadata": {
+      "tool": "nuclei",
+      "failure_count": 1
+    }
+  },
+  {
+    "event_id": "REC-D7D6A474",
+    "timestamp": 1791792592.0526376,
+    "component": "network:https://api.target.com",
+    "error_type": "NetworkOutage",
+    "action_taken": "RETRY_NETWORK",
+    "detail": "Network unreachable at 'https://api.target.com'. Attempt 1/3. Wait: 2s.",
+    "success": true,
+    "metadata": {
+      "endpoint": "https://api.target.com",
+      "attempt": 1,
+      "wait_seconds": 2
+    }
+  },
+  {
+    "event_id": "REC-0ABC226F",
+    "timestamp": 1791792592.0536418,
+    "component": "network:https://api.target.com",
+    "error_type": "NetworkOutage",
+    "action_taken": "RETRY_NETWORK",
+    "detail": "Network unreachable at 'https://api.target.com'. Attempt 4/3. Wait: 16s.",
+    "success": false,
+    "metadata": {
+      "endpoint": "https://api.target.com",
+      "attempt": 4,
+      "wait_seconds": 16
+    }
+  }
+]

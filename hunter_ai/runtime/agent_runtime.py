@@ -35,7 +35,7 @@ class AgentRuntime:
 
     def __init__(
         self,
-        agent_dir: str = ".agent",
+        agent_dir: Optional[str] = None,
         tool_registry: Optional[ToolRegistry] = None,
         model_invoker: Optional[Callable[[Dict[str, Any]], Coroutine[Any, Any, Dict[str, Any]]]] = None,
         event_callback: Optional[Callable[[Dict[str, Any]], Coroutine[Any, Any, None]]] = None

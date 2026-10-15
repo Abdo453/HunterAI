@@ -28,6 +28,7 @@ class GoldenTraceRunner:
         # Test environment components
         self.capture_store = CaptureStore("test_gateway")
         self.gateway = BurpGateway(capture_store=self.capture_store)
+        self.gateway.set_scope(include=["example.com", "*.example.com"], exclude=["out-of-scope.com", "*.out-of-scope.com"])
         self.client = TestClient(self.gateway.app)
         self.provenance_engine = EvidenceProvenanceEngine()
         

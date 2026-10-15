@@ -14,6 +14,7 @@ import logging
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import urlparse
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -111,6 +112,12 @@ class BurpGateway:
         """Programmatically updates active scope filters and recompiles scope engine"""
         if include is not None:
             self.active_scope["include"] = list(include)
+            # An explicit scope update is an operator decision to permit these
+            # targets; remove directly conflicting prior exclusions.
+            self.active_scope["exclude"] = [
+                item for item in self.active_scope["exclude"]
+                if item not in self.active_scope["include"]
+            ]
         if exclude is not None:
             self.active_scope["exclude"] = list(exclude)
         from core.scope_guard import ScopeGuard
@@ -238,9 +245,11 @@ class BurpGateway:
                 payload = await req.json()
                 req_str = payload.get("request", "")
                 resp_str = payload.get("response", "")
-                host = payload.get("host", "target.local")
-                port = payload.get("port", 80)
-                proto = payload.get("protocol", "http")
+                supplied_url = payload.get("url", "")
+                parsed_url = urlparse(supplied_url) if supplied_url else None
+                host = payload.get("host") or (parsed_url.hostname if parsed_url else None) or "target.local"
+                port = payload.get("port") or (parsed_url.port if parsed_url else None) or 80
+                proto = payload.get("protocol") or (parsed_url.scheme if parsed_url else None) or "http"
 
                 # Parse request line & headers vs body
                 req_headers = {}
@@ -257,14 +266,16 @@ class BurpGateway:
                 lines = hdr_part.splitlines() if hdr_part else []
                 first_line = lines[0] if lines else "GET / HTTP/1.1"
                 parts = first_line.split()
-                method = parts[0] if len(parts) > 0 else "GET"
-                path = parts[1] if len(parts) > 1 else "/"
-                full_url = f"{proto}://{host}:{port}{path}" if port not in (80, 443) else f"{proto}://{host}{path}"
+                method = payload.get("method") or (parts[0] if len(parts) > 0 else "GET")
+                path = ((parsed_url.path or "/") + (f"?{parsed_url.query}" if parsed_url and parsed_url.query else "")) if parsed_url else (parts[1] if len(parts) > 1 else "/")
+                full_url = supplied_url or (f"{proto}://{host}:{port}{path}" if port not in (80, 443) else f"{proto}://{host}{path}")
 
                 for hline in lines[1:]:
                     if ":" in hline:
                         hk, hv = hline.split(":", 1)
                         req_headers[hk.strip()] = hv.strip()
+                req_headers.update(payload.get("req_headers") or payload.get("headers") or {})
+                req_body = payload.get("req_body", req_body)
 
                 # Parse response line & headers vs body
                 resp_headers = {}
@@ -281,12 +292,14 @@ class BurpGateway:
                 resp_lines = rhdr_part.splitlines() if rhdr_part else []
                 resp_first = resp_lines[0] if resp_lines else "HTTP/1.1 200 OK"
                 status_parts = resp_first.split()
-                status_code = int(status_parts[1]) if len(status_parts) > 1 and status_parts[1].isdigit() else 200
+                status_code = payload.get("status_code") or (int(status_parts[1]) if len(status_parts) > 1 and status_parts[1].isdigit() else 200)
 
                 for hline in resp_lines[1:]:
                     if ":" in hline:
                         hk, hv = hline.split(":", 1)
                         resp_headers[hk.strip()] = hv.strip()
+                resp_headers.update(payload.get("resp_headers") or {})
+                resp_body = payload.get("resp_body", resp_body)
 
                 # ── ACTIVE SCOPE ENFORCEMENT BARRIER ──────────────────────────
                 is_in_scope, scope_reason = self.check_scope(host, full_url)
@@ -335,18 +348,20 @@ class BurpGateway:
                 self.capture_store.store_transaction(tx)
 
                 # Broadcast to event stream & normalize into research controller
-                self.event_stream.publish_event("REQUEST_INGESTED", {
-                    "tx_id": tx.tx_id,
-                    "trace_id": trace_id,
-                    "browser_action_id": browser_action_id,
-                    "host": host,
-                    "url": full_url,
-                    "method": method,
-                    "status_code": status_code,
-                    "tool": payload.get("tool", "proxy")
-                })
+                if self.event_stream is not None:
+                    self.event_stream.publish_event("REQUEST_INGESTED", {
+                        "tx_id": tx.tx_id,
+                        "trace_id": trace_id,
+                        "browser_action_id": browser_action_id,
+                        "host": host,
+                        "url": full_url,
+                        "method": method,
+                        "status_code": status_code,
+                        "tool": payload.get("tool", "proxy")
+                    })
                 can_tx = BurpTrafficNormalizer.normalize_dict(payload)
-                self.research_controller.ingest_canonical(can_tx)
+                if self.research_controller is not None:
+                    self.research_controller.ingest_canonical(can_tx)
 
                 # Broadcast to on_traffic_cb (In-Scope Only)
                 if self.on_traffic_cb:
@@ -386,7 +401,13 @@ class BurpGateway:
 
                 action = TaskAction[action_str] if action_str in TaskAction.__members__ else TaskAction.SCAN
                 task = self.task_queue.enqueue(action, target_url, data.get("payload", {}))
-                return {"status": "QUEUED", "task": task.to_dict()}
+                # Keep the complete task payload for existing clients while exposing
+                # the task id at the top level, which is the API's retrieval handle.
+                return {
+                    "status": "QUEUED",
+                    "task_id": task.task_id,
+                    "task": task.to_dict(),
+                }
             except Exception as e:
                 logger.error(f"[GATEWAY] Task creation error: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})

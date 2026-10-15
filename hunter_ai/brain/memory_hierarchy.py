@@ -13,6 +13,7 @@ import os
 import json
 import time
 import sqlite3
+import tempfile
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any, Set
@@ -24,8 +25,11 @@ class MemoryHierarchy:
     يقسم الذاكرة إلى 4 فروع معزولة مع إمكانية البحث والاسترجاع.
     """
 
-    def __init__(self, root_memory_dir: str = "memory"):
-        self.root_dir = Path(root_memory_dir)
+    def __init__(self, root_memory_dir: Optional[str] = None):
+        # Mission history is session-local unless a caller explicitly supplies
+        # a storage location for a deliberate archival workflow.
+        self._session_only = root_memory_dir is None
+        self.root_dir = Path(root_memory_dir) if root_memory_dir is not None else Path(tempfile.mkdtemp(prefix="hunterai-memory-"))
         self.short_term_dir = self.root_dir / "short_term"
         self.long_term_dir = self.root_dir / "long_term"
         self.knowledge_dir = self.root_dir / "knowledge"

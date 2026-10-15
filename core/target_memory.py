@@ -8,6 +8,7 @@ Persistent memory per target:
 """
 import json
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -17,16 +18,20 @@ logger = logging.getLogger("hunter_ai.target_memory")
 class TargetMemory:
     """Manages persistent state and false positive suppression across scans"""
 
-    def __init__(self, target_host: str, base_dir: str = "data/scans"):
+    def __init__(self, target_host: str, base_dir: Optional[str] = None):
         sanitized_host = target_host.replace(":", "_").replace("/", "_")
-        self.mem_dir = Path(base_dir) / sanitized_host
+        # Production scans must not inherit target history.  A caller can still
+        # pass an explicit directory for an isolated, intentional persistence use.
+        self._session_only = base_dir is None
+        base_path = Path(base_dir) if base_dir is not None else Path(tempfile.mkdtemp(prefix="hunterai-target-"))
+        self.mem_dir = base_path / sanitized_host
         self.mem_dir.mkdir(parents=True, exist_ok=True)
 
         self.do_not_repeat_file = self.mem_dir / "do_not_repeat.json"
         self.false_positives_file = self.mem_dir / "false_positives.json"
 
-        self._do_not_repeat: Set[str] = self._load_set(self.do_not_repeat_file)
-        self._false_positives: List[Dict[str, Any]] = self._load_list(self.false_positives_file)
+        self._do_not_repeat: Set[str] = set() if self._session_only else self._load_set(self.do_not_repeat_file)
+        self._false_positives: List[Dict[str, Any]] = [] if self._session_only else self._load_list(self.false_positives_file)
 
     def _load_set(self, path: Path) -> Set[str]:
         if path.exists():
@@ -61,6 +66,8 @@ class TargetMemory:
         self.save()
 
     def save(self):
+        if self._session_only:
+            return
         try:
             with open(self.do_not_repeat_file, "w", encoding="utf-8") as f:
                 json.dump(list(self._do_not_repeat), f, indent=2)

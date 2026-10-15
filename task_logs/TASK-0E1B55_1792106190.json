@@ -1,0 +1,22 @@
+{
+  "task_id": "TASK-0E1B55",
+  "name": "E2E Subdomain Recon",
+  "action": "subdomain_enum",
+  "target": "example.com",
+  "priority": 1,
+  "depends_on": [],
+  "status": "SUCCESS",
+  "result": {
+    "subdomains": [
+      "api.example.com",
+      "admin.example.com",
+      "auth.example.com"
+    ],
+    "live_hosts": [
+      "api.example.com",
+      "auth.example.com"
+    ]
+  },
+  "created_at": 1792106190.6066058,
+  "completed_at": 1792106190.6066058
+}

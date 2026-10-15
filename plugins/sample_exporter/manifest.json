@@ -1,0 +1,9 @@
+{
+  "plugin_id": "sample_exporter",
+  "name": "Sample Exporter Plugin",
+  "version": "1.0.0",
+  "description": "Exports assessment findings to structured payloads",
+  "allowed_actions": ["scan", "export"],
+  "entry_file": "plugin.py",
+  "enabled": true
+}

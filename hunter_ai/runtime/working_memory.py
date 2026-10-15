@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import json
 import time
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -28,8 +29,11 @@ class PersistentWorkingMemory:
     Manages persistent memory inside the `.agent/` working directory.
     """
 
-    def __init__(self, agent_dir: str = ".agent"):
-        self.dir = Path(agent_dir)
+    def __init__(self, agent_dir: Optional[str] = None):
+        # A default runtime is deliberately ephemeral: each mission starts with
+        # no observations, hypotheses, or target state from a previous run.
+        self._session_only = agent_dir is None
+        self.dir = Path(agent_dir) if agent_dir is not None else Path(tempfile.mkdtemp(prefix="hunterai-agent-"))
         self.dir.mkdir(parents=True, exist_ok=True)
 
         self.state_file = self.dir / "state.json"
@@ -194,3 +198,8 @@ class PersistentWorkingMemory:
             "failed_attempts": recent_failures,
             "confirmed_findings_count": len(findings)
         }
+
+
+# Backward-compatibility alias
+WorkingMemory = PersistentWorkingMemory
+

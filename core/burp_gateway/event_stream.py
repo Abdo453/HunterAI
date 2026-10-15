@@ -104,3 +104,8 @@ class BurpLiveEventStream:
 
     def clear(self):
         self._buffer.clear()
+
+
+# Backward-compatibility alias
+EventStream = BurpLiveEventStream
+

@@ -47,6 +47,8 @@ class BurpTask:
         d = asdict(self)
         d["action"] = self.action.value
         d["status"] = self.status.value
+        # Public API compatibility: consumers use a generic timestamp field.
+        d["timestamp"] = self.created_at
         return d
 
 

@@ -45,6 +45,7 @@ from agents.security_intelligence.learning_profile import LearningProfile
 from agents.security_intelligence.teacher import TeacherAgent
 from agents.security_intelligence.model_router import IntelligenceModelRouter
 from agents.security_intelligence.tool_registry import ToolRegistry
+from agents.security_intelligence.deliberation_engine import DeliberationEngine
 
 log = logging.getLogger("security_intelligence.brain")
 
@@ -75,6 +76,7 @@ class SecurityIntelligence:
         self.critic = CriticEngine(self.memory.false_positive)
         self.contradiction = ContradictionEngine()
         self.decision = SecurityDecisionEngine()
+        self.deliberation = DeliberationEngine()
 
         self.analyst = VulnerabilityAnalyst(
             hypothesis_engine=self.hypothesis_engine,
@@ -253,6 +255,16 @@ class SecurityIntelligence:
     async def evaluate_evidence(self, items: List[EvidenceItem]) -> Dict[str, Any]:
         """تقييم سلسلة الأدلة وحساب الوزن التراكمي"""
         return self.evidence_analyzer.evaluate_evidence_chain(items)
+
+    async def deliberate(
+        self,
+        observation: SecurityObservation,
+        evidence: Optional[List[EvidenceItem]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Rank competing security explanations and state the safest next check."""
+        context = self.context.build_context(observation)
+        hypotheses = self.hypothesis_engine.generate_hypotheses(observation)
+        return self.deliberation.deliberate(hypotheses, evidence or [], context)
 
     async def research(self, topic_or_cve: str) -> ResearchReport:
         """البحث الأمني المتعمق والتحقق من مصادر CVE وقواعد البيانات مع التخزين المؤقت"""

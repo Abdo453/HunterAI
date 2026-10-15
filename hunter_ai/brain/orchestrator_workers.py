@@ -372,11 +372,52 @@ class MasterOrchestratorEngine:
             scope_pol = ScopePolicy(allowed_targets=[self.domain, f"*.{self.domain}"])
             self.policy_gate = PolicyGate(scope_policy=scope_pol, authorized=True)
 
+    # ── Phase → Playbook section keyword mapping ──────────────────────────────
+    _PHASE_PLAYBOOK_KEYWORDS: Dict[str, List[str]] = {
+        "RECON":   ["SECTION 00:", "SECTION 01:", "SECTION 02:", "SECTION 03:"],
+        "SCAN":    ["SECTION 10:", "SECTION 11:", "SECTION 12:", "SECTION 13:"],
+        "ANALYZE": ["SECTION 06:", "SECTION 07:", "SECTION 08:", "SECTION 16:", "SECTION 17:"],
+        "EXPLOIT": ["SECTION 18:", "SECTION 19:", "SECTION 20:"],
+        "REPORT":  [],
+    }
+
+    def _load_playbook_context(self) -> str:
+        """Loads the playbook sections relevant to the current phase (<=800 chars)."""
+        try:
+            from core.playbooks.dorking_and_osint_knowledge import DorkingAndOSINTKnowledge
+            phase_name = self.state.phase.value  # e.g. "RECON"
+            keywords = self._PHASE_PLAYBOOK_KEYWORDS.get(phase_name, [])
+            if not keywords:
+                return ""
+            chunks: List[str] = []
+            budget = 800
+            for kw in keywords:
+                section = DorkingAndOSINTKnowledge.load_master_playbook(section=kw)
+                snippet = section[:budget].strip()
+                if snippet:
+                    chunks.append(snippet)
+                    budget -= len(snippet)
+                if budget <= 0:
+                    break
+            return "\n\n".join(chunks)
+        except Exception as exc:
+            logger.debug("Playbook load skipped: %s", exc)
+            return ""
+
     async def decide_next_action(self) -> Dict[str, Any]:
         """
         Asks qwen3:8b to read the compact BlackboardState and output the next structured step.
+        Enriches the prompt with verified Playbook commands for the current phase.
         """
         summary = self.state.get_compact_summary()
+
+        # ── Playbook enrichment (phase-aware) ────────────────────────────────
+        playbook_ctx = self._load_playbook_context()
+        playbook_block = (
+            f"\n\n[Verified Playbook Reference — Phase {self.state.phase.value}]\n{playbook_ctx}"
+            if playbook_ctx else ""
+        )
+
         system = (
             "You are Qwen3 8B, Master Security Orchestrator for HunterAI. "
             "You do NOT talk to models directly. You communicate via the Shared Blackboard State.\n"
@@ -391,6 +432,7 @@ class MasterOrchestratorEngine:
             "   - 'finish'\n"
             "3. Never jump phases illegally. Follow: RECON -> SCAN -> ANALYZE -> EXPLOIT -> REPORT -> COMPLETE.\n"
             "4. Output STRICT JSON: {\"action\": \"...\", \"params\": {...}, \"rationale\": \"...\"}"
+            + playbook_block
         )
         user = f"Current Blackboard State:\n{json.dumps(summary, indent=2)}\n\nWhat is the next best action?"
         raw = await self.workers._query_ollama(self.orchestrator_model, system, user, temperature=0.2)

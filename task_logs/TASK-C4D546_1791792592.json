@@ -1,0 +1,16 @@
+{
+  "task_id": "TASK-C4D546",
+  "name": "HTTP Probe",
+  "action": "http_probe",
+  "target": "example.com",
+  "priority": 2,
+  "depends_on": [
+    "TASK-2EE7AD"
+  ],
+  "status": "SUCCESS",
+  "result": {
+    "warning": "No handler registered for action 'http_probe'. Simulated as NOOP."
+  },
+  "created_at": 1791792592.0485399,
+  "completed_at": 1791792592.0495822
+}

@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -104,7 +105,11 @@ class CaptureStore:
     def __init__(self, target: str, base_dir: Optional[Path] = None):
         parsed = urlparse(target if "://" in target else f"http://{target}")
         self.target_host = (parsed.hostname or target).lower().replace(":", "_").replace(".", "_")
-        self.root_dir = (base_dir or Path("data/engagements")) / self.target_host
+        # Use a fresh temporary engagement by default.  Persisting a target's
+        # traffic is opt-in through an explicit base_dir.
+        self._session_only = base_dir is None
+        storage_root = Path(base_dir) if base_dir is not None else Path(tempfile.mkdtemp(prefix="hunterai-engagement-"))
+        self.root_dir = storage_root / self.target_host
 
         # Create subdirectories
         (self.root_dir / "requests").mkdir(parents=True, exist_ok=True)
@@ -135,7 +140,8 @@ class CaptureStore:
         self._trace_index: Dict[str, List[str]] = {}  # trace_id -> [tx_id, ...]
         self._browser_action_index: Dict[str, List[str]] = {}  # browser_action_id -> [tx_id, ...]
 
-        self._load_existing()
+        if not self._session_only:
+            self._load_existing()
 
     def _load_existing(self):
         try:
@@ -274,6 +280,14 @@ class CaptureStore:
         resp_path = self.root_dir / "responses" / f"{request_id}.json"
         if not req_path.exists():
             return None
+
+    def list_transactions(self, limit: Optional[int] = None) -> List[CapturedTransaction]:
+        """Returns captured transactions in insertion order without duplicate aliases."""
+        unique: Dict[str, CapturedTransaction] = {}
+        for transaction in self.transactions.values():
+            unique[transaction.tx_id] = transaction
+        transactions = list(unique.values())
+        return transactions[-limit:] if limit is not None else transactions
 
         try:
             with open(req_path, "r", encoding="utf-8") as f:
@@ -430,6 +444,7 @@ class CaptureStore:
             "hypotheses_count": len(self.hypotheses),
             "findings_count": len(self.findings),
             "timeline_events": len(self.timeline),
+            "total_transactions": len(self.list_transactions()),
         }
 
 

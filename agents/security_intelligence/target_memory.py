@@ -15,10 +15,12 @@ log = logging.getLogger("security_intelligence.target_memory")
 class TargetMemory:
     """ذاكرة الهدف المحدد: التاريخ، الثغرات المؤكدة، والأنماط المكتشفة لكل هدف"""
 
-    def __init__(self, storage_file: Optional[str] = None):
+    def __init__(self, storage_file: Optional[str] = None, persist: bool = False):
         self.storage_file = storage_file or SecurityIntelligenceConfig.TARGET_MEMORY_PATH
+        self.persist = persist
         self.targets: Dict[str, Dict[str, Any]] = {}
-        self._load()
+        if self.persist:
+            self._load()
 
     def get_or_create_target(self, target_host: str) -> Dict[str, Any]:
         if target_host not in self.targets:
@@ -51,6 +53,8 @@ class TargetMemory:
         return 0
 
     def _save(self):
+        if not self.persist:
+            return
         try:
             p = Path(self.storage_file)
             p.parent.mkdir(parents=True, exist_ok=True)
