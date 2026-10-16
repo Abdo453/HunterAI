@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import socket
 from datetime import datetime, time as dt_time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -86,6 +87,45 @@ DEFAULT_EXCLUDED_PORTS: List[int] = [
 ]
 
 
+def normalize_ip_literal(
+    host: str,
+) -> Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]:
+    """Parses ANY textual IP literal into an ``ipaddress`` object.
+
+    Naive ``ipaddress.ip_address`` parsing silently rejects the ambiguous
+    encodings that attackers use to smuggle a forbidden destination past scope
+    checks. This normaliser understands:
+
+      - canonical IPv4 / IPv6 (``10.0.0.5``, ``::1``)
+      - dotted-short IPv4 (``127.1`` -> 127.0.0.1)
+      - integer IPv4 (``2130706433`` -> 127.0.0.1)
+      - hexadecimal IPv4 (``0x7f000001`` -> 127.0.0.1)
+      - octal IPv4 (``0177.0.0.1`` -> 127.0.0.1)
+      - IPv6 with a zone id (``fe80::1%eth0``)
+      - bracketed IPv6 (``[::1]``)
+
+    Returns ``None`` when the value is an ordinary hostname (not an IP literal).
+    """
+    if not host:
+        return None
+    h = host.strip()
+    if h.startswith("[") and h.endswith("]"):
+        h = h[1:-1]
+    if "%" in h:  # strip an IPv6 zone id
+        h = h.split("%", 1)[0]
+
+    try:
+        return ipaddress.ip_address(h)
+    except ValueError:
+        pass
+
+    # Legacy inet_aton forms (IPv4 only, incl. hex/octal/short notation).
+    try:
+        return ipaddress.IPv4Address(socket.inet_aton(h))
+    except (OSError, ValueError):
+        return None
+
+
 class ScopePolicy(BaseModel):
     """Declarative scope policy loaded from scope.yaml or provided directly"""
     allowed_targets: List[str] = Field(default_factory=list)
@@ -98,6 +138,10 @@ class ScopePolicy(BaseModel):
     testing_window: Optional[Dict[str, str]] = None  # {"start": "08:00", "end": "20:00"}
     max_request_budget: int = 5000
     allow_private_ips_override: bool = False  # Strict default False
+    # When True, a target that matches NO in-scope rule is DENIED even if the
+    # allowlist is empty. Legacy callers keep the historical permissive fallback
+    # by leaving this False; the governed gateways opt in explicitly.
+    fail_closed: bool = False
 
     def __init__(self, **data):
         if "allowed_domains" in data and "allowed_targets" not in data:
@@ -234,9 +278,14 @@ class StrictScopeEngine:
         if low_host in HARD_BLOCKED_HOSTS:
             return False, f"SECURITY INVARIANT: Host '{host}' is an internal/metadata service and is strictly forbidden."
 
-        # 2. Hard-blocked IP addresses & CIDRs
-        try:
-            ip_obj = ipaddress.ip_address(low_host)
+        # 2. Hard-blocked IP addresses & CIDRs (ALL textual encodings)
+        ip_obj = normalize_ip_literal(low_host)
+        if ip_obj is not None:
+            # Normalise IPv4-mapped IPv6 (::ffff:127.0.0.1) to IPv4 so mapped
+            # loopback / metadata cannot slip past the IPv4 invariants.
+            if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped is not None:
+                ip_obj = ip_obj.ipv4_mapped
+
             if isinstance(ip_obj, ipaddress.IPv4Address):
                 # Inviolable invariants (Loopback, Cloud Metadata 169.254.169.254) can NEVER be scanned
                 for blk in INVIOLABLE_IPV4_SUBNETS:
@@ -255,9 +304,6 @@ class StrictScopeEngine:
                     for blk in RFC1918_IPV6_SUBNETS:
                         if ip_obj in blk:
                             return False, f"SECURITY INVARIANT: IPv6 {host} belongs to internal/private subnet {blk} and cannot be scanned."
-        except ValueError:
-            # Not an IP address, proceed with domain checks
-            pass
 
         # 3. Hard-blocked Ports
         if port and port in self.policy.excluded_ports:

@@ -1959,17 +1959,28 @@ class HunterPipelineOrchestrator:
         for s in self.secrets:
             if s.confidence >= 0.85:
                 from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
-                is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                # Secret presence is directly observed (we fetched the asset), but
+                # a leaked key has no Proof-of-Execution signature: it is deferred
+                # as a hypothesis rather than reported as a CONFIRMED vuln.
+                payload = self._build_proof_payload("SecretLeak", s.matched_string)
+                is_q, f_obj, rationale = FindingQualificationGate.evaluate_candidate(
                     title=f"Leaked Credential / Secret ({s.secret_type})",
                     asset=self.domain,
                     endpoint=s.file_url,
                     vuln_type="SecretLeak",
                     raw_evidence=s.matched_string,
                     source_tool="CodeIntelligence_SecretHunter",
-                    verifier_result={"reproduced": True, "is_reflection": False}
+                    verifier_result=self._court_verifier_result(payload, directly_observed=True),
+                    proof_payload=payload
                 )
                 if is_q and f_obj:
                     self.findings.append(f_obj)
+                else:
+                    self._defer_hypothesis(
+                        f"Leaked Credential / Secret ({s.secret_type})", s.file_url,
+                        "SecretLeak", "CodeIntelligence_SecretHunter", rationale,
+                        s.matched_string,
+                    )
 
         # ── TRANSITION TO VERIFICATION (ENFORCES ZERO FALSE POSITIVES) ────────
         self.fsm.transition_to(HunterState.VERIFY, "Multi-layer verification & false positive filtering")
@@ -1986,6 +1997,7 @@ class HunterPipelineOrchestrator:
             for f in self.findings if f.evidence
         ]
         self._save_stage_artifact("12_vulnerabilities", "findings.json", findings_json)
+        self._save_stage_artifact("12_vulnerabilities", "deferred_hypotheses.json", self.deferred_hypotheses)
         self._save_stage_artifact("13_evidence", "verification_proofs.json", proofs_json)
         self._save_stage_artifact("13_evidence", "evidence_graph.json", self.evidence_graph.to_dict())
         self._save_stage_artifact("07_verification", "verification_proofs.json", findings_json)

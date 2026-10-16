@@ -132,9 +132,19 @@ class CausalSecurityGraph:
         finding_id: str,
         param: str,
         sink_name: str,
-        differential_detail: str
+        differential_detail: str,
+        observed_differential: bool = False,
     ) -> CausalChainVerification:
-        """Constructs and verifies a standard linear injection causal chain"""
+        """Constructs and verifies a standard linear injection causal chain.
+
+        The chain is only *proven* when the caller asserts an actually observed
+        differential effect (``observed_differential=True``). Previously this
+        builder always returned ``is_causally_proven=True`` because the template
+        itself supplied the DATA_SINK → OBSERVABLE_RESPONSE link — a tautology
+        that let any caller manufacture causality from a free-text label. Now the
+        effect link (and therefore the proof) is conditional on a real
+        observation.
+        """
         in_id = f"IN_{finding_id}_{param}"
         parser_id = f"PARSER_{finding_id}"
         sink_id = f"SINK_{finding_id}_{sink_name}"
@@ -147,7 +157,8 @@ class CausalSecurityGraph:
 
         self.add_causal_link(in_id, parser_id, "User input injected into parser")
         self.add_causal_link(parser_id, sink_id, "Unsanitized parameter reaches execution sink")
-        self.add_causal_link(sink_id, resp_id, "Execution sink output reflected in response")
+        if observed_differential:
+            self.add_causal_link(sink_id, resp_id, "Execution sink output reflected in response")
 
         verif = self.verify_causal_chain(in_id, resp_id)
         verif.finding_id = finding_id

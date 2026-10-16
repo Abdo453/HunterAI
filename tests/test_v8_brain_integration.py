@@ -78,7 +78,8 @@ def test_causal_graph_standard_chain_builder():
         finding_id="F-TEST-01",
         param="search_query",
         sink_name="POSTGRESQL_QUERY",
-        differential_detail="Arithmetic evaluation ((53+19))->72 executed"
+        differential_detail="Arithmetic evaluation ((53+19))->72 executed",
+        observed_differential=True,
     )
     assert verif.is_causally_proven is True
     assert verif.confidence_score >= 0.90

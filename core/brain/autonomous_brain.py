@@ -2287,7 +2287,8 @@ class AutonomousBrain:
                     finding_id=f"CAUSAL-{vt}-{param}",
                     param=param,
                     sink_name=f"{vt.upper()}_SINK",
-                    differential_detail=p_reason or "Observable differential anomaly triggered"
+                    differential_detail=p_reason or "Observable differential anomaly triggered",
+                    observed_differential=bool(evidence_text),
                 )
 
                 # 2. Analysis of Competing Hypotheses (ACH)

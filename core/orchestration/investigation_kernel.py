@@ -204,7 +204,8 @@ class AutonomousInvestigationKernel:
                 finding_id=hyp_sqli.hypothesis_id,
                 param="q",
                 sink_name="SQL_DATABASE_QUERY",
-                differential_detail="Arithmetic evaluation ((53+19))->72 executed in DBMS query engine"
+                differential_detail="Arithmetic evaluation ((53+19))->72 executed in DBMS query engine",
+                observed_differential=True,
             )
             if causal_res_sqli.is_causally_proven:
                 causal_verified_count += 1

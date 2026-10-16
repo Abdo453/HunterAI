@@ -125,10 +125,10 @@
 - C5 (انعكاس ≠ تنفيذ): `core/scoring/tool_agreement.py:59-61` (يُبقي دحض الانعكاس) · `core/smart_probe_engine.py:370,381` (`probe in probe_resp.text` ⇒ XSS) · `core/independent_verifier.py:69-72` (`"<tagxyz>123" in text` ⇒ «انعكاس غير مُعقَّم مؤكَّد»). العمل: الانعكاس ≠ تنفيذ؛ XSS لا يُؤكَّد إلا بدليل تنفيذ (PoE/تنفيذ DOM)، والانعكاس يبقى فرضية.
 - القبول: اختبارات دحض الانعكاس/الصدفة + صفر تأكيد بمدخل نصي حر أو حساس افتراضي True.
 
-**M1d — LEDGER-016: توصيل PoE وتحويل مواضع الماسحات**
+**M1d — LEDGER-016: توصيل PoE وتحويل مواضع الماسحات — ✅ منجَزة (اختُبر 166)**
 - المواقع: `hunter_ai/pipeline/pipeline_orchestrator.py` مواضع `FindingQualificationGate` (dalfox/nikto/secrets وغيرها) التي تمرّر `reproduced` فقط.
 - العمل: (أ) تمرير طلب/استجابة فعليين إلى `ProofOfExecutionEngine` / `ProofPayload` حيث يكون الإثبات قابلًا لإعادة التقييم (توكن/حسابي/تفاضلي/بصمة). (ب) ما لا يقبل إعادة التقييم يتحوّل إلى **فرضية** تغذّي `InvestigationController` بدل تأكيد مباشر.
-- القبول: اختبار يفحص `findings_count`: صفر عند غياب الإثبات، > 0 عند وجود حمولة إثبات صحيحة.
+- القبول: اختبار يفحص `findings_count`: صفر عند غياب الإثبات، > 0 عند وجود حمولة إثبات صحيحة. (منفَّذ في `tests/test_poe_pipeline_gate.py` + `_court_verifier_result` = `bool(directly_observed and proof_payload)` + `_defer_hypothesis` + كسر طوطولوجيا `build_standard_injection_chain`.)
 
 **مخاطر:** عالية (نلمس المحكمة و`autonomous_brain`). **تراجع:** كل تغيير مستقل + اختبارات الأدلة القائمة تحرس. لا تعديل على `autonomous_brain` بلا اختبار موجّه يغطّي المسار المتأثّر.
 

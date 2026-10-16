@@ -274,6 +274,22 @@
 
 ---
 
+## LEDGER-016 — توصيل PoE وتحويل إشارات الماسحات (M1d / القبول: `findings_count`)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | كل Finding مؤكَّد يجب أن يقف على حمولة إثبات قابلة لإعادة التقييم (PoE)؛ وإشارة الماسح غير القابلة لإعادة التقييم تصبح **فرضية** لا تأكيدًا، فلا ادعاء «reproduced» كاذب |
+| **الحالة السابقة** | `PARTIAL` — 6 مواضع في خط الأنابيب تمرّر `verifier_result={"reproduced": True, "is_reflection": False}` تلقائيًا بلا أي إثبات (subzy/nuclei/dalfox/nikto/SpecialFileHunter/SecretHunter)، فتُشبع خطوة «التحقّق المستقل» في المحكمة براية غير مُكتسبة. و`causal_graph.build_standard_injection_chain` يعيد `is_causally_proven=True` دائمًا (قالب ثابت يوفّر رابط `DATA_SINK → OBSERVABLE_RESPONSE` بنفسه). |
+| **الملفات المفحوصة** | `hunter_ai/pipeline/pipeline_orchestrator.py` · `hunter_ai/pipeline/qualification_gate.py` · `core/evidence_court.py` (`adjudicate`/`_ProofResolver`) · `core/poe_engine.py` · `core/causal/causal_graph.py` · `core/brain/autonomous_brain.py` · `core/orchestration/investigation_kernel.py` |
+| **الملفات المتغيرة** | `hunter_ai/pipeline/pipeline_orchestrator.py` · `core/causal/causal_graph.py` · `core/brain/autonomous_brain.py` · `core/orchestration/investigation_kernel.py` · `tests/test_v8_brain_integration.py` · `tests/test_poe_pipeline_gate.py` (جديد) |
+| **وصف التغيير** | 1) `_court_verifier_result(payload, directly_observed=…)`: لا يُدّعى `reproduced` إلا عند توفّر حمولة PoE **قابلة لإعادة التقييم** جُمعت مباشرةً (`bool(directly_observed and proof_payload)`)؛ سطر ماسح ليس إعادة إنتاج. 2) المواضع الستّة استُبدلت: الماسحات ذات السطر فقط (`subzy`/`nuclei`/`dalfox`/`nikto`) لا تدّعي إعادة الإنتاج؛ `SpecialFileHunter`/`SecretHunter` (نجلب الأصل بأنفسنا) تمرّر `directly_observed=True` مع نصّ استجابة أطول (`r.text[:4000]`) ليتحقّق توقيع LFI. 3) `_defer_hypothesis(...)`: كل مرشّح ترفضه المحكمة يُسجَّل فرضية تغذّي التحقيق (`deferred_hypotheses.json`) بدل إسقاطه أو تأكيده. 4) `causal_graph.build_standard_injection_chain(..., observed_differential=False)`: رابط الأثر السبيبي (وبالتالي الإثبات) صار مشروطًا برصد فعلي — كسر الطوطولوجيا. |
+| **الاختبارات المنفَّذة** | `tests/test_poe_pipeline_gate.py` (5، جديد) + `test_v8_brain_integration` (4) + `test_v8_investigation_os`+`test_court_unification`+`test_no_reflection_confirmation`+`test_evidence_court_single_authority`+`test_no_direct_confirmation`+`test_proof_provenance`+`test_evidence_driven_system`+`test_scope_and_false_positives` (86) + `test_autonomous_brain_mission`+`test_autonomous_brain_state`+`test_agent_copilot_and_ui`+`test_autonomous_skills_arsenal`+`test_attack_graph_integration`+`test_meta_reasoning`+`test_integration_pipeline` (33) + خط الأنابيب (`test_hunter_master_pipeline`/`test_hunter_workflow_pipeline`/`test_enterprise_casm`/`test_program_intelligence_and_triad`/`test_artifact_based_recon`/`test_burp_pipeline_fusion`) (38) |
+| **نتائج الاختبارات** | ✅ **9/9** + **86/86** + **33/33** + **38/38 نجحت** (166 إجمالًا) + `py_compile` نظيف |
+| **قيود متبقية** | أصناف بلا توقيع PoE (`.env`/أسرار/`SubdomainTakeover`/`NucleiExposure`/`XSS`/`MisconfigExposure`) لا يمكن تأكيدها بالتصميم (المحكمة تشترط إثباتًا قطعيًا) ⇒ تُؤجَّل كفرضيات. توسيع عائلات الإثبات = M5. الوكيل المتوازي قد يُعيد إنشاء حزمة `core/evidence_court/` (الحارس يكشف). |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
 ## ما بقي خارج نطاق هذه الجلسة (مقصود)
 
 | البند | الحالة | السبب |
