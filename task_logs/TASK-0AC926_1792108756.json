@@ -1,0 +1,131 @@
+{
+  "task_id": "TASK-0AC926",
+  "title": "Recon Pass",
+  "team": "RECON",
+  "owner_agent": "ReconWorker_1",
+  "reviewer_agent": "",
+  "target": "https://target.com",
+  "action": "asset_discovery",
+  "parameters": {},
+  "priority": 5,
+  "depends_on": [],
+  "success_criteria": [],
+  "scope_verified": false,
+  "status": "REVIEW",
+  "retry_count": 0,
+  "max_retries": 2,
+  "result": {
+    "execution_id": "EXEC-9E814F",
+    "task_id": "TASK-0AC926",
+    "tool_name": "AssetDiscoveryAgent",
+    "action": "asset_discovery",
+    "target": "https://target.com",
+    "parameters": {},
+    "success": true,
+    "exit_code": 0,
+    "duration_ms": 0.0,
+    "raw_output": "Discovered 7 domains, 3 live hosts",
+    "normalized_data": {
+      "domains": [
+        "api.target.com",
+        "target.com",
+        "admin.target.com",
+        "https://target.com",
+        "static.target.com",
+        "auth.target.com",
+        "app.target.com"
+      ],
+      "live_hosts": [
+        "target.com",
+        "api.target.com",
+        "auth.target.com"
+      ]
+    },
+    "errors": [],
+    "warnings": [],
+    "evidence_artifacts": [
+      {
+        "evidence_id": "EV-FF1372",
+        "significance": "OBSERVATION",
+        "source_tool": "AssetDiscoveryAgent",
+        "target": "target.com",
+        "description": "Live HTTP host verified: target.com",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7339401
+      },
+      {
+        "evidence_id": "EV-5B3AF8",
+        "significance": "OBSERVATION",
+        "source_tool": "AssetDiscoveryAgent",
+        "target": "api.target.com",
+        "description": "Live HTTP host verified: api.target.com",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7339401
+      },
+      {
+        "evidence_id": "EV-EEDCA6",
+        "significance": "OBSERVATION",
+        "source_tool": "AssetDiscoveryAgent",
+        "target": "auth.target.com",
+        "description": "Live HTTP host verified: auth.target.com",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7339401
+      }
+    ],
+    "covered_items": [
+      "api.target.com",
+      "target.com",
+      "admin.target.com",
+      "https://target.com",
+      "static.target.com",
+      "auth.target.com",
+      "app.target.com"
+    ],
+    "coverage_limits": [
+      "Passive DNS enumeration",
+      "HTTP/HTTPS port 80/443 only"
+    ],
+    "unresolved_unknowns": [
+      "UDP services",
+      "Wildcard subdomains (>depth 2)"
+    ],
+    "recommended_next_steps": [
+      {
+        "team": "WEB",
+        "action": "http_analysis",
+        "target": "https://target.com"
+      },
+      {
+        "team": "WEB",
+        "action": "http_analysis",
+        "target": "https://api.target.com"
+      },
+      {
+        "team": "WEB",
+        "action": "http_analysis",
+        "target": "https://auth.target.com"
+      }
+    ],
+    "timestamp": 1792108756.7339401
+  },
+  "review_notes": "",
+  "review_passed": null,
+  "created_at": 1792108756.7323112,
+  "started_at": 1792108756.7328572,
+  "completed_at": null
+}

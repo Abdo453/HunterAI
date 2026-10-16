@@ -410,6 +410,12 @@ class BurpIntegrationValidatorV1:
                     "confidence": 0.99,
                     "proof_detail": "BOLA confirmed: User 42 successfully fetched User 43 private profile."
                 },
+                proof_payload={
+                    "artifact_type": "token",
+                    "expected_token": "bob@corp.local",
+                    "response_text": "HTTP/1.1 200 OK\r\n\r\n{\"id\": 43, \"email\": \"bob@corp.local\"}",
+                    "baseline_text": "HTTP/1.1 200 OK\r\n\r\n{\"id\": 42, \"email\": \"alice@corp.local\"}",
+                },
                 is_in_scope=True
             )
 

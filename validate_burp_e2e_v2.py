@@ -526,6 +526,12 @@ class BurpE2EValidatorV2:
                 vuln_class="idor",
                 finder_claim=finder_claim,
                 verifier_result=verifier_result,
+                proof_payload={
+                    "artifact_type": "token",
+                    "expected_token": "bob@corp.local",
+                    "response_text": "HTTP/1.1 200 OK\r\n\r\n{\"id\": 43, \"email\": \"bob@corp.local\"}",
+                    "baseline_text": "HTTP/1.1 200 OK\r\n\r\n{\"id\": 42, \"email\": \"alice@corp.local\"}",
+                },
                 is_in_scope=True
             )
 

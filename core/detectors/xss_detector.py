@@ -103,6 +103,15 @@ class XSSDetector:
             vuln_class="xss",
             finder_claim={"claim": "Unencoded attribute context breakout", "raw_response": t_body},
             verifier_result={"reproduced": True, "dom_breakout_confirmed": True, "confidence": 0.98},
+            # Hand the Court the raw evidence so proof is DERIVED, not declared:
+            # the unique nonce must appear verbatim in the mutated response and be
+            # absent from the unmutated baseline.
+            proof_payload={
+                "artifact_type": "token",
+                "expected_token": nonce,
+                "response_text": t_body,
+                "baseline_text": b_body,
+            },
             is_in_scope=True
         )
 

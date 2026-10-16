@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -30,6 +31,53 @@ from core.scope_engine import (
 )
 
 logger = logging.getLogger("hunter_ai.policy_gate")
+
+# Placeholder targets that mean "no network destination" rather than a hostname.
+_SENTINEL_TARGETS: Set[str] = {
+    "", "local_terminal", "background_process", "localhost_shell", "local",
+}
+_URL_HOST_RE = re.compile(r"https?://([^\s/'\"`)\]},;]+)", re.IGNORECASE)
+_IPV4_RE = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+
+
+def extract_candidate_destinations(*fields: Optional[str]) -> List[str]:
+    """Best-effort extraction of network destinations referenced by free text.
+
+    Used to run the non-overridable safety invariants against shell commands,
+    which otherwise carry their destination inside the command string rather
+    than in a dedicated ``target``/``url`` field.
+
+    This is deliberately conservative: it returns only hosts, IPv4 literals and
+    known internal/metadata hostnames. Filesystem paths are not matched.
+    """
+    seen: List[str] = []
+    for value in fields:
+        if not value:
+            continue
+        text = str(value)
+
+        for match in _URL_HOST_RE.finditer(text):
+            host = match.group(1).rsplit("@", 1)[-1]
+            # Strip a trailing :port (but never mangle a bare IPv6 literal).
+            if host.count(":") == 1:
+                host = host.split(":", 1)[0]
+            if host:
+                seen.append(host)
+
+        for match in _IPV4_RE.finditer(text):
+            seen.append(match.group(0))
+
+        lowered = text.lower()
+        for blocked in HARD_BLOCKED_HOSTS:
+            if blocked in lowered:
+                seen.append(blocked)
+
+    # De-duplicate, preserving order.
+    ordered: List[str] = []
+    for host in seen:
+        if host not in ordered:
+            ordered.append(host)
+    return ordered
 
 
 class ActionCategory(str, Enum):
@@ -116,7 +164,28 @@ class PolicyGate:
                             action_request=req
                         )
 
-        # 2. Check Active Fuzzing Authorization
+        # 2. Inviolable Destination Scan (ALL categories, no bypass)
+        # Loopback, cloud metadata and reserved ranges are non-overridable.
+        # This must run before the "local exec" exemption below, because a shell
+        # command places its real destination inside the command string:
+        #   curl http://169.254.169.254/latest/meta-data/
+        # would otherwise be classified as a local, target-less execution.
+        for host in extract_candidate_destinations(req.url, req.target, req.command):
+            if host.strip().lower() in _SENTINEL_TARGETS:
+                continue
+            invariant_ok, invariant_reason = self._scope_engine.check_inviolable(host)
+            if not invariant_ok:
+                logger.critical(
+                    "POLICY GATE DENIED (inviolable): host='%s' category='%s' reason='%s'",
+                    host, req.category.value, invariant_reason,
+                )
+                return PolicyDecision(
+                    allowed=False,
+                    reason=invariant_reason,
+                    action_request=req,
+                )
+
+        # 3. Check Active Fuzzing Authorization
         if req.category == ActionCategory.ACTIVE_FUZZING and not self._authorized:
             return PolicyDecision(
                 allowed=False,
@@ -124,7 +193,7 @@ class PolicyGate:
                 action_request=req
             )
 
-        # 3. Scope Engine Validation on Target / URL
+        # 4. Scope Engine Validation on Target / URL
         target_to_check = req.url or req.target
         if not target_to_check and req.category in (ActionCategory.BROWSER_NAVIGATE, ActionCategory.HTTP_REQUEST):
             return PolicyDecision(

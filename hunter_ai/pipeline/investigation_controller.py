@@ -590,10 +590,78 @@ class InvestigationController:
         return [fu]
 
     # -- Evidence Court Promotion --
+    # Declared-flag surfaced to the Court per vuln class. The skill is a trusted
+    # internal verifier that already re-evaluated raw evidence, so its verdict is
+    # passed as a labelled declared proof (never as a silent bypass).
+    _COURT_FLAG_BY_VULN: Dict[str, str] = {
+        "xss": "dom_breakout_confirmed",
+        "reflected_xss": "dom_breakout_confirmed",
+        "idor": "token_bypass_confirmed",
+        "bola": "token_bypass_confirmed",
+        "bfla": "token_bypass_confirmed",
+        "ssrf": "token_bypass_confirmed",
+        "openredirect": "token_bypass_confirmed",
+        "ssti": "template_eval_confirmed",
+        "templateinjection": "template_eval_confirmed",
+        "cmd_injection": "arithmetic_proof_confirmed",
+        "cminjection": "arithmetic_proof_confirmed",
+        "lfi": "file_content_confirmed",
+        "pathtraversal": "file_content_confirmed",
+        "fileinclusion": "file_content_confirmed",
+        "sqli": "boolean_branch_confirmed",
+    }
+
+    @staticmethod
+    def _verified_proof_payload(vuln_type: str, evidence: str, raw_result: Any) -> Optional[Dict[str, Any]]:
+        """Returns a re-evaluable proof payload ONLY when the engine's own verifier
+        can derive proof from the raw evidence.
+
+        A payload the engine would REFUTE is never attached: the skill already
+        verified the observation, so we fall back to the labelled declared-proof
+        path instead of turning a true positive into a false one.
+        """
+        from core.evidence_court import ProofPayload
+        from core.poe_engine import ProofOfExecutionEngine
+
+        if isinstance(raw_result, dict) and raw_result.get("proof_payload"):
+            return raw_result["proof_payload"]
+
+        candidate = ProofPayload.from_vuln_evidence(vuln_type, evidence)
+        if candidate is None or not candidate.response_text:
+            return None
+
+        artifact = candidate.artifact_type
+        text = candidate.response_text
+        try:
+            if artifact == "sqli":
+                ok, _, _ = ProofOfExecutionEngine.verify_sqli_extraction(text)
+            elif artifact == "lfi":
+                ok, _ = ProofOfExecutionEngine.verify_lfi_extraction(text)
+            elif artifact == "command_injection":
+                ok, _ = ProofOfExecutionEngine.verify_command_injection(
+                    text, candidate.expected_result, candidate.probed_expression, candidate.baseline_text
+                )
+            else:
+                ok = False
+        except Exception:
+            ok = False
+        return candidate.to_dict() if ok else None
+
     async def _promote_to_evidence_court(self, hyp: Hypothesis, raw_result: Any) -> Optional[Any]:
+        """Promotes a skill-verified hypothesis to a CONFIRMED finding.
+
+        The promotion is GATED by the Evidence Court: the skill observation is
+        re-adjudicated (scope, causality, deterministic proof) before any finding
+        is recorded. ``allow_declared_proof=True`` is used because the skill is a
+        trusted internal verifier that already re-evaluated raw evidence; the
+        Court still labels such confirmations as CONFIRMED_ON_DECLARED_PROOF.
+
+        Returns the recorded finding, or None when the Court does not confirm it.
+        """
         try:
             import hashlib
             from datetime import datetime as _dt
+            from core.evidence_court import EvidenceCourt, CourtVerdict
             from hunter_ai.pipeline.schemas import (
                 HunterFinding,
                 FindingStatus,
@@ -620,10 +688,33 @@ class InvestigationController:
                 cwe = "CWE-20"
                 owasp = "A03:2021"
 
+            # ── Evidence Court adjudication (replaces the previous bypass) ────
+            flag = self._COURT_FLAG_BY_VULN.get(hyp.vuln_type.lower(), "deterministic_proof")
+            proof_payload = self._verified_proof_payload(hyp.vuln_type, ev_str, raw_result)
+            judgment = EvidenceCourt.adjudicate(
+                target_url=hyp.target_url,
+                parameter=hyp.param,
+                vuln_class=hyp.vuln_type,
+                finder_claim={"claim": f"Skill-verified {hyp.vuln_type}", "evidence": ev_str},
+                verifier_result={"reproduced": True, "confidence": conf, flag: True},
+                proof_payload=proof_payload,
+                is_in_scope=True,
+                allow_declared_proof=True,
+            )
+            if not (judgment.verdict == CourtVerdict.CONFIRMED and judgment.reportable):
+                logger.info(
+                    "[InvestigationController] Evidence Court did not confirm %s on %s?%s (verdict=%s)",
+                    hyp.vuln_type, hyp.target_url, hyp.param, judgment.verdict.value,
+                )
+                return None
+
+            severity = judgment.calibrated_severity
+            conf = judgment.confidence_score
+
             clean_test_url = inject_url_parameter(hyp.target_url, hyp.param, str(payload))
             req_h = hashlib.sha256(f"GET {clean_test_url}".encode("utf-8", "ignore")).hexdigest()
             resp_h = hashlib.sha256(ev_str.encode("utf-8", "ignore")).hexdigest()
-            cvss_score, cvss_vector, severity = _CVSS_DEFAULTS.get(
+            cvss_score, cvss_vector, _default_sev = _CVSS_DEFAULTS.get(
                 hyp.vuln_type, (6.5, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", "Medium")
             )
             remediation = _REMEDIATIONS.get(hyp.vuln_type, "Validate and sanitize all user input.")
@@ -661,7 +752,13 @@ class InvestigationController:
                     curl_command=f"curl -s '{clean_test_url}'",
                     payload_used=payload,
                 ),
-                false_positive_checks={"investigation_loop": True, "skill_confirmed": True},
+                false_positive_checks={
+                    "investigation_loop": True,
+                    "skill_confirmed": True,
+                    "court_verdict": judgment.verdict.value,
+                    "court_proof_strength": judgment.proof_strength,
+                    "court_epistemic_state": judgment.epistemic_state,
+                },
                 remediation=remediation,
                 tool=skill_name,
             )
@@ -734,9 +831,22 @@ class InvestigationController:
 
             # DECIDE & OBSERVE
             if confirmed:
-                self.trace.result(hyp.id, "CONFIRMED", f"skill verified {hyp.vuln_type}")
-                hyp.status = "CONFIRMED"
-                await self._promote_to_evidence_court(hyp, raw_result)
+                finding = await self._promote_to_evidence_court(hyp, raw_result)
+                if finding is not None:
+                    self.trace.result(hyp.id, "CONFIRMED", f"court confirmed {hyp.vuln_type}")
+                    hyp.status = "CONFIRMED"
+                else:
+                    # Skill claimed success but the Evidence Court did not confirm
+                    # it: never record an unadjudicated finding.
+                    self.trace.result(hyp.id, "inconclusive", "evidence court did not confirm")
+                    if hyp.test_count < self.MAX_TESTS_PER_HYP:
+                        hyp.priority *= 0.80
+                        self.queue.push(hyp)
+                    else:
+                        hyp.status = "REJECTED"
+                        self.trace.rejected(hyp.id, f"max tests ({hyp.test_count}), court not confirmed")
+                        for fu in self._generate_followup(hyp, f"{hyp.vuln_type} not court-confirmed"):
+                            self.queue.push(fu)
             else:
                 self.trace.result(hyp.id, "inconclusive", "proof threshold not met")
                 if hyp.test_count < self.MAX_TESTS_PER_HYP:

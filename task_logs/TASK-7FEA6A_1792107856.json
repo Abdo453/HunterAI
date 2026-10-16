@@ -1,0 +1,66 @@
+{
+  "task_id": "TASK-7FEA6A",
+  "title": "Self Grade Test",
+  "team": "WEB",
+  "owner_agent": "Agent_Alice",
+  "reviewer_agent": "Agent_Bob_Verifier",
+  "target": "example.com",
+  "action": "probe",
+  "parameters": {},
+  "priority": 5,
+  "depends_on": [],
+  "success_criteria": [],
+  "scope_verified": false,
+  "status": "DONE",
+  "retry_count": 0,
+  "max_retries": 2,
+  "result": {
+    "execution_id": "EXEC-5ED465",
+    "task_id": "TASK-001",
+    "tool_name": "subfinder",
+    "action": "subdomain_enum",
+    "target": "example.com",
+    "parameters": {},
+    "success": true,
+    "exit_code": 0,
+    "duration_ms": 0.0,
+    "raw_output": "api.example.com",
+    "normalized_data": {
+      "subdomains": [
+        "api.example.com"
+      ]
+    },
+    "errors": [],
+    "warnings": [],
+    "evidence_artifacts": [
+      {
+        "evidence_id": "EV-E6FE8D",
+        "significance": "OBSERVATION",
+        "source_tool": "subfinder",
+        "target": "example.com",
+        "description": "Subdomain discovered",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792107856.657706
+      }
+    ],
+    "covered_items": [
+      "example.com"
+    ],
+    "coverage_limits": [],
+    "unresolved_unknowns": [
+      "Internal DNS zone unmapped"
+    ],
+    "recommended_next_steps": [],
+    "timestamp": 1792107856.657706
+  },
+  "review_notes": "",
+  "review_passed": true,
+  "created_at": 1792107856.6671658,
+  "started_at": 1792107856.6677604,
+  "completed_at": 1792107856.668782
+}

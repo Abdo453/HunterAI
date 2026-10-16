@@ -83,6 +83,8 @@ class FindingQualificationGate:
         is_in_scope: bool = True,
         reproduction: Optional[ReproductionArtifact] = None,
         evidence_chain: Optional[List[Dict[str, Any]]] = None,
+        proof_payload: Optional[Dict[str, Any]] = None,
+        allow_declared_proof: bool = False,
     ) -> Tuple[bool, Optional[HunterFinding], str]:
         """
         Evaluates whether a candidate claim qualifies as a legitimate vulnerability finding.
@@ -119,7 +121,9 @@ class FindingQualificationGate:
             vuln_class=vuln_type,
             finder_claim=finder_claim,
             verifier_result=verifier_result,
-            is_in_scope=is_in_scope
+            is_in_scope=is_in_scope,
+            proof_payload=proof_payload,
+            allow_declared_proof=allow_declared_proof,
         )
 
         if judgment.verdict != CourtVerdict.CONFIRMED:

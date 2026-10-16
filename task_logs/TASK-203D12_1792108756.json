@@ -1,0 +1,122 @@
+{
+  "task_id": "TASK-203D12",
+  "title": "Port Scan",
+  "team": "NETWORK",
+  "owner_agent": "NetworkWorker_1",
+  "reviewer_agent": "",
+  "target": "target.com",
+  "action": "port_scan",
+  "parameters": {},
+  "priority": 5,
+  "depends_on": [],
+  "success_criteria": [],
+  "scope_verified": false,
+  "status": "REVIEW",
+  "retry_count": 0,
+  "max_retries": 2,
+  "result": {
+    "execution_id": "EXEC-98C523",
+    "task_id": "TASK-203D12",
+    "tool_name": "NetworkDiscoveryAgent",
+    "action": "port_scan",
+    "target": "target.com",
+    "parameters": {},
+    "success": true,
+    "exit_code": 0,
+    "duration_ms": 0.0,
+    "raw_output": "Open ports: [80, 443, 8443]",
+    "normalized_data": {
+      "open_ports": [
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "service": "http",
+          "state": "open"
+        },
+        {
+          "port": 443,
+          "protocol": "tcp",
+          "service": "https",
+          "state": "open"
+        },
+        {
+          "port": 8443,
+          "protocol": "tcp",
+          "service": "https-alt",
+          "state": "open"
+        }
+      ]
+    },
+    "errors": [],
+    "warnings": [],
+    "evidence_artifacts": [
+      {
+        "evidence_id": "EV-054332",
+        "significance": "OBSERVATION",
+        "source_tool": "NetworkDiscoveryAgent",
+        "target": "target.com:80",
+        "description": "Open port discovered: 80/tcp (http)",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7572365
+      },
+      {
+        "evidence_id": "EV-AA2AAD",
+        "significance": "OBSERVATION",
+        "source_tool": "NetworkDiscoveryAgent",
+        "target": "target.com:443",
+        "description": "Open port discovered: 443/tcp (https)",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7572365
+      },
+      {
+        "evidence_id": "EV-E8488C",
+        "significance": "OBSERVATION",
+        "source_tool": "NetworkDiscoveryAgent",
+        "target": "target.com:8443",
+        "description": "Open port discovered: 8443/tcp (https-alt)",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7572365
+      }
+    ],
+    "covered_items": [
+      "target.com:80",
+      "target.com:443",
+      "target.com:8443"
+    ],
+    "coverage_limits": [
+      "Top 1000 TCP ports scanned"
+    ],
+    "unresolved_unknowns": [
+      "UDP services unmapped",
+      "Non-standard high ports (>10000)"
+    ],
+    "recommended_next_steps": [
+      {
+        "team": "NETWORK",
+        "action": "service_analysis",
+        "target": "target.com:8443"
+      }
+    ],
+    "timestamp": 1792108756.7572365
+  },
+  "review_notes": "",
+  "review_passed": null,
+  "created_at": 1792108756.7552369,
+  "started_at": 1792108756.7562363,
+  "completed_at": null
+}

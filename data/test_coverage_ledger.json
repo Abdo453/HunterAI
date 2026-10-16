@@ -1,0 +1,69 @@
+{
+  "assets": [
+    {
+      "asset_type": "DOMAIN",
+      "identifier": "example.com",
+      "discovered_by": "ReconTeam",
+      "discovered_at": 1792107856.657706,
+      "analyzed": false,
+      "analyzed_by": "",
+      "tested": false,
+      "tested_vuln_classes": [],
+      "confirmed": false,
+      "finding_refs": [],
+      "failed": false,
+      "failure_reasons": [],
+      "untestable": false,
+      "untestable_reason": null,
+      "untestable_detail": "",
+      "metadata": {}
+    },
+    {
+      "asset_type": "ENDPOINT",
+      "identifier": "/api/v1/users",
+      "discovered_by": "WebTeam",
+      "discovered_at": 1792107856.6589324,
+      "analyzed": true,
+      "analyzed_by": "APITeam",
+      "tested": true,
+      "tested_vuln_classes": [
+        "IDOR"
+      ],
+      "confirmed": false,
+      "finding_refs": [],
+      "failed": false,
+      "failure_reasons": [],
+      "untestable": false,
+      "untestable_reason": null,
+      "untestable_detail": "",
+      "metadata": {}
+    },
+    {
+      "asset_type": "ENDPOINT",
+      "identifier": "/admin/2fa",
+      "discovered_by": "",
+      "discovered_at": 1792107856.6616802,
+      "analyzed": false,
+      "analyzed_by": "",
+      "tested": false,
+      "tested_vuln_classes": [],
+      "confirmed": false,
+      "finding_refs": [],
+      "failed": false,
+      "failure_reasons": [],
+      "untestable": true,
+      "untestable_reason": "REQUIRES_OPERATOR_2FA",
+      "untestable_detail": "Needs hardware Yubikey",
+      "metadata": {}
+    }
+  ],
+  "blindspots": [
+    {
+      "category": "BinaryProtocols",
+      "description": "gRPC HTTP/2 stream unparsed",
+      "impact": "HIGH",
+      "recommended_mitigation": "",
+      "detected_at": 1792107856.6632931
+    }
+  ]
+}

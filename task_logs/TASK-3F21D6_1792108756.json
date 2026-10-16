@@ -1,0 +1,130 @@
+{
+  "task_id": "TASK-3F21D6",
+  "title": "Content Discovery",
+  "team": "WEB",
+  "owner_agent": "WebWorker_1",
+  "reviewer_agent": "",
+  "target": "https://target.com",
+  "action": "content_discovery",
+  "parameters": {},
+  "priority": 5,
+  "depends_on": [],
+  "success_criteria": [],
+  "scope_verified": false,
+  "status": "REVIEW",
+  "retry_count": 0,
+  "max_retries": 2,
+  "result": {
+    "execution_id": "EXEC-A663AD",
+    "task_id": "TASK-3F21D6",
+    "tool_name": "ContentDiscoveryAgent",
+    "action": "content_discovery",
+    "target": "https://target.com",
+    "parameters": {},
+    "success": true,
+    "exit_code": 0,
+    "duration_ms": 0.0,
+    "raw_output": "Found 5 endpoints, 3 parameters",
+    "normalized_data": {
+      "endpoints": [
+        "https://target.com/",
+        "https://target.com/api/v1/users",
+        "https://target.com/api/v1/auth/login",
+        "https://target.com/admin/dashboard",
+        "https://target.com/static/main.js"
+      ],
+      "parameters": [
+        {
+          "endpoint": "https://target.com/api/v1/users",
+          "param": "id",
+          "method": "GET"
+        },
+        {
+          "endpoint": "https://target.com/api/v1/auth/login",
+          "param": "username",
+          "method": "POST"
+        },
+        {
+          "endpoint": "https://target.com/api/v1/auth/login",
+          "param": "password",
+          "method": "POST"
+        }
+      ]
+    },
+    "errors": [],
+    "warnings": [],
+    "evidence_artifacts": [
+      {
+        "evidence_id": "EV-025E16",
+        "significance": "ANOMALY",
+        "source_tool": "ContentDiscoveryAgent",
+        "target": "https://target.com/api/v1/users",
+        "description": "Endpoint parameter discovered: id (GET)",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7743156
+      },
+      {
+        "evidence_id": "EV-05B210",
+        "significance": "OBSERVATION",
+        "source_tool": "ContentDiscoveryAgent",
+        "target": "https://target.com/api/v1/auth/login",
+        "description": "Endpoint parameter discovered: username (POST)",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7743156
+      },
+      {
+        "evidence_id": "EV-278EDD",
+        "significance": "OBSERVATION",
+        "source_tool": "ContentDiscoveryAgent",
+        "target": "https://target.com/api/v1/auth/login",
+        "description": "Endpoint parameter discovered: password (POST)",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.7743156
+      }
+    ],
+    "covered_items": [
+      "https://target.com/",
+      "https://target.com/api/v1/users",
+      "https://target.com/api/v1/auth/login",
+      "https://target.com/admin/dashboard",
+      "https://target.com/static/main.js"
+    ],
+    "coverage_limits": [
+      "Max crawl depth 3",
+      "HTML & JS link extraction"
+    ],
+    "unresolved_unknowns": [
+      "Authenticated user sub-paths",
+      "GraphQL introspection schema"
+    ],
+    "recommended_next_steps": [
+      {
+        "team": "HYPOTHESIS",
+        "action": "generate_hypothesis",
+        "target": "https://target.com/api/v1/users",
+        "observation": "Object reference parameter 'id' discovered in /api/v1/users"
+      }
+    ],
+    "timestamp": 1792108756.7743156
+  },
+  "review_notes": "",
+  "review_passed": null,
+  "created_at": 1792108756.770315,
+  "started_at": 1792108756.772315,
+  "completed_at": null
+}

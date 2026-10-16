@@ -239,12 +239,27 @@ class EvidenceOS:
         self.claims[clm.claim_id] = clm
         return clm
 
-    def rule_verdict(self, claim_id: str, decision: str = "CONFIRMED") -> Verdict:
+    def rule_verdict(self, claim_id: str, decision: str = "UNVERIFIED") -> Verdict:
+        """Issues a binding court verdict on a claim.
+
+        A ``CONFIRMED`` ruling is only armed when the claim has a verified,
+        unbroken causal lineage (Observation -> Hypothesis -> Experiment ->
+        Evidence -> Claim). Otherwise it is refused outright, so a verdict can
+        never be asserted without proof. The default decision is the honest
+        ``UNVERIFIED`` rather than a silent ``CONFIRMED``.
+        """
         if claim_id not in self.claims:
             raise ValueError(f"Claim ID '{claim_id}' not found.")
 
-        signature = hashlib.sha256(f"COURT:{claim_id}:{decision}".encode("utf-8")).hexdigest()[:16]
-        vrd = Verdict(claim_id=claim_id, decision=decision, court_signature=signature)
+        decision_norm = (decision or "").strip().upper()
+        if decision_norm == "CONFIRMED" and not self.verify_claim_lineage(claim_id):
+            raise ValueError(
+                f"Refusing CONFIRMED verdict for claim '{claim_id}': "
+                "unbroken causal lineage could not be verified."
+            )
+
+        signature = hashlib.sha256(f"COURT:{claim_id}:{decision_norm}".encode("utf-8")).hexdigest()[:16]
+        vrd = Verdict(claim_id=claim_id, decision=decision_norm, court_signature=signature)
         self.verdicts[vrd.verdict_id] = vrd
         return vrd
 

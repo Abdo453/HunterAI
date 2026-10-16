@@ -365,9 +365,17 @@ def test_evidence_court_provenance_integration():
             "confidence": 0.99,
             "proof_detail": "Evaluated 53+19 to 72"
         },
+        # The Court re-evaluates the raw response instead of trusting the flag.
+        proof_payload={
+            "artifact_type": "command_injection",
+            "response_text": "www-data\n72\n",
+            "expected_result": "72",
+            "probed_expression": "53+19",
+        },
         is_in_scope=True
     )
     assert judgment.verdict == CourtVerdict.CONFIRMED
+    assert judgment.proof_strength == "DERIVED"
     assert judgment.reportable is True
     # Verify that EvidenceCourt automatically attached the 7-stage causal provenance chain
     assert len(judgment.provenance_chain) == 7

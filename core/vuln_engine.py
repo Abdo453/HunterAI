@@ -30,7 +30,7 @@ from agents.skills.cmd_injection_skill import CmdInjectionSkill
 from agents.skills.ssrf_skill import SSRFSkill
 from agents.skills.idor_skill import IDORSkill
 from core.risk_scheduler import RiskScheduler
-from core.evidence_court import EvidenceCourt, CourtVerdict
+from core.evidence_court import EvidenceCourt, CourtVerdict, ProofPayload
 from core.target_memory import TargetMemory
 
 log = logging.getLogger("vuln_engine")
@@ -362,13 +362,21 @@ class VulnerabilityEngine:
                                 }
 
                     if res_dict:
-                        # Adjudicate via Evidence Court
+                        # Adjudicate via Evidence Court with a re-evaluable proof
+                        # payload when the class has a deterministic PoE signature.
+                        # Without this, the Court records the caller's claim as
+                        # DECLARED (not DERIVED) and refuses to confirm it.
+                        proof_payload = ProofPayload.from_vuln_evidence(
+                            skill_key,
+                            res_dict.get("extracted_data") or res_dict.get("evidence") or "",
+                        )
                         judgment = EvidenceCourt.adjudicate(
                             target_url=probe_url,
                             parameter=param_name,
                             vuln_class=skill_key,
                             finder_claim=res_dict,
                             verifier_result={"reproduced": res_dict.get("verified", True), **res_dict},
+                            proof_payload=proof_payload,
                             is_in_scope=_is_url_in_scope(probe_url)
                         )
 

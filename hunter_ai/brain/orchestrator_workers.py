@@ -46,6 +46,7 @@ import os
 import re
 import time
 import urllib.request
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -356,6 +357,8 @@ class MasterOrchestratorEngine:
         ollama_host: str = "http://127.0.0.1:11434",
         policy_gate: Optional[PolicyGate] = None,
         max_iterations: int = 20,
+        reasoning_core: Optional[Any] = None,
+        reasoning_samples: int = 1,
     ):
         self.target = target
         domain = target.replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
@@ -365,12 +368,82 @@ class MasterOrchestratorEngine:
         self.workers = ModelWorkerRegistry(ollama_host=ollama_host)
         self.orchestrator_model = self.workers._resolve_model("qwen3:8b", ["qwen3", "qwen2.5-coder:14b", "qwen"])
 
+        # Hybrid reasoning scaffold (DeepSeek-R1 + Claude extended thinking).
+        # Auto-built unless an explicit core is supplied; the orchestrator stays
+        # fully functional even if the cognitive subsystem is unavailable.
+        self.reasoning_core = reasoning_core if reasoning_core is not None else self._build_default_reasoning_core()
+
+        # Self-consistency sampling count for the decision step (DeepSeek-R1
+        # style). 1 = single deterministic call (default, no extra cost).
+        self.reasoning_samples = max(1, int(reasoning_samples))
+
         # Policy Gate for deterministic safety
         if policy_gate is not None:
             self.policy_gate = policy_gate
         else:
             scope_pol = ScopePolicy(allowed_targets=[self.domain, f"*.{self.domain}"])
             self.policy_gate = PolicyGate(scope_policy=scope_pol, authorized=True)
+
+    # ── Reasoning scaffold helpers ────────────────────────────────────────────
+    def _build_default_reasoning_core(self) -> Optional[Any]:
+        """Lazily construct the hybrid reasoning core (fail-safe: never fatal)."""
+        try:
+            from core.cognitive import HybridReasoningCore
+            return HybridReasoningCore(default_role="security orchestrator")
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Reasoning core unavailable, continuing without it: %s", exc)
+            return None
+
+    def _phase_stakes(self) -> str:
+        return {
+            BlackboardPhase.RECON: "low",
+            BlackboardPhase.SCAN: "medium",
+            BlackboardPhase.ANALYZE: "high",
+            BlackboardPhase.EXPLOIT: "critical",
+            BlackboardPhase.REPORT: "medium",
+            BlackboardPhase.COMPLETE: "low",
+        }.get(self.state.phase, "medium")
+
+    def _reasoning_steering(self, summary: Dict[str, Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """
+        Runs the hybrid reasoning core over the current decision context and
+        returns (prompt_steering_block, concise_decision_summary).
+
+        Only a concise, auditable rationale is surfaced (strategy + confidence +
+        stats) — never raw private chain-of-thought.
+        """
+        if self.reasoning_core is None:
+            return "", None
+
+        observations = [
+            f"phase={self.state.phase.value}",
+            f"iteration={self.state.iteration}/{self.state.max_iterations}",
+            f"endpoints={summary['stats']['endpoints_count']}",
+            f"parameters={summary['stats']['parameters_count']}",
+            f"hypotheses={summary['stats']['hypotheses_count']}",
+            f"confirmed={summary['stats']['confirmed_count']}",
+        ]
+        problem = (
+            f"Decide the single next best action for target {self.target} during "
+            f"the {self.state.phase.value} phase, respecting the legal phase order "
+            f"RECON -> SCAN -> ANALYZE -> EXPLOIT -> REPORT -> COMPLETE."
+        )
+        try:
+            result = self.reasoning_core.think(
+                problem=problem,
+                observations=observations,
+                stakes=self._phase_stakes(),
+            )
+            meta = self.reasoning_core.decision_summary(result)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Reasoning scaffold error, continuing without steering: %s", exc)
+            return "", None
+
+        block = (
+            "\n\n[Active Reasoning Protocol — apply before answering]\n"
+            f"{result.steering_prompt}"
+        )
+        return block, meta
 
     # ── Phase → Playbook section keyword mapping ──────────────────────────────
     _PHASE_PLAYBOOK_KEYWORDS: Dict[str, List[str]] = {
@@ -418,6 +491,9 @@ class MasterOrchestratorEngine:
             if playbook_ctx else ""
         )
 
+        # ── Reasoning scaffold steering (DeepSeek-R1 + Claude extended thinking) ─
+        reasoning_block, reasoning_meta = self._reasoning_steering(summary)
+
         system = (
             "You are Qwen3 8B, Master Security Orchestrator for HunterAI. "
             "You do NOT talk to models directly. You communicate via the Shared Blackboard State.\n"
@@ -433,21 +509,58 @@ class MasterOrchestratorEngine:
             "3. Never jump phases illegally. Follow: RECON -> SCAN -> ANALYZE -> EXPLOIT -> REPORT -> COMPLETE.\n"
             "4. Output STRICT JSON: {\"action\": \"...\", \"params\": {...}, \"rationale\": \"...\"}"
             + playbook_block
+            + reasoning_block
         )
         user = f"Current Blackboard State:\n{json.dumps(summary, indent=2)}\n\nWhat is the next best action?"
-        raw = await self.workers._query_ollama(self.orchestrator_model, system, user, temperature=0.2)
 
-        try:
-            m = re.search(r"\{.*\}", raw, re.DOTALL)
-            parsed = json.loads(m.group(0)) if m else {}
-        except Exception:
-            # Fallback deterministic progression if LLM response is malformed
+        # ── Self-consistency decision sampling (DeepSeek-R1 style) ────────────
+        # 1 sample  => single deterministic call (unchanged behaviour, no extra cost).
+        # N samples => sample at higher temperature and take the majority action.
+        n = self.reasoning_samples
+        temperature = 0.2 if n == 1 else 0.7
+        raws: List[str] = []
+        for _ in range(n):
+            raws.append(
+                await self.workers._query_ollama(
+                    self.orchestrator_model, system, user, temperature=temperature
+                )
+            )
+
+        parsed_votes = [self._parse_action_decision(r) for r in raws]
+        valid = [p for p in parsed_votes if p]
+
+        if valid:
+            if n > 1:
+                tally = Counter(p["action"] for p in valid)
+                winner, votes = tally.most_common(1)[0]
+                parsed = next(p for p in valid if p["action"] == winner)
+                if reasoning_meta is not None:
+                    reasoning_meta["decision_samples"] = n
+                    reasoning_meta["decision_agreement"] = round(votes / len(valid), 3)
+            else:
+                parsed = valid[0]
+        else:
+            # Fallback deterministic progression if all LLM responses are unusable
             parsed = self._deterministic_fallback_action()
 
         if not parsed.get("action"):
             parsed = self._deterministic_fallback_action()
 
+        parsed["_reasoning"] = reasoning_meta
         return parsed
+
+    def _parse_action_decision(self, raw: str) -> Optional[Dict[str, Any]]:
+        """Extracts a valid action decision dict from a raw model response, else None."""
+        if not raw:
+            return None
+        try:
+            m = re.search(r"\{.*\}", raw, re.DOTALL)
+            parsed = json.loads(m.group(0)) if m else {}
+        except Exception:
+            return None
+        if isinstance(parsed, dict) and parsed.get("action"):
+            return parsed
+        return None
 
     def _deterministic_fallback_action(self) -> Dict[str, Any]:
         """Guarantees pipeline progress even if LLM returns empty or unparseable output."""
@@ -488,6 +601,7 @@ class MasterOrchestratorEngine:
         action = decision.get("action", "finish")
         params = decision.get("params", {})
         rationale = decision.get("rationale", "")
+        reasoning_meta = decision.get("_reasoning")
 
         logger.info(f"[Orchestrator Step {self.state.iteration}] Phase={self.state.phase.value} Action={action} Rationale={rationale}")
 
@@ -562,7 +676,11 @@ class MasterOrchestratorEngine:
         self.state.record_action(
             actor="Qwen3_Orchestrator",
             action=action,
-            details={"rationale": rationale, "result_summary": list(result_payload.keys())}
+            details={
+                "rationale": rationale,
+                "result_summary": list(result_payload.keys()),
+                "reasoning": reasoning_meta,
+            }
         )
 
         return {
@@ -570,6 +688,7 @@ class MasterOrchestratorEngine:
             "phase": self.state.phase.value,
             "action": action,
             "rationale": rationale,
+            "reasoning": reasoning_meta,
             "result": result_payload
         }
 

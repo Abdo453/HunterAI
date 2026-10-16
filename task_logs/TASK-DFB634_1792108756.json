@@ -1,0 +1,124 @@
+{
+  "task_id": "TASK-DFB634",
+  "title": "JS Route Extract",
+  "team": "JAVASCRIPT",
+  "owner_agent": "JSWorker_1",
+  "reviewer_agent": "",
+  "target": "https://target.com/static/main.js",
+  "action": "route_extraction",
+  "parameters": {},
+  "priority": 5,
+  "depends_on": [],
+  "success_criteria": [],
+  "scope_verified": false,
+  "status": "REVIEW",
+  "retry_count": 0,
+  "max_retries": 2,
+  "result": {
+    "execution_id": "EXEC-BA9FF9",
+    "task_id": "TASK-DFB634",
+    "tool_name": "RouteExtractionAgent",
+    "action": "route_extraction",
+    "target": "https://target.com/static/main.js",
+    "parameters": {},
+    "success": true,
+    "exit_code": 0,
+    "duration_ms": 0.0,
+    "raw_output": "Extracted 4 internal endpoints",
+    "normalized_data": {
+      "extracted_routes": [
+        "/api/v1/internal/health",
+        "/api/v1/admin/feature-flags",
+        "/api/v1/users/export",
+        "/v2/debug/profiler"
+      ]
+    },
+    "errors": [],
+    "warnings": [],
+    "evidence_artifacts": [
+      {
+        "evidence_id": "EV-FE6E56",
+        "significance": "OBSERVATION",
+        "source_tool": "RouteExtractionAgent",
+        "target": "/api/v1/internal/health",
+        "description": "Hidden endpoint extracted from JS bundle: /api/v1/internal/health",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.8345373
+      },
+      {
+        "evidence_id": "EV-5C4477",
+        "significance": "OBSERVATION",
+        "source_tool": "RouteExtractionAgent",
+        "target": "/api/v1/admin/feature-flags",
+        "description": "Hidden endpoint extracted from JS bundle: /api/v1/admin/feature-flags",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.8345373
+      },
+      {
+        "evidence_id": "EV-5A46A3",
+        "significance": "OBSERVATION",
+        "source_tool": "RouteExtractionAgent",
+        "target": "/api/v1/users/export",
+        "description": "Hidden endpoint extracted from JS bundle: /api/v1/users/export",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.8345373
+      },
+      {
+        "evidence_id": "EV-69C2ED",
+        "significance": "OBSERVATION",
+        "source_tool": "RouteExtractionAgent",
+        "target": "/v2/debug/profiler",
+        "description": "Hidden endpoint extracted from JS bundle: /v2/debug/profiler",
+        "request_id": null,
+        "response_status": null,
+        "response_hash": null,
+        "payload_used": null,
+        "diff_data": {},
+        "poe_verified": false,
+        "timestamp": 1792108756.8345373
+      }
+    ],
+    "covered_items": [
+      "https://target.com/static/main.js"
+    ],
+    "coverage_limits": [
+      "Regex & AST string pattern scan"
+    ],
+    "unresolved_unknowns": [
+      "Dynamically assembled route concatenations"
+    ],
+    "recommended_next_steps": [
+      {
+        "team": "WEB",
+        "action": "http_analysis",
+        "target": "/api/v1/internal/health"
+      },
+      {
+        "team": "WEB",
+        "action": "http_analysis",
+        "target": "/api/v1/admin/feature-flags"
+      }
+    ],
+    "timestamp": 1792108756.8345373
+  },
+  "review_notes": "",
+  "review_passed": null,
+  "created_at": 1792108756.828069,
+  "started_at": 1792108756.8320112,
+  "completed_at": null
+}

@@ -43,6 +43,60 @@ class UntestableReason(str, Enum):
     HOST_UNRESPONSIVE    = "HOST_UNRESPONSIVE"
     DESTRUCTIVE_RISK     = "DESTRUCTIVE_RISK"
     ENVIRONMENT_LIMIT    = "ENVIRONMENT_LIMIT"
+    # Legacy negative-space reasons (kept so the endpoint-level ledger can
+    # record the *specific* causal reason instead of collapsing it).
+    AUTH_MISSING              = "AUTH_MISSING"
+    RATE_LIMITED              = "RATE_LIMITED"
+    POLICY_RESTRICTION        = "POLICY_RESTRICTION"
+    MANUAL_APPROVAL_REQUIRED  = "MANUAL_APPROVAL_REQUIRED"
+    UNSUPPORTED_PROTOCOL      = "UNSUPPORTED_PROTOCOL"
+    USER_RESTRICTION          = "USER_RESTRICTION"
+
+
+class CoverageStatus(str, Enum):
+    """Endpoint-level probe outcome.
+
+    Backward-compatibility surface: existed before the asset-based ledger
+    rewrite and is still consumed by ``cli/hunter_cli.py``,
+    ``core/brain/autonomous_brain.py`` and several test suites.
+    """
+    PROBED_AND_VERIFIED = "PROBED_AND_VERIFIED"
+    PROBED_AND_SAFE = "PROBED_AND_SAFE"
+    SKIPPED_OUT_OF_SCOPE = "SKIPPED_OUT_OF_SCOPE"
+    SKIPPED_AUTH_MISSING = "SKIPPED_AUTH_MISSING"
+    SKIPPED_RATE_LIMITED = "SKIPPED_RATE_LIMITED"
+    SKIPPED_WAF_BLOCKED = "SKIPPED_WAF_BLOCKED"
+    SKIPPED_POLICY_RESTRICTION = "SKIPPED_POLICY_RESTRICTION"
+    SKIPPED_MANUAL_APPROVAL_REQUIRED = "SKIPPED_MANUAL_APPROVAL_REQUIRED"
+    SKIPPED_UNSUPPORTED_PROTOCOL = "SKIPPED_UNSUPPORTED_PROTOCOL"
+    SKIPPED_USER_RESTRICTION = "SKIPPED_USER_RESTRICTION"
+
+
+# Maps a legacy skip status to the asset-level untestable reason it implies,
+# so one record satisfies both consumers without losing the causal detail.
+LEGACY_STATUS_TO_REASON: Dict[CoverageStatus, UntestableReason] = {
+    CoverageStatus.SKIPPED_OUT_OF_SCOPE: UntestableReason.OUT_OF_SCOPE,
+    CoverageStatus.SKIPPED_AUTH_MISSING: UntestableReason.AUTH_MISSING,
+    CoverageStatus.SKIPPED_RATE_LIMITED: UntestableReason.RATE_LIMITED,
+    CoverageStatus.SKIPPED_WAF_BLOCKED: UntestableReason.WAF_BLOCKED,
+    CoverageStatus.SKIPPED_POLICY_RESTRICTION: UntestableReason.POLICY_RESTRICTION,
+    CoverageStatus.SKIPPED_MANUAL_APPROVAL_REQUIRED: UntestableReason.MANUAL_APPROVAL_REQUIRED,
+    CoverageStatus.SKIPPED_UNSUPPORTED_PROTOCOL: UntestableReason.UNSUPPORTED_PROTOCOL,
+    CoverageStatus.SKIPPED_USER_RESTRICTION: UntestableReason.USER_RESTRICTION,
+}
+
+
+@dataclass
+class SurfaceItem:
+    """Endpoint-level ledger row (legacy shape, still emitted)."""
+    target: str
+    endpoint: str
+    method: str
+    parameter: Optional[str] = None
+    status: CoverageStatus = CoverageStatus.PROBED_AND_SAFE
+    reason: str = ""
+    probe_count: int = 0
+    timestamp: float = field(default_factory=time.time)
 
 
 @dataclass
@@ -88,10 +142,23 @@ class CoverageLedger:
     Central accounting ledger for investigation completeness.
     Ensures the assessment report explicitly discloses unprobed surfaces.
     """
-    def __init__(self, persistence_file: Optional[str | Path] = None):
+    def __init__(
+        self,
+        target_scope: Optional[str | Path] = None,
+        persistence_file: Optional[str | Path] = None,
+    ):
+        # Backward compatibility: the pre-rewrite constructor took the target
+        # scope as the sole positional argument. Callers that pass a *.json
+        # path positionally are treated as supplying persistence_file.
+        if target_scope is not None and persistence_file is None:
+            if str(target_scope).lower().endswith(".json"):
+                persistence_file = target_scope
+                target_scope = None
+        self.target_scope: str = str(target_scope) if target_scope else ""
         self.persistence_file = Path(persistence_file) if persistence_file else None
         self._assets: Dict[str, AssetItem] = {}
         self._blindspots: List[BlindspotEntry] = []
+        self.items: Dict[str, SurfaceItem] = {}
         self._load()
 
     def record_discovery(
@@ -189,6 +256,111 @@ class CoverageLedger:
         self._blindspots.append(entry)
         self._persist()
 
+    # ── Endpoint-level ledger (legacy API, preserved) ─────────────────────────
+
+    def _make_key(self, endpoint: str, method: str, parameter: Optional[str] = None) -> str:
+        param_part = f"?{parameter}" if parameter else ""
+        return f"{method.upper()}:{endpoint}{param_part}"
+
+    def record_probed(
+        self,
+        endpoint: str,
+        method: str,
+        parameter: Optional[str] = None,
+        verified_finding: bool = False,
+    ) -> SurfaceItem:
+        """Record an endpoint/parameter that was actually probed.
+
+        Writes both the endpoint-level row and the asset-level record so the
+        asset summary stays consistent with the negative-space ledger.
+        """
+        key = self._make_key(endpoint, method, parameter)
+        previous = self.items.get(key)
+        item = SurfaceItem(
+            target=self.target_scope,
+            endpoint=endpoint,
+            method=method.upper(),
+            parameter=parameter,
+            status=(
+                CoverageStatus.PROBED_AND_VERIFIED
+                if verified_finding
+                else CoverageStatus.PROBED_AND_SAFE
+            ),
+            reason="Tested with differential verification probes.",
+            probe_count=(previous.probe_count if previous else 0) + 1,
+        )
+        self.items[key] = item
+
+        self.record_discovery(AssetType.ENDPOINT, endpoint, discovered_by="coverage_ledger")
+        if parameter:
+            self.record_discovery(
+                AssetType.PARAMETER,
+                f"{endpoint}?{parameter}",
+                discovered_by="coverage_ledger",
+            )
+        self.record_analysis(AssetType.ENDPOINT, endpoint, analyzed_by="coverage_ledger")
+        self.record_test(AssetType.ENDPOINT, endpoint, vuln_class="coverage_probe")
+        if verified_finding:
+            self.record_confirmation(
+                AssetType.ENDPOINT, endpoint, finding_id=f"probe:{key}"
+            )
+        return item
+
+    def record_skipped(
+        self,
+        endpoint: str,
+        method: str,
+        status: CoverageStatus,
+        reason: str,
+        parameter: Optional[str] = None,
+    ) -> SurfaceItem:
+        """Record negative space: surface that was identified but NOT tested."""
+        key = self._make_key(endpoint, method, parameter)
+        item = SurfaceItem(
+            target=self.target_scope,
+            endpoint=endpoint,
+            method=method.upper(),
+            parameter=parameter,
+            status=status,
+            reason=reason,
+            probe_count=0,
+        )
+        self.items[key] = item
+
+        self.record_discovery(AssetType.ENDPOINT, endpoint, discovered_by="coverage_ledger")
+        mapped = LEGACY_STATUS_TO_REASON.get(status)
+        if mapped is not None:
+            self.record_untestable(AssetType.ENDPOINT, endpoint, mapped, detail=reason)
+        return item
+
+    def format_terminal_coverage_map(self) -> str:
+        summary = self.get_summary()
+        pct = summary["coverage_percentage"]
+        filled_slots = int(pct / 5)
+        bar = "█" * filled_slots + "░" * (20 - filled_slots)
+        sep = "═" * 70
+        sub = "─" * 70
+        lines = [
+            sep,
+            f" 🗺️ HunterAI Attack Surface Coverage Map — {self.target_scope}",
+            sep,
+            f" Coverage Progress: [{bar}] {pct}%",
+            f" Total Identified Surface:  {summary['total_surface_items']:>6} endpoints & parameters",
+            f" Fully Probed & Verified:   {summary['probed_items']:>6} ({pct}%)",
+            f" Endpoint-Level Coverage:   {summary['endpoint_coverage_pct']:>6}%",
+            f" Parameter-Level Coverage:  {summary['parameter_coverage_pct']:>6}%",
+            f" Untested / Negative Space: {summary['skipped_items']:>6}",
+            sub,
+            " Negative Space Ledger (What was NOT tested and why):",
+        ]
+        if summary["skipped_breakdown"]:
+            for k, count in sorted(summary["skipped_breakdown"].items()):
+                lines.append(f"   [!] {k:<32} : {count:>4} items")
+        else:
+            lines.append("   • All discovered in-scope endpoints were fully probed.")
+        lines.append(sep)
+        return "\n".join(lines)
+
     def get_summary(self) -> Dict[str, Any]:
         total = len(self._assets)
         analyzed = sum(1 for a in self._assets.values() if a.analyzed)
@@ -211,7 +383,37 @@ class CoverageLedger:
         analysis_rate = (analyzed / max(1, total)) * 100.0
         test_rate = (tested / max(1, total)) * 100.0
 
+        # ── Endpoint-level (legacy) projection of the same ledger ────────────
+        ep_total = len(self.items)
+        probed_verified = sum(
+            1 for i in self.items.values() if i.status == CoverageStatus.PROBED_AND_VERIFIED
+        )
+        probed_safe = sum(
+            1 for i in self.items.values() if i.status == CoverageStatus.PROBED_AND_SAFE
+        )
+        probed_items = probed_verified + probed_safe
+        skipped_items = ep_total - probed_items
+        coverage_pct = round((probed_items / max(1, ep_total)) * 100.0, 1)
+
+        skipped_breakdown: Dict[str, int] = {}
+        for i in self.items.values():
+            if "SKIPPED" in i.status.value:
+                skipped_breakdown[i.status.value] = skipped_breakdown.get(i.status.value, 0) + 1
+
+        unique_endpoints = len({i.endpoint for i in self.items.values()})
+        probed_endpoints = len(
+            {i.endpoint for i in self.items.values() if "PROBED" in i.status.value}
+        )
+        endpoint_pct = round((probed_endpoints / max(1, unique_endpoints)) * 100.0, 1)
+
+        params = [i for i in self.items.values() if i.parameter]
+        probed_params = [i for i in params if "PROBED" in i.status.value]
+        param_pct = (
+            round((len(probed_params) / max(1, len(params))) * 100.0, 1) if params else 100.0
+        )
+
         return {
+            # Asset-level view (current API)
             "total_assets_discovered": total,
             "assets_analyzed": analyzed,
             "assets_tested": tested,
@@ -223,6 +425,17 @@ class CoverageLedger:
             "testing_coverage_pct": round(test_rate, 1),
             "by_type": by_type,
             "blindspots": [b.to_dict() for b in self._blindspots],
+            # Endpoint-level view (legacy API, preserved for existing callers)
+            "target_scope": self.target_scope,
+            "total_surface_items": ep_total,
+            "probed_items": probed_items,
+            "probed_and_verified": probed_verified,
+            "probed_and_safe": probed_safe,
+            "skipped_items": skipped_items,
+            "coverage_percentage": coverage_pct,
+            "endpoint_coverage_pct": endpoint_pct,
+            "parameter_coverage_pct": param_pct,
+            "skipped_breakdown": skipped_breakdown,
         }
 
     def _persist(self) -> None:

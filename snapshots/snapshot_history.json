@@ -54,5 +54,20 @@
     "snapshot_id": "SNAP-6384795E",
     "timestamp": 1792106232.7501526,
     "status": "RESTORED"
+  },
+  {
+    "action": "CREATE_SNAPSHOT",
+    "snapshot_id": "SNAP-52D05725",
+    "label": "e2e_final_checkpoint",
+    "timestamp": 1792107989.495522,
+    "checksum": "5916f26b724c2c5296011295070430b2683f09efbd27742e4b37298b24a585ca",
+    "file": "snapshots\\SNAP-52D05725.json",
+    "metadata": {}
+  },
+  {
+    "action": "ROLLBACK",
+    "snapshot_id": "SNAP-52D05725",
+    "timestamp": 1792107989.5076199,
+    "status": "RESTORED"
   }
 ]

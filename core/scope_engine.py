@@ -19,6 +19,7 @@ import logging
 import os
 import re
 from datetime import datetime, time as dt_time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
@@ -144,6 +145,43 @@ class StrictScopeEngine:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> StrictScopeEngine:
         return cls(ScopePolicy(**data))
+
+    @classmethod
+    def from_file(cls, path: str | os.PathLike) -> StrictScopeEngine:
+        """Loads a ScopePolicy from an explicit scope.yaml / scope.json file.
+
+        Raises FileNotFoundError for a missing path and ValueError for a path
+        that is not a regular file, instead of silently falling back to a
+        permissive default policy.
+        """
+        p = Path(path)
+        if not p.exists():
+            raise FileNotFoundError(f"Scope policy file not found: {p}")
+        if not p.is_file():
+            raise ValueError(f"Scope policy path is not a file: {p}")
+
+        text = p.read_text(encoding="utf-8")
+        suffix = p.suffix.lower()
+
+        if suffix == ".json":
+            data = json.loads(text) if text.strip() else {}
+        elif suffix in (".yaml", ".yml"):
+            data = yaml.safe_load(text) or {}
+        else:
+            # Unknown extension: YAML is a JSON superset, so this is safe.
+            data = yaml.safe_load(text) or {}
+
+        if not isinstance(data, dict):
+            raise ValueError(f"Scope policy file must contain a mapping: {p}")
+
+        # Accept either a flat policy or one wrapped in a 'scope:' key.
+        if "scope" in data and isinstance(data["scope"], dict):
+            data = data["scope"]
+
+        policy = ScopePolicy(**data)
+        engine = cls(policy)
+        engine.source_file = str(p)
+        return engine
 
     def _compile_policy(self):
         self.in_scope_patterns = []
@@ -332,6 +370,18 @@ class StrictScopeEngine:
     def validate_target(self, target: str) -> Tuple[bool, str]:
         """Validates whether a target host or IP is authorized and adheres to safety invariants"""
         return self.is_allowed(target)
+
+    def check_inviolable(self, host: str, port: Optional[int] = None) -> Tuple[bool, str]:
+        """Public wrapper for the non-overridable safety invariants only.
+
+        Unlike :meth:`validate_target`, this does NOT consult the allowlist, so
+        it is safe to run against untrusted/dynamic input (for example a host
+        extracted from a shell command) without granting or denying access on
+        allowlist grounds. Returns ``(True, "")`` when the destination is not
+        forbidden by an inviolable invariant.
+        """
+        ok, reason = self._check_hard_invariants(host, port)
+        return ok, (reason or "")
 
     def validate_url(self, url: str) -> Tuple[bool, str]:
         """Validates whether a full URL is authorized and adheres to safety invariants"""

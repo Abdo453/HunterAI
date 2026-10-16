@@ -1,0 +1,19 @@
+{
+  "findings_count": 1,
+  "hypothesis_count": 1,
+  "judgment_verdict": "CourtVerdict.UNVERIFIED",
+  "phase": "COMPLETE",
+  "project_id": "e2e_example_proj",
+  "recon_result": {
+    "live_hosts": [
+      "api.example.com",
+      "auth.example.com"
+    ],
+    "subdomains": [
+      "api.example.com",
+      "admin.example.com",
+      "auth.example.com"
+    ]
+  },
+  "target": "example.com"
+}

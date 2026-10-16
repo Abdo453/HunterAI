@@ -1,5 +1,5 @@
 """Tool Manager — مدير الأدوات الذكي مع caching"""
-import asyncio, shutil, hashlib, time
+import asyncio, shutil, hashlib, time, re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 
@@ -15,6 +15,7 @@ class ToolResult:
     cached: bool = False
     error: Optional[str] = None
     output_file: Optional[str] = None
+    error_category: Optional[str] = None
 
     @property
     def success(self) -> bool:
@@ -23,6 +24,46 @@ class ToolResult:
     @property
     def output(self) -> str:
         return self.stdout or self.stderr
+
+
+# Shell exit codes that mean "the executable was never launched".
+_MISSING_TOOL_EXIT_CODES = {127, 9009}
+_MISSING_TOOL_PATTERNS = (
+    "command not found",
+    "not recognized as an internal or external command",
+    "no such file or directory",
+    "is not defined",
+    "cannot find the path",
+)
+# Shell-generated diagnostics for a missing binary, e.g. "sh: 1: nmap: not found".
+# Anchored to a shell name so a tool's ordinary "record not found" output is not
+# misclassified as an installation problem.
+_SHELL_NOT_FOUND_RE = re.compile(
+    r"(?:^|[\r\n])\s*(?:\S*[/\\])?(?:sh|bash|dash|zsh|ash|cmd(?:\.exe)?|powershell(?:\.exe)?)[:\s][^\r\n]*not found",
+    re.IGNORECASE,
+)
+
+
+def classify_tool_failure(returncode: int, stderr: str) -> Optional[str]:
+    """Maps a raw process outcome to a structured, reportable failure category.
+
+    Returns ``None`` when the invocation is not a failure. This exists because
+    ``create_subprocess_shell`` always starts a shell: a missing binary never
+    raises ``FileNotFoundError`` and instead surfaces as exit 127/9009 with no
+    stderr on some platforms, which previously made a missing tool
+    indistinguishable from a successful run that found nothing.
+    """
+    if returncode == 0:
+        return None
+    if returncode in _MISSING_TOOL_EXIT_CODES:
+        return "TOOL_UNAVAILABLE"
+    text = stderr or ""
+    low = text.lower()
+    if any(p in low for p in _MISSING_TOOL_PATTERNS):
+        return "TOOL_UNAVAILABLE"
+    if _SHELL_NOT_FOUND_RE.search(text):
+        return "TOOL_UNAVAILABLE"
+    return "NONZERO_EXIT"
 
 
 class ToolManager:
@@ -46,12 +87,84 @@ class ToolManager:
         "hydra": "sudo apt update && sudo apt install -y hydra",
     }
 
-    def __init__(self, output_dir: Optional[str] = None):
+    def __init__(self, output_dir: Optional[str] = None, policy_gate: Optional[Any] = None,
+                 project_id: str = "default"):
         import os
         self._cache: Dict[str, ToolResult] = {}
         self._avail: Dict[str, bool] = {}
         self.output_dir = output_dir or os.getenv("TOOL_OUTPUTS_DIR", os.path.join(os.getcwd(), "data", "tool_outputs"))
         os.makedirs(self.output_dir, exist_ok=True)
+        # Security-sensitive executions must pass the authoritative PolicyGate.
+        # When None, ToolManager stays usable in isolation (e.g. unit tests that
+        # exercise the raw process wrapper); production entry points attach a gate.
+        self.policy_gate = policy_gate
+        self.project_id = project_id
+        self.governance_audit: List[Dict[str, Any]] = []
+
+    def attach_policy_gate(self, policy_gate: Any, project_id: str = "default") -> None:
+        """Wires the authoritative PolicyGate into every subsequent tool execution."""
+        self.policy_gate = policy_gate
+        self.project_id = project_id
+
+    def _govern(self, tool: str, command_str: str) -> Optional[ToolResult]:
+        """Evaluates a tool command through the PolicyGate (fail-closed).
+
+        Returns a denial ``ToolResult`` when the command must not run; returns
+        ``None`` to proceed. Every decision is appended to ``governance_audit`` so
+        the execution is auditable: project_id, tool_id, action, timestamp,
+        authorization decision and result.
+        """
+        if self.policy_gate is None:
+            return None
+        base = {
+            "project_id": self.project_id,
+            "tool_id": tool,
+            "action": "tool_execute",
+            "command": command_str,
+            "timestamp": time.time(),
+        }
+        try:
+            from core.control_plane.policy_gate import (
+                ActionCategory,
+                ActionRequest,
+                extract_candidate_destinations,
+            )
+            destinations = extract_candidate_destinations(command_str) or []
+            target = destinations[0] if destinations else "local_terminal"
+            request = ActionRequest(
+                category=ActionCategory.TERMINAL_COMMAND,
+                target=target,
+                command=command_str,
+                reason="ToolManager.execute",
+                requested_by_model="tool_manager",
+                metadata={
+                    "project_id": self.project_id,
+                    "tool_id": tool,
+                    "destinations": destinations,
+                },
+            )
+            decision = self.policy_gate.evaluate(request)
+        except Exception as exc:  # fail-closed on any evaluation error
+            reason = f"POLICY GATE ERROR (fail-closed): {exc}"
+            self.governance_audit.append(
+                {**base, "authorization": "DENIED", "decision": "DENIED_POLICY_ERROR", "reason": reason}
+            )
+            return ToolResult(tool=tool, command=command_str, stdout="", stderr=reason,
+                              returncode=-1, duration=0.0, error=reason,
+                              error_category="POLICY_ERROR")
+
+        if not decision.allowed:
+            self.governance_audit.append(
+                {**base, "authorization": "DENIED", "decision": "DENIED_POLICY", "reason": decision.reason}
+            )
+            return ToolResult(tool=tool, command=command_str, stdout="", stderr=decision.reason,
+                              returncode=-1, duration=0.0, error=decision.reason,
+                              error_category="POLICY_DENIED")
+
+        self.governance_audit.append(
+            {**base, "authorization": "ALLOWED", "decision": "ALLOWED", "reason": decision.reason}
+        )
+        return None
 
     def resolve_binary(self, cmd: str) -> str:
         """حل مسار الأداة بدقة لمنع التعارض بين أدوات بايثون وأدوات كالي Go"""
@@ -214,6 +327,12 @@ class ToolManager:
                 if len(args) > 1 and isinstance(args[1], (int, float)):
                     timeout = int(args[1])
 
+        # ── Governance (fail-closed when a PolicyGate is attached) ────────────
+        # Security-sensitive operations must never bypass the policy layer.
+        denial = self._govern(tool, command_str)
+        if denial is not None:
+            return denial
+
         key = hashlib.md5(command_str.encode()).hexdigest()
         if use_cache and key in self._cache:
             r = self._cache[key]
@@ -231,17 +350,29 @@ class ToolManager:
                 err_msg = f"Timeout after {timeout}s"
                 out_f = self._save_tool_output(tool, command_str, "", "", -1, dur, error=err_msg)
                 return ToolResult(tool=tool, command=command_str, stdout="", stderr="",
-                                  returncode=-1, duration=dur, error=err_msg, output_file=out_f)
+                                  returncode=-1, duration=dur, error=err_msg,
+                                  error_category="TIMEOUT", output_file=out_f)
             
             dur = time.time() - t0
             stdout_str = out.decode("utf-8", errors="replace")
             stderr_str = err.decode("utf-8", errors="replace")
             ret_code = proc.returncode or 0
-            out_f = self._save_tool_output(tool, command_str, stdout_str, stderr_str, ret_code, dur)
+
+            # Classify failure explicitly: a missing binary or a non-zero exit
+            # must never look like a clean run that simply found nothing.
+            failure = classify_tool_failure(ret_code, stderr_str)
+            err_msg = None
+            if failure == "TOOL_UNAVAILABLE":
+                err_msg = f"'{tool}' is unavailable (exit {ret_code}); command was not executed."
+            elif failure:
+                err_msg = f"'{tool}' exited with code {ret_code}."
+
+            out_f = self._save_tool_output(tool, command_str, stdout_str, stderr_str, ret_code, dur, error=err_msg)
             r = ToolResult(tool=tool, command=command_str,
                            stdout=stdout_str,
                            stderr=stderr_str,
                            returncode=ret_code, duration=dur,
+                           error=err_msg, error_category=failure,
                            output_file=out_f)
             self._cache[key] = r
             return r
@@ -250,13 +381,15 @@ class ToolManager:
             err_msg = f"'{tool}' not found in PATH"
             out_f = self._save_tool_output(tool, command_str, "", "", 127, dur, error=err_msg)
             return ToolResult(tool=tool, command=command_str, stdout="", stderr="",
-                              returncode=127, duration=dur, error=err_msg, output_file=out_f)
+                              returncode=127, duration=dur, error=err_msg,
+                              error_category="TOOL_UNAVAILABLE", output_file=out_f)
         except Exception as e:
             dur = time.time() - t0
             err_msg = str(e)
             out_f = self._save_tool_output(tool, command_str, "", "", -1, dur, error=err_msg)
             return ToolResult(tool=tool, command=command_str, stdout="", stderr="",
-                              returncode=-1, duration=dur, error=err_msg, output_file=out_f)
+                              returncode=-1, duration=dur, error=err_msg,
+                              error_category="EXECUTION_ERROR", output_file=out_f)
 
     async def execute_tool(self, tool_name: str, args: str, timeout: int = 300, waf_detected: bool = False) -> ToolResult:
         """تشغيل أداة مع تحسين الباراميترات وتثبيتها تلقائياً لو كانت مفقودة"""

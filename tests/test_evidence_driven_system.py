@@ -70,11 +70,54 @@ class TestEvidenceDrivenSystem:
                 "confidence": 0.98,
                 "proof_detail": "Evaluated 53+19 to 72"
             },
+            # The proof must be re-evaluable, not merely asserted: supply the
+            # observed response so ProofOfExecutionEngine can confirm it.
+            proof_payload={
+                "artifact_type": "command_injection",
+                "response_text": "uid=0(root) gid=0(root)\n72\n",
+                "expected_result": "72",
+                "probed_expression": "53+19",
+            },
             is_in_scope=True
         )
         assert judgment.verdict == CourtVerdict.CONFIRMED
         assert judgment.reportable is True
+        assert judgment.proof_strength == "DERIVED"
         assert judgment.calibrated_severity == "Critical"
+
+    def test_evidence_court_rejects_declared_proof_without_evidence(self):
+        """Regression: a bare boolean must not be enough to confirm a finding."""
+        judgment = EvidenceCourt.adjudicate(
+            target_url="https://target.com/page",
+            parameter="ip",
+            vuln_class="cmd_injection",
+            finder_claim={"is_real_vuln": True},
+            verifier_result={"reproduced": True, "arithmetic_proof_confirmed": True},
+            is_in_scope=True
+        )
+        assert judgment.verdict == CourtVerdict.UNVERIFIED
+        assert judgment.reportable is False
+        assert judgment.proof_strength == "DECLARED"
+
+    def test_evidence_court_refutes_fabricated_proof(self):
+        """A payload that fails engine evaluation is disproof, not a gap."""
+        judgment = EvidenceCourt.adjudicate(
+            target_url="https://target.com/page",
+            parameter="ip",
+            vuln_class="cmd_injection",
+            finder_claim={"is_real_vuln": True},
+            verifier_result={"reproduced": True, "arithmetic_proof_confirmed": True},
+            proof_payload={
+                "artifact_type": "command_injection",
+                # Only the literal syntax echoed back - no execution.
+                "response_text": "<html>error: $((53+19)) rejected</html>",
+                "expected_result": "72",
+                "probed_expression": "53+19",
+            },
+            is_in_scope=True
+        )
+        assert judgment.verdict == CourtVerdict.FALSE_POSITIVE
+        assert judgment.proof_strength == "REFUTED"
 
     def test_evidence_court_blocks_out_of_scope(self):
         judgment = EvidenceCourt.adjudicate(

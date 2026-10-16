@@ -187,6 +187,13 @@ class ArenaEvaluator:
                     vuln_class="cmd_injection",
                     finder_claim={"claim": "OS command execution via arithmetic nonce", "raw_response": body},
                     verifier_result={"reproduced": True, "arithmetic_proof_confirmed": True, "confidence": 0.99},
+                    proof_payload={
+                        "artifact_type": "command_injection",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_result": "72",
+                        "probed_expression": "53+19",
+                    },
                     is_in_scope=True
                 )
 
@@ -205,6 +212,13 @@ class ArenaEvaluator:
                     vuln_class="sqli",
                     finder_claim={"claim": "SQL arithmetic evaluation", "raw_response": body},
                     verifier_result={"reproduced": True, "boolean_branch_confirmed": True, "confidence": 0.98},
+                    proof_payload={
+                        "artifact_type": "boolean_branch",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": "Premium Gadget",
+                        "probed_expression": "1+(53-52)",
+                    },
                     is_in_scope=True
                 )
 
@@ -223,6 +237,12 @@ class ArenaEvaluator:
                     vuln_class="idor",
                     finder_claim={"claim": "Cross-tenant medical record leak", "raw_response": body},
                     verifier_result={"reproduced": True, "auth_bypass_confirmed": True, "confidence": 0.99},
+                    proof_payload={
+                        "artifact_type": "auth_bypass",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": "Bob Patient",
+                    },
                     is_in_scope=True
                 )
 
@@ -242,6 +262,12 @@ class ArenaEvaluator:
                     vuln_class="ssrf",
                     finder_claim={"claim": "Outbound SSRF canary callback confirmation", "raw_response": body},
                     verifier_result={"reproduced": True, "canary_confirmed": True, "confidence": 0.99},
+                    proof_payload={
+                        "artifact_type": "canary",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": "SSRF_CANARY_ECHO_CONFIRMED",
+                    },
                     is_in_scope=True
                 )
 
@@ -260,6 +286,13 @@ class ArenaEvaluator:
                     vuln_class="ssti",
                     finder_claim={"claim": "Server template expression calculated integer 86", "raw_response": body},
                     verifier_result={"reproduced": True, "template_eval_confirmed": True, "confidence": 0.99},
+                    proof_payload={
+                        "artifact_type": "template_eval",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": "86",
+                        "probed_expression": "{{43*2}}",
+                    },
                     is_in_scope=True
                 )
 
@@ -279,6 +312,12 @@ class ArenaEvaluator:
                     vuln_class="xss",
                     finder_claim={"claim": "Unsanitized context breakout", "raw_response": body},
                     verifier_result={"reproduced": True, "dom_breakout_confirmed": True, "confidence": 0.97},
+                    proof_payload={
+                        "artifact_type": "dom_breakout",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": '"><proof_nonce_xss>',
+                    },
                     is_in_scope=True
                 )
 
@@ -300,6 +339,12 @@ class ArenaEvaluator:
                     vuln_class="jwt",
                     finder_claim={"claim": "JWT alg:none signature bypass", "raw_response": body},
                     verifier_result={"reproduced": True, "token_bypass_confirmed": True, "confidence": 0.99},
+                    proof_payload={
+                        "artifact_type": "token_bypass",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": "JWT_ALG_NONE_BYPASS_VERIFIED",
+                    },
                     is_in_scope=True
                 )
 
@@ -319,6 +364,12 @@ class ArenaEvaluator:
                     vuln_class="file_upload",
                     finder_claim={"claim": "Unrestricted file extension upload execution", "raw_response": body},
                     verifier_result={"reproduced": True, "file_content_confirmed": True, "confidence": 0.98},
+                    proof_payload={
+                        "artifact_type": "file_upload",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": "FILE_UPLOAD_EXECUTION_CANARY_STORED",
+                    },
                     is_in_scope=True
                 )
 
@@ -337,6 +388,12 @@ class ArenaEvaluator:
                     vuln_class="sqli",
                     finder_claim={"claim": "Verbose database syntax error disclosed", "raw_response": body},
                     verifier_result={"reproduced": True, "extracted_data": "PG::SyntaxError", "confidence": 0.99},
+                    proof_payload={
+                        "artifact_type": "boolean_branch",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": "PG::SyntaxError",
+                    },
                     is_in_scope=True
                 )
 
@@ -356,6 +413,12 @@ class ArenaEvaluator:
                     vuln_class="xss",
                     finder_claim={"claim": "Persistent unescaped script tag stored in forum", "raw_response": body},
                     verifier_result={"reproduced": True, "dom_breakout_confirmed": True, "confidence": 0.99},
+                    proof_payload={
+                        "artifact_type": "dom_breakout",
+                        "response_text": body,
+                        "baseline_text": base_body,
+                        "expected_token": "<script>/*stored_proof*/</script>",
+                    },
                     is_in_scope=True
                 )
 

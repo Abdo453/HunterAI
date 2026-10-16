@@ -45,7 +45,26 @@ class MasterToolRegistry:
     def __init__(self, tool_manager: Optional[ToolManager] = None):
         self.tm = tool_manager or ToolManager()
         self.specs: Dict[str, ToolSpec] = {}
+        self._result_observer: Optional[Any] = None
         self._init_master_specs()
+
+    def set_result_observer(self, observer: Any) -> None:
+        """Register a callback invoked after every tool execution.
+
+        The observer receives a structured dict describing the outcome
+        (tool, stage, status, error, category, duration, item_count). It is the
+        single integration point through which the pipeline records tool
+        failures as coverage gaps instead of losing them in a log line.
+        """
+        self._result_observer = observer
+
+    def _notify_observer(self, payload: Dict[str, Any]) -> None:
+        if self._result_observer is None:
+            return
+        try:
+            self._result_observer(payload)
+        except Exception as e:  # never let telemetry break a scan
+            logger.warning("Tool result observer failed for %s: %s", payload.get("tool_name"), e)
 
     def _init_master_specs(self):
         # 1. Subfinder
@@ -775,6 +794,13 @@ class MasterToolRegistry:
             print(f"[!] [{stage.upper()}] ❌ Error running {tool_name}: {e}")
 
         duration = time.time() - t0
+
+        # A fallback that produced nothing usable is not a success: report it so
+        # the coverage ledger records an honest gap rather than a silent pass.
+        if status == "fallback" and not parsed:
+            status = "fallback_empty"
+            error_msg = error_msg or f"No results from fallback '{spec.fallback_tool if spec else 'unknown'}'."
+
         meta = engagement_mgr.save_tool_artifact(
             stage=stage,
             tool_name=tool_name,
@@ -787,6 +813,19 @@ class MasterToolRegistry:
             status=status,
             error=error_msg,
         )
+
+        self._notify_observer({
+            "tool_name": tool_name,
+            "stage": stage,
+            "status": status,
+            "error": error_msg,
+            "duration": duration,
+            "item_count": len(parsed),
+            "command": cmd_str,
+            "target": context.get("domain") or context.get("url") or context.get("target") or "",
+            "next_stage": spec.next_stage if spec else None,
+            "input_source": input_source,
+        })
         return (parsed, meta)
 
 

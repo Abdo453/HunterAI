@@ -111,6 +111,14 @@ class SQLiDetector:
             vuln_class="sqli",
             finder_claim={"claim": "Deterministic SQL injection behavior", "raw_response": t_body},
             verifier_result=verifier_data,
+            # The detector already established the semantic differential
+            # (arithmetic evaluation or SQL syntax disclosure). Hand the Court the
+            # raw baseline vs. mutated responses so the proof is re-evaluable.
+            proof_payload={
+                "artifact_type": "differential",
+                "response_text": t_body,
+                "baseline_text": b_body,
+            },
             is_in_scope=True
         )
 

@@ -91,9 +91,17 @@ def test_causality_gate_confirms_with_true_causal_proof():
             "status_code": 200,
             "confidence": 0.99,
         },
+        # Proof must be re-evaluable from the observed response, so supply it.
+        proof_payload={
+            "artifact_type": "command_injection",
+            "response_text": "www-data\n72\n",
+            "expected_result": "72",
+            "probed_expression": "53+19",
+        },
         causal_triad=triad,
         is_in_scope=True,
     )
     assert judgment.verdict == CourtVerdict.CONFIRMED
     assert judgment.reportable is True
+    assert judgment.proof_strength == "DERIVED"
     assert judgment.calibrated_severity == "Critical"

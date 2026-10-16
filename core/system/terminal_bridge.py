@@ -38,6 +38,24 @@ REDACT_PATTERNS = [
     (re.compile(r"(token[=:\s]+)[A-Za-z0-9\-_\.]{16,}", re.I), r"\1[REDACTED]"),
 ]
 
+# ── GOVERNANCE INTEGRATION ────────────────────────────────────────────────────
+# Terminal execution is a security-sensitive operation and must NEVER bypass the
+# security policy layer. When a PolicyGate is wired in, it becomes the
+# authoritative decision point (fail-closed). These imports are defensive so the
+# module can still be imported in isolation (e.g. for pure signature checks).
+try:
+    from core.control_plane.policy_gate import (
+        ActionCategory,
+        ActionRequest,
+        PolicyDecision,
+        extract_candidate_destinations,
+    )
+except Exception:  # pragma: no cover - defensive: keep module importable standalone
+    ActionCategory = None
+    ActionRequest = None
+    PolicyDecision = None
+    extract_candidate_destinations = None
+
 
 @dataclass
 class TrackedProcess:
@@ -80,19 +98,97 @@ class TerminalBridge:
         project_id: str = "default",
         timeout_seconds: float = 30.0,
         shell: bool = False,
+        tool_id: Optional[str] = None,
+        agent_id: str = "terminal_bridge",
     ) -> Dict[str, Any]:
         """
         Executes a terminal command with safety invariants, scope checks, and output redaction.
+
+        Governed execution order (security-sensitive operations must never bypass the gate):
+            1. Inviolable PolicyGate evaluation (authoritative when wired in, fail-closed)
+            2. Local catastrophic-command signature check (defense in depth)
+            3. Scope-engine check on an embedded network destination (fallback mode)
+            4. Execution + output redaction
+            5. Auditable execution record (project_id, tool_id, action, timestamp, decision, result)
         """
         start_time = time.time()
-        
-        # 1. Safety check
+        resolved_tool_id = tool_id or "terminal"
+        base_record: Dict[str, Any] = {
+            "command": command,
+            "project_id": project_id,
+            "tool_id": resolved_tool_id,
+            "action": "terminal_command",
+            "agent_id": agent_id,
+            "timestamp": start_time,
+            "authorization": "NOT_EVALUATED",
+            "authorization_decision": "",
+        }
+
+        # 1. Inviolable Policy Gate (authoritative, fail-closed)
+        if self.policy_gate is not None and ActionRequest is not None:
+            try:
+                destinations = (
+                    extract_candidate_destinations(command)
+                    if extract_candidate_destinations is not None
+                    else []
+                )
+                request = ActionRequest(
+                    category=ActionCategory.TERMINAL_COMMAND,
+                    # When a network destination is embedded in the command, surface it
+                    # as the target so the scope-whitelist check applies to it as well.
+                    target=destinations[0] if destinations else "local_terminal",
+                    command=command,
+                    reason="TerminalBridge.execute_command",
+                    requested_by_model=agent_id,
+                    metadata={
+                        "project_id": project_id,
+                        "tool_id": resolved_tool_id,
+                        "destinations": destinations,
+                    },
+                )
+                decision: "PolicyDecision" = self.policy_gate.evaluate(request)
+            except Exception as exc:  # fail-closed on any evaluation error
+                reason = f"POLICY GATE ERROR (fail-closed): {exc}"
+                entry = {
+                    **base_record,
+                    "status": "DENIED_POLICY_ERROR",
+                    "authorization": "DENIED",
+                    "authorization_decision": reason,
+                    "returncode": -1,
+                    "stdout": "",
+                    "stderr": reason,
+                    "duration_ms": 0.0,
+                }
+                self.execution_history.append(entry)
+                logger.error("Terminal command denied (policy gate error): %s", command)
+                return entry
+
+            if not decision.allowed:
+                entry = {
+                    **base_record,
+                    "status": "DENIED_POLICY",
+                    "authorization": "DENIED",
+                    "authorization_decision": decision.reason,
+                    "returncode": -1,
+                    "stdout": "",
+                    "stderr": decision.reason,
+                    "duration_ms": 0.0,
+                }
+                self.execution_history.append(entry)
+                logger.warning("Terminal command denied by PolicyGate: %s (reason: %s)", command, decision.reason)
+                return entry
+
+            base_record["authorization"] = "ALLOWED"
+            base_record["authorization_decision"] = decision.reason
+
+        # 2. Defense-in-depth: local catastrophic command signatures
         safe, reason = self._is_command_safe(command)
         if not safe:
             entry = {
-                "command": command,
-                "project_id": project_id,
+                **base_record,
                 "status": "DENIED",
+                "authorization": base_record["authorization"] if base_record["authorization"] != "NOT_EVALUATED" else "DENIED",
+                "authorization_decision": base_record["authorization_decision"] or (reason or ""),
                 "returncode": -1,
                 "stdout": "",
                 "stderr": reason,
@@ -102,8 +198,8 @@ class TerminalBridge:
             logger.warning("Terminal command denied: %s (reason: %s)", command, reason)
             return entry
 
-        # 2. Scope check if scope engine available
-        if self.scope_engine and hasattr(self.scope_engine, "is_allowed"):
+        # 3. Scope check (fallback when no PolicyGate is wired in)
+        if self.policy_gate is None and self.scope_engine is not None and hasattr(self.scope_engine, "is_allowed"):
             # Simple heuristic extraction of domain/IP
             parts = command.split()
             for part in parts:
@@ -112,9 +208,10 @@ class TerminalBridge:
                     allowed, scope_reason = self.scope_engine.is_allowed(cleaned)
                     if not allowed:
                         entry = {
-                            "command": command,
-                            "project_id": project_id,
+                            **base_record,
                             "status": "DENIED_SCOPE",
+                            "authorization": "DENIED",
+                            "authorization_decision": str(scope_reason),
                             "returncode": -1,
                             "stdout": "",
                             "stderr": f"Scope violation: {scope_reason}",
@@ -123,7 +220,7 @@ class TerminalBridge:
                         self.execution_history.append(entry)
                         return entry
 
-        # 3. Execution
+        # 4. Execution
         try:
             # Run command with timeout
             proc = subprocess.Popen(
@@ -170,8 +267,7 @@ class TerminalBridge:
         stderr_safe = self.capture_output(stderr_raw)
 
         record = {
-            "command": command,
-            "project_id": project_id,
+            **base_record,
             "status": status,
             "returncode": returncode,
             "stdout": stdout_safe,

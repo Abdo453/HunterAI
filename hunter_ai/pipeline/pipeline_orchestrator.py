@@ -33,7 +33,6 @@ from tools.web_tools import WebTools
 from hunter_ai.pipeline.state_machine import HunterState, HunterStateMachine, IllegalStateTransitionError
 from hunter_ai.pipeline.tool_specs import MasterToolRegistry
 from hunter_ai.pipeline.correlation import CorrelationEngine, DeduplicationEngine, PriorityEngine
-import hashlib
 from core.scope_engine import StrictScopeEngine, ScopePolicy
 from core.rate_limiter import AdaptiveRateLimiter
 from core.secret_sanitizer import SecretSanitizer
@@ -45,8 +44,6 @@ from hunter_ai.pipeline.schemas import (
     EndpointRecord,
     ParameterRecord,
     SecretFindingRecord,
-    VerificationEvidence,
-    ReproductionArtifact,
     HunterFinding,
     AssetCategory,
     FindingStatus,
@@ -82,6 +79,11 @@ from hunter_ai.brain.ai_preflight import AIPreflightGate, AIPreflightResult
 from hunter_ai.brain.cognitive_council import CognitiveCouncil, CouncilRole
 from hunter_ai.pipeline.desktop_exporter import DesktopExportManager
 from core.wordlist_intelligence import WordlistIntelligenceAgent, WordlistCategory, AttackPhase
+from core.coverage.coverage_ledger import (
+    AssetType,
+    CoverageLedger,
+    UntestableReason,
+)
 
 logger = logging.getLogger("hunter_ai.pipeline")
 
@@ -174,13 +176,20 @@ class HunterPipelineOrchestrator:
         self.artifact_root = self.engagement_mgr.run_dir
 
         # Initialize Strict Scope Engine & Safety Invariants
-        if self.scope_file and os.path.exists(self.scope_file):
+        self.scope_file_loaded: bool = False
+        if self.scope_file:
             self.strict_scope_engine = StrictScopeEngine.from_file(self.scope_file)
+            self.scope_file_loaded = True
+            # A scope file is authoritative: adopt its rate limit when the
+            # operator did not override the CLI default explicitly.
+            declared_rps = getattr(self.strict_scope_engine.policy, "rate_limit_rps", None)
+            if declared_rps and self.rate_limit_rps == 2.0:
+                self.rate_limit_rps = float(declared_rps)
         else:
             policy = ScopePolicy(
                 allowed_targets=in_scope or [self.domain, f"*.{self.domain}"],
                 excluded_targets=out_of_scope or [],
-                max_rate_limit_rps=self.rate_limit_rps,
+                rate_limit_rps=self.rate_limit_rps,
                 allow_private_ips_override=self.allow_private_ips,
             )
             self.strict_scope_engine = StrictScopeEngine(policy)
@@ -199,6 +208,10 @@ class HunterPipelineOrchestrator:
             authorized=self.authorized,
             allow_destructive=not self.no_destructive_tests
         )
+        # Every tool execution must pass the same authoritative gate. This closes
+        # the S1 gap where ToolManager ran shell commands with no policy check.
+        if hasattr(self.tm, "attach_policy_gate"):
+            self.tm.attach_policy_gate(self.policy_gate, project_id=self.session_id)
         self.computer_control = ComputerControl(
             workspace_dir=str(self.artifact_root),
             policy_gate=self.policy_gate,
@@ -234,6 +247,15 @@ class HunterPipelineOrchestrator:
             failure_memory=self.failure_memory,
             progress_cb=self._emit
         )
+
+        # Coverage & Negative-Space Ledger (single accounting point for what was
+        # actually executed, what failed, and what was never testable).
+        self.coverage_ledger = CoverageLedger(
+            target_scope=self.domain,
+            persistence_file=str(Path(self.artifact_root) / "coverage_ledger.json"),
+        )
+        self.tool_failures: List[Dict[str, Any]] = []
+        self.master_tools.set_result_observer(self._observe_tool_result)
 
         # Stage Storage
         self.scope_config: Optional[ScopeConfig] = None
@@ -401,6 +423,83 @@ class HunterPipelineOrchestrator:
         except Exception as e:
             logger.debug(f"[BurpTraffic] Processing error: {e}")
 
+    def _build_proof_payload(self, vuln_type: str, evidence: str) -> Optional[Dict[str, Any]]:
+        """Builds a re-evaluable ProofPayload from scanner/collector evidence.
+
+        Delegates to the shared builder so the PoE signature rules live in one
+        place. Returns None when no deterministic PoE signature applies to this
+        class, which leaves the candidate honestly UNVERIFIED rather than
+        fabricating a proof.
+        """
+        from core.evidence_court import ProofPayload
+        payload = ProofPayload.from_vuln_evidence(vuln_type, evidence)
+        return payload.to_dict() if payload else None
+
+    def _observe_tool_result(self, payload: Dict[str, Any]) -> None:
+        """Records every tool outcome in the coverage ledger.
+
+        A missing tool, a non-zero exit, a timeout, an empty fallback or an
+        unparsable output is a *coverage gap* and must be reported as such.
+        Previously these were swallowed by ``except Exception: logger.debug``
+        and never reached the report.
+        """
+        try:
+            status = str(payload.get("status") or "unknown")
+            tool = str(payload.get("tool_name") or "unknown")
+            stage = str(payload.get("stage") or "unknown")
+            target = str(payload.get("target") or self.domain)
+            items = int(payload.get("item_count") or 0)
+            err = payload.get("error")
+
+            failed = status in ("failed", "error", "fallback_empty") or bool(err)
+            if not failed:
+                return
+
+            entry = {
+                "tool": tool,
+                "stage": stage,
+                "target": target,
+                "status": status,
+                "error": err,
+                "item_count": items,
+                "timestamp": time.time(),
+            }
+            self.tool_failures.append(entry)
+
+            reason_map = {
+                "failed": UntestableReason.ENVIRONMENT_LIMIT,
+                "error": UntestableReason.ENVIRONMENT_LIMIT,
+                "fallback_empty": UntestableReason.ENVIRONMENT_LIMIT,
+            }
+            self.coverage_ledger.record_blindspot(
+                category=f"TOOL_{status.upper()}",
+                description=(
+                    f"{tool} did not produce usable observations at stage {stage} "
+                    f"for {target}: {err or status}"
+                ),
+                impact="HIGH" if items == 0 else "MEDIUM",
+                recommended_mitigation=(
+                    f"Install/repair '{tool}' or provide an equivalent adapter, "
+                    f"then re-run stage {stage}."
+                ),
+            )
+            if target:
+                self.coverage_ledger.record_discovery(
+                    AssetType.HOST, target, discovered_by="tool_observer"
+                )
+                self.coverage_ledger.record_untestable(
+                    AssetType.HOST,
+                    target,
+                    reason_map.get(status, UntestableReason.ENVIRONMENT_LIMIT),
+                    detail=f"{tool}: {err or status}",
+                )
+            logger.warning(
+                "[CoverageGap] tool=%s stage=%s status=%s items=%d error=%s",
+                tool, stage, status, items, err,
+            )
+        except Exception as e:
+            logger.warning("Failed to record tool outcome in coverage ledger: %s", e)
+
     async def _emit(self, event: str, **data):
         payload = {"event": event, "session_id": self.session_id, "state": self.fsm.current_state.value, **data}
         if self.cb:
@@ -520,7 +619,7 @@ class HunterPipelineOrchestrator:
             stage="00_scope"
         )
 
-                # 1. Evaluate StrictScopeEngine Invariants (RFC1918, loopback, cloud metadata)
+        # 1. Evaluate StrictScopeEngine Invariants (RFC1918, loopback, cloud metadata)
         strict_allowed, strict_reason = self.strict_scope_engine.validate_target(self.domain)
         if not strict_allowed:
             allowed = False
@@ -531,7 +630,7 @@ class HunterPipelineOrchestrator:
                 allowed, scope_reason = scope_eval
             else:
                 allowed = bool(scope_eval)
-                scope_reason = "In-scope" if allowed else "Out-of-scope" 
+                scope_reason = "In-scope" if allowed else "Out-of-scope"
 
         self.scope_config = ScopeConfig(
             target=self.raw_target,
@@ -545,6 +644,27 @@ class HunterPipelineOrchestrator:
         self._save_stage_artifact("00_scope", "scope.json", self.scope_config.model_dump())
         self._save_stage_artifact("00_scope", "scope_config.json", self.scope_config.model_dump())
         self._save_stage_artifact("00_scope", "scope_policy.json", self.strict_scope_engine.policy.model_dump())
+
+        # ── HARD STOP: no network egress is permitted for an unauthorized target.
+        # The scope decision above is purely local (pattern/subnet matching).
+        # Everything below performs outbound requests, so it must be unreachable
+        # when the target is out of scope.
+        if not allowed:
+            await self._emit(
+                "scope_rejected",
+                reason=scope_reason,
+                message=f"Target {self.domain} is OUT OF SCOPE! Aborting before any outbound request.",
+            )
+            self.fsm.transition_to(HunterState.ABORTED, f"Out of scope: {scope_reason}")
+            self.scope_config.program_metadata = None
+            self._save_stage_artifact("00_scope", "scope_config.json", self.scope_config.model_dump())
+            self.engagement_mgr.record_timeline_event(
+                stage="00_scope",
+                event="scope_rejected",
+                message=f"Rejected before egress: {scope_reason}",
+            )
+            self.engagement_mgr.complete_stage("00_scope", item_count=0)
+            return False
 
         # Discover Program Intelligence (BBP vs VDP, Platform vs Self-Hosted, security.txt)
         try:
@@ -562,7 +682,7 @@ class HunterPipelineOrchestrator:
                 message=f"Program identified: {self.program_metadata.program_type.value} ({self.program_metadata.platform.value})"
             )
         except Exception as e:
-            logger.debug(f"Program intelligence notice: {e}")
+            logger.warning(f"Program intelligence failed for in-scope target {self.domain}: {e}")
 
         # Generate target Google & GitHub Dorks and save in 01_osint
         try:
@@ -578,11 +698,6 @@ class HunterPipelineOrchestrator:
             logger.debug(f"Dork generation notice: {e}")
 
         self.engagement_mgr.complete_stage("00_scope", item_count=1)
-
-        if not allowed:
-            await self._emit("scope_rejected", message=f"Target {self.domain} is OUT OF SCOPE! Aborting scan.")
-            self.fsm.transition_to(HunterState.ABORTED, "Out of scope")
-            return False
 
         auth_msg = " | 🛡️ Active Testing: AUTHORIZED" if self.authorized else " | ⚠️ Active Testing: RESTRICTED (Detection-Only)"
         await self._emit("scope_approved", message=f"Target {self.domain} verified within scope policy{auth_msg}")
@@ -708,7 +823,8 @@ class HunterPipelineOrchestrator:
                             vuln_type="SubdomainTakeover",
                             raw_evidence=line,
                             source_tool="subzy",
-                            verifier_result={"reproduced": True, "is_reflection": False}
+                            verifier_result={"reproduced": True, "is_reflection": False},
+                            proof_payload=self._build_proof_payload("SubdomainTakeover", line)
                         )
                         if is_q and f_obj:
                             self.findings.append(f_obj)
@@ -1280,7 +1396,8 @@ class HunterPipelineOrchestrator:
                                 vuln_type="InformationDisclosure",
                                 raw_evidence=r.text[:200],
                                 source_tool="SpecialFileHunter",
-                                verifier_result={"reproduced": True, "status_code": 200, "is_reflection": False}
+                                verifier_result={"reproduced": True, "status_code": 200, "is_reflection": False},
+                                proof_payload=self._build_proof_payload("InformationDisclosure", r.text[:200])
                             )
                             if is_q and f_obj:
                                 self.findings.append(f_obj)
@@ -1555,8 +1672,6 @@ class HunterPipelineOrchestrator:
         self.fsm.transition_to(HunterState.TEST, "Executing targeted vulnerability skills")
         await self._emit("test_start", count=len(hypotheses), message="Dispatching testing skills with context...")
 
-        raw_probe_findings = []
-
         # Profile & Authorization Guardrails
         if self.profile == "passive":
             self.engagement_mgr.record_timeline_event(
@@ -1610,7 +1725,8 @@ class HunterPipelineOrchestrator:
                                     vuln_type="NucleiExposure",
                                     raw_evidence=nline,
                                     source_tool="nuclei",
-                                    verifier_result={"reproduced": True, "is_reflection": False}
+                                    verifier_result={"reproduced": True, "is_reflection": False},
+                                    proof_payload=self._build_proof_payload("NucleiExposure", nline)
                                 )
                                 if is_q and f_obj:
                                     self.findings.append(f_obj)
@@ -1746,24 +1862,10 @@ class HunterPipelineOrchestrator:
                     self._save_stage_artifact("09_javascript", "ai_js_audit.json", js_audit_results)
                     await self._emit("ai_triad_done", model="qwen2.5-coder", count=len(js_audit_results))
 
-                # 3. WhiteRabbitNeo: Offensive strategy for top unverified skill hits
-                wbn_results = []
-                for raw_f in raw_probe_findings[:5]:
-                    try:
-                        await self._emit("ai_triad_start", model="WhiteRabbitNeo", message=f"Formulating strategy for {raw_f['vuln_type']}...")
-                        strategy = await triad.formulate_offensive_strategy(
-                            target_url=raw_f["target_url"],
-                            param_name=raw_f["param"],
-                            vuln_type=raw_f["vuln_type"],
-                            context=raw_f.get("evidence", "")
-                        )
-                        wbn_results.append(strategy)
-                        logger.info(f"[AI/WhiteRabbitNeo] Strategy for {raw_f['vuln_type']} on {raw_f['param']}")
-                    except Exception as e:
-                        logger.debug(f"[AI/WhiteRabbitNeo] Strategy error: {e}")
-                if wbn_results:
-                    self._save_stage_artifact("12_vulnerabilities", "ai_offensive_strategy.json", wbn_results)
-                    await self._emit("ai_triad_done", model="WhiteRabbitNeo", count=len(wbn_results))
+                # NOTE: the former "WhiteRabbitNeo offensive strategy for raw probe
+                # findings" block was removed — `raw_probe_findings` was never
+                # populated (dead code). The equivalent capability now runs inside
+                # InvestigationController (court-gated) — see LEDGER-009.
 
             except Exception as e:
                 logger.warning(f"[AI/LocalTriad] Ollama not available — skipping AI analysis: {e}")
@@ -1787,342 +1889,6 @@ class HunterPipelineOrchestrator:
         # ── TRANSITION TO VERIFICATION (ENFORCES ZERO FALSE POSITIVES) ────────
         self.fsm.transition_to(HunterState.VERIFY, "Multi-layer verification & false positive filtering")
         await self._emit("verify_start", message="Enforcing Verification Invariants (Reflection != Execution)...")
-
-        verified_findings: List[HunterFinding] = []
-
-        for raw_f in raw_probe_findings:
-            v_type = raw_f["vuln_type"]
-            param = raw_f["param"]
-            target_u = raw_f["target_url"]
-
-            if v_type == "CmdInjection":
-                req_str = f"POST {target_u} HTTP/1.1\r\nHost: {self.domain}\r\n\r\n{param}={raw_f.get('payload')}"
-                resp_str = str(raw_f.get('proof'))
-                req_h = hashlib.sha256(req_str.encode("utf-8", errors="ignore")).hexdigest()
-                resp_h = hashlib.sha256(resp_str.encode("utf-8", errors="ignore")).hexdigest()
-
-                f_item = HunterFinding(
-                    finding=f"OS Command Injection Confirmed on '{param}'",
-                    asset=self.domain,
-                    endpoint=target_u,
-                    parameter=param,
-                    vuln_type="CmdInjection",
-                    status=FindingStatus.CONFIRMED,
-                    tier=FindingTier.VERIFIED_FINDING,
-                    severity="Critical",
-                    confidence=0.98,
-                    cvss_score=raw_f.get("cvss", 9.8),
-                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                    request_hash=req_h,
-                    response_hash=resp_h,
-                    reproducible=True,
-                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
-                    evidence=[
-                        VerificationEvidence(
-                            type="arithmetic_proof",
-                            description="Arithmetic proof evaluated inside target shell ($((41+1)) -> 42)",
-                            proof_snippet=resp_str,
-                            verified=True,
-                            request_hash=req_h,
-                            response_hash=resp_h
-                        )
-                    ],
-                    reproduction=ReproductionArtifact(
-                        curl_command=f"curl -s -X POST '{target_u}' -d '{param}={raw_f.get('payload')}'",
-                        payload_used=raw_f.get("payload", "")
-                    ),
-                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
-                    remediation="Never pass user input to shell commands; use subprocess with execve argument arrays."
-                )
-                verified_findings.append(f_item)
-                self.engagement_mgr.record_lineage(
-                    asset_id=f"vuln:CmdInjection:{param}",
-                    asset_value=f"OS Command Injection on {param}",
-                    asset_type="vulnerability",
-                    tool="cmd_injection_skill",
-                    stage="12_vulnerabilities",
-                    parent_id=f"{target_u}?{param}"
-                )
-            elif v_type == "SQLi":
-                req_str = f"GET {target_u} HTTP/1.1\r\nHost: {self.domain}"
-                resp_str = str(raw_f.get("extracted"))
-                req_h = hashlib.sha256(req_str.encode("utf-8", errors="ignore")).hexdigest()
-                resp_h = hashlib.sha256(resp_str.encode("utf-8", errors="ignore")).hexdigest()
-
-                f_item = HunterFinding(
-                    finding=f"SQL Injection (UNION / Extraction) on '{param}'",
-                    asset=self.domain,
-                    endpoint=target_u,
-                    parameter=param,
-                    vuln_type="SQLi",
-                    status=FindingStatus.CONFIRMED,
-                    tier=FindingTier.VERIFIED_FINDING,
-                    severity="Critical",
-                    confidence=0.97,
-                    cvss_score=9.8,
-                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                    request_hash=req_h,
-                    response_hash=resp_h,
-                    reproducible=True,
-                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
-                    evidence=[
-                        VerificationEvidence(
-                            type="controlled_execution",
-                            description=f"Database version / data extracted from {raw_f.get('dbms')}",
-                            proof_snippet=resp_str,
-                            verified=True,
-                            request_hash=req_h,
-                            response_hash=resp_h
-                        )
-                    ],
-                    reproduction=ReproductionArtifact(
-                        curl_command=f"curl -s '{target_u}'",
-                        payload_used=raw_f.get("payload", "")
-                    ),
-                    remediation="Use Parameterized Queries / Prepared Statements (PreparedStatement)."
-                )
-                verified_findings.append(f_item)
-                self.engagement_mgr.record_lineage(
-                    asset_id=f"vuln:SQLi:{param}",
-                    asset_value=f"SQL Injection on {param}",
-                    asset_type="vulnerability",
-                    tool="sqli_skill",
-                    stage="12_vulnerabilities",
-                    parent_id=f"{target_u}?{param}"
-                )
-            elif v_type == "XSS":
-                ev_str = str(raw_f.get("evidence", ""))
-                req_h = hashlib.sha256(f"GET {target_u}?{param}=<xss>".encode("utf-8", errors="ignore")).hexdigest()
-                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
-                f_item = HunterFinding(
-                    finding=f"Cross-Site Scripting (XSS) Confirmed on '{param}' [{raw_f.get('context', 'html_body')}]",
-                    asset=self.domain,
-                    endpoint=target_u,
-                    parameter=param,
-                    vuln_type="XSS",
-                    status=FindingStatus.CONFIRMED,
-                    tier=FindingTier.VERIFIED_FINDING,
-                    severity="High",
-                    confidence=raw_f.get("confidence", 0.9),
-                    cvss_score=7.4,
-                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
-                    request_hash=req_h,
-                    response_hash=resp_h,
-                    reproducible=True,
-                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
-                    evidence=[
-                        VerificationEvidence(
-                            type="unescaped_reflection",
-                            description=f"XSS payload reflected unescaped in context: {raw_f.get('context', 'html_body')}",
-                            proof_snippet=ev_str[:300],
-                            verified=True,
-                            request_hash=req_h,
-                            response_hash=resp_h
-                        )
-                    ],
-                    reproduction=ReproductionArtifact(
-                        curl_command=f"curl -s '{target_u}?{param}={raw_f.get('payload', '')}'",
-                        payload_used=raw_f.get("payload", "")
-                    ),
-                    false_positive_checks={"in_band_html_reflection": True, "verified_execution": False},
-                    remediation="Use context-aware output encoding (HTML entity encoding). Implement a strict Content-Security-Policy. Use httpOnly/Secure cookie flags."
-                )
-                verified_findings.append(f_item)
-                self.engagement_mgr.record_lineage(
-                    asset_id=f"vuln:XSS:{param}",
-                    asset_value=f"XSS on {param}",
-                    asset_type="vulnerability",
-                    tool="xss_skill",
-                    stage="12_vulnerabilities",
-                    parent_id=f"{target_u}?{param}"
-                )
-            elif v_type == "IDOR":
-                ev_str = str(raw_f.get("evidence", ""))
-                req_h = hashlib.sha256(f"GET {target_u}?{param}=X".encode("utf-8", errors="ignore")).hexdigest()
-                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
-                f_item = HunterFinding(
-                    finding=f"Insecure Direct Object Reference (IDOR/BOLA) on '{param}'",
-                    asset=self.domain,
-                    endpoint=target_u,
-                    parameter=param,
-                    vuln_type="IDOR",
-                    status=FindingStatus.CONFIRMED,
-                    tier=FindingTier.VERIFIED_FINDING,
-                    severity="High",
-                    confidence=raw_f.get("confidence", 0.9),
-                    cvss_score=raw_f.get("cvss", 8.1),
-                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
-                    request_hash=req_h,
-                    response_hash=resp_h,
-                    reproducible=True,
-                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
-                    evidence=[
-                        VerificationEvidence(
-                            type="unauthorized_access",
-                            description=f"Cross-tenant / unauthenticated access to object via '{param}'",
-                            proof_snippet=ev_str[:300],
-                            verified=True,
-                            request_hash=req_h,
-                            response_hash=resp_h
-                        )
-                    ],
-                    reproduction=ReproductionArtifact(
-                        curl_command=f"curl -s '{target_u}?{param}={raw_f.get('payload', '')}'",
-                        payload_used=raw_f.get("payload", "")
-                    ),
-                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
-                    remediation="Implement server-side object ownership checks. Never rely on client-supplied IDs without session-bound ownership validation."
-                )
-                verified_findings.append(f_item)
-                self.engagement_mgr.record_lineage(
-                    asset_id=f"vuln:IDOR:{param}",
-                    asset_value=f"IDOR on {param}",
-                    asset_type="vulnerability",
-                    tool="idor_skill",
-                    stage="12_vulnerabilities",
-                    parent_id=f"{target_u}?{param}"
-                )
-            elif v_type == "LFI":
-                ev_str = str(raw_f.get("evidence", ""))
-                req_h = hashlib.sha256(f"GET {target_u}?{param}=../etc/passwd".encode("utf-8", errors="ignore")).hexdigest()
-                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
-                f_item = HunterFinding(
-                    finding=f"Local File Inclusion / Path Traversal Confirmed on '{param}'",
-                    asset=self.domain,
-                    endpoint=target_u,
-                    parameter=param,
-                    vuln_type="LFI",
-                    status=FindingStatus.CONFIRMED,
-                    tier=FindingTier.VERIFIED_FINDING,
-                    severity="Critical",
-                    confidence=raw_f.get("confidence", 0.98),
-                    cvss_score=raw_f.get("cvss", 9.1),
-                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
-                    request_hash=req_h,
-                    response_hash=resp_h,
-                    reproducible=True,
-                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
-                    evidence=[
-                        VerificationEvidence(
-                            type="file_signature_match",
-                            description="OS file content signature matched in HTTP response body",
-                            proof_snippet=ev_str[:300],
-                            verified=True,
-                            request_hash=req_h,
-                            response_hash=resp_h
-                        )
-                    ],
-                    reproduction=ReproductionArtifact(
-                        curl_command=f"curl -s '{target_u}?{param}={raw_f.get('payload', '')}'",
-                        payload_used=raw_f.get("payload", "")
-                    ),
-                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
-                    remediation="Use an allowlist for permitted file paths. Apply os.path.basename() stripping. Never concatenate user input directly to file paths."
-                )
-                verified_findings.append(f_item)
-                self.engagement_mgr.record_lineage(
-                    asset_id=f"vuln:LFI:{param}",
-                    asset_value=f"LFI on {param}",
-                    asset_type="vulnerability",
-                    tool="lfi_skill",
-                    stage="12_vulnerabilities",
-                    parent_id=f"{target_u}?{param}"
-                )
-            elif v_type == "SSRF":
-                ev_str = str(raw_f.get("evidence", ""))
-                req_h = hashlib.sha256(f"GET {target_u}?{param}=http://127.0.0.1".encode("utf-8", errors="ignore")).hexdigest()
-                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
-                f_item = HunterFinding(
-                    finding=f"Server-Side Request Forgery (SSRF) Confirmed on '{param}'",
-                    asset=self.domain,
-                    endpoint=target_u,
-                    parameter=param,
-                    vuln_type="SSRF",
-                    status=FindingStatus.CONFIRMED,
-                    tier=FindingTier.VERIFIED_FINDING,
-                    severity="High",
-                    confidence=raw_f.get("confidence", 0.9),
-                    cvss_score=raw_f.get("cvss", 8.6),
-                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N",
-                    request_hash=req_h,
-                    response_hash=resp_h,
-                    reproducible=True,
-                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
-                    evidence=[
-                        VerificationEvidence(
-                            type="internal_network_reach",
-                            description="Server made outbound HTTP request to attacker-controlled or internal endpoint",
-                            proof_snippet=ev_str[:300],
-                            verified=True,
-                            request_hash=req_h,
-                            response_hash=resp_h
-                        )
-                    ],
-                    reproduction=ReproductionArtifact(
-                        curl_command=f"curl -s '{target_u}?{param}=http://127.0.0.1'",
-                        payload_used=raw_f.get("payload", "")
-                    ),
-                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
-                    remediation="Use an allowlist for permitted outbound URLs. Block RFC1918 and loopback addresses at network egress. Disable URL-following for user-controlled inputs."
-                )
-                verified_findings.append(f_item)
-                self.engagement_mgr.record_lineage(
-                    asset_id=f"vuln:SSRF:{param}",
-                    asset_value=f"SSRF on {param}",
-                    asset_type="vulnerability",
-                    tool="ssrf_skill",
-                    stage="12_vulnerabilities",
-                    parent_id=f"{target_u}?{param}"
-                )
-            elif v_type == "SSTI":
-                ev_str = str(raw_f.get("evidence", ""))
-                req_h = hashlib.sha256(f"GET {target_u}?{param}={{{{7*7}}}}".encode("utf-8", errors="ignore")).hexdigest()
-                resp_h = hashlib.sha256(ev_str.encode("utf-8", errors="ignore")).hexdigest()
-                f_item = HunterFinding(
-                    finding=f"Server-Side Template Injection (SSTI) Confirmed on '{param}'",
-                    asset=self.domain,
-                    endpoint=target_u,
-                    parameter=param,
-                    vuln_type="SSTI",
-                    status=FindingStatus.CONFIRMED,
-                    tier=FindingTier.VERIFIED_FINDING,
-                    severity="Critical",
-                    confidence=raw_f.get("confidence", 0.97),
-                    cvss_score=raw_f.get("cvss", 9.3),
-                    cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
-                    request_hash=req_h,
-                    response_hash=resp_h,
-                    reproducible=True,
-                    execution_timestamp_utc=datetime.utcnow().isoformat() + "Z",
-                    evidence=[
-                        VerificationEvidence(
-                            type="arithmetic_proof",
-                            description="Template engine evaluated arithmetic expression (53+19=72) in server response",
-                            proof_snippet=ev_str[:300],
-                            verified=True,
-                            request_hash=req_h,
-                            response_hash=resp_h
-                        )
-                    ],
-                    reproduction=ReproductionArtifact(
-                        curl_command=f"curl -s '{target_u}?{param}={raw_f.get('payload', '')}'",
-                        payload_used=raw_f.get("payload", "")
-                    ),
-                    false_positive_checks={"in_band_html_reflection": False, "verified_execution": True},
-                    remediation="Never render user input in template strings. Use sandboxed template environments. Prefer data-binding over string interpolation."
-                )
-                verified_findings.append(f_item)
-                self.engagement_mgr.record_lineage(
-                    asset_id=f"vuln:SSTI:{param}",
-                    asset_value=f"SSTI on {param}",
-                    asset_type="vulnerability",
-                    tool="ssti_skill",
-                    stage="12_vulnerabilities",
-                    parent_id=f"{target_u}?{param}"
-                )
-
-        self.findings.extend(verified_findings)
-
 
         # ── DEDUPLICATION & CORRELATION ───────────────────────────────────────
         self.fsm.transition_to(HunterState.CORRELATE, "Correlating multi-source attack chains")
@@ -2353,10 +2119,17 @@ class HunterPipelineOrchestrator:
         # 🔬 Print tool availability diagnostic so user knows what runs natively
         self.master_tools.print_tools_status(profile=self.profile)
 
+        # Step 0: Scope Gate — MUST run before anything that touches the network
+        # (including the AI preflight, which egresses to the model host).
+        # A purely local pattern/subnet decision, so an unauthorized target is
+        # rejected with reason="out_of_scope" and no outbound request is made.
+        if not await self.stage_scope_check():
+            return {"status": "aborted", "reason": "out_of_scope", "target": self.raw_target}
+
         # 🔴 BurpAgent & Gateway Subsystem (Auto-Detect 127.0.0.1:8080 & Launch Port 8085)
         await self._init_burp_agent_subsystem()
 
-        # Step 0: AI Preflight Gate (3-Tier Check: Host, Models, Live Inference)
+        # Step 1: AI Preflight Gate (3-Tier Check: Host, Models, Live Inference)
         if not await self.stage_ai_preflight():
             return {
                 "status": "aborted",
@@ -2366,11 +2139,7 @@ class HunterPipelineOrchestrator:
                 "preflight": self.ai_preflight_result.to_dict() if self.ai_preflight_result else {},
             }
 
-        # Step 1: Scope
-        if not await self.stage_scope_check():
-            return {"status": "aborted", "reason": "out_of_scope", "target": self.raw_target}
-
-        # Step 1: Recon & Subdomains
+        # Step 2: Recon & Subdomains
         await self.stage_recon()
 
         # Step 2: Live Assets
@@ -2392,6 +2161,8 @@ class HunterPipelineOrchestrator:
         )
 
         desktop_export = getattr(self, "last_reports", {}).get("desktop_export")
+        coverage_summary = self.coverage_ledger.get_summary()
+        self._save_stage_artifact("13_evidence", "coverage_ledger.json", coverage_summary)
         return {
             "status": "completed",
             "target": self.raw_target,
@@ -2411,5 +2182,7 @@ class HunterPipelineOrchestrator:
             "lineage_file": str(self.engagement_mgr.lineage_file),
             "desktop_directory": desktop_export,
             "reports": getattr(self, "last_reports", {}),
-            "tool_logs": self.tool_logs
+            "tool_logs": self.tool_logs,
+            "coverage_summary": coverage_summary,
+            "tool_failures": self.tool_failures,
         }

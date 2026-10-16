@@ -7,6 +7,9 @@ from core.coverage.coverage_ledger import (
     AssetType,
     UntestableReason,
     BlindspotEntry,
+    CoverageStatus,
+    SurfaceItem,
+    LEGACY_STATUS_TO_REASON,
 )
 
 __all__ = [
@@ -15,4 +18,7 @@ __all__ = [
     "AssetType",
     "UntestableReason",
     "BlindspotEntry",
+    "CoverageStatus",
+    "SurfaceItem",
+    "LEGACY_STATUS_TO_REASON",
 ]

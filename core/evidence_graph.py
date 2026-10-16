@@ -255,18 +255,21 @@ class DeterministicEvidenceValidator:
         baseline_len: int,
         tampered_resp_code: int,
         tampered_len: int,
-        anomaly_indicator: str = ""
+        anomaly_indicator: str = "",
+        tampered_body: str = ""
     ) -> Tuple[bool, float, str]:
-        """Validates BOLA/IDOR or logic flaws by comparing baseline vs tampered HTTP responses"""
+        """Validates BOLA/IDOR or logic flaws by comparing baseline vs tampered HTTP responses."""
         # Case 1: Unauthorized access succeeds (e.g. 200 with sensitive data)
         if baseline_resp_code in (401, 403) and tampered_resp_code == 200:
             return True, 0.95, "Differential confirmed: Unauthorized request bypassed auth and returned 200 OK."
 
-        # Case 2: Meaningful body length differential with anomaly indicator
+        # Case 2: A body-length delta is only meaningful when corroborated by an
+        # indicator that is actually PRESENT in the tampered body. A bare length
+        # difference (reflection/jitter) is never sufficient proof on its own.
         len_diff = abs(baseline_len - tampered_len)
-        if anomaly_indicator and anomaly_indicator.lower() in anomaly_indicator.lower():
-            if len_diff > 50:
-                return True, 0.90, f"Significant response length divergence ({len_diff} bytes) and anomaly indicator present."
+        indicator = (anomaly_indicator or "").strip().lower()
+        if indicator and len_diff > 50 and indicator in (tampered_body or "").lower():
+            return True, 0.90, f"Significant response length divergence ({len_diff} bytes) with corroborating indicator '{anomaly_indicator}'."
 
         return False, 0.30, "Response differential insufficient to prove vulnerability."
 

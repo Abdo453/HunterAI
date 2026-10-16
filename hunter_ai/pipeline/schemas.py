@@ -196,8 +196,11 @@ class HunterFinding(BaseModel):
     endpoint: str
     parameter: Optional[str] = None
     vuln_type: str
-    status: FindingStatus = FindingStatus.CONFIRMED
-    tier: FindingTier = FindingTier.VERIFIED_FINDING
+    # Safe-by-default: a finding is NOT confirmed/verified unless a caller (the
+    # EvidenceCourt-gated qualification path) explicitly promotes it. This stops
+    # any partial construction from silently claiming a verified result.
+    status: FindingStatus = FindingStatus.UNVERIFIED
+    tier: FindingTier = FindingTier.NEEDS_REVIEW
     severity: str = "Medium"
     confidence: float = 0.90
     cvss_score: float = 5.0

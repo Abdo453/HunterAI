@@ -28,6 +28,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from core.poe_engine import ProofOfExecutionEngine
+
 logger = logging.getLogger("hunter_ai.evidence_court")
 
 
@@ -85,6 +87,213 @@ class ExecutionEvidence:
         return asdict(self)
 
 
+class ProofStrength(str, Enum):
+    """How a claimed deterministic proof was established.
+
+    DERIVED  — an engine re-evaluated the raw observed data and the proof held.
+    REFUTED  — an engine re-evaluated the raw observed data and the proof failed.
+    DECLARED — the caller asserted a proof flag without supplying checkable data.
+    NONE     — no proof was offered at all.
+    """
+    DERIVED = "DERIVED"
+    REFUTED = "REFUTED"
+    DECLARED = "DECLARED"
+    NONE = "NONE"
+
+
+@dataclass
+class ProofPayload:
+    """Raw, engine-checkable evidence backing a claimed deterministic proof.
+
+    This is the difference between "trust me, it executed" and "here is the
+    response; verify it yourself".
+    """
+    response_text: str = ""
+    baseline_text: str = ""
+    artifact_type: str = ""          # command_injection | sqli | lfi | canary | auth_bypass | ...
+    probed_expression: str = "53+19"
+    expected_result: str = "72"
+    expected_token: str = ""         # nonce/canary that must appear verbatim
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_mapping(cls, data: Any) -> Optional["ProofPayload"]:
+        if not data:
+            return None
+        if isinstance(data, ProofPayload):
+            return data
+        if isinstance(data, dict):
+            known = {f for f in cls.__dataclass_fields__}
+            payload = cls(**{k: v for k, v in data.items() if k in known})
+            if payload.response_text or payload.expected_token or payload.artifact_type:
+                return payload
+        return None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_vuln_evidence(cls, vuln_type: str, evidence: str) -> Optional["ProofPayload"]:
+        """Builds a re-evaluable payload for classes with a deterministic PoE
+        signature. Returns None when no signature applies, so the candidate is
+        honestly left UNVERIFIED instead of fabricating a proof.
+        """
+        text = f"{vuln_type} {evidence or ''}".lower()
+        artifact = None
+        if any(k in text for k in ("sql", "union select", "sqli")):
+            artifact = "sqli"
+        elif any(k in text for k in (
+            "traversal", "lfi", "etc/passwd", "boot.ini", "[boot loader]",
+            "root:x:0:0", "root:/root:", "/bin/bash",
+        )):
+            artifact = "lfi"
+        elif any(k in text for k in ("command injection", "cmd_injection", "rce", "remote code")):
+            artifact = "command_injection"
+        if not artifact or not evidence:
+            return None
+        payload = cls(artifact_type=artifact, response_text=str(evidence)[:4000])
+        if artifact == "command_injection":
+            payload.expected_result = "72"
+            payload.probed_expression = "53+19"
+        return payload
+
+
+class _ProofResolver:
+    """Derives proof strength by re-evaluating raw evidence, never by trust."""
+
+    # Declared flag -> (artifact_type, verdict kind)
+    _FLAG_KINDS: Dict[str, str] = {
+        "arithmetic_proof_confirmed": "command_injection",
+        "canary_confirmed": "token",
+        "template_eval_confirmed": "command_injection",
+        "dom_breakout_confirmed": "token",
+        "token_bypass_confirmed": "token",
+        "boolean_branch_confirmed": "token",
+        "auth_bypass_confirmed": "token",
+        "file_content_confirmed": "lfi",
+        "extracted_data": "sqli",
+        "deterministic_proof": "token",
+    }
+
+    _DECLARED_FLAGS = tuple(_FLAG_KINDS.keys())
+
+    @classmethod
+    def declared_flags(cls, verifier_result: Optional[Dict[str, Any]]) -> List[str]:
+        if not verifier_result:
+            return []
+        return [f for f in cls._DECLARED_FLAGS if verifier_result.get(f)]
+
+    @classmethod
+    def resolve(
+        cls,
+        verifier_result: Optional[Dict[str, Any]],
+        causal_evidence: Optional["CausalEvidence"] = None,
+        proof_payload: Optional[ProofPayload] = None,
+    ) -> Tuple[ProofStrength, str, str]:
+        """Returns (strength, proof_kind, rationale).
+
+        Order of authority: a payload that an engine can evaluate always wins
+        over a declared flag. A payload that FAILS is a refutation, not a
+        missing proof.
+        """
+        vr = verifier_result or {}
+
+        payload = proof_payload or ProofPayload.from_mapping(vr.get("proof_payload"))
+        declared = cls.declared_flags(vr)
+        kind_hint = cls._FLAG_KINDS.get(declared[0], "") if declared else ""
+
+        # ── 1. Derive from raw evidence ──────────────────────────────────────
+        if payload is not None:
+            artifact = (payload.artifact_type or kind_hint or "").lower()
+            text = payload.response_text or ""
+
+            if artifact == "command_injection" or "command_injection" in artifact:
+                ok, reason = ProofOfExecutionEngine.verify_command_injection(
+                    text,
+                    expected_arithmetic_result=payload.expected_result or "72",
+                    probed_expression=payload.probed_expression or "53+19",
+                    baseline_text=payload.baseline_text or "",
+                )
+                return (
+                    (ProofStrength.DERIVED if ok else ProofStrength.REFUTED),
+                    "command_injection",
+                    reason,
+                )
+
+            if artifact == "sqli" or "sqli" in artifact or "sql_injection" in artifact:
+                ok, dbms, detail = ProofOfExecutionEngine.verify_sqli_extraction(text)
+                return (
+                    (ProofStrength.DERIVED if ok else ProofStrength.REFUTED),
+                    "sqli",
+                    f"{detail} (dbms={dbms})" if ok else detail,
+                )
+
+            if artifact == "lfi" or "lfi" in artifact or "traversal" in artifact:
+                ok, reason = ProofOfExecutionEngine.verify_lfi_extraction(text)
+                return (
+                    (ProofStrength.DERIVED if ok else ProofStrength.REFUTED),
+                    "lfi",
+                    reason,
+                )
+
+            # Token / nonce family: the expected marker must appear verbatim and
+            # must not be a mere echo of the payload we sent.
+            if payload.expected_token:
+                token = payload.expected_token
+                if len(text) < len(token):
+                    return ProofStrength.REFUTED, "token", "Response shorter than expected token."
+                if token not in text:
+                    return (
+                        ProofStrength.REFUTED,
+                        "token",
+                        f"Expected token '{token}' absent from observed response.",
+                    )
+                control = payload.baseline_text or ""
+                if control and token in control:
+                    return (
+                        ProofStrength.REFUTED,
+                        "token",
+                        "Token already present in the unmutated baseline (not caused by the probe).",
+                    )
+                if payload.probed_expression and payload.probed_expression in text and token not in text.replace(payload.probed_expression, ""):
+                    return ProofStrength.REFUTED, "token", "Token appears only as part of the reflected payload."
+                return (
+                    ProofStrength.DERIVED,
+                    "token",
+                    f"Deterministic token '{token}' observed in the probe response and absent from the baseline.",
+                )
+
+            # A payload with real text but no explicit marker: fall back to the
+            # baseline-differential check so the engine still has a say.
+            if text and payload.baseline_text and text != payload.baseline_text:
+                return (
+                    ProofStrength.DERIVED,
+                    "differential",
+                    "Probe response differs from the supplied baseline and no reflection was detected.",
+                )
+
+        # ── 2. Causal evidence object ────────────────────────────────────────
+        # CausalEvidence is a typed contract produced by the causal/invariant
+        # engines (see run_causal_validation_arena.py, run_unified_live_session.py),
+        # unlike an untyped dict key any caller can set, so its verdict counts as
+        # derived. Extracted observables strengthen the recorded rationale.
+        if causal_evidence is not None and causal_evidence.invariant_passed:
+            detail = causal_evidence.rationale or "Causal invariant held."
+            if causal_evidence.extracted_observables:
+                detail = f"{detail} Observables: {sorted(causal_evidence.extracted_observables)[:5]}"
+            return ProofStrength.DERIVED, "causal_invariant", detail
+
+        # ── 3. Declared-only ─────────────────────────────────────────────────
+        if declared:
+            return (
+                ProofStrength.DECLARED,
+                kind_hint,
+                f"Caller declared {', '.join(declared)} without supplying checkable evidence.",
+            )
+
+        return ProofStrength.NONE, "", "No deterministic proof offered."
+
+
 @dataclass
 class CausalTriad:
     """The legacy lightweight triad adapter for backward compatibility."""
@@ -137,6 +346,9 @@ class CourtJudgment:
     causality_rationale: Optional[str] = None
     contradiction_detected: bool = False
     epistemic_state: str = "UNKNOWN"
+    proof_strength: str = "NONE"
+    proof_kind: str = ""
+    proof_detail: str = ""
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -165,8 +377,12 @@ class EvidenceCourt:
         negative_observables: Optional[Dict[str, Any]] = None,
         execution_evidence: Optional[ExecutionEvidence] = None,
         provenance_trace: Optional[Any] = None,
+        proof_payload: Optional[Union[Dict[str, Any], ProofPayload]] = None,
+        allow_declared_proof: bool = False,
     ) -> CourtJudgment:
         finder_claim = finder_claim or {}
+        # Accept a raw dict or the structured ProofPayload object.
+        proof_payload = ProofPayload.from_mapping(proof_payload)
         # Accept the structured execution object used by the public evidence API.
         if execution_evidence is not None:
             execution_result = execution_evidence.to_dict()
@@ -327,28 +543,63 @@ class EvidenceCourt:
                 judgment.negative_evidence.append(reason)
                 return judgment
 
-        # 7. Causal Invariant & Deterministic Proof Gate
-        has_deterministic_proof = bool(
-            (causal_evidence and causal_evidence.invariant_passed) or
-            verifier_result.get("arithmetic_proof_confirmed") or
-            verifier_result.get("extracted_data") or
-            verifier_result.get("auth_bypass_confirmed") or
-            verifier_result.get("file_content_confirmed") or
-            verifier_result.get("boolean_branch_confirmed") or
-            verifier_result.get("canary_confirmed") or
-            verifier_result.get("template_eval_confirmed") or
-            verifier_result.get("dom_breakout_confirmed") or
-            verifier_result.get("token_bypass_confirmed") or
-            verifier_result.get("deterministic_proof")
+        # 7. Deterministic Proof Gate — DERIVED, not declared.
+        # A caller-supplied boolean is never sufficient on its own: proof must be
+        # re-evaluable from raw observed data (ProofPayload), otherwise it is
+        # recorded as DECLARED and does not confirm unless the caller explicitly
+        # opts into the legacy behaviour.
+        strength, proof_kind, proof_detail = _ProofResolver.resolve(
+            verifier_result=verifier_result,
+            causal_evidence=causal_evidence,
+            proof_payload=proof_payload,
         )
+        judgment.proof_strength = strength.value
+        judgment.proof_kind = proof_kind
+        judgment.proof_detail = proof_detail
+
+        if strength is ProofStrength.REFUTED:
+            judgment.verdict = CourtVerdict.FALSE_POSITIVE
+            judgment.calibrated_severity = "Info"
+            judgment.confidence_score = 0.05
+            judgment.reportable = False
+            judgment.epistemic_state = "REJECTED"
+            judgment.adjudication_rationale = (
+                f"Deterministic proof REFUTED by re-evaluating the supplied evidence: {proof_detail}"
+            )
+            judgment.negative_evidence.append(proof_detail)
+            return judgment
+
+        has_deterministic_proof = strength is ProofStrength.DERIVED
+
+        if strength is ProofStrength.DECLARED:
+            if not allow_declared_proof:
+                judgment.verdict = CourtVerdict.UNVERIFIED
+                judgment.calibrated_severity = "Low"
+                judgment.confidence_score = 0.40
+                judgment.reportable = False
+                judgment.epistemic_state = "TESTED"
+                judgment.adjudication_rationale = (
+                    f"Proof was asserted but not verifiable: {proof_detail} "
+                    "Supply a ProofPayload with the observed response so the engine can re-evaluate it."
+                )
+                judgment.negative_evidence.append("Unverifiable declared proof.")
+                return judgment
+            # Explicit legacy opt-in: keep the historical behaviour but label it.
+            has_deterministic_proof = True
 
         if has_deterministic_proof:
             judgment.verdict = CourtVerdict.CONFIRMED
             judgment.reportable = True
-            judgment.epistemic_state = "CONFIRMED"
+            judgment.epistemic_state = (
+                "CONFIRMED" if strength is ProofStrength.DERIVED
+                else "CONFIRMED_ON_DECLARED_PROOF"
+            )
             judgment.confidence_score = float(
                 (causal_evidence.causal_strength if causal_evidence else 0) or
                 verifier_result.get("confidence", 0.98)
+            )
+            judgment.adjudication_rationale = (
+                f"Confirmed by {strength.value} proof ({proof_kind}): {proof_detail}"
             )
 
             # Severity calibration
@@ -385,5 +636,8 @@ class EvidenceCourt:
         judgment.confidence_score = 0.60
         judgment.reportable = False
         judgment.epistemic_state = "TESTED"
-        judgment.adjudication_rationale = "Verifier observed differential change, but causal invariant execution proof is absent."
+        judgment.adjudication_rationale = (
+            "Verifier observed differential change, but no deterministic proof was established. "
+            f"Proof strength: {strength.value}."
+        )
         return judgment
