@@ -21,7 +21,7 @@ import re
 import socket
 from datetime import datetime, time as dt_time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urlparse
 
 import yaml
@@ -338,13 +338,24 @@ class StrictScopeEngine:
             port = port or parsed.port or (443 if parsed.scheme == "https" else 80)
         else:
             host_part = clean.split("/")[0]
-            if ":" in host_part:
+            if host_part.startswith("["):
+                # Bracketed IPv6, optionally followed by :port  ->  [::1]:8080
+                end = host_part.find("]")
+                if end != -1:
+                    host = host_part[1:end]
+                    rest = host_part[end + 1:]
+                    if rest.startswith(":") and rest[1:].isdigit():
+                        port = port or int(rest[1:])
+                else:
+                    host = host_part
+            elif host_part.count(":") == 1:
                 host, port_str = host_part.split(":", 1)
                 try:
                     port = port or int(port_str)
                 except ValueError:
                     pass
             else:
+                # Bare IPv6 literal (multiple colons) or plain hostname.
                 host = host_part
 
         # 1. Inviolable Invariants Check
@@ -391,8 +402,12 @@ class StrictScopeEngine:
                 return False, f"Target {host} matches Out-of-Scope domain pattern"
 
         # 6. In-Scope Validation
-        # If no explicit allowed targets provided, permissive fallback for single target domain
+        # No explicit allowlist configured:
+        #  - fail_closed policies DENY (no authorization = no access)
+        #  - legacy policies keep the historical permissive single-target fallback
         if not self.in_scope_patterns and not self.in_scope_subnets:
+            if self.policy.fail_closed:
+                return False, "Target is not covered by any in-scope rule (fail-closed policy)."
             return True, "Authorized (Default scope permissive)"
 
         try:
