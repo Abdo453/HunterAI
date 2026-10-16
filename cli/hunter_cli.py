@@ -389,6 +389,15 @@ def build_parser() -> argparse.ArgumentParser:
     kt_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
     kt_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
 
+    # Nmap command (V11.x Tool Intelligence Pilot — L1→L5 Service Fingerprint)
+    nm_p = subparsers.add_parser("nmap", help="Run Nmap service fingerprint (L1→L5 pipeline with verification)")
+    nm_p.add_argument("--target", required=True, help="Target host or IP to scan")
+    nm_p.add_argument("--ports", default=None, help="Ports to scan (e.g. 22,80,443 or 1-1000)")
+    nm_p.add_argument("--scripts", default=None, help="Nmap scripts to run (e.g. vuln,safe)")
+    nm_p.add_argument("--timing", default="T4", help="Timing template (T0-T5)")
+    nm_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    nm_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
     # Swarm command (V9.0 Multi-Agent Swarm)
     swm_p = subparsers.add_parser("swarm", help="Run Multi-Agent Autonomous Swarm Mission")
     swm_p.add_argument("--target", default="api.corp.local", help="Target domain or host")
@@ -1010,6 +1019,83 @@ def main(args=None):
                 print(f"       Recommendation: {f.get('recommendation','')[:140]}")
             if not res.findings:
                 print("   (No endpoints — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "nmap":
+        import asyncio, json, sys
+        from agents.nmap_agent import NmapAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(
+            allowed_targets=[target],
+            rate_limit_rps=2.0,
+            max_request_budget=5000,
+        )
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Nmap blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}")
+            print("   Use --safe-mode or adjust scope.yaml to authorize this target.\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = NmapAgent(mgr)
+
+        task = AgentTask(
+            target=target,
+            extra={
+                "ports": parsed.ports,
+                "service_detection": True,
+                "version_detection": True,
+                "scripts": parsed.scripts,
+                "timing": parsed.timing,
+                "httpx_results": {},
+                "katana_endpoints": [],
+            },
+        )
+        res = asyncio.run(agent.run(task))
+
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name,
+                "target": res.target,
+                "success": res.success,
+                "exit_code": exit_code,
+                "findings_count": len(res.findings),
+                "findings": res.findings,
+                "raw_output": res.raw_output,
+                "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🗺️  HunterAI Nmap Service Fingerprint — {target}")
+            print(f"   Scope Check:         {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available:      {agent.tools.is_available()}")
+            print(f"   Raw Matches:         {len(res.raw_output.get('raw_matches', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Duplicates Removed:  {len(res.raw_output.get('duplicates', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Open Ports:          {len(res.findings)}")
+            for f in res.findings:
+                verified = "✅ E1" if f.get('evidence_level') == 'E1' else "⚠️  E0"
+                hv = " [HIGH-VALUE]" if f.get('is_high_value') else ""
+                waf = " [WAF]" if f.get('is_likely_waf') else ""
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['host']}:{f['port']}/{f['protocol']} ({verified}{hv}{waf}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       State: {f.get('state')} | Service: {f.get('service_name') or '—'} {f.get('service_product') or ''} {f.get('service_version') or ''}")
+                print(f"       Banner: {f.get('banner') or '—'}")
+                print(f"       Context: family={f.get('context', {}).get('service_family', '—')}, auth={f.get('context', {}).get('auth_sensitive', False)}")
+                print(f"       Adaptive Suggestions: {', '.join(f.get('adaptive_suggestions', [])[:4]) or '—'}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No open ports — see raw_output for tool errors or empty results)")
             print("")
 
         sys.exit(exit_code)
