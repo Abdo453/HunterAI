@@ -1,2 +1,8 @@
-from core.reporting.cvss_report_engine import CVSSv31Calculator, CVSSReportEngine
-__all__ = ["CVSSv31Calculator", "CVSSReportEngine"]
+"""HunterAI PDF Report Generator Package"""
+from core.reporting.pdf_generator import PDFReportGenerator, CVSSCalculator
+
+__all__ = [
+    "PDFReportGenerator",
+    "CVSSCalculator",
+]
+__version__ = "1.0.0"

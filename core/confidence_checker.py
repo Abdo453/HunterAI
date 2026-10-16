@@ -8,8 +8,12 @@ Confidence Checker — نظام التحقق من اليقين في الثغرا
   1. كل موديلات الـ API تشتغل بالتوازي (بدون GPU محلي)
   2. موديلين Security يفتحوا المتصفح + BurpSuite للتحقق الفعلي
   3. النتائج تتجمع → Confidence Score نهائي
-  4. لو > 70% → تأكيد الثغرة
+  4. لو > 70% → تطابق النماذج (CORROBORATED — إشاري وليس تأكيدًا مُسنَدًا بأدلة)
   5. لو < 70% → False Positive
+
+  ملاحظة معمارية: هذا الفحص **إشاري** فقط. لا يمثل تأكيدًا بمستوى الأدلة
+  (evidence-grade CONFIRMED)؛ التأكيد الحقيقي يمرّ حصرًا عبر Evidence Court
+  (core/evidence_court.py) الذي يطلب إثباتًا قابلًا لإعادة التقييم.
 
 الـ Trigger keywords:
   "not sure", "might be", "possibly", "شاكك", "ممكن", "يبدو"
@@ -59,7 +63,7 @@ class ModelVerdict:
 class ConfidenceResult:
     original_claim: str
     target: str
-    final_verdict: str    # "CONFIRMED" | "FALSE_POSITIVE" | "UNCERTAIN"
+    final_verdict: str    # "CORROBORATED" | "FALSE_POSITIVE" | "UNCERTAIN" (advisory; never evidence-grade CONFIRMED)
     confidence_score: float
     verdicts: List[ModelVerdict] = field(default_factory=list)
     browser_evidence: str = ""
@@ -513,9 +517,14 @@ Provide your verdict as JSON."""
         # Final score
         raw_score = confirmed_score + browser_boost + burp_boost
 
-        # Verdict
+        # Verdict — ADVISORY ONLY.
+        # The consensus is derived purely from LLM votes (plus optional browser /
+        # proxy boosts); it is NOT evidence-grade confirmation. Only the Evidence
+        # Court (core/evidence_court.py), backed by a re-evaluable deterministic
+        # proof, may promote a finding to CONFIRMED. Strong model agreement is
+        # therefore labelled "CORROBORATED" so no false "CONFIRMED" leaks out.
         if raw_score >= 0.65:
-            verdict = "CONFIRMED"
+            verdict = "CORROBORATED"
         elif fp_score >= 0.5 or raw_score < 0.3:
             verdict = "FALSE_POSITIVE"
         else:
@@ -554,7 +563,7 @@ Provide your verdict as JSON."""
         """تقرير منسق للـ confidence check"""
         bars = "#" * int(result.confidence_score * 10) + "." * (10 - int(result.confidence_score * 10))
         verdict_icon = {
-            "CONFIRMED": "[CONFIRMED]",
+            "CORROBORATED": "[CORROBORATED/ADVISORY]",
             "FALSE_POSITIVE": "[FALSE_POSITIVE]",
             "UNCERTAIN": "[UNCERTAIN]"
         }.get(result.final_verdict, "[?]")

@@ -43,6 +43,11 @@ class TribunalRuling:
     unanimous: bool
     opinions: List[CourtRoleVerdict]
     chief_justification: str
+    # These mirror the authoritative Evidence Court (v1) judgment so the tribunal
+    # never hides HOW a proof was established (DERIVED vs DECLARED vs NONE).
+    proof_strength: str = "NONE"
+    epistemic_state: str = "UNKNOWN"
+    court_judgment_id: str = ""
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -56,6 +61,9 @@ class TribunalRuling:
                 for o in self.opinions
             ],
             "justification": self.chief_justification,
+            "proof_strength": self.proof_strength,
+            "epistemic_state": self.epistemic_state,
+            "court_judgment_id": self.court_judgment_id,
         }
 
 
@@ -71,8 +79,44 @@ class EvidenceCourtV2:
         reproductions_count: int,
         causal_chain_verified: bool,
         baseline_stable: bool,
-        waf_clean: bool
+        waf_clean: bool,
+        proof_payload: Optional[Any] = None,
+        verifier_result: Optional[Dict[str, Any]] = None,
+        allow_declared_proof: bool = False,
     ) -> TribunalRuling:
+        """Adversarial tribunal that DELEGATES the proof decision to the single
+        authoritative Evidence Court (v1).
+
+        Historically this tribunal accepted the caller's booleans as if they were
+        deterministic proof, so it could confirm what the v1 court refuted. It now
+        feeds the same evidence to ``EvidenceCourt.adjudicate`` and derives its
+        ruling from that judgment: a caller assertion (``proof_nonce_proven``) is
+        recorded as DECLARED proof and never confirms on its own. Only a
+        re-evaluable ``proof_payload`` (or a typed causal invariant) can yield
+        CONFIRMED — identically to v1.
+        """
+        from core.evidence_court import CourtVerdict, EvidenceCourt
+
+        vr: Dict[str, Any] = dict(verifier_result or {})
+        vr.setdefault("reproduced", reproductions_count >= 1)
+        if proof_nonce_proven:
+            # A bare caller assertion is DECLARED, not DERIVED. The engine must
+            # still be able to re-evaluate it through proof_payload.
+            vr.setdefault("deterministic_proof", True)
+        if not waf_clean:
+            vr.setdefault("waf_blocked", True)
+
+        judgment = EvidenceCourt.adjudicate(
+            target_url=endpoint,
+            parameter=str(vr.get("parameter", "")),
+            vuln_class=str(vr.get("vuln_class", "")),
+            finder_claim={"claim": f"Tribunal case {case_id}"},
+            verifier_result=vr,
+            proof_payload=proof_payload,
+            is_in_scope=True,
+            allow_declared_proof=allow_declared_proof,
+        )
+
         opinions: List[CourtRoleVerdict] = []
 
         # 1. Finder: Discovers anomaly and advocates confirmation
@@ -83,19 +127,27 @@ class EvidenceCourtV2:
             confidence=0.85
         ))
 
-        # 2. Verifier: Requires proof nonce & minimum 2 reproductions
-        if proof_nonce_proven and reproductions_count >= 2:
+        # 2. Verifier: confirms only when the v1 court actually derived the proof
+        #    AND the minimum reproduction threshold is met.
+        if judgment.verdict == CourtVerdict.CONFIRMED and reproductions_count >= 2:
             opinions.append(CourtRoleVerdict(
                 role=CourtParticipantRole.VERIFIER,
                 disposition="VOTE_CONFIRM",
-                argument=f"Deterministic nonce proven across {reproductions_count} independent reproduction runs.",
+                argument=(
+                    f"Evidence Court confirmed by {judgment.proof_strength} proof "
+                    f"across {reproductions_count} reproduction runs."
+                ),
                 confidence=0.95
             ))
         else:
+            reason = judgment.proof_detail or judgment.adjudication_rationale
             opinions.append(CourtRoleVerdict(
                 role=CourtParticipantRole.VERIFIER,
                 disposition="VOTE_REJECT",
-                argument=f"Verification failed: Nonce missing or insufficient reproductions ({reproductions_count}/2).",
+                argument=(
+                    f"Verification failed: {reason} "
+                    f"(reproductions {reproductions_count}/2)."
+                ),
                 confidence=0.90
             ))
 
@@ -138,19 +190,29 @@ class EvidenceCourtV2:
                 confidence=0.85
             ))
 
-        # 5. Chief Justice weighs votes
+        # 5. Chief Justice weighs the tribunal AND the authoritative v1 judgment.
+        #    The skeptic can always downgrade; the v1 verdict decides whether the
+        #    deterministic proof gate was actually passed.
         votes = [o.disposition for o in opinions]
         is_unanimous = len(set(votes)) == 1 and votes[0] == "VOTE_CONFIRM"
 
-        if is_unanimous:
+        if is_unanimous and judgment.verdict == CourtVerdict.CONFIRMED:
             final_verdict = "CONFIRMED"
-            justification = "Unanimous tribunal decision: Deterministic proof, causal chain, and absence of noise all proven."
+            justification = (
+                "Unanimous tribunal decision: deterministic proof, causal chain, "
+                "and absence of noise all proven."
+            )
         elif "VOTE_INCONCLUSIVE" in votes:
             final_verdict = "INCONCLUSIVE"
-            justification = "Tribunal impasse: Skeptic raised valid doubts regarding server jitter or environmental instability."
+            justification = (
+                "Tribunal impasse: Skeptic raised valid doubts regarding server "
+                "jitter or environmental instability."
+            )
         elif votes.count("VOTE_REJECT") >= 1:
             final_verdict = "REFUTED"
-            justification = "Claim dismissed: Evidence contract or causal integrity rejected by tribunal officers."
+            justification = (
+                f"Claim dismissed by tribunal officers: {judgment.adjudication_rationale}"
+            )
         else:
             final_verdict = "INCONCLUSIVE"
             justification = "Split opinion among tribunal members."
@@ -161,5 +223,8 @@ class EvidenceCourtV2:
             final_verdict=final_verdict,
             unanimous=is_unanimous,
             opinions=opinions,
-            chief_justification=justification
+            chief_justification=justification,
+            proof_strength=judgment.proof_strength,
+            epistemic_state=judgment.epistemic_state,
+            court_judgment_id=judgment.judgment_id,
         )

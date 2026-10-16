@@ -125,6 +125,15 @@ class TestCompetingHypothesesEngine:
 
 class TestEvidenceCourtV2:
     def test_unanimous_confirmation(self):
+        # CONFIRMED now requires an actual re-evaluable proof, not a caller flag.
+        from core.evidence_court import ProofPayload
+
+        proof = ProofPayload(
+            artifact_type="token",
+            expected_token="HUNTER-TRIBUNAL-PROOF",
+            response_text="admin panel :: HUNTER-TRIBUNAL-PROOF :: ok",
+            baseline_text="admin panel :: access denied",
+        )
         ruling = EvidenceCourtV2.adjudicate_case(
             case_id="C-100",
             endpoint="/api/orders",
@@ -132,10 +141,12 @@ class TestEvidenceCourtV2:
             reproductions_count=3,
             causal_chain_verified=True,
             baseline_stable=True,
-            waf_clean=True
+            waf_clean=True,
+            proof_payload=proof,
         )
         assert ruling.final_verdict == "CONFIRMED"
         assert ruling.unanimous is True
+        assert ruling.proof_strength == "DERIVED"
 
     def test_skeptic_dissent_forces_inconclusive(self):
         ruling = EvidenceCourtV2.adjudicate_case(

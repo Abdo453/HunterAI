@@ -115,7 +115,7 @@ class Claim:
 class Verdict:
     verdict_id: str = field(default_factory=lambda: f"VRD-{uuid.uuid4().hex[:8].upper()}")
     claim_id: str = ""
-    decision: str = "CONFIRMED"  # CONFIRMED, REJECTED, INCONCLUSIVE
+    decision: str = "INCONCLUSIVE"  # CONFIRMED, REJECTED, INCONCLUSIVE (fail-closed default)
     court_signature: str = ""
     timestamp: float = field(default_factory=time.time)
 

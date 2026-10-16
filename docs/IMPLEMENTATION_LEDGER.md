@@ -226,6 +226,22 @@
 
 ---
 
+## LEDGER-013 — منع الكتابة المباشرة إلى `CONFIRMED` (M1a / C7)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | ألّا يُعلن أي مسار إنتاجي `CONFIRMED` انطلاقًا من راية مستدعٍ أو تصويت نماذج أو قيمة افتراضية خطرة |
+| **الحالة السابقة** | `PARTIAL` — (أ) `core/arbitration_engine.py:82` يكتب `LifecycleStage.CONFIRMED` من `tool_output.get("verified")`، وهو **كود ميت** (صفر مستوردين) يكرّر قدرة المحكمة؛ (ب) `core/evidence_os/unified_model.py:118` قيمة `Verdict.decision` الافتراضية `CONFIRMED`; (ج) `core/confidence_checker.py:518` تصويت نماذج ≥0.65 ⇒ `CONFIRMED` (إشاري) |
+| **الملفات المفحوصة** | `core/arbitration_engine.py` · `core/confidence_checker.py` · `core/evidence_os/unified_model.py` · `core/evidence_court.py` (`_ProofResolver`) · `orchestrator/router.py` · `core/contract/security_contract.py` · `grep` شامل لـ`CONFIRMED` |
+| **الملفات المتغيرة** | **حُذف** `core/arbitration_engine.py` · `core/evidence_os/unified_model.py` · `core/confidence_checker.py` · `tests/test_no_direct_confirmation.py` (جديد) |
+| **وصف التغيير** | 1) حُذف `arbitration_engine` (كود ميت + كتابة مباشرة تكرّر المحكمة ⇒ لا يُوصَل). 2) `Verdict.decision` صار fail-closed = `"INCONCLUSIVE"`. 3) إجماع النماذج صار `"CORROBORATED"` إشاريًا مع توضيح معماري في الوثيقة والتقرير؛ لا `CONFIRMED` من تصويت LLM. 4) اختبار حراسة: يمنع أي كتابة `LifecycleStage.CONFIRMED` خارج وحدات دورة الحياة/العقد، ويثبت أن راية المستدعِ المجرّدة لا تُؤكِّد بينما الإثبات المُشتقّ يُؤكِّد. |
+| **الاختبارات المنفَّذة** | `tests/test_no_direct_confirmation.py` (5) + `test_evidence_integrity_defaults` + `test_v4_evidence_os` + `test_investigation_court_promotion` + `test_v8_investigation_os` + `test_v2_deep_architecture` + `test_scope_and_false_positives` |
+| **نتائج الاختبارات** | ✅ **76/76 نجحت** + `py_compile` نظيف |
+| **قيود متبقية** | `core/contract/security_contract.py:97` يُبقي كلمة `CONFIRMED` لكنها مُشتقّة من تقييم متطلبات + حدّ إعادة إنتاج (ليست راية مستدعٍ مجرّدة) ⇒ أُبقي بوعي. باقي M1 (توحيد V1/V2، إشارات الانعكاس، توصيل PoE) = M1b..M1d. |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
 ## ما بقي خارج نطاق هذه الجلسة (مقصود)
 
 | البند | الحالة | السبب |
