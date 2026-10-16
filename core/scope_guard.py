@@ -7,6 +7,13 @@ import ipaddress
 from urllib.parse import urlparse
 from typing import List, Dict, Tuple, Optional, Set
 
+from core.scope_engine import ScopePolicy, StrictScopeEngine, normalize_ip_literal
+
+# Single reference engine, used ONLY for the non-overridable safety invariants
+# (loopback / cloud metadata / RFC1918). This is what unifies every legacy scope
+# guard onto one authority instead of each re-implementing its own (weaker) rules.
+_INVARIANT_ENGINE = StrictScopeEngine(ScopePolicy(allowed_targets=[], fail_closed=True))
+
 
 class ScopeGuard:
     """
@@ -83,6 +90,17 @@ class ScopeGuard:
             pattern = re.compile(rf"^(?:[a-zA-Z0-9_\-]+\.)*{domain_part}$", re.IGNORECASE)
             patterns_list.append(pattern)
 
+    def _is_explicit_ip_allowlist(self, host: str) -> bool:
+        """True when the host is an explicit literal-IP in_scope entry.
+
+        This preserves deliberate lab engagements (e.g. in_scope=["127.0.0.1"])
+        without weakening the invariant for every other target.
+        """
+        target_ip = normalize_ip_literal(host)
+        if target_ip is None:
+            return False
+        return any(normalize_ip_literal(item) == target_ip for item in self.in_scope_raw)
+
     def is_in_scope(self, target: str) -> Tuple[bool, str]:
         """
         التحقق مما إذا كان الهدف مسموحاً به في الـ Scope
@@ -98,6 +116,14 @@ class ScopeGuard:
             host = parsed.hostname or clean
         else:
             host = clean.split("/")[0].split(":")[0]
+
+        # 0. Non-overridable safety invariants via the reference engine
+        #    (loopback / cloud metadata / RFC1918). An EXPLICIT literal-IP entry in
+        #    in_scope acts as a deliberate lab override.
+        if not self._is_explicit_ip_allowlist(host):
+            inv_ok, inv_reason = _INVARIANT_ENGINE.check_inviolable(host)
+            if not inv_ok:
+                return False, inv_reason
 
         # 1. فحص إذا كان في الـ Out-of-Scope أولاً (Blacklist Priority)
         # Check subnets

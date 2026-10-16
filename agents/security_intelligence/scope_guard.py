@@ -18,7 +18,9 @@ class ScopeGuard:
     """الحارس الأمني الصارم لضمان عدم تجاوز النطاق وتصنيف الأوضاع الأمنية"""
 
     def __init__(self, rule: Optional[ScopeRule] = None):
-        self.rule = rule or ScopeRule(target="*")
+        # Fail-closed default: a bare guard authorises nothing until a rule is
+        # explicitly set (previously defaulted to a permissive wildcard).
+        self.rule = rule or ScopeRule(target="", allow_active_tests=False)
         self._custom_rules: Dict[str, ScopeRule] = {}
 
     def set_scope(self, rule: ScopeRule):

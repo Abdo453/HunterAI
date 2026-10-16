@@ -39,7 +39,8 @@ class NetworkScopeGuard:
         audit_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
         policy_name: str = "scope_v1"
     ):
-        self.policy = scope_policy or ScopePolicy()
+        # Fail-closed: with no explicit policy nothing is authorised.
+        self.policy = scope_policy or ScopePolicy(fail_closed=True)
         self.scope_engine = StrictScopeEngine(self.policy)
         self.audit_callback = audit_callback
         self.policy_name = policy_name

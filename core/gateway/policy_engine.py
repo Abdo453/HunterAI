@@ -4,14 +4,62 @@ Enforces multi-layer safety arbitration: Scope boundaries, Risk Tiers, Action Ra
 """
 import re
 import logging
-from typing import Optional, Dict
+from dataclasses import dataclass
+from typing import Optional, Dict, List
 
 from core.gateway.schemas import ActionProposal, PolicyVerdict, RiskTier
 from core.gateway.risk_classifier import RiskClassifier
+from core.scope_engine import ScopePolicy, StrictScopeEngine
 from agents.security_intelligence.scope_guard import ScopeGuard
 from agents.security_intelligence.schemas import ScopeRule, ScopeMode
 
 log = logging.getLogger("core.gateway.policy_engine")
+
+
+@dataclass
+class _ScopeDecision:
+    allowed: bool
+    reason: str
+
+
+class _ReferenceScopeGuard:
+    """Fail-closed bridge to the single reference scope engine.
+
+    Exposes just the surface ``PolicyEngine`` relies on (``rule``,
+    ``evaluate_scope_decision``, ``set_scope``) while delegating every decision
+    to :class:`StrictScopeEngine`. With no allowlist it DENIES, and the
+    non-overridable safety invariants (loopback / cloud metadata / RFC1918)
+    always apply — regardless of what an LLM proposes.
+    """
+
+    def __init__(self, rule: Optional[ScopeRule] = None):
+        self.rule = rule or ScopeRule(target="", allow_active_tests=False)
+        self._engine = self._engine_from_rule(self.rule)
+
+    @staticmethod
+    def _engine_from_rule(rule: ScopeRule) -> StrictScopeEngine:
+        # An EXPLICIT wildcard authorisation is the only permissive path here;
+        # it is never a default.
+        if rule.target == "*" and not rule.allowed_domains and not rule.allowed_ips:
+            return StrictScopeEngine(ScopePolicy(allowed_targets=[], fail_closed=False))
+        targets: List[str] = []
+        if rule.target and rule.target != "*":
+            targets.append(rule.target)
+        targets.extend(rule.allowed_domains or [])
+        targets.extend(rule.allowed_ips or [])
+        return StrictScopeEngine(ScopePolicy(
+            allowed_targets=targets,
+            excluded_paths=list(rule.excluded_paths or []),
+            fail_closed=True,
+        ))
+
+    def set_scope(self, rule: ScopeRule) -> None:
+        self.rule = rule
+        self._engine = self._engine_from_rule(rule)
+
+    def evaluate_scope_decision(self, target: str, action: str = "passive_analysis") -> _ScopeDecision:
+        allowed, reason = self._engine.is_allowed(target)
+        return _ScopeDecision(allowed=allowed, reason=reason)
 
 
 class PolicyEngine:
@@ -30,22 +78,36 @@ class PolicyEngine:
         scope_guard: Optional[ScopeGuard] = None,
         risk_classifier: Optional[RiskClassifier] = None,
         max_repeated_actions: Optional[int] = None,
-        full_permissions: bool = True
+        full_permissions: bool = False
     ):
-        # Default to full permissions mode with open scope
-        rule = ScopeRule(target="*", allow_active_tests=True, mode=ScopeMode.ACTIVE) if full_permissions else ScopeRule(target="*")
-        self.scope_guard = scope_guard or ScopeGuard(rule)
+        # Fail-closed by default. An explicitly injected scope guard is honoured
+        # as-is; otherwise the engine routes through the reference
+        # StrictScopeEngine and DENIES any non-authorised target. Unrestricted
+        # scope is an explicit, auditable opt-in (enable_full_permissions()).
+        if scope_guard is not None:
+            self.scope_guard = scope_guard
+        else:
+            self.scope_guard = _ReferenceScopeGuard(
+                ScopeRule(target="*", allow_active_tests=True, mode=ScopeMode.ACTIVE)
+                if full_permissions else None
+            )
         self.risk_classifier = risk_classifier or RiskClassifier()
         self.full_permissions = full_permissions
         self.max_repeated_actions = max_repeated_actions if max_repeated_actions is not None else (99999 if full_permissions else 5)
         self._action_counts: Dict[str, int] = {}
 
     def enable_full_permissions(self):
-        """منح كافة الصلاحيات الكاملة للـ Agent للعمل بحرية واستقلالية تامة"""
+        """Explicit, auditable opt-in to unrestricted scope.
+
+        This is NEVER a default: the caller must invoke it deliberately, so the
+        system cannot drift into open-scope mode by accident.
+        """
         self.full_permissions = True
         self.max_repeated_actions = 99999
-        self.scope_guard.set_scope(ScopeRule(target="*", allow_active_tests=True, mode=ScopeMode.ACTIVE))
-        log.info("[PolicyEngine] 🔓 Full Autonomous Permissions Mode ENABLED.")
+        self.scope_guard = _ReferenceScopeGuard(
+            ScopeRule(target="*", allow_active_tests=True, mode=ScopeMode.ACTIVE)
+        )
+        log.info("[PolicyEngine] 🔓 Full Autonomous Permissions Mode ENABLED (explicit opt-in).")
 
     def set_scope(self, rule: ScopeRule):
         """تحديث سياسة النطاق والتصاريح"""
