@@ -67,9 +67,13 @@ class IndependentVerifier:
                         reason = "Differential boolean evaluation confirmed (True vs False query response mismatch)."
 
                 elif "xss" in vuln_t:
+                    # Reflection is NOT execution. Without a DOM/execution signal this
+                    # verifier refuses to PROVE XSS; the observation stays a hypothesis
+                    # (a reflected payload alone is a frequent false positive).
                     if "<tagxyz>123" in probe_resp.text:
-                        is_proven = True
-                        reason = "Unsanitized payload reflection confirmed in response body."
+                        is_proven = False
+                        reason = ("Payload reflected in response body, but reflection != "
+                                  "execution; no DOM execution proof available.")
 
                 status = "PROVEN" if is_proven else "FALSE_POSITIVE_REJECTED"
                 confidence = 0.98 if is_proven else 0.15

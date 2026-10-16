@@ -365,19 +365,26 @@ class SmartPoCExecutor:
                     if probe_resp.status_code in (403, 429, 503) or any(w in p_body_lower for w in ("just a moment...", "attention required! | cloudflare", "cf-browser-verification", "access denied")):
                         continue
 
-                    # فحص حل لابات PortSwigger أو وجود أخطاء SQL أو انعكاس XSS تنفيذي أو تغير تفاضلي جوهري
+                    # فحص حل لابات PortSwigger أو وجود أخطاء SQL أو انعكاس الحمولة (ليس تنفيذًا) أو تغير تفاضلي
                     has_solve_banner = "congratulations, you solved the lab" in p_body_lower or "solved" in p_body_lower
-                    has_xss_exec = any(tag in probe.lower() for tag in ("<script", "<svg", "<img", "onload=", "onerror=")) and probe in probe_resp.text
+                    # NOTE: an echoed payload is REFLECTION, never EXECUTION. It may
+                    # trigger deeper analysis, but it can never by itself be proof
+                    # that a script executed.
+                    has_payload_reflection = any(tag in probe.lower() for tag in ("<script", "<svg", "<img", "onload=", "onerror=")) and probe in probe_resp.text
                     has_sql_error = any(err in p_body_lower for err in ["you have an error in your sql syntax", "ora-009", "pg_query", "psqlexception", "syntax error at or near", "unclosed quotation mark"])
                     has_differential_increase = (
                         probe_resp.status_code == 200 and base_status == 200 and
                         (len(probe_resp.text) > (base_len * 1.3) or ("product" in p_body_lower and probe_resp.text.count("<div") > base_resp.text.count("<div") + 3))
                     )
 
-                    if has_solve_banner or has_sql_error or has_xss_exec or has_differential_increase:
+                    if has_solve_banner or has_sql_error or has_payload_reflection or has_differential_increase:
                         # استدعاء الذكاء الاصطناعي لقراءة الـ HTML وتحديد نوع الثغرة الحقيقي بدقة
                         ai_decision = await self.ai_reason_and_classify(probe_resp.text, param_name, probe, probe_resp.status_code)
-                        if ai_decision.get("vulnerable", False) or has_solve_banner or has_sql_error or has_differential_increase:
+                        # Confirmation requires an execution banner, a DB error signature,
+                        # or the AI's independent verdict on a NON-reflection-only candidate.
+                        # A reflected payload or a mere size delta is never proof.
+                        reflection_only_xss = has_payload_reflection and not (has_solve_banner or has_sql_error)
+                        if (ai_decision.get("vulnerable", False) or has_solve_banner or has_sql_error) and not reflection_only_xss:
                             is_verified = True
                             successful_probe = probe
                             real_vuln_type = ai_decision.get("vuln_type", v_type)
@@ -385,8 +392,6 @@ class SmartPoCExecutor:
                                 proof_reason = f"🎉 PortSwigger Lab Solved with payload: {probe} (Unreleased products retrieved)"
                             elif has_sql_error:
                                 proof_reason = f"SQL syntax error triggered with payload: {probe}"
-                            elif has_differential_increase:
-                                proof_reason = f"Boolean-based SQL injection verified: {probe} returned additional hidden records (+{len(probe_resp.text)-base_len} bytes)"
                             else:
                                 proof_reason = ai_decision.get("reasoning") or f"Vulnerability confirmed with payload: {probe}"
                             ai_remediation = ai_decision.get("remediation", ai_remediation)

@@ -2260,11 +2260,25 @@ class AutonomousBrain:
                 vt = poc_result.get("vuln_type", primary_focus)
 
                 # ── Evidence Court 2.0 & Causal Tri-Engine Adjudication ──────
+                # Proof must be STRUCTURAL. A human-readable proof_reason is
+                # narrative (shown to operators), never a substitute for
+                # re-evaluable evidence. We carry the raw response snippet and let
+                # the Evidence Court derive or refute a real ProofPayload instead
+                # of substring-matching prose such as "72" in a sentence.
                 p_reason = str(poc_result.get("proof_reason", ""))
-                is_reflection = ("reflection" in p_reason.lower() or "Reflection != Execution" in p_reason)
-                has_arith = bool("72" in p_reason and "53+19" not in p_reason)
-                is_reproduced = poc_result.get("reproduced", False)
-                is_verified = poc_result.get("verified", False) and not is_reflection
+                evidence_obj = poc_result.get("evidence", {})
+                if isinstance(evidence_obj, dict):
+                    evidence_text = str(evidence_obj.get("probe_snippet") or "")
+                else:
+                    evidence_text = str(evidence_obj or "")
+                proof_payload = None
+                try:
+                    from core.evidence_court import ProofPayload
+                    proof_payload = ProofPayload.from_vuln_evidence(vt, evidence_text)
+                except Exception:
+                    proof_payload = None
+                is_reproduced = bool(poc_result.get("reproduced", False))
+                is_verified = bool(poc_result.get("verified", False))
 
                 # 1. Causal Security Graph
                 if self.causal_graph is None:
@@ -2283,7 +2297,7 @@ class AutonomousBrain:
                 ach_res = CompetingHypothesesEngine.evaluate(
                     status_code=poc_result.get("status_code", 200),
                     body=p_reason,
-                    proof_nonce_present=bool((has_arith or is_verified) and not is_reflection),
+                    proof_nonce_present=bool(proof_payload is not None),
                     baseline_stable=baseline_stable,
                     waf_signatures_found=waf_found,
                     auth_session_valid=auth_valid
@@ -2294,11 +2308,15 @@ class AutonomousBrain:
                 ruling = EvidenceCourtV2.adjudicate_case(
                     case_id=case_id,
                     endpoint=target,
-                    proof_nonce_proven=bool((has_arith or is_verified) and ach_res.verdict == "CONFIRMED"),
+                    # A boolean can no longer masquerade as proof: we pass only the
+                    # re-evaluable payload and let the Court derive or refute it.
+                    proof_nonce_proven=False,
                     reproductions_count=2 if is_reproduced else 1,
                     causal_chain_verified=causal_res.is_causally_proven,
                     baseline_stable=baseline_stable and (ach_res.verdict != "INCONCLUSIVE"),
-                    waf_clean=not waf_found
+                    waf_clean=not waf_found,
+                    verifier_result={"reproduced": is_verified, "vuln_class": vt},
+                    proof_payload=proof_payload,
                 )
 
                 if ruling.final_verdict != "CONFIRMED" or not ruling.unanimous:
@@ -2334,7 +2352,7 @@ class AutonomousBrain:
                     "type": vt,
                     "param_name": param,
                     "title": f"{vt.upper()} in parameter {param!r}",
-                    "severity": "CRITICAL" if has_arith else "HIGH",
+                    "severity": "CRITICAL" if (proof_payload is not None and ruling.proof_strength == "DERIVED") else "HIGH",
                     "evidence": p_reason or ruling.chief_justification,
                     "payload_used": poc_result.get("payload_used", "N/A"),
                     "remediation": qwen.get("remediation_code", ""),
@@ -2454,13 +2472,17 @@ class AutonomousBrain:
                 # Tool Agreement Evaluation
                 try:
                     from core.scoring.tool_agreement import ToolAgreementEngine, SensorSignals
+                    # Fail-closed: a missing sensor signal is ABSENT, never assumed
+                    # present. Defaulting these to True made agreement_ratio=1.0 and
+                    # produced empty confirmations. poe_token_verified now requires a
+                    # real verification flag, not just any non-empty evidence string.
                     signals = SensorSignals(
                         burp_observed=bool(self.burp_sensor),
-                        browser_dom_executed=f.get("dom_executed", True),
-                        http_diff_confirmed=f.get("diff_confirmed", True),
-                        poe_token_verified=bool(f.get("evidence", "")),
-                        waf_blocked=False,
-                        is_reflection_only=f.get("reflection_only", False)
+                        browser_dom_executed=bool(f.get("dom_executed", False)),
+                        http_diff_confirmed=bool(f.get("diff_confirmed", False)),
+                        poe_token_verified=bool(f.get("poe_token_verified", False)),
+                        waf_blocked=bool(f.get("waf_blocked", False)),
+                        is_reflection_only=bool(f.get("reflection_only", False))
                     )
                     agreement = ToolAgreementEngine.evaluate(signals)
                     f["tool_agreement"] = agreement
