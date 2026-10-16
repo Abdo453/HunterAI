@@ -22,7 +22,7 @@ except ImportError:
     HAS_FASTAPI = False
 
 from core.methodology.phases import get_all_phases, MethodologyPhase
-from core.evidence_court.exploit_verifier import ExploitVerifier
+from core.exploit_verification.exploit_verifier import ExploitVerifier
 
 log = logging.getLogger("hunter_ai.web_dashboard")
 

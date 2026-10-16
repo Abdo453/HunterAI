@@ -1,32 +1,17 @@
-"""
-Multi-Agent Specialized Reasoning Package (SickHackShark-Inspired)
-"""
-from core.multi_agent.contracts import (
-    SpecialistRole,
-    SpecialistTask,
-    SpecialistReport
-)
-from core.multi_agent.specialists import (
-    BaseSpecialist,
-    ReconSpecialist,
-    WebSpecialist,
-    APISpecialist,
-    AuthSpecialist,
-    VulnSpecialist,
-    CriticSpecialist,
-    LeadAnalyst
+"""HunterAI Multi-Agent Orchestrator Package"""
+from core.multi_agent.orchestrator import (
+    AgentOrchestrator,
+    MissionPlan,
+    SubAgentTask,
+    MissionStatus,
+    TaskStatus,
 )
 
 __all__ = [
-    "SpecialistRole",
-    "SpecialistTask",
-    "SpecialistReport",
-    "BaseSpecialist",
-    "ReconSpecialist",
-    "WebSpecialist",
-    "APISpecialist",
-    "AuthSpecialist",
-    "VulnSpecialist",
-    "CriticSpecialist",
-    "LeadAnalyst"
+    "AgentOrchestrator",
+    "MissionPlan",
+    "SubAgentTask",
+    "MissionStatus",
+    "TaskStatus",
 ]
+__version__ = "1.0.0"

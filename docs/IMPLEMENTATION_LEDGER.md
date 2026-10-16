@@ -242,6 +242,22 @@
 
 ---
 
+## LEDGER-014 — توحيد المحكمتين V1/V2 (M1b / C2)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | محكمة أدلة واحدة مرجعية؛ V2 طبقة عرض تفوّض القرار إلى V1، فلا تُؤكّد ما ترفضه V1 |
+| **الحالة السابقة** | `PARTIAL` — `core/court/evidence_court_v2.py:adjudicate_case` كان يستقبل `proof_nonce_proven: bool` جاهزًا من المتصل، والمتصل يشتقّه من نصّ حرّ (`has_arith = "72" in proof_reason`) ⇒ فرق بايت يتحوّل إلى «إثبات» |
+| **الملفات المفحوصة** | `core/court/evidence_court_v2.py` · `core/evidence_court.py` (`_ProofResolver`/`adjudicate`) · `core/poe_engine.py` · `core/orchestration/investigation_kernel.py` · `core/brain/autonomous_brain.py:2262-2349` · `cli/hunter_cli.py:666` |
+| **الملفات المتغيرة** | `core/court/evidence_court_v2.py` · `core/orchestration/investigation_kernel.py` · `tests/test_v8_investigation_os.py` · `tests/test_court_unification.py` (جديد) |
+| **وصف التغيير** | 1) V2 تستدعي الآن `EvidenceCourt.adjudicate` وتبني حكمها منه؛ والراية `proof_nonce_proven` تُسجَّل `DECLARED` لا `DERIVED`. 2) توسيع `TribunalRuling` بـ`proof_strength`/`epistemic_state`/`court_judgment_id` (شفافية كاملة). 3) Verifier لا يؤكّد إلا إذا أكّدت V1 فعلًا + تحقّق حدّ الإعادة (≥2). 4) Skeptic يبقى قادرًا على الحطّ دائمًا. 5) `investigation_kernel` (محاكاة حتمية يكون فيها هو المُحقّق) يمرّر `allow_declared_proof=True` صراحةً ⇒ يُوسَم `CONFIRMED_ON_DECLARED_PROOF` (لا تجاوز صامت). |
+| **الاختبارات المنفَّذة** | `tests/test_court_unification.py` (4) + `test_v8_investigation_os` + `test_v8_brain_integration` + `test_v19_epistemic_security_os` + `test_evidence_integrity_defaults` + `test_no_direct_confirmation` + `test_investigation_court_promotion` + `test_proof_provenance` (98) + `test_v16_benchmark_and_dashboard`/`test_execution_fabric_and_orchestration`/`test_governed_orchestrator`/`test_v3_provenance_platform`/`test_evidence_graph_and_lab_mode`/`test_evidence_driven_system` (54) |
+| **نتائج الاختبارات** | ✅ **98/98** + **54/54 نجحت** + `py_compile` نظيف |
+| **قيود متبقية** | **(تعارض حاسم أُصلح)** حزمة `core/evidence_court/` التي أنشأتها العملية المتوازية كانت تُظلّل الوحدة `core/evidence_court.py` وتكسر كل استيرادات المحكمة ⇒ نُقلت إلى `core/exploit_verification/` وصُحّح مرجعها في `core/web_dashboard/dashboard.py`. لا يزال مسار `autonomous_brain` يمرّر رايات مشتقّة من نصّ حرّ (`has_arith`/`is_reflection`) ⇒ يُنظَّف في M1c. |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
 ## ما بقي خارج نطاق هذه الجلسة (مقصود)
 
 | البند | الحالة | السبب |

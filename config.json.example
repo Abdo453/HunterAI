@@ -1,0 +1,71 @@
+"""مثال على ملف config.json لـ HunterAI"""
+{
+  "defaults": {
+    "provider": "nvidia"
+  },
+  "providers": {
+    "nvidia": {
+      "name": "nvidia",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "default_model": "nvidia/z-ai/glm-5.3-flash",
+      "default_embedding_model": "nvidia/nv-embedcode-7b-v1",
+      "api_key_env": "NVIDIA_API_KEY",
+      "default_model_config": {
+        "model": "nvidia/z-ai/glm-5.3-flash",
+        "context_size": 131072,
+        "max_retries": 3,
+        "stream_usage": true,
+        "max_tokens": null,
+        "temperature": 0.7,
+        "top_p": 0.9
+      },
+      "default_embedding_model_config": {
+        "model": "nvidia/nv-embedcode-7b-v1",
+        "context_size": 4096,
+        "max_retries": 3
+      }
+    },
+    "openrouter": {
+      "name": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1/chat/completions",
+      "default_model": "mistralai/mistral-7b-instruct",
+      "default_embedding_model": "openai/text-embedding-3-small",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "default_model_config": {
+        "model": "mistralai/mistral-7b-instruct",
+        "context_size": 32768,
+        "max_retries": 3,
+        "stream_usage": true,
+        "max_tokens": null,
+        "temperature": 0.7,
+        "top_p": 0.9
+      }
+    },
+    "openai": {
+      "name": "openai",
+      "base_url": "https://api.openai.com/v1/chat/completions",
+      "default_model": "gpt-4o-mini",
+      "default_embedding_model": "text-embedding-3-small",
+      "api_key_env": "OPENAI_API_KEY",
+      "default_model_config": {
+        "model": "gpt-4o-mini",
+        "context_size": 128000,
+        "max_retries": 3,
+        "stream_usage": true
+      }
+    },
+    "vllm": {
+      "name": "vllm",
+      "base_url": "http://localhost:8000/v1/chat/completions",
+      "default_model": "mistralai/mistral-7b-instruct",
+      "default_embedding_model": "text-embedding-3-small",
+      "api_key_env": "VLLM_API_KEY",
+      "default_model_config": {
+        "model": "mistralai/mistral-7b-instruct",
+        "context_size": 32768,
+        "max_retries": 3,
+        "stream_usage": true
+      }
+    }
+  }
+}

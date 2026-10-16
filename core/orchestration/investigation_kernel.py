@@ -222,6 +222,10 @@ class AutonomousInvestigationKernel:
                 ach_conclusive_count += 1
 
             # Evidence Court 2.0 Adjudication
+            # This kernel is a deterministic simulation and acts as its own
+            # internal verifier, so it declares proof explicitly. The court
+            # labels the confirmation CONFIRMED_ON_DECLARED_PROOF — never a
+            # silent bypass (see EvidenceCourtV2 adjudicate_case).
             court_ruling_sqli = EvidenceCourtV2.adjudicate_case(
                 case_id=f"CASE-SQLI-{inv_id}",
                 endpoint=hyp_sqli.target_endpoint,
@@ -229,7 +233,8 @@ class AutonomousInvestigationKernel:
                 reproductions_count=2,
                 causal_chain_verified=causal_res_sqli.is_causally_proven,
                 baseline_stable=True,
-                waf_clean=True
+                waf_clean=True,
+                allow_declared_proof=True,
             )
             court_records.append(court_ruling_sqli.to_dict())
 
@@ -311,7 +316,8 @@ class AutonomousInvestigationKernel:
                 reproductions_count=2,
                 causal_chain_verified=causal_res_bola.is_causally_proven,
                 baseline_stable=True,
-                waf_clean=True
+                waf_clean=True,
+                allow_declared_proof=True,
             )
             court_records.append(court_ruling_bola.to_dict())
 

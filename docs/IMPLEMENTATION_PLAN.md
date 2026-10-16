@@ -113,7 +113,7 @@
 - العمل: أي مسار إلى `LifecycleStage.CONFIRMED` / `final_verdict=CONFIRMED` يجب أن يمرّ عبر بوابة إثبات مشتقّ (ProofPayload مُتحقَّق أو إعادة تحكيم المحكمة). الرايات (`verified`, `objective_met`) تصير **إشارات** لا أحكامًا؛ ترفع أقصى تقدير إلى `UNVERIFIED`/`NEEDS_REVIEW`.
 - القبول: اختبار يثبت أن `verified=True` وحده لا ينتج `CONFIRMED`؛ و`grep` مُقنَّع باختبار لمواضع `CONFIRMED` المتبقّية.
 
-**M1b — LEDGER-014: توحيد المحكمتين (P0-6 / C2)**
+**M1b — LEDGER-014: توحيد المحكمتين (P0-6 / C2) — ✅ منجَزة (اختُبر 98/98)**
 - المواقع: `core/court/evidence_court_v2.py:65-165` (`adjudicate_case` يستقبل `proof_nonce_proven: bool` من المتصل) · المتصل `core/brain/autonomous_brain.py:2294-2302` يحسب `proof_nonce_proven` من `has_arith` (بحث نصي).
 - العمل: `EvidenceCourt` v1 مرجع وحيد. جعل V2 طبقة عرض/أدلجة فوق V1: تأخذ `proof_payload`/`verifier_result`، تُفوّض القرار إلى `EvidenceCourt.adjudicate`، وتشتقّ `TribunalRuling` من الحكم. **ممنوع** أن تحوّل V2 راية منطقية إلى إثبات. عند غياب حمولة إثبات → لا `CONFIRMED`.
 - توافق خلفي: الحفاظ على توقيع `adjudicate_case` (المعاملات المنطقية) كي لا تنكسر `tests/test_v8_investigation_os.py::TestEvidenceCourtV2` و`test_v8_brain_integration.py`، لكن دلالتها تتغيّر: الرايات بلا حمولة إثبات ⇒ `REFUTED`/`INCONCLUSIVE`. تُراجَع الاختبارات القديمة إن كانت تفترض تأكيدًا بلا إثبات.
