@@ -40,7 +40,6 @@ class OllamaManager:
         """فحص واكتشاف عنوان Ollama النشط تلقائياً (سواء IP الشبكة أو 127.0.0.1)"""
         candidates = [
             self.host,
-            "http://192.168.1.3:11434",
             "http://127.0.0.1:11434",
             "http://localhost:11434",
             "http://10.0.2.2:11434"

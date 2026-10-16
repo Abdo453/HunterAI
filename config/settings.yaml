@@ -25,10 +25,13 @@ report:
   include_raw_output: true
   cvss_version: "3.1"
 
+# ملاحظة حوكمة: هذا القسم غير مقروء حاليًا في الكود (لا يوجد قارئ لـ settings.yaml).
+# القيم أدناه fail-closed صراحةً لتفادي أي "فتح افتراضي" إذا وُصل لاحقًا ببوابة حقيقية.
+# أي تفعيل فعلي يجب أن يمرّ عبر PolicyGate/ScopeEngine وليس عبر إعداد ثابت هنا.
 permissions:
-  autonomous_full_permissions: true
-  auto_approve_all: true
-  allow_active_probing: true
-  allow_elevated_sudo: true
-  unrestricted_scope: true
+  autonomous_full_permissions: false
+  auto_approve_all: false
+  allow_active_probing: false
+  allow_elevated_sudo: false
+  unrestricted_scope: false
 

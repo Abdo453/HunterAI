@@ -177,7 +177,7 @@ def main():
         elif kali_host:
             host = kali_host
         else:
-            host = env_host or "http://192.168.1.3:11434"
+            host = env_host or "http://127.0.0.1:11434"
 
     # Run checks
     check_ollama(host)

@@ -210,6 +210,22 @@
 
 ---
 
+## LEDGER-012 — تثبيت أساس سريع: نظافة الحوكمة والأدوات (M0)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | إزالة أخطاء صغيرة عالية الأثر: فتح افتراضي في الإعدادات، مضيف LAN مُثبّت، واستيراد ناقص |
+| **الحالة السابقة** | `MOCKED`/`PARTIAL` — (أ) `config/settings.yaml` يعلن `unrestricted_scope: true` و`auto_approve_all: true` بلا أي قارئ في الكود؛ (ب) `192.168.1.3` مُثبّت في ستة مواضع إنتاجية رغم ادعاء `127.0.0.1`؛ (ج) `core/tool_registry.py:211,259` يستخدم `Tuple` غير مستوردة |
+| **الملفات المفحوصة** | `config/settings.yaml:28-33` · مواضع المضيف الستة · `core/tool_registry.py` · `core/terminal_bridge.py` · بحث `nvidia_test.py` · `grep 192.168.1.3` · `grep settings.yaml` |
+| **الملفات المتغيرة** | `config/settings.yaml` · `core/tool_registry.py` · `hunter_ai/brain/model_router.py` · `core/ai_bridge/agent_ai_cognitive_bridge.py` · `core/pipeline/vram_sequential_pipeline.py` · `core/resilience/autonomous_healing_engine.py` · `models/ollama_manager.py` · `platform/kali.json` · `test_connection.py` · `tests/test_config_and_host_hygiene.py` (جديد) |
+| **وصف التغيير** | 1) أذونات `settings.yaml` صارت fail-closed (`false`) مع تعليق يوضّح أنها بلا قارئ. 2) وُحّد مضيف Ollama على `os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")` في كل مواضع الإنتاج، وأُزيل مضيف الشبكة من قائمة اكتشاف `OllamaManager`. 3) أُضيف استيراد `Tuple` إلى `tool_registry` (إصلاح وقائي؛ ملاحظة: `from __future__ import annotations` كان يمنع `NameError` وقت التشغيل، لذا التدقيق كان مبالغًا في الأثر). |
+| **الاختبارات المنفَّذة** | `tests/test_config_and_host_hygiene.py` (3) · `test_ai_model_connectivity` + `test_agent_ai_cognitive_bridge` + `test_vram_sequential_pipeline` (25) · `test_full_computer_agent.py` (14) · `py_compile` + `import` |
+| **نتائج الاختبارات** | ✅ **42/42** عبر الأهداف الثلاثة + ترجمة/استيراد نظيفان |
+| **قيود متبقية** | بندا P2-43 في التدقيق غير صالحين: `nvidia_test.py` **غير موجود أصلًا**، و`core/terminal_bridge.py` **مُستخدَم فعليًا** (`tests/test_e2e_phase17.py:37` و`capability_matrix.json:38`) ⇒ أُبقي. و`sync.sh` سكربت تطويري لمضيف مزامنة (منفذ 9999) خارج نطاق الإنتاج ⇒ أُبقي. وبقيت `tests/test_vram_sequential_pipeline.py` تمرّر المضيف صراحةً كوسيط اختبار (ليس افتراضيًا إنتاجيًا). |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
 ## ما بقي خارج نطاق هذه الجلسة (مقصود)
 
 | البند | الحالة | السبب |

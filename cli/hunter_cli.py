@@ -398,6 +398,75 @@ def build_parser() -> argparse.ArgumentParser:
     nm_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
     nm_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
 
+    # Subfinder command (V11.x Tool Intelligence Pilot — L1→L5 Asset Coverage)
+    sf_p = subparsers.add_parser("subfinder", help="Run Subfinder asset coverage (L1→L5 pipeline with verification)")
+    sf_p.add_argument("--target", required=True, help="Target domain to enumerate subdomains")
+    sf_p.add_argument("--sources", default=None, help="Comma-separated sources (e.g. crtsh,virustotal)")
+    sf_p.add_argument("--recursive", action="store_true", help="Enable recursive subdomain enumeration")
+    sf_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    sf_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Burp command
+    burp_p = subparsers.add_parser("burp", help="Run Burp Suite traffic intelligence (L1→L5 pipeline with verification)")
+    burp_p.add_argument("--target", required=True, help="Target URL to analyze")
+    burp_p.add_argument("--config", default=None, help="Burp scan configuration file")
+    burp_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    burp_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # SQLmap command
+    sql_p = subparsers.add_parser("sqlmap", help="Run SQLmap result interpreter (L1→L5 pipeline with verification)")
+    sql_p.add_argument("--target", required=True, help="Target URL with parameter to test")
+    sql_p.add_argument("--data", default=None, help="POST data to test")
+    sql_p.add_argument("--level", type=int, default=1, help="Level of tests to perform (1-5)")
+    sql_p.add_argument("--risk", type=int, default=1, help="Risk of tests to perform (1-3)")
+    sql_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    sql_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Semgrep command
+    sm_p = subparsers.add_parser("semgrep", help="Run Semgrep code finding analyzer (L1→L5 pipeline with verification)")
+    sm_p.add_argument("--target", required=True, help="Target directory or file to scan")
+    sm_p.add_argument("--config", default=None, help="Semgrep rules configuration")
+    sm_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    sm_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # BBOT command
+    bb_p = subparsers.add_parser("bbot", help="Run BBOT asset relationship analyzer (L1→L5 pipeline with verification)")
+    bb_p.add_argument("--target", required=True, help="Target domain or IP")
+    bb_p.add_argument("--modules", default=None, help="Comma-separated BBOT modules")
+    bb_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    bb_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Dalfox command
+    dl_p = subparsers.add_parser("dalfox", help="Run Dalfox XSS context analyzer (L1→L5 pipeline with verification)")
+    dl_p.add_argument("--target", required=True, help="Target URL to scan for XSS")
+    dl_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    dl_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Arjun command
+    arj_p = subparsers.add_parser("arjun", help="Run Arjun parameter intelligence (L1→L5 pipeline with verification)")
+    arj_p.add_argument("--target", required=True, help="Target URL to scan for parameters")
+    arj_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    arj_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # testssl command
+    ts_p = subparsers.add_parser("testssl", help="Run testssl.sh TLS configuration intelligence (L1→L5 pipeline with verification)")
+    ts_p.add_argument("--target", required=True, help="Target host:port to scan")
+    ts_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    ts_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Gitleaks command
+    gl_p = subparsers.add_parser("gitleaks", help="Run Gitleaks secret context analyzer (L1→L5 pipeline with verification)")
+    gl_p.add_argument("--target", required=True, help="Target repository path or URL")
+    gl_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    gl_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Trivy command
+    tr_p = subparsers.add_parser("trivy", help="Run Trivy dependency risk analyzer (L1→L5 pipeline with verification)")
+    tr_p.add_argument("--target", required=True, help="Target image, filesystem, or repository")
+    tr_p.add_argument("--scan-type", default="fs", help="Scan type (fs, image, config, repo)")
+    tr_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    tr_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
     # Swarm command (V9.0 Multi-Agent Swarm)
     swm_p = subparsers.add_parser("swarm", help="Run Multi-Agent Autonomous Swarm Mission")
     swm_p.add_argument("--target", default="api.corp.local", help="Target domain or host")
@@ -671,6 +740,330 @@ def main(args=None):
         kernel = AutonomousInvestigationKernel()
         dossier = kernel.run(cfg)
         print(dossier.format_terminal_summary())
+
+    elif parsed.command == "burp":
+        import asyncio, json, sys
+        from agents.burp_agent import BurpAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Burp blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = BurpAgent(mgr)
+        task = AgentTask(target=target, extra={"config": parsed.config})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🕸️  HunterAI Burp Traffic Intelligence — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['method']} {f['url']} → {f.get('status', '?')} (confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "sqlmap":
+        import asyncio, json, sys
+        from agents.sqlmap_agent import SQLmapAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 SQLmap blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = SQLmapAgent(mgr)
+        task = AgentTask(target=target, extra={"data": parsed.data, "level": parsed.level, "risk": parsed.risk})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n💉 HunterAI SQLmap Result Interpreter — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['parameter']} ({f['technique']}, {f.get('dbms', '?')}, confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "semgrep":
+        import asyncio, json, sys
+        from agents.semgrep_agent import SemgrepAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Semgrep blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = SemgrepAgent(mgr)
+        task = AgentTask(target=target, extra={"config": parsed.config})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔍 HunterAI Semgrep Code Finding Analyzer — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['rule_id']} — {f['file_path']}:{f['line_number']} ({f.get('severity', '?')}, confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "bbot":
+        import asyncio, json, sys
+        from agents.bbot_agent import BBOTAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 BBOT blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = BBOTAgent(mgr)
+        task = AgentTask(target=target, extra={"modules": parsed.modules})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🕸️  HunterAI BBOT Asset Relationship Analyzer — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Assets: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['asset_type']}:{f['asset_value']} (confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "dalfox":
+        import asyncio, json, sys
+        from agents.dalfox_agent import DalfoxAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Dalfox blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = DalfoxAgent(mgr)
+        task = AgentTask(target=target)
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n⚡ HunterAI Dalfox XSS Context Analyzer — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['type']} at {f['injection_point']} — {f['url']} (confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "arjun":
+        import asyncio, json, sys
+        from agents.arjun_agent import ArjunAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Arjun blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = ArjunAgent(mgr)
+        task = AgentTask(target=target)
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🏹 HunterAI Arjun Parameter Intelligence — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Parameters: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['parameter']} — {f['url']} ({f['method']}, confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "testssl":
+        import asyncio, json, sys
+        from agents.testssl_agent import TestsslAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 testssl.sh blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = TestsslAgent(mgr)
+        task = AgentTask(target=target)
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔐 HunterAI testssl.sh TLS Configuration Intelligence — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['severity']}: {f['title']} (confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "gitleaks":
+        import asyncio, json, sys
+        from agents.gitleaks_agent import GitleaksAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Gitleaks blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = GitleaksAgent(mgr)
+        task = AgentTask(target=target)
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔐 HunterAI Gitleaks Secret Context Analyzer — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Secrets: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['secret_type']} — {f['file_path']}:{f['start_line']} (confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "trivy":
+        import asyncio, json, sys
+        from agents.trivy_agent import TrivyAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Trivy blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = TrivyAgent(mgr)
+        task = AgentTask(target=target, extra={"scan_type": parsed.scan_type})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success, "exit_code": exit_code, "findings_count": len(res.findings), "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors}, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n📦 HunterAI Trivy Dependency Risk Analyzer — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Vulnerabilities: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['vulnerability_id']} — {f['package_name']} {f['installed_version']} ({f['severity']}, confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
 
     elif parsed.command == "swarm":
         import asyncio
@@ -1096,6 +1489,79 @@ def main(args=None):
                 print(f"       Recommendation: {f.get('recommendation','')[:140]}")
             if not res.findings:
                 print("   (No open ports — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "subfinder":
+        import asyncio, json, sys
+        from agents.subfinder_agent import SubfinderAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(
+            allowed_targets=[target],
+            rate_limit_rps=2.0,
+            max_request_budget=5000,
+        )
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Subfinder blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}")
+            print("   Use --safe-mode or adjust scope.yaml to authorize this target.\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = SubfinderAgent(mgr)
+
+        task = AgentTask(
+            target=target,
+            extra={
+                "sources": parsed.sources,
+                "recursive": parsed.recursive,
+                "httpx_results": {},
+                "nmap_ports": {},
+            },
+        )
+        res = asyncio.run(agent.run(task))
+
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name,
+                "target": res.target,
+                "success": res.success,
+                "exit_code": exit_code,
+                "findings_count": len(res.findings),
+                "findings": res.findings,
+                "raw_output": res.raw_output,
+                "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔍 HunterAI Subfinder Asset Coverage — {target}")
+            print(f"   Scope Check:         {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available:      {agent.tools.is_available()}")
+            print(f"   Raw Matches:         {len(res.raw_output.get('raw_matches', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Duplicates Removed:  {len(res.raw_output.get('duplicates', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Subdomains:          {len(res.findings)}")
+            for f in res.findings:
+                verified = "✅ E1" if f.get('evidence_level') == 'E1' else "⚠️  E0"
+                hv = " [HIGH-VALUE]" if f.get('is_high_value') else ""
+                web = " [WEB]" if f.get('is_live_web') else ""
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['subdomain']} ({verified}{hv}{web}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Source: {f.get('source')} | Type: {f.get('source_type')} | IP: {f.get('ip') or '—'}")
+                print(f"       CDN: {f.get('cdn', False)} | Needs Verification: {f.get('needs_verification', False)}")
+                print(f"       Adaptive Suggestions: {', '.join(f.get('adaptive_suggestions', [])[:4]) or '—'}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No subdomains — see raw_output for tool errors or empty results)")
             print("")
 
         sys.exit(exit_code)

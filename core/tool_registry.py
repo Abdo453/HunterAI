@@ -10,7 +10,7 @@ import logging
 import shutil
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("hunter_ai.tool_registry")
 

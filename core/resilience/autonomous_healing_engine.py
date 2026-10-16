@@ -5,6 +5,7 @@ Next-generation Root Cause Analysis (RCA), Adaptive Resilience, Multi-Tiered AI 
 JSON Repair, Session Recovery, and State Machine Circuit Breakers for PentestAI.
 """
 
+import os
 import re
 import json
 import time
@@ -206,7 +207,7 @@ class AICascadeFailover:
 
     def __init__(
         self,
-        ollama_url: str = "http://192.168.1.3:11434",
+        ollama_url: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
         gemini_key: Optional[str] = None,
         openrouter_key: Optional[str] = None,
     ):

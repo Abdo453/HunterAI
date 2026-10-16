@@ -57,7 +57,7 @@ class AIModelRouter:
         (re.compile(r"(?i)(explain|summary|remediation|report|cwe|cvss)"), TaskIntent.EXPLAIN_VULNERABILITY),
     ]
 
-    def __init__(self, ollama_host: str = "http://192.168.1.3:11434"):
+    def __init__(self, ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")):
         self.ollama_host = ollama_host
 
     def infer_intent(self, task_description: str) -> TaskIntent:

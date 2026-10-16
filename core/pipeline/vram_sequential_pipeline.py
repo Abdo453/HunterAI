@@ -161,7 +161,7 @@ class VRAMManager:
     the active model from GPU VRAM after inference completes.
     """
 
-    def __init__(self, ollama_host: str = "http://192.168.1.3:11434"):
+    def __init__(self, ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")):
         self.ollama_host = ollama_host.rstrip("/")
         self.currently_loaded_model: Optional[str] = None
         self.cascade_failover = AICascadeFailover(ollama_url=self.ollama_host)
@@ -726,7 +726,7 @@ class VRAMSequentialPipeline:
 
     def __init__(
         self,
-        ollama_host: str = "http://192.168.1.3:11434",
+        ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
         workspace_dir: str = "artifacts/pipeline_runs"
     ):
         self.workspace = Path(workspace_dir)
