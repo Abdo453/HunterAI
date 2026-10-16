@@ -258,6 +258,22 @@
 
 ---
 
+## LEDGER-015 — إزالة تأكيدات الانعكاس/النصّ الحرّ/الإشارات المفترضة (M1c / C3+C4+C5)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | لا يُؤكَّد finding من انعكاس حمولة، ولا من مطابقة نصّ حرّ، ولا من إشارات حساسات مفترضة |
+| **الحالة السابقة** | `PARTIAL` — (C3) `autonomous_brain` يشتقّ «إثباتًا» من `has_arith = "72" in proof_reason`؛ (C5) الانعكاس يُعدّ تنفيذًا في `smart_probe_engine` (وتكبير بايتي يؤكّد SQLi) و`independent_verifier` (`<tagxyz>123` في الردّ ⇒ PROVEN)؛ (C4) `SensorSignals`/`ConfidenceFactors` بقيم افتراضية أو مُثبّتة (`dom_executed=True`, `diff_confirmed=True`, `poe_token_verified=bool(evidence)`, `reproducibility=1.0`, `negative_test_result=1.0`, `tool_agreement=0.9`) |
+| **الملفات المفحوصة** | `core/brain/autonomous_brain.py` · `core/smart_probe_engine.py` · `core/independent_verifier.py` · `core/scoring/tool_agreement.py` · `core/scoring/confidence_calculator.py` · `core/poe_engine.py` · `core/causal/causal_graph.py` |
+| **الملفات المتغيرة** | `core/brain/autonomous_brain.py` · `core/smart_probe_engine.py` · `core/independent_verifier.py` · `tests/test_no_reflection_confirmation.py` (جديد) · `tests/test_evidence_court_single_authority.py` (جديد) |
+| **وصف التغيير** | (C3) يُبنى `ProofPayload.from_vuln_evidence(vt, probe_snippet)` من الردّ الخام ويُمرَّر للمحكمة؛ حُذفت مطابقة النصّ الحرّ (`has_arith`/`is_reflection`) و`proof_nonce_proven=False`. (C5) `smart_probe_engine`: `has_xss_exec` → `has_payload_reflection`، والانعكاس لا يؤكّد، والتكبير البايتي لم يعد إثباتًا. `independent_verifier`: انعكاس XSS ⇒ `is_proven=False` (انعكاس ≠ تنفيذ). (C4) `SensorSignals` و`ConfidenceFactors` صارت fail-closed و`poe_token_verified` من علم حقيقي. **(حاسم)** أُعيد إصلاح تظليل `core/evidence_court/` ← `core/adversarial_court/`، وأُضيف حارس دائم. |
+| **الاختبارات المنفَّذة** | `test_no_reflection_confirmation.py` (4) + `test_evidence_court_single_authority.py` (2) + الحزم: المحكمة/الدماغ/الأدلة/`scope_and_false_positives`/`v2_deep_architecture`/`v19` (171) + `tests/v27` + `tests/integration` + الأوركسترة/اللوحة/Burp (107) |
+| **نتائج الاختبارات** | ✅ **171/171** + **107/107 نجحت** + `py_compile` نظيف |
+| **قيود متبقية** | `causal_graph.build_standard_injection_chain` يعيد `is_causally_proven=True` دائمًا (قالب ثابت بلا تحقّق حقيقي) — يُعالَج في M1d. الوكيل المتوازي قد يُعيد إنشاء حزمة `core/evidence_court/` (حارس الاختبار يكشفها فورًا). |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
 ## ما بقي خارج نطاق هذه الجلسة (مقصود)
 
 | البند | الحالة | السبب |

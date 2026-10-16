@@ -2515,16 +2515,23 @@ class AutonomousBrain:
                 except Exception as e:
                     log.debug(f"Tool agreement check bypassed: {e}")
 
-                # Multidimensional Confidence Score
+                # Multidimensional Confidence Score — every factor must be
+                # empirical. Hard-coded 1.0s previously inflated confidence for
+                # findings that were never reproduced or control-tested.
                 try:
                     from core.scoring.confidence_calculator import MultidimensionalConfidenceCalculator, ConfidenceFactors
+                    _agreement_score = 0.0
+                    try:
+                        _agreement_score = float(f.get("tool_agreement", {}).get("agreement_score", 0.0))
+                    except Exception:
+                        _agreement_score = 0.0
                     factors = ConfidenceFactors(
-                        evidence_score=0.9 if f.get("evidence") else 0.5,
+                        evidence_score=0.9 if f.get("poe_token_verified") else 0.4,
                         differential_signal=0.85 if f.get("diff_confirmed") else 0.4,
-                        reproducibility=1.0,
-                        tool_agreement=0.9,
-                        negative_test_result=1.0,
-                        is_reflection_only=f.get("reflection_only", False)
+                        reproducibility=1.0 if f.get("reproduced") else 0.0,
+                        tool_agreement=_agreement_score,
+                        negative_test_result=1.0 if f.get("control_neutral") else 0.5,
+                        is_reflection_only=bool(f.get("reflection_only", False))
                     )
                     det_conf = MultidimensionalConfidenceCalculator.calculate(factors)
                     f["deterministic_confidence"] = det_conf

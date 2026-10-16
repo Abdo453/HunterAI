@@ -119,7 +119,7 @@
 - توافق خلفي: الحفاظ على توقيع `adjudicate_case` (المعاملات المنطقية) كي لا تنكسر `tests/test_v8_investigation_os.py::TestEvidenceCourtV2` و`test_v8_brain_integration.py`، لكن دلالتها تتغيّر: الرايات بلا حمولة إثبات ⇒ `REFUTED`/`INCONCLUSIVE`. تُراجَع الاختبارات القديمة إن كانت تفترض تأكيدًا بلا إثبات.
 - القبول: اختبار يثبت أن نفس المدخل (حمولة إثبات صحيحة) يعطي الحكم نفسه من V1 وV2؛ وأن V2 بلا حمولة لا تُؤكّد؛ وأن V1 وV2 لا تتعارضان على أي مدخل.
 
-**M1c — LEDGER-015: إزالة تأكيدات الأعلام/الانعكاس (C3/C4/C5)**
+**M1c — LEDGER-015: إزالة تأكيدات الأعلام/الانعكاس (C3/C4/C5) — ✅ منجَزة (اختُبر 171+107)**
 - C3 (نص حر كدليل): `core/brain/autonomous_brain.py:2263-2267` — `is_reflection = "reflection" in p_reason.lower()` و`has_arith = "72" in p_reason and "53+19" not in p_reason`. العمل: لا قرار تحكيم من نص حر؛ الاعتماد على حقول بنيوية في `poc_result` (توكن/تفاضلي مُقاس) لا على بحث نصي.
 - C4 (حساسات افتراضية True): `core/brain/autonomous_brain.py:2459-2460` — `f.get("dom_executed", True)` و`f.get("diff_confirmed", True)` ⇒ `agreement_ratio=1.0`. العمل: الافتراضي `False` (fail-closed) + قراءة الحقول من قنوات حقيقية.
 - C5 (انعكاس ≠ تنفيذ): `core/scoring/tool_agreement.py:59-61` (يُبقي دحض الانعكاس) · `core/smart_probe_engine.py:370,381` (`probe in probe_resp.text` ⇒ XSS) · `core/independent_verifier.py:69-72` (`"<tagxyz>123" in text` ⇒ «انعكاس غير مُعقَّم مؤكَّد»). العمل: الانعكاس ≠ تنفيذ؛ XSS لا يُؤكَّد إلا بدليل تنفيذ (PoE/تنفيذ DOM)، والانعكاس يبقى فرضية.

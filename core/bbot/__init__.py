@@ -2,7 +2,6 @@
 from core.bbot.schemas import BBOTAssetRecord, BBOTEvidenceLevel
 from core.bbot.analyzer import BBOTNormalizer, DuplicateDetector, EvidenceReviewer
 from core.bbot.context import ContextEnricher, AdaptiveAdvisor
-from agents.bbot_agent import BBOTAgent
 
 __all__ = [
     "BBOTAssetRecord",
@@ -12,6 +11,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveAdvisor",
-    "BBOTAgent",
 ]
 __version__ = "1.0.0-pilot"

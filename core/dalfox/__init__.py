@@ -2,7 +2,6 @@
 from core.dalfox.schemas import DalfoxFindingRecord, DalfoxEvidenceLevel
 from core.dalfox.analyzer import DalfoxNormalizer, DuplicateDetector, EvidenceReviewer
 from core.dalfox.context import ContextEnricher, AdaptiveAdvisor
-from agents.dalfox_agent import DalfoxAgent
 
 __all__ = [
     "DalfoxFindingRecord",
@@ -12,6 +11,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveAdvisor",
-    "DalfoxAgent",
 ]
 __version__ = "1.0.0-pilot"
