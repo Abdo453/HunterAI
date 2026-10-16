@@ -194,6 +194,22 @@
 
 ---
 
+## LEDGER-011 — منع `CONFIRMED` الصامت (افتراضات المخطط + حكم `EvidenceOS` + صدق مراجع الفرق)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | إغلاق كل مسار يسمح بإعلان نتيجة مؤكّدة/متحقَّقة بلا إثبات |
+| **الحالة السابقة** | `MOCKED` — أربعة مواضع: (أ) `HunterFinding.status=CONFIRMED` و`tier=VERIFIED_FINDING` افتراضيًا في المخطط؛ (ب) `EvidenceOS.rule_verdict(decision="CONFIRMED")` افتراضيًا وبلا استدعاء مدقّق النسب (`verify_claim_lineage`)؛ (ج) تكرار منطقي `x.lower() in x.lower()` في `DeterministicEvidenceValidator.evaluate_differential_response` يجعل فرق الطول وحده كافيًا؛ (د) `EvidenceCourtReviewer` يصادق حتى على حكم `UNVERIFIED` ويستعمل `poe_token` مُلفَّقًا |
+| **الملفات المفحوصة** | `hunter_ai/pipeline/schemas.py:199-200` · `core/evidence_os/unified_model.py:242` · `core/evidence_graph.py:252-271` · `core/teams/verification_team.py:98-189` · `tests/test_v4_evidence_os.py` · `tests/test_burp_pipeline_fusion.py` · `grep HunterFinding(`/`rule_verdict`/`evaluate_differential_response` |
+| **الملفات المتغيرة** | `hunter_ai/pipeline/schemas.py` · `core/evidence_os/unified_model.py` · `core/evidence_graph.py` · `core/teams/verification_team.py` · `tests/test_evidence_integrity_defaults.py` (جديد) |
+| **وصف التغيير** | 1) افتراضيا `HunterFinding` صار `UNVERIFIED`/`NEEDS_REVIEW` (الترقية صريحة فقط من مسار البوابة). 2) `rule_verdict` افتراضيه `UNVERIFIED`، ويرفض `CONFIRMED` برفع `ValueError` إن لم تصحّ سلسلة النسب (Observation→…→Claim). 3) أُزيل التكرار المنطقي؛ يتطلّب الآن وجود مؤشّر الفرق فعلًا داخل الجسم (`tampered_body`) للتأكيد، وفرق الطول وحده لا يكفي. 4) `EvidenceCourtReviewer` يعيد التحكيم عبر `EvidenceCourt` بحمولة فرق حقيقية (`probed_text`/`baseline_text`) بلا رمز مُلفَّق، ولا يوافق إلا على `CourtVerdict.CONFIRMED`. 5) `CausalVerificationAgent` لا يختلق استجابات (يرفض عند غياب القياسات) ويحمل الأجسام الخام في الدليل لإعادة التقييم. |
+| **الاختبارات المنفَّذة** | `tests/test_evidence_integrity_defaults.py` (12) · `tests/test_v4_evidence_os.py` (14) · `tests/test_evidence_graph_and_lab_mode.py` + مجموعة الأدلة (55) · `tests/test_hunter_master_pipeline.py tests/test_hunter_workflow_pipeline.py` (15) |
+| **نتائج الاختبارات** | ✅ **96/96** عبر الأهداف الأربعة · ✅ **1262/1262** بصلة كاملة للحالة السابقة (13 دقيقة) · البصلة الكاملة على الحالة الجديدة تُؤكَّد في تقرير المرحلة |
+| **قيود متبقية** | مواضع بوابة الماسحات (`dalfox`/`nikto`/`secrets`) ما زالت تمرّر `reproduced` فقط ⇒ ترفضها المحكمة (سلوك صادق: لا Finding بلا إثبات) — يُعالَج في البند التالي بتحويل ملاحظات الماسحات إلى فرضيات تُختبر. |
+| **الحالة الحالية** | ✅ **EXISTS** (لا مسار لإعلان `CONFIRMED` بلا إثبات في المخطط/`EvidenceOS`/المحكمة/مراجع الفرق) |
+
+---
+
 ## ما بقي خارج نطاق هذه الجلسة (مقصود)
 
 | البند | الحالة | السبب |
@@ -202,7 +218,8 @@
 | مسار `_promote_to_evidence_court` الذي يتجاوز المحكمة | ✅ `EXISTS` (LEDGER-009) | كل Finding يمرّ الآن عبر `EvidenceCourt.adjudicate` (مُعلَن مُوسَّم / مُشتَق) — لا Finding بلا قرار محكمة |
 | `raw_probe_findings` الفارغة (340 سطر كود ميت) | ✅ `EXISTS` (LEDGER-010) | أُزيل المسار الميت المتجاوز للمحكمة (336 سطرًا)؛ الكفاءة مغطّاة عبر LEDGER-009 |
 | فجوة S1: تنفيذ `ToolManager` بلا بوابة سياسة | ✅ `EXISTS` (LEDGER-008) | رُبط `ToolManager.execute` بـ`PolicyGate` fail-closed + سجل تدقيق؛ تبقّى فرض قائمة السماح على أسماء المضيفين المجرّدة |
-| `core/teams` (18 وكيلًا محاكاة + كود ميت) | `MOCKED` / `DISCONNECTED` | المرحلة 2 |
+| `core/teams` (18 وكيلًا محاكاة + كود ميت) | `PARTIAL` | المرحلة 2 — صُدِّق مراجع التحقق (`EvidenceCourtReviewer`) وأُلغي الاختلاق في `CausalVerificationAgent` (LEDGER-011)؛ بقية الفرق ما زالت محاكاة |
+| افتراضات `CONFIRMED` الصامتة (المخطط + `EvidenceOS` + مراجع الفرق) | ✅ `EXISTS` (LEDGER-011) | أُلغيت الافتراضات الخطيرة، ورُفض `CONFIRMED` بلا نسب، وصار المراجع صادقًا |
 | المراجعة المستقلة في `TaskScheduler` | `PARTIAL` | المرحلة 2 |
 | الذاكرة المشتركة الموحّدة (6 مخازن) | `MISSING` | المرحلة 6 |
 | ادعاء "البيئة المعزولة" مع مفتاح Gemini فعّال | `DISCONNECTED`/خطر | يحتاج قرار من المالك قبل التغيير |
@@ -224,6 +241,10 @@ python -m pytest tests/test_policy_invariants_on_commands.py tests/test_tool_fai
 # 3) اختبارات مسار خط الأنابيب
 python -m pytest tests/test_hunter_master_pipeline.py tests/test_hunter_workflow_pipeline.py `
                  tests/test_enterprise_casm.py tests/test_scope_and_false_positives.py -q
+
+# 3b) سلامة الأدلة: منع CONFIRMED الصامت (LEDGER-011)
+python -m pytest tests/test_evidence_integrity_defaults.py tests/test_v4_evidence_os.py `
+                 tests/test_evidence_graph_and_lab_mode.py -q
 
 # 4) الـCLI الذي كان ميتًا
 python cli\hunter_cli.py coverage --domain example.com
