@@ -265,6 +265,10 @@ class HunterPipelineOrchestrator:
         self.parameters: List[ParameterRecord] = []
         self.secrets: List[SecretFindingRecord] = []
         self.findings: List[HunterFinding] = []
+        # Scanner signals that could not be re-evaluated into proof are NOT
+        # confirmed; they are recorded here as hypotheses for follow-up instead
+        # of being silently dropped or falsely confirmed.
+        self.deferred_hypotheses: List[Dict[str, Any]] = []
         self.tool_logs: List[str] = []
 
         # Burp Suite Sensory & Control Subsystem
@@ -434,6 +438,51 @@ class HunterPipelineOrchestrator:
         from core.evidence_court import ProofPayload
         payload = ProofPayload.from_vuln_evidence(vuln_type, evidence)
         return payload.to_dict() if payload else None
+
+    @staticmethod
+    def _court_verifier_result(
+        proof_payload: Optional[Dict[str, Any]],
+        *,
+        directly_observed: bool = False,
+    ) -> Dict[str, Any]:
+        """Builds a TRUTHFUL ``verifier_result`` for the Evidence Court.
+
+        ``reproduced`` is claimed only when we hold re-evaluable proof captured
+        first-hand (a ProofPayload the engine can re-check) AND we observed the
+        effect ourselves. A scanner's output line is a signal, not a
+        reproduction, so it never sets ``reproduced`` — the Court then honestly
+        returns UNVERIFIED instead of trusting a caller flag.
+        """
+        return {
+            "reproduced": bool(directly_observed and proof_payload),
+            "is_reflection": False,
+        }
+
+    def _defer_hypothesis(
+        self,
+        title: str,
+        endpoint: str,
+        vuln_type: str,
+        source_tool: str,
+        rationale: str,
+        raw_evidence: str = "",
+    ) -> None:
+        """Records a non-confirmed scanner signal as a follow-up hypothesis.
+
+        This replaces the previous behaviour of submitting scanner lines to the
+        Court as if they were reproduced proof. The signal is preserved (with the
+        Court's rejection rationale) so it seeds the InvestigationController
+        instead of vanishing or being falsely promoted.
+        """
+        self.deferred_hypotheses.append({
+            "title": title,
+            "endpoint": endpoint,
+            "vuln_type": vuln_type,
+            "source_tool": source_tool,
+            "rationale": rationale,
+            "raw_evidence": (raw_evidence or "")[:300],
+            "timestamp": time.time(),
+        })
 
     def _observe_tool_result(self, payload: Dict[str, Any]) -> None:
         """Records every tool outcome in the coverage ledger.
@@ -816,18 +865,25 @@ class HunterPipelineOrchestrator:
                 for line in subzy_res:
                     if isinstance(line, str) and ("VULNERABLE" in line.upper() or "[VUL" in line):
                         from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
-                        is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                        payload = self._build_proof_payload("SubdomainTakeover", line)
+                        is_q, f_obj, rationale = FindingQualificationGate.evaluate_candidate(
                             title=f"Subdomain Takeover: {line[:80]}",
                             asset=self.domain,
                             endpoint=line.split()[0] if line.split() else self.domain,
                             vuln_type="SubdomainTakeover",
                             raw_evidence=line,
                             source_tool="subzy",
-                            verifier_result={"reproduced": True, "is_reflection": False},
-                            proof_payload=self._build_proof_payload("SubdomainTakeover", line)
+                            verifier_result=self._court_verifier_result(payload),
+                            proof_payload=payload
                         )
                         if is_q and f_obj:
                             self.findings.append(f_obj)
+                        else:
+                            self._defer_hypothesis(
+                                f"Subdomain Takeover: {line[:80]}",
+                                line.split()[0] if line.split() else self.domain,
+                                "SubdomainTakeover", "subzy", rationale, line,
+                            )
                 self._save_stage_artifact("04_attack_surface", "subdomain_takeover.txt", "\n".join(subzy_res))
                 if meta_subzy and meta_subzy.raw_output_file:
                     self.tool_logs.append(meta_subzy.raw_output_file)
@@ -1389,18 +1445,27 @@ class HunterPipelineOrchestrator:
 
                         if is_valid:
                             from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
-                            is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                            # We fetched this resource ourselves, so a valid PoE
+                            # signature may be derived from the live body.
+                            payload = self._build_proof_payload("InformationDisclosure", r.text[:4000])
+                            is_q, f_obj, rationale = FindingQualificationGate.evaluate_candidate(
                                 title=f"Sensitive File / Backup Exposed: /{sc}",
                                 asset=self.domain,
                                 endpoint=test_url,
                                 vuln_type="InformationDisclosure",
                                 raw_evidence=r.text[:200],
                                 source_tool="SpecialFileHunter",
-                                verifier_result={"reproduced": True, "status_code": 200, "is_reflection": False},
-                                proof_payload=self._build_proof_payload("InformationDisclosure", r.text[:200])
+                                verifier_result=self._court_verifier_result(payload, directly_observed=True),
+                                proof_payload=payload
                             )
                             if is_q and f_obj:
                                 self.findings.append(f_obj)
+                            else:
+                                self._defer_hypothesis(
+                                    f"Sensitive File / Backup Exposed: /{sc}",
+                                    test_url, "InformationDisclosure",
+                                    "SpecialFileHunter", rationale, r.text[:200],
+                                )
                 except Exception:
                     pass
 
@@ -1718,18 +1783,24 @@ class HunterPipelineOrchestrator:
                             if isinstance(nline, str) and "[" in nline:
                                 from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
                                 title_part = nline.split("]")[0].strip("[]")
-                                is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                                payload = self._build_proof_payload("NucleiExposure", nline)
+                                is_q, f_obj, rationale = FindingQualificationGate.evaluate_candidate(
                                     title=f"Nuclei: {title_part}",
                                     asset=self.domain,
                                     endpoint=target_live.url,
                                     vuln_type="NucleiExposure",
                                     raw_evidence=nline,
                                     source_tool="nuclei",
-                                    verifier_result={"reproduced": True, "is_reflection": False},
-                                    proof_payload=self._build_proof_payload("NucleiExposure", nline)
+                                    verifier_result=self._court_verifier_result(payload),
+                                    proof_payload=payload
                                 )
                                 if is_q and f_obj:
                                     self.findings.append(f_obj)
+                                else:
+                                    self._defer_hypothesis(
+                                        f"Nuclei: {title_part}", target_live.url,
+                                        "NucleiExposure", "nuclei", rationale, nline,
+                                    )
                 except Exception as e:
                     logger.debug(f"Nuclei test error: {e}")
 
@@ -1747,17 +1818,24 @@ class HunterPipelineOrchestrator:
                         for dl in dalf_lines:
                             if isinstance(dl, str) and dl:
                                 from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
-                                is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
-                                    title=f"XSS Confirmed: {xss_p.parameter}",
+                                payload = self._build_proof_payload("XSS", dl)
+                                is_q, f_obj, rationale = FindingQualificationGate.evaluate_candidate(
+                                    title=f"XSS Candidate: {xss_p.parameter}",
                                     asset=self.domain,
                                     endpoint=dalfox_url,
                                     vuln_type="XSS",
                                     raw_evidence=dl,
                                     source_tool="dalfox",
-                                    verifier_result={"reproduced": True, "is_reflection": False}
+                                    verifier_result=self._court_verifier_result(payload),
+                                    proof_payload=payload
                                 )
                                 if is_q and f_obj:
                                     self.findings.append(f_obj)
+                                else:
+                                    self._defer_hypothesis(
+                                        f"XSS Candidate: {xss_p.parameter}", dalfox_url,
+                                        "XSS", "dalfox", rationale, dl,
+                                    )
                 except Exception as e:
                     logger.debug(f"Dalfox XSS error: {e}")
 
@@ -1773,17 +1851,24 @@ class HunterPipelineOrchestrator:
                         for nk in nikto_lines:
                             if isinstance(nk, str) and "OSVDB" in nk or "CVE" in str(nk):
                                 from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
-                                is_q, f_obj, _ = FindingQualificationGate.evaluate_candidate(
+                                payload = self._build_proof_payload("MisconfigExposure", nk)
+                                is_q, f_obj, rationale = FindingQualificationGate.evaluate_candidate(
                                     title=f"Nikto: {nk[:80]}",
                                     asset=self.domain,
                                     endpoint=target_live.url,
                                     vuln_type="MisconfigExposure",
                                     raw_evidence=nk,
                                     source_tool="nikto",
-                                    verifier_result={"reproduced": True, "is_reflection": False}
+                                    verifier_result=self._court_verifier_result(payload),
+                                    proof_payload=payload
                                 )
                                 if is_q and f_obj:
                                     self.findings.append(f_obj)
+                                else:
+                                    self._defer_hypothesis(
+                                        f"Nikto: {nk[:80]}", target_live.url,
+                                        "MisconfigExposure", "nikto", rationale, nk,
+                                    )
                 except Exception as e:
                     logger.debug(f"Nikto scan error: {e}")
 
