@@ -345,6 +345,42 @@ def build_parser() -> argparse.ArgumentParser:
     inv_p.add_argument("--mission", default="full", choices=["full", "auth", "bola", "api"], help="Target mission type")
     inv_p.add_argument("--safe-mode", action="store_true", help="Enforce passive safe mode")
 
+    # OSINT Identity command (V10.x OSINT Identity Subsystem)
+    oi_p = subparsers.add_parser("osint-identity", help="Run OSINT Identity discovery (username/email enumeration + correlation)")
+    oi_p.add_argument("--username", help="Username to enumerate across platforms")
+    oi_p.add_argument("--email", help="Email address to enumerate across platforms")
+    oi_p.add_argument("--vectors", default="username,email", help="Comma-separated vectors: username,email")
+    oi_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+
+    # Nuclei command (V11.x Tool Intelligence Pilot — L1→L5)
+    nuc_p = subparsers.add_parser("nuclei", help="Run Nuclei finding analyzer (L1→L5 pipeline with verification)")
+    nuc_p.add_argument("--target", required=True, help="Target URL or domain to scan")
+    nuc_p.add_argument("--templates", default=None, help="Path to nuclei templates directory or template name")
+    nuc_p.add_argument("--severity", default=None, help="Filter by severity: info,low,medium,high,critical")
+    nuc_p.add_argument("--tags", default=None, help="Filter by template tags")
+    nuc_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    nuc_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # HTTPx command (V11.x Tool Intelligence Pilot — L1→L5 Technology Profiler)
+    hx_p = subparsers.add_parser("httpx", help="Run HTTPx technology profiler (L1→L5 pipeline with verification)")
+    hx_p.add_argument("--target", required=True, help="Target URL or domain to profile")
+    hx_p.add_argument("--targets-file", default=None, help="Path to file with list of targets (one per line)")
+    hx_p.add_argument("--rate-limit", type=int, default=150, help="Requests per second limit")
+    hx_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    hx_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # ffuf command (V11.x Tool Intelligence Pilot — L1→L5 Response Intelligence)
+    ff_p = subparsers.add_parser("ffuf", help="Run ffuf response intelligence (L1→L5 pipeline with verification)")
+    ff_p.add_argument("--target", required=True, help="Target URL (use FUZZ keyword or it will be appended)")
+    ff_p.add_argument("--wordlist", default="common.txt", help="Path to wordlist file")
+    ff_p.add_argument("--extensions", default=None, help="File extensions (e.g. php,html,js)")
+    ff_p.add_argument("--filter-status", default=None, help="Filter status codes (e.g. 404)")
+    ff_p.add_argument("--filter-size", default=None, help="Filter response size (e.g. 1234)")
+    ff_p.add_argument("--filter-words", default=None, help="Filter word count (e.g. 42)")
+    ff_p.add_argument("--rate-limit", type=int, default=50, help="Requests per second limit")
+    ff_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    ff_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
     # Swarm command (V9.0 Multi-Agent Swarm)
     swm_p = subparsers.add_parser("swarm", help="Run Multi-Agent Autonomous Swarm Mission")
     swm_p.add_argument("--target", default="api.corp.local", help="Target domain or host")
@@ -434,7 +470,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(args=None):
-    import json
+    import json, sys
     if hasattr(sys.stdout, 'reconfigure'):
         try:
             sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -632,6 +668,270 @@ def main(args=None):
         print(f"   Defender Stealth:     {res['stealth_score']}% (Alerts: {res['simulated_siem_alerts']})")
         print(f"   Alert Limit Exceeded: {res['alert_ceiling_exceeded']}")
         print(f"   Swarm Status:         {res['status']}\n")
+
+    elif parsed.command == "osint-identity":
+        import asyncio, json
+        from agents.osint_identity_agent import OSINTIdentityAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+
+        mgr = ToolManager()
+        agent = OSINTIdentityAgent(mgr)
+
+        vectors = [v.strip() for v in (parsed.vectors or "username,email").split(",") if v.strip()]
+        task = AgentTask(
+            target=parsed.username or parsed.email or "unknown",
+            extra={
+                "username": parsed.username,
+                "email": parsed.email,
+                "vectors": vectors,
+                "max_platforms": 60,
+            },
+        )
+        res = asyncio.run(agent.run(task))
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name,
+                "target": res.target,
+                "success": res.success,
+                "findings_count": len(res.findings),
+                "findings": res.findings,
+                "raw_output": res.raw_output,
+                "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔍 OSINT Identity Discovery — {res.target}")
+            print(f"   Findings (Evidence Clusters): {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['title']} (confidence={f.get('confidence', 0):.2f})")
+                print(f"       {f.get('recommendation','')[:120]}")
+            if not res.findings:
+                print("   (No identity clusters above 'weak' threshold — see raw_output for E0 evidence)")
+            print("")
+
+    elif parsed.command == "nuclei":
+        import asyncio, json, sys
+        from agents.nuclei_agent import NucleiAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        # يتم تطبيق نطاق افتراضي يحظر النطاقات الخاصة والمetadata حتى لو لم يُمرر --safe-mode
+        policy = ScopePolicy(
+            allowed_targets=[target],
+            rate_limit_rps=2.0,
+            max_request_budget=5000,
+        )
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Nuclei blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}")
+            print("   Use --safe-mode or adjust scope.yaml to authorize this target.\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = NucleiAgent(mgr)
+
+        task = AgentTask(
+            target=target,
+            extra={
+                "templates": parsed.templates,
+                "severity": parsed.severity,
+                "tags": parsed.tags,
+            },
+        )
+        res = asyncio.run(agent.run(task))
+
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name,
+                "target": res.target,
+                "success": res.success,
+                "exit_code": exit_code,
+                "findings_count": len(res.findings),
+                "findings": res.findings,
+                "raw_output": res.raw_output,
+                "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n☢️  HunterAI Nuclei Finding Analyzer — {target}")
+            print(f"   Scope Check:         {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available:      {agent.tools.is_available()}")
+            print(f"   Raw Matches:         {len(res.raw_output.get('raw_matches', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Duplicates Removed:  {len(res.raw_output.get('duplicates', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Findings:            {len(res.findings)}")
+            for f in res.findings:
+                verified = "✅ E1" if f.get('evidence_level') == 'E1' else "⚠️  E0"
+                print(f"   - [{f.get('status', '?').upper()}] {f['template_id']} — {f['matched_at']} ({verified}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Severity: {f['severity']} | Matcher: {f['matcher_name']}")
+                print(f"       Needs Verification: {f.get('needs_verification', False)} | Scope: {f.get('scope_check', '?')}")
+                print(f"       Context: auth={f.get('context', {}).get('auth_sensitive', False)}, admin={f.get('context', {}).get('admin_sensitive', False)}")
+                print(f"       Adaptive Templates: {', '.join(f.get('adaptive_templates', [])[:4]) or '—'}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No findings — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "httpx":
+        import asyncio, json, sys
+        from agents.httpx_agent import HTTPxAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(
+            allowed_targets=[target],
+            rate_limit_rps=2.0,
+            max_request_budget=5000,
+        )
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 HTTPx blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}")
+            print("   Use --safe-mode or adjust scope.yaml to authorize this target.\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = HTTPxAgent(mgr)
+
+        task = AgentTask(
+            target=target,
+            extra={
+                "targets_file": parsed.targets_file,
+                "rate_limit": parsed.rate_limit,
+                "dns_records": {},  # يمكن تزويدها من نتائج subfinder/dnsx لاحقًا
+                "open_ports": {},   # يمكن تزويدها من نتائج naabu/nmap لاحقًا
+                "katana_endpoints": [],
+            },
+        )
+        res = asyncio.run(agent.run(task))
+
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name,
+                "target": res.target,
+                "success": res.success,
+                "exit_code": exit_code,
+                "findings_count": len(res.findings),
+                "findings": res.findings,
+                "raw_output": res.raw_output,
+                "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🌐 HunterAI HTTPx Technology Profiler — {target}")
+            print(f"   Scope Check:         {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available:      {agent.tools.is_available()}")
+            print(f"   Raw Matches:         {len(res.raw_output.get('raw_matches', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Duplicates Removed:  {len(res.raw_output.get('duplicates', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Profiles:            {len(res.findings)}")
+            for f in res.findings:
+                verified = "✅ E1" if f.get('evidence_level') == 'E1' else "⚠️  E0"
+                waf = " [WAF]" if f.get('is_likely_waf') else ""
+                cdn = " [CDN]" if f.get('is_likely_cdn') else ""
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['url']} ({verified}{waf}{cdn}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Status: {f.get('status_code')} | Server: {f.get('web_server') or '—'} | Tech: {', '.join(f.get('technologies', [])[:4]) or '—'}")
+                print(f"       Needs Verification: {f.get('needs_verification', False)}")
+                print(f"       Context: auth={f.get('context', {}).get('auth_sensitive', False)}, admin={f.get('context', {}).get('admin_sensitive', False)}")
+                print(f"       Adaptive Suggestions: {', '.join(f.get('adaptive_suggestions', [])[:4]) or '—'}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No profiles — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "ffuf":
+        import asyncio, json, sys
+        from agents.ffuf_agent import FfufAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(
+            allowed_targets=[target],
+            rate_limit_rps=2.0,
+            max_request_budget=5000,
+        )
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 ffuf blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}")
+            print("   Use --safe-mode or adjust scope.yaml to authorize this target.\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = FfufAgent(mgr)
+
+        task = AgentTask(
+            target=target,
+            extra={
+                "wordlist": parsed.wordlist,
+                "extensions": parsed.extensions,
+                "filter_status": parsed.filter_status,
+                "filter_size": parsed.filter_size,
+                "filter_words": parsed.filter_words,
+                "rate_limit": parsed.rate_limit,
+                "katana_endpoints": [],
+            },
+        )
+        res = asyncio.run(agent.run(task))
+
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name,
+                "target": res.target,
+                "success": res.success,
+                "exit_code": exit_code,
+                "findings_count": len(res.findings),
+                "findings": res.findings,
+                "raw_output": res.raw_output,
+                "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n📁 HunterAI ffuf Response Intelligence — {target}")
+            print(f"   Scope Check:         {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available:      {agent.tools.is_available()}")
+            print(f"   Raw Matches:         {len(res.raw_output.get('raw_matches', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Duplicates Removed:  {len(res.raw_output.get('duplicates', [])) if isinstance(res.raw_output, dict) else 'N/A'}")
+            print(f"   Results:             {len(res.findings)}")
+            for f in res.findings:
+                verified = "✅ E1" if f.get('evidence_level') == 'E1' else "⚠️  E0"
+                cat = f.get('category', 'normal')
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['url']} ({verified}, {cat}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Status: {f.get('status_code')} | Len: {f.get('content_length')} | Words: {f.get('content_words')}")
+                print(f"       Context: admin={f.get('context', {}).get('admin_sensitive', False)}, auth={f.get('context', {}).get('auth_sensitive', False)}")
+                print(f"       Path Category: {f.get('context', {}).get('path_category', '—')}")
+                print(f"       Adaptive Wordlist: {', '.join(f.get('adaptive_wordlist', [])[:4]) or '—'}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No results — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
 
     elif parsed.command == "patch":
         from core.remediation.ast_patch_engine import ASTPatchEngine, VulnerabilityPatchRequest

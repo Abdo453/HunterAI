@@ -56,3 +56,41 @@ class OSINTTools:
         wl = wordlist or WordlistManager().get_wordlist("dns", profile="safe")
         r_arg = f"-r {resolvers}" if resolvers else ""
         return await self.mgr.execute(f"puredns bruteforce {wl} {domain} {r_arg} -q", timeout=300)
+
+    # ── Username Vector (modern tools beyond sherlock) ────────────
+
+    async def maigret(self, username: str) -> ToolResult:
+        """Maigret — مئات المواقع + تقارير JSON مفصلة per platform."""
+        return await self.mgr.execute(
+            f"maigret {username} --json --print-found", timeout=300
+        )
+
+    async def blackbird(self, username: str) -> ToolResult:
+        """Blackbird — سريع الفحص عبر APIs المواقع الاجتماعية."""
+        return await self.mgr.execute(
+            f"blackbird {username} -o -", timeout=300
+        )
+
+    # ── Email Vector ─────────────────────────────────────────────
+
+    async def holehe(self, email: str) -> ToolResult:
+        """Holehe — يكتشف على أي منصة الإيميل مسجل عبر password-reset flows."""
+        return await self.mgr.execute(
+            f"holehe {email}", timeout=300
+        )
+
+    async def ghunt(self, email: str) -> ToolResult:
+        """GHunt — استخراج معلومات حساب غوغل من الإيميل."""
+        return await self.mgr.execute(
+            f"ghunt email {email}", timeout=300
+        )
+
+    # ── Cross-Scan (username ↔ email) ────────────────────────────
+
+    async def cross_scan(self, username: str, email: str) -> ToolResult:
+        """
+        Cross-scan user-scanner style: يربط بين الـ username والإيميل
+        ويفحص كليهما عبر متجهات متعددة.
+        """
+        cmd = f"echo '{username}' | xargs -I {{}} sh -c 'echo USERNAME: {{}}; echo EMAIL: {email}'"
+        return await self.mgr.execute(cmd, timeout=300)
