@@ -209,10 +209,19 @@
 | extensions_system | 22 | ✅ |
 | shared_evidence_graph | 18 | ✅ |
 | new_api_smoke | 6 | ✅ |
+| runs_api | 2 | ✅ |
+| sandbox | 6 | ✅ |
+| scope_enforcer | 11 | ✅ |
 | action_evaluator_and_policy (pre-existing) | 4 | ✅ |
-| **المجموع** | **187** | ✅ **كلها ناجحة** |
+| **المجموع** | **206** | ✅ **كلها ناجحة** |
 
-### Phase H — واجهة API / واجهة أمامية + رصد ✅ جزئيًا (مُنجز في هذه الجلسة)
+### Phase G — صندوق رمل + فرض نطاق الشبكة ✅ مكتمل (هذه الجلسة)
+- `core/sandbox.py` — واجهة `Sandbox` مجردة + `LocalSandbox` (تنفيذ محلي عبر `create_subprocess_exec` بلا shell string، cwd مقيد، env محدود، timeout مع process termination، حد إخراج) + `DockerSandbox` موثق لتشغيل Kali/خادم.
+- `core/scope_enforcer.py` — `ScopeEnforcer` يغلف `core/scope_guard.py` القائمة: حظر خدمات metadata (169.254.169.254، metadata.google.internal)، منع loopback/RFC1918 ما لم يُصرح، التحقق من إعادة التوجيه (redirects) ضد النطاق، حدود معدل لكل هدف، سجل تدقيق لكل قرار نطاق.
+- `core/tool_registry.py` — `CliTool` يُنفذ الآن عبر `LocalSandbox.run` بدلاً من `create_subprocess_exec` المباشر؛ `CliTool.authorize` يستدعي `ScopeEnforcer.enforce_target` عندما يتوفر.
+- `tests/test_sandbox.py` (6)، `tests/test_scope_enforcer.py` (11) — جميعها ناجحة.
+
+### Phase H — واجهة API / واجهة أمامية + رصد ✅ جزئيًا (مُنجز في جلسة سابقة)
 - `core/global_state.py` — سواقل مشتركة `GLOBAL_COORDINATOR` و `GLOBAL_EVIDENCE_STORE` (مثل `GLOBAL_RUN_CONTROLLER`).
 - `ui/web/runs_api.py` — نقاط نهاية:
   - `GET /api/runs/{run_id}/events` — تاريخ الأحداث runway لتشغيل.
