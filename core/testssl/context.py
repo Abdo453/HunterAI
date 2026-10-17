@@ -1,4 +1,4 @@
-"""testssl.sh TLS Configuration Intelligence — L3 Context + L4 Adaptive"""
+"""testssl.sh TLS Configuration Intelligence — L3 Context Intelligence + L4 Adaptive Advisor"""
 from __future__ import annotations
 
 import logging
@@ -39,8 +39,12 @@ class ContextEnricher:
         return context
 
 
-class AdaptiveAdvisor:
-    def advise(self, record: TestsslFindingRecord, context: Optional[Dict[str, Any]] = None) -> List[str]:
+class AdaptiveTestAdvisor:
+    def advise(
+        self,
+        record: TestsslFindingRecord,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> List[str]:
         context = context or {}
         suggestions: List[str] = []
 
@@ -59,4 +63,5 @@ class AdaptiveAdvisor:
             if s not in seen:
                 seen.add(s)
                 unique.append(s)
+
         return unique[:8]

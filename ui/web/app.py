@@ -1315,6 +1315,9 @@ from ui.web.control_api import create_budget_router, create_run_control_router
 app.include_router(create_run_control_router())
 app.include_router(create_budget_router())
 
+# ── Runs API: events / evidence / findings (Phase H) ──────────────────────
+from ui.web.runs_api import router as runs_api_router
+app.include_router(runs_api_router)
 
 # ── V27.2 METAMORPHIC TRIAD, ATTACK SURFACE GRAPH & LEDGER ENDPOINTS ──
 @app.get("/api/v27/attack-surface")

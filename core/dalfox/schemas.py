@@ -33,3 +33,21 @@ class DalfoxFindingRecord:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class XSSProfile:
+    url: str
+    injection_point: str
+    payload: str
+    type: str
+    evidence: str
+    confidence_score: float
+    confidence_label: str
+    evidence_level: str
+    is_vulnerable: bool = False
+    context_notes: List[str] = field(default_factory=list)
+    adaptive_suggestions: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)

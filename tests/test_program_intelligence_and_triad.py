@@ -142,7 +142,8 @@ async def test_orchestrator_program_metadata_and_reports():
         target="scanme.nmap.org",
         profile="passive",
         authorized=False,
-        workflow="recon"
+        workflow="recon",
+        allow_no_ai=True,  # بيئة اختبار بلا Ollama — وضع الاستدلال الحتمي
     )
     res = await orch.run()
     assert res["status"] == "completed"

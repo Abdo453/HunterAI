@@ -5,9 +5,13 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.trivy.schemas import TrivyVulnerabilityRecord, TrivyEvidenceLevel
-from core.trivy.analyzer import TrivyNormalizer, DuplicateDetector, EvidenceReviewer
-from core.trivy.context import ContextEnricher, AdaptiveAdvisor
+from core.trivy.schemas import (
+    TrivyVulnerabilityRecord, TrivyEvidenceLevel,
+)
+from core.trivy.analyzer import (
+    TrivyNormalizer, DuplicateDetector, EvidenceReviewer,
+)
+from core.trivy.context import ContextEnricher, AdaptiveTestAdvisor
 
 
 TRIVY_SAMPLE = json.dumps({
@@ -42,6 +46,7 @@ def test_duplicate_detector():
     assert g1 is False
     g2 = dedup.add(rec)
     assert g2 is True
+
     count = dedup.flush()
     assert count == 1
     print("[PASS] trivy duplicate detector")
@@ -75,11 +80,11 @@ def test_context_enricher():
     assert ctx["is_critical_severity"] is True
     assert ctx["has_fix"] is True
     assert ctx["is_exploitable"] is True
-    print("[PASS] trivy context enricher")
+    print("[PASS] testssl context enricher")
 
 
 def test_adaptive_advisor():
-    advisor = AdaptiveAdvisor()
+    advisor = AdaptiveTestAdvisor()
     rec = TrivyVulnerabilityRecord(
         record_id="tr2",
         vulnerability_id="CVE-2021-44228",
@@ -94,7 +99,7 @@ def test_adaptive_advisor():
     assert "trivy --severity CRITICAL,HIGH" in advice
     assert "مراقبة الاستغلال النشط عبر CISA KEV" in advice
     assert len(advice) <= 8
-    print("[PASS] trivy adaptive advisor")
+    print("[PASS] testssl adaptive advisor")
 
 
 if __name__ == "__main__":

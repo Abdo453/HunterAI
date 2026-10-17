@@ -467,6 +467,50 @@ def build_parser() -> argparse.ArgumentParser:
     tr_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
     tr_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
 
+    # SSH-Audit command (V12.x Tool Intelligence Pilot — L1→L5 Security Fingerprint)
+    ssh_p = subparsers.add_parser("ssh-audit", help="Run SSH-Audit security profiler (L1→L5 pipeline with verification)")
+    ssh_p.add_argument("--target", required=True, help="Target host or IP to scan")
+    ssh_p.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
+    ssh_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    ssh_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Subjack command (V12.x Tool Intelligence Pilot — L1→L5 Subdomain Takeover)
+    sj_p = subparsers.add_parser("subjack", help="Run Subjack subdomain takeover detection (L1→L5 pipeline with verification)")
+    sj_p.add_argument("--target", required=True, help="Target domain or file with subdomains")
+    sj_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    sj_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # LinkFinder command (V12.x Tool Intelligence Pilot — L1→L5 JS Endpoints)
+    lf_p = subparsers.add_parser("linkfinder", help="Run LinkFinder JS endpoints extraction (L1→L5 pipeline with verification)")
+    lf_p.add_argument("--target", required=True, help="Target JavaScript file or URL")
+    lf_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    lf_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Cloud-Enum command (V12.x Tool Intelligence Pilot — L1→L5 Cloud Storage)
+    ce_p = subparsers.add_parser("cloud-enum", help="Run Cloud-Enum cloud storage buckets discovery (L1→L5 pipeline with verification)")
+    ce_p.add_argument("--target", required=True, help="Target keyword or domain to search for buckets")
+    ce_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    ce_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # Soft-404-Detector command (V12.x Tool Intelligence Pilot — L1→L5 Soft 404)
+    s4_p = subparsers.add_parser("soft-404", help="Run Soft-404 Detector (L1→L5 pipeline with verification)")
+    s4_p.add_argument("--target", required=True, help="Target URL to check for soft-404")
+    s4_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    s4_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # enum4linux-ng command (Phase 2 AD/SMB Enumeration — L1→L5)
+    e4_p = subparsers.add_parser("enum4linux-ng", help="Run enum4linux-ng SMB/AD enumeration (L1→L5 pipeline with verification)")
+    e4_p.add_argument("--target", required=True, help="Target host to enumerate")
+    e4_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    e4_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # NetExec command (Phase 2 AD Intelligence — L1→L5)
+    nx_p = subparsers.add_parser("netexec", help="Run NetExec AD/SMB/LDAP enumeration (L1→L5 pipeline with verification)")
+    nx_p.add_argument("--target", required=True, help="Target host to enumerate")
+    nx_p.add_argument("--protocol", default="smb", help="netexec protocol: smb/ldap/winrm/mssql/rdp (default: smb)")
+    nx_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    nx_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
     # Swarm command (V9.0 Multi-Agent Swarm)
     swm_p = subparsers.add_parser("swarm", help="Run Multi-Agent Autonomous Swarm Mission")
     swm_p.add_argument("--target", default="api.corp.local", help="Target domain or host")
@@ -1061,6 +1105,575 @@ def main(args=None):
             print(f"   Vulnerabilities: {len(res.findings)}")
             for f in res.findings:
                 print(f"   - [{f.get('confidence_label', '?').upper()}] {f['vulnerability_id']} — {f['package_name']} {f['installed_version']} ({f['severity']}, confidence={f.get('confidence', 0):.2f})")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "ssh-audit":
+        import asyncio, json, sys
+        from agents.ssh_audit_agent import SSHAuditAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(
+            allowed_targets=[target],
+            rate_limit_rps=2.0,
+            max_request_budget=5000,
+        )
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 SSH-Audit blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = SSHAuditAgent(mgr)
+
+        task = AgentTask(target=target, extra={"port": parsed.port})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔐 HunterAI SSH-Audit Security Profiler — {target}:{parsed.port}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['host']}:{f['port']} ({f.get('banner', '—')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Critical: {f.get('critical_issues', 0)} | High: {f.get('high_issues', 0)} | Medium: {f.get('medium_issues', 0)}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No SSH findings — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "subfinder":
+        import asyncio, json, sys
+        from agents.subfinder_agent import SubfinderAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Subfinder blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = SubfinderAgent(mgr)
+
+        task = AgentTask(
+            target=target,
+            extra={
+                "sources": parsed.sources,
+                "recursive": parsed.recursive,
+                "httpx_results": {},
+                "katana_endpoints": [],
+            },
+        )
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔍 HunterAI Subfinder Asset Coverage — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['subdomain']} ({f.get('source', 'unknown')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       IP: {f.get('ip', '—')} | CDN: {f.get('cdn', '—')}")
+                print(f"       High Value: {f.get('is_high_value', False)} | Live Web: {f.get('is_live_web', False)}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No subdomains — see raw_output for tool errors or empty results)")
+            print("")
+
+    elif parsed.command == "subjack":
+        import asyncio, json, sys
+        from agents.subjack_agent import SubjackAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Subjack blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = SubjackAgent(mgr)
+
+        task = AgentTask(target=target, extra={})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors},
+                ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🕸️ HunterAI Subjack Subdomain Takeover — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['subdomain']} ({f.get('takeover_risk', 'unknown')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       CNAME: {f.get('cname', '—')} | Status: {f.get('status_code', '—')}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No subdomain takeover findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "linkfinder":
+        import asyncio, json, sys
+        from agents.linkfinder_agent import LinkFinderAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 LinkFinder blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = LinkFinderAgent(mgr)
+
+        task = AgentTask(target=target, extra={})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors},
+                ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔗 HunterAI LinkFinder JS Endpoints — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['url']} ({f.get('parameter', '—')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Method: {f.get('method', 'GET')} | Line: {f.get('line_number', '—')}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No JS endpoint findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "cloud-enum":
+        import asyncio, json, sys
+        from agents.cloud_enum_agent import CloudEnumAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Cloud-Enum blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = CloudEnumAgent(mgr)
+
+        task = AgentTask(target=target, extra={})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors},
+                ensure_ascii=False, indent=2))
+        else:
+            print(f"\n☁️ HunterAI Cloud-Enum Cloud Storage — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f.get('bucket_name', f.get('url', '—'))} ({f.get('provider', 'unknown')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Access: {f.get('access_level', '—')} | Region: {f.get('region', '—')}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No cloud storage findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "soft-404":
+        import asyncio, json, sys
+        from agents.soft_404_agent import Soft404Agent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Soft-404 blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = Soft404Agent(mgr)
+
+        task = AgentTask(target=target, extra={})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({"agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors},
+                ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔍 HunterAI Soft-404 Detector — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f.get('url', '—')} ({f.get('status_code', '—')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Content-Length: {f.get('content_length', '—')} | Similarity: {f.get('similarity_score', 0):.2f}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No Soft-404 findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "enum4linux-ng":
+        import asyncio, json, sys
+        from agents.enum4linux_agent import Enum4LinuxAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 enum4linux-ng blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = Enum4LinuxAgent(mgr)
+
+        task = AgentTask(target=target)
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🏴󠁵󠁿󠁵󠁿 HunterAI enum4linux-ng — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['host']} "
+                      f"(domain={f.get('domain')}, users={f.get('user_count')}, shares={f.get('share_count')}, "
+                      f"writable={f.get('writable_shares')}, dc={f.get('is_dc')})")
+                print(f"       Role: {f.get('role')} | Surface: {', '.join(f.get('attack_surface', []))}")
+            if not res.findings:
+                print("   (No findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "netexec":
+        import asyncio, json, sys
+        from agents.netexec_agent import NetExecAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+        protocol = (parsed.protocol or "smb").strip().lower()
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 NetExec blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = NetExecAgent(mgr)
+
+        task = AgentTask(target=target, extra={"protocols": [protocol]})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🏴󠁵󠁿󠁵󠁿 HunterAI NetExec — {target} ({protocol})")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['protocol']}://{f['host']}:{f.get('port')} "
+                      f"(domain={f.get('domain')}, pwned={f.get('pwned')}, creds={f.get('credentials_valid')})")
+                print(f"       Surface: {', '.join(f.get('attack_surface', []))}")
+            if not res.findings:
+                print("   (No findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "swarm":
+        import asyncio, json, sys
+        from agents.subjack_agent import SubjackAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Subjack blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = SubjackAgent(mgr)
+
+        task = AgentTask(target=target, extra={})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🕸️ HunterAI Subjack Subdomain Takeover — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['subdomain']} ({f.get('takeover_risk', 'unknown')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       CNAME: {f.get('cname', '—')} | Status: {f.get('status_code', '—')}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No takeover findings — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "linkfinder":
+        import asyncio, json, sys
+        from agents.linkfinder_agent import LinkFinderAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 LinkFinder blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = LinkFinderAgent(mgr)
+
+        task = AgentTask(target=target, extra={})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔗 HunterAI LinkFinder JS Endpoints — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f.get('endpoint', f.get('url', '—'))} ({f.get('method', 'GET')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Source: {f.get('source_file', '—')} | Line: {f.get('line_number', '—')}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No endpoint findings — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "cloud-enum":
+        import asyncio, json, sys
+        from agents.cloud_enum_agent import CloudEnumAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Cloud-Enum blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = CloudEnumAgent(mgr)
+
+        task = AgentTask(target=target, extra={})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n☁️ HunterAI Cloud-Enum Cloud Storage — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f.get('bucket_name', f.get('url', '—'))} ({f.get('provider', 'unknown')}, confidence={f.get('confidence', 0):.2f})")
+                print(f"       Access: {f.get('access_level', '—')} | Region: {f.get('region', '—')}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No bucket findings — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "soft-404":
+        import asyncio, json, sys
+        from agents.soft_404_agent import Soft404Agent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 Soft-404 blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = Soft404Agent(mgr)
+
+        task = AgentTask(target=target, extra={})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔍 HunterAI Soft-404 Detector — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f.get('url', '—')} (confidence={f.get('confidence', 0):.2f})")
+                print(f"       Status: {f.get('status_code', '—')} | Content-Length: {f.get('content_length', '—')}")
+                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+            if not res.findings:
+                print("   (No soft-404 findings — see raw_output for tool errors or empty results)")
             print("")
 
         sys.exit(exit_code)

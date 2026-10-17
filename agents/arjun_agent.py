@@ -10,7 +10,7 @@ from tools.tool_manager import ToolManager
 from tools.arjun_tools import ArjunTools
 from core.arjun.schemas import ArjunParameterRecord, ArjunEvidenceLevel
 from core.arjun.analyzer import ArjunNormalizer, DuplicateDetector, EvidenceReviewer
-from core.arjun.context import ContextEnricher, AdaptiveAdvisor
+from core.arjun.context import ContextEnricher, AdaptiveTestAdvisor
 
 log = logging.getLogger("arjun.agent")
 
@@ -61,12 +61,14 @@ class ArjunAgent(BaseAgent):
                 final_records.append(rec)
 
         enricher = ContextEnricher()
-        advisor = AdaptiveAdvisor()
+        advisor = AdaptiveTestAdvisor()
 
         for rec in final_records:
             ctx = enricher.enrich(rec)
             advice = advisor.advise(rec, ctx)
             review = self.reviewer.review(rec)
+
+            rec.evidence_level = review["evidence_level"]
 
             finding = {
                 "record_id": rec.record_id,

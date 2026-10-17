@@ -10,7 +10,7 @@ from tools.tool_manager import ToolManager
 from tools.dalfox_tools import DalfoxTools
 from core.dalfox.schemas import DalfoxFindingRecord, DalfoxEvidenceLevel
 from core.dalfox.analyzer import DalfoxNormalizer, DuplicateDetector, EvidenceReviewer
-from core.dalfox.context import ContextEnricher, AdaptiveAdvisor
+from core.dalfox.context import ContextEnricher, AdaptiveTestAdvisor
 
 log = logging.getLogger("dalfox.agent")
 
@@ -61,12 +61,14 @@ class DalfoxAgent(BaseAgent):
                 final_records.append(rec)
 
         enricher = ContextEnricher()
-        advisor = AdaptiveAdvisor()
+        advisor = AdaptiveTestAdvisor()
 
         for rec in final_records:
             ctx = enricher.enrich(rec)
             advice = advisor.advise(rec, ctx)
             review = self.reviewer.review(rec)
+
+            rec.evidence_level = review["evidence_level"]
 
             finding = {
                 "record_id": rec.record_id,
@@ -79,6 +81,7 @@ class DalfoxAgent(BaseAgent):
                 "confidence": review["confidence"],
                 "confidence_label": review["confidence_label"],
                 "evidence_status": review["evidence_status"],
+                "is_vulnerable": review["is_vulnerable"],
                 "needs_verification": review["needs_verification"],
                 "context": ctx,
                 "adaptive_suggestions": advice,

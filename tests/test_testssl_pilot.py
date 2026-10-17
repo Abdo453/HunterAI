@@ -5,9 +5,13 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.testssl.schemas import TestsslFindingRecord, TestsslEvidenceLevel
-from core.testssl.analyzer import TestsslNormalizer, DuplicateDetector, EvidenceReviewer
-from core.testssl.context import ContextEnricher, AdaptiveAdvisor
+from core.testssl.schemas import (
+    TestsslFindingRecord, TestsslEvidenceLevel,
+)
+from core.testssl.analyzer import (
+    TestsslNormalizer, DuplicateDetector, EvidenceReviewer,
+)
+from core.testssl.context import ContextEnricher, AdaptiveTestAdvisor
 
 
 TESTSSL_SAMPLE = json.dumps({
@@ -38,6 +42,7 @@ def test_duplicate_detector():
     assert g1 is False
     g2 = dedup.add(rec)
     assert g2 is True
+
     count = dedup.flush()
     assert count == 1
     print("[PASS] testssl duplicate detector")
@@ -62,6 +67,7 @@ def test_context_enricher():
         severity="CRITICAL",
         title="POODLE TLS",
         description="Protocol downgrade attack",
+        cve="CVE-2014-0162",
         evidence_level=TestsslEvidenceLevel.E0,
     )
     ctx = enricher.enrich(rec)
@@ -71,7 +77,7 @@ def test_context_enricher():
 
 
 def test_adaptive_advisor():
-    advisor = AdaptiveAdvisor()
+    advisor = AdaptiveTestAdvisor()
     rec = TestsslFindingRecord(
         record_id="ts2",
         severity="HIGH",

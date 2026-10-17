@@ -1,21 +1,77 @@
 version: '3.9'
 
+# ============================================================
+# HunterAI / PentestAI-Unified — Docker Compose
+# ويب + (اختياريًا) صورة عامل بأدوات Kali.
+# المتطلبات:
+#   export MUTEKI-style secrets في .env قبل التشغيل
+#   docker compose up --build
+# ============================================================
+
 services:
-  pentestai:
-    build: .
-    container_name: pentestai-unified
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hunterai-web
     ports:
       - "7070:7070"
     volumes:
       - ./data:/app/data
+      - ./artifacts:/app/artifacts
+      - ./reports:/app/reports
       - ./.env:/app/.env:ro
     environment:
-      - OLLAMA_HOST=http://host.docker.internal:11434
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=7070
+      - HUNTER_UNRESTRICTED=0
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7070/api/sessions"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:7070/api/status"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
+
+  # صورة العامل بأدوات Kali — تُستخدم عند اختيار وضع container للوكلاء
+  # اختر إحدى الصورتين عبر build target:
+  #   الخفيفة: docker/worker.Dockerfile (أدوات أساسية)
+  #   Kali:     docker/worker-kali.Dockerfile (سلسلة Kali كاملة)
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: hunterai-worker
+    profiles: ["worker"]          # لا تُشغَّل إلا مع: docker compose --profile worker up
+    volumes:
+      - ./data:/worker/data
+    environment:
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    # عزل شبكة صريح: لا يفتح منافذ؛ يتصل للخارج فقط
+    networks:
+      - hunterai-egress
+
+  # بديل: عامل بقاعدة Kali Rolling (سلسلة أدوات ثقيلة)
+  worker-kali:
+    build:
+      context: .
+      dockerfile: docker/worker-kali.Dockerfile
+    container_name: hunterai-worker-kali
+    profiles: ["worker-kali"]
+    volumes:
+      - ./data:/worker/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - hunterai-egress
+
+networks:
+  hunterai-egress:
+    driver: bridge

@@ -1,4 +1,7 @@
-"""Subfinder Agent — L1→L5 pipeline with verification"""
+"""Subfinder Agent — يربط L1→L5 معًا في وكيل BaseAgent واحد.
+يدير Pipeline: تشغيل Subfinder → Normalize → Dedup → Enrich → Advise → Review.
+يُنتج Asset Profiles مع مستويات الثقة — längst E1 (لا يُرفع إلى Confirmed بدون تحقق يدوي).
+"""
 from __future__ import annotations
 
 import asyncio
@@ -10,12 +13,21 @@ from tools.tool_manager import ToolManager
 from tools.subfinder_tools import SubfinderTools
 from core.subfinder.schemas import SubfinderAssetRecord, SubfinderEvidenceLevel
 from core.subfinder.analyzer import SubfinderNormalizer, DuplicateDetector, EvidenceReviewer
-from core.subfinder.context import ContextEnricher, AdaptiveAdvisor
+from core.subfinder.context import ContextEnricher, AdaptiveTestAdvisor
 
 log = logging.getLogger("subfinder.agent")
 
 
 class SubfinderAgent(BaseAgent):
+    """
+    وكيل Subfinder المطور (L1→L5):
+      L1 Tool Adapter:    SubfinderTools.enum()
+      L2 AI Analyzer:     SubfinderNormalizer + DuplicateDetector
+      L3 Context:         ContextEnricher (HTTPx results + Katana endpoints)
+      L4 Adaptive:        AdaptiveTestAdvisor (اقتراح أدوات/قوالب إضافية)
+      L5 Verification:    EvidenceReviewer (evidence status + confidence)
+    """
+
     def __init__(self, mgr: ToolManager, cb=None):
         super().__init__(
             "subfinder_agent",
@@ -34,7 +46,7 @@ class SubfinderAgent(BaseAgent):
         sources = extra.get("sources")
         recursive = extra.get("recursive", False)
         httpx_results = extra.get("httpx_results", {})
-        nmap_ports = extra.get("nmap_ports", {})
+        katana_endpoints = extra.get("katana_endpoints", [])
 
         r = AgentResult(agent_name=self.name, target=target)
         await self.emit("start", {"message": f"Subfinder L1→L5 pipeline on {target}"})
@@ -45,6 +57,7 @@ class SubfinderAgent(BaseAgent):
             await self.emit("complete", {"findings": 0, "error": "subfinder_missing"})
             return r
 
+        # ── L1: تشغيل Subfinder ─────────────────────────────────────
         await self.emit("tool_start", {"tool": "subfinder", "target": target})
         try:
             tool_res = await self.tools.enum(
@@ -60,6 +73,7 @@ class SubfinderAgent(BaseAgent):
             await self.emit("complete", {"findings": 0, "error": str(e)})
             return r
 
+        # ── L2: Normalize + Deduplicate ──────────────────────────
         records = self.normalizer.normalize_batch(tool_res.stdout)
         deduped_groups: Dict[str, List[SubfinderAssetRecord]] = {}
         final_records: List[SubfinderAssetRecord] = []
@@ -67,36 +81,55 @@ class SubfinderAgent(BaseAgent):
         for rec in records:
             group = self.dedup.add(rec)
             if group is None:
-                final_records.append(rec)
+                final_records.append(rec)  # أصل جديد (ممثل المجموعة)
             else:
                 key = rec.canonical_key
                 deduped_groups.setdefault(key, group)
 
         deduped_groups = self.dedup.flush()
 
-        enricher = ContextEnricher(httpx_results=httpx_results, nmap_ports=nmap_ports)
-        advisor = AdaptiveAdvisor()
+        # ── L3: enrichment السياق ────────────────────────────────
+        enricher = ContextEnricher(
+            httpx_results=httpx_results,
+            katana_endpoints=katana_endpoints,
+        )
+        advisor = AdaptiveTestAdvisor()
 
+        # ── L5: مراجعة الأدلة + بناء Asset Coverage Profile ─────────
         for rec in final_records:
             ctx = enricher.enrich(rec)
             advice = advisor.advise(rec, ctx)
             review = self.reviewer.review(rec)
+
+            # تحديث السجل
             rec.evidence_level = review["evidence_level"]
+
+            profile = AssetCoverageProfile(
+                subdomain=rec.subdomain,
+                source=rec.source,
+                ip=rec.ip,
+                cdn=rec.cdn,
+                is_high_value=review["is_high_value"],
+                is_live_web=context.get("is_live_web", False),
+                confidence_score=review["confidence"],
+                confidence_label=review["confidence_label"],
+                evidence_level=rec.evidence_level,
+                context_notes=ctx.get("notes", []),
+                adaptive_suggestions=advice,
+            )
 
             finding = {
                 "record_id": rec.record_id,
                 "subdomain": rec.subdomain,
                 "source": rec.source,
-                "source_type": rec.source_type,
                 "ip": rec.ip,
                 "cdn": rec.cdn,
                 "evidence_level": rec.evidence_level,
                 "confidence": review["confidence"],
                 "confidence_label": review["confidence_label"],
                 "evidence_status": review["evidence_status"],
-                "needs_verification": review["needs_verification"],
-                "is_high_value": ctx.get("is_high_value", False),
-                "is_live_web": ctx.get("is_live_web", False),
+                "is_high_value": review["is_high_value"],
+                "is_live_web": context.get("is_live_web", False),
                 "context": ctx,
                 "adaptive_suggestions": advice,
                 "recommendation": review["recommendation"],

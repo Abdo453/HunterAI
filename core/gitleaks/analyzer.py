@@ -6,7 +6,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from core.gitleaks.schemas import GitleaksFindingRecord, GitleaksEvidenceLevel
+from core.gitleaks.schemas import (
+    GitleaksFindingRecord, GitleaksEvidenceLevel,
+)
 
 log = logging.getLogger("gitleaks.analyzer")
 
@@ -22,7 +24,7 @@ class GitleaksNormalizer:
         except json.JSONDecodeError:
             return None
 
-        digest_src = f"{data.get('ruleID', '')}:{data.get('File', '')}:{data.get('StartLine', 0)}"
+        digest_src = f"{data.get('RuleID', '')}:{data.get('File', '')}:{data.get('StartLine', 0)}"
         record_id = f"gl_{__import__('hashlib').md5(digest_src.encode()).hexdigest()[:10]}"
 
         return GitleaksFindingRecord(
@@ -105,11 +107,26 @@ class EvidenceReviewer:
             "file_path": record.file_path,
             "start_line": record.start_line,
             "end_line": record.end_line,
+            "secret_value": record.secret_value,
             "evidence_level": record.evidence_level,
             "evidence_status": "sufficient" if record.evidence_level == GitleaksEvidenceLevel.E1 else "insufficient",
             "confidence": round(confidence, 2),
             "confidence_label": "strong" if confidence >= 0.75 else "probable" if confidence >= 0.50 else "possible" if confidence >= 0.25 else "weak",
             "needs_verification": record.evidence_level != GitleaksEvidenceLevel.E1,
             "issues": issues,
-            "recommendation": "إزالة السر من المستودع وتدوير جميع بيانات الاعتماد المكشوفة فورًا.",
+            "recommendation": (
+                "إزالة السر من المستودع وتدوير جميع بيانات الاعتماد المكشوفة فورًا."
+                if record.evidence_level == GitleaksEvidenceLevel.E1 else
+                "السر يحتاج إخفاء وتعديل بعد التأكيد."
+            ),
         }
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 0.75:
+            return "strong"
+        elif score >= 0.50:
+            return "probable"
+        elif score >= 0.25:
+            return "possible"
+        return "weak"

@@ -60,6 +60,7 @@
         <button class="tab" onclick="switchTab('split',this)">⚡ العرض المزدوج (Split: شات + إيجنت)</button>
         <button class="tab" onclick="switchTab('http',this)">🔍 محلل الترافيك والـ HTTP</button>
         <button class="tab" onclick="switchTab('learning',this)">🎓 التعلم الذاتي والمهارات</button>
+        <button class="tab" onclick="switchTab('engines',this)">⚙️ وكلاء المحركات (CLI Engines)</button>
       </div>
     </header>
 
@@ -296,6 +297,67 @@
           <input type="text" id="method-search-inp" placeholder="🔍 ابحث في المنهجيات (مثال: sql injection, 403 bypass, jwt, csrf, subdomain)..." oninput="searchMethodology(this.value)" style="margin-bottom:10px;width:100%;">
           <div id="methodology-container" style="display:flex;flex-direction:column;gap:10px;max-height:300px;overflow-y:auto;"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── CLI ENGINE WORKERS TAB (Phase 1) ──────────────────────────── -->
+    <div id="tab-engines" class="tab-content">
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-hdr">
+          <h2>⚙️ وكلاء المحركات (CLI Engine Workers)</h2>
+          <div style="display:flex;gap:8px;">
+            <button onclick="loadEngines()" class="btn-sm">🔄 تحديث القائمة</button>
+            <button onclick="runEngineSelfcheck()" id="engines-selfcheck-btn" class="btn-sm">🩺 فحص الصحة (Self-check)</button>
+          </div>
+        </div>
+        <p style="color:#888;font-size:12px;margin-bottom:10px;">
+          وكلاء بيشتغلوا عبر عميل CLI خارجي (Claude Code / Codex / OpenCode) — كل مهمة تمرّ عبر
+          ScopeGuard + PolicyGate قبل التنفيذ. الفحص يرسل Probe حقيقي بجولة واحدة.
+        </p>
+        <div id="engines-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <div id="engines-selfcheck-result" style="margin-top:10px;font-family:monospace;font-size:12px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr">
+          <h2>🚀 تشغيل مهمة عبر محرك (Engine Dispatch)</h2>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label>المحرك (Engine):</label>
+            <select id="engine-select" style="width:100%;">
+              <option value="claude">Claude Code</option>
+              <option value="codex">OpenAI Codex</option>
+              <option value="opencode">OpenCode</option>
+            </select>
+          </div>
+          <div>
+            <label>الهدف (داخل النطاق):</label>
+            <input type="text" id="engine-target" placeholder="https://lab.example.com">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label>النطاق المسموح (in_scope — مفصولة بفاصلة):</label>
+            <input type="text" id="engine-inscope" placeholder="lab.example.com, 10.0.0.0/8">
+          </div>
+          <div>
+            <label>النموذج (اختياري):</label>
+            <input type="text" id="engine-model" placeholder="claude-sonnet-4-5">
+          </div>
+        </div>
+        <div style="margin-bottom:10px;">
+          <label>المهمة (Prompt):</label>
+          <textarea id="engine-prompt" rows="4" style="width:100%;"
+            placeholder="افحص /login بحثًا عن SQL injection وسجّل كل إثبات مؤكد..."></textarea>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button onclick="runEngineTask()" id="engine-run-btn" class="btn-sm">▶️ تشغيل المهمة</button>
+          <label style="display:flex;gap:6px;align-items:center;font-size:12px;">
+            <input type="checkbox" id="engine-web-access" checked> السماح بأدوات الويب
+          </label>
+        </div>
+        <div id="engine-run-result" style="margin-top:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;"></div>
       </div>
     </div>
 

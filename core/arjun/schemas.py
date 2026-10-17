@@ -31,3 +31,21 @@ class ArjunParameterRecord:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class ParameterProfile:
+    parameter: str
+    url: str
+    method: str
+    confidence_score: float
+    confidence_label: str
+    evidence_level: str
+    is_auth_parameter: bool = False
+    is_id_parameter: bool = False
+    is_search_parameter: bool = False
+    context_notes: List[str] = field(default_factory=list)
+    adaptive_suggestions: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)

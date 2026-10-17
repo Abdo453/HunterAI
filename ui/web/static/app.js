@@ -38,6 +38,7 @@ function switchTab(tab, btn) {
   if(tab === 'intelligence') loadIntelligenceHub();
   if(tab === 'methodology') loadMethodology();
   if(tab === 'graph') setTimeout(refreshGraph, 100);
+  if(tab === 'engines') loadEngines();
 }
 
 function switchView(view, btn) {
@@ -1723,3 +1724,106 @@ async function runThreatResearch() {
   }
 }
 
+
+// ── CLI ENGINE WORKERS (Phase 1) ──────────────────────────────
+async function loadEngines() {
+  const el = document.getElementById('engines-list');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/engines');
+    const d = await r.json();
+    el.innerHTML = (d.engines || []).map(e => `
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:8px;border:1px solid #333;border-radius:6px;">
+        <div>
+          <b style="color:#00ccff;">${e.display_name}</b>
+          <span style="color:#666;font-size:11px;">(${e.engine})</span>
+          <div style="color:#888;font-size:11px;">القدرات: ${(e.capabilities||[]).join(', ') || '—'}</div>
+        </div>
+        <div style="font-size:11px;color:${e.secure_prompt_transport ? '#00ff41' : '#ffaa00'};">
+          ${e.secure_prompt_transport ? '🔒 prompt آمن عبر stdin' : '⚠️ prompt عبر argv'}
+        </div>
+      </div>
+    `).join('') || '<div style="color:#888;">لا توجد محركات.</div>';
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ff2a4b;">فشل تحميل المحركات: ${e}</div>`;
+  }
+}
+
+async function runEngineSelfcheck() {
+  const btn = document.getElementById('engines-selfcheck-btn');
+  const res = document.getElementById('engines-selfcheck-result');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ جارٍ الفحص...'; }
+  if (res) res.innerHTML = '<span style="color:#ffaa00;">جارٍ إرسال probe لكل محرك...</span>';
+  try {
+    const r = await fetch('/api/engines/selfcheck', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({})
+    });
+    const d = await r.json();
+    const rows = Object.entries(d.results || {}).map(([name, s]) => `
+      <div style="color:${s.healthy ? '#00ff41' : '#ff2a4b'};">
+        ${s.healthy ? '✅' : '❌'} ${name} ${s.version ? '· ' + s.version : ''}
+        ${s.detail ? '— ' + s.detail : ''}
+      </div>
+    `).join('');
+    if (res) res.innerHTML = `
+      <div style="color:#00ccff;margin-bottom:4px;">النتيجة: ${d.healthy_count}/${d.total} سليم (${d.duration_s}s)</div>
+      ${rows}`;
+  } catch(e) {
+    if (res) res.innerHTML = `<div style="color:#ff2a4b;">فشل الفحص: ${e}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🩺 فحص الصحة (Self-check)'; }
+  }
+}
+
+async function runEngineTask() {
+  const btn = document.getElementById('engine-run-btn');
+  const res = document.getElementById('engine-run-result');
+  const engine = document.getElementById('engine-select').value;
+  const target = document.getElementById('engine-target').value.trim();
+  const inscope = document.getElementById('engine-inscope').value.trim();
+  const model = document.getElementById('engine-model').value.trim();
+  const prompt = document.getElementById('engine-prompt').value.trim();
+  const web = document.getElementById('engine-web-access').checked;
+
+  if (!prompt) { alert('اكتب المهمة (Prompt) أولًا'); return; }
+  if (!target) { alert('حدد الهدف أولًا'); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ جارٍ التنفيذ...'; }
+  if (res) res.innerHTML = '<span style="color:#ffaa00;">جارٍ تنفيذ المهمة عبر المحرك...</span>';
+
+  try {
+    const r = await fetch('/api/engines/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        engine: engine,
+        target: target,
+        prompt: prompt,
+        model: model,
+        web_access: web,
+        in_scope: inscope ? inscope.split(',').map(s => s.trim()) : [],
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (res) res.innerHTML = `<span style="color:#ff2a4b;">خطأ: ${d.detail || r.status}</span>`;
+      return;
+    }
+    if (res) res.innerHTML = `
+      <div style="color:${d.success ? '#00ff41' : '#ff2a4b'};margin-bottom:6px;">
+        ${d.success ? '✅ نجحت' : '❌ فشلت'} · جلسة: ${d.session_id || '—'} · زمن: ${d.duration_s}s
+      </div>
+      ${d.errors && d.errors.length ? `<div style="color:#ffaa00;margin-bottom:6px;">${d.errors.join('<br>')}</div>` : ''}
+      ${(d.findings||[]).length ? `<div style="color:#00ccff;margin-bottom:4px;">نتائج (${d.findings.length}):</div>` : ''}
+      <div style="color:#ccc;">${(d.output || '').slice(0, 4000)}</div>
+      ${d.evidence_file ? `<div style="color:#666;font-size:10px;margin-top:6px;">إثبات: ${d.evidence_file}</div>` : ''}
+    `;
+  } catch(e) {
+    if (res) res.innerHTML = `<span style="color:#ff2a4b;">فشل الاتصال: ${e}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▶️ تشغيل المهمة'; }
+  }
+}

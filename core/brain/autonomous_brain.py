@@ -826,6 +826,277 @@ async def _run_idor_matrix_skill(brain: "AutonomousBrain", target: str, params: 
     return findings
 
 
+async def _run_open_redirect_skill(brain: "AutonomousBrain", target_url: str = "", params: list = None,
+                                   proxy: str = "", **kwargs) -> list:
+    """تشغيل Open Redirect Autonomous Skill (Differential PoE)"""
+    from agents.skills.open_redirect_skill import OpenRedirectSkill
+    skill = OpenRedirectSkill(proxy=proxy or None)
+    findings = []
+    target = target_url or kwargs.get("target", "")
+    test_params = params or ([kwargs.get("param_name")] if kwargs.get("param_name") else
+                             ["next", "redirect", "url", "dest", "goto", "return"])
+    if isinstance(test_params, str):
+        test_params = [test_params]
+    for param in test_params[:4]:
+        if not param:
+            continue
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"OpenRedirectSkill failed on {param}")
+    return findings
+
+
+async def _run_host_header_injection_skill(brain: "AutonomousBrain", target_url: str = "", params: list = None,
+                                           proxy: str = "", **kwargs) -> list:
+    """تشغيل Host Header Injection Autonomous Skill (CWE-644)"""
+    from agents.skills.host_header_injection_skill import HostHeaderInjectionSkill
+    skill = HostHeaderInjectionSkill(proxy=proxy or None)
+    findings = []
+    target = target_url or kwargs.get("target", "")
+    test_params = params or ([kwargs.get("param_name")] if kwargs.get("param_name") else
+                             ["host", "x-forwarded-host", "site", "domain"])
+    if isinstance(test_params, str):
+        test_params = [test_params]
+    for param in test_params[:3]:
+        if not param:
+            continue
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"HostHeaderInjectionSkill failed on {param}")
+    return findings
+
+
+async def _run_nosql_injection_skill(brain: "AutonomousBrain", target_url: str = "", params: list = None,
+                                     proxy: str = "", **kwargs) -> list:
+    """تشغيل NoSQL Injection Autonomous Skill (CWE-943)"""
+    from agents.skills.nosql_injection_skill import NoSQLInjectionSkill
+    skill = NoSQLInjectionSkill(proxy=proxy or None)
+    findings = []
+    target = target_url or kwargs.get("target", "")
+    test_params = params or ([kwargs.get("param_name")] if kwargs.get("param_name") else
+                             ["user", "email", "login", "username", "pass", "q"])
+    if isinstance(test_params, str):
+        test_params = [test_params]
+    for param in test_params[:4]:
+        if not param:
+            continue
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"NoSQLInjectionSkill failed on {param}")
+    return findings
+
+
+async def _run_crlf_injection_skill(brain: "AutonomousBrain", target_url: str = "", params: list = None,
+                                    proxy: str = "", **kwargs) -> list:
+    """تشغيل CRLF Injection Autonomous Skill (CWE-93)"""
+    from agents.skills.crlf_injection_skill import CRLFSkill
+    skill = CRLFSkill(proxy=proxy or None)
+    findings = []
+    target = target_url or kwargs.get("target", "")
+    test_params = params or ([kwargs.get("param_name")] if kwargs.get("param_name") else
+                             ["url", "next", "redirect", "path", "lang"])
+    if isinstance(test_params, str):
+        test_params = [test_params]
+    for param in test_params[:3]:
+        if not param:
+            continue
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"CRLFSkill failed on {param}")
+    return findings
+
+
+async def _run_http_parameter_pollution_skill(brain: "AutonomousBrain", target_url: str = "", params: list = None,
+                                              proxy: str = "", **kwargs) -> list:
+    """تشغيل HTTP Parameter Pollution Autonomous Skill (CWE-235)"""
+    from agents.skills.hpp_skill import HTTPParameterPollutionSkill
+    skill = HTTPParameterPollutionSkill(proxy=proxy or None)
+    findings = []
+    target = target_url or kwargs.get("target", "")
+    test_params = params or ([kwargs.get("param_name")] if kwargs.get("param_name") else
+                             ["id", "price", "amount", "qty", "user_id"])
+    if isinstance(test_params, str):
+        test_params = [test_params]
+    for param in test_params[:4]:
+        if not param:
+            continue
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"HTTPParameterPollutionSkill failed on {param}")
+    return findings
+
+
+async def _run_ldap_injection_skill(brain: "AutonomousBrain", target_url: str = "", params: list = None,
+                                    proxy: str = "", **kwargs) -> list:
+    """تشغيل LDAP Injection Autonomous Skill (CWE-90)"""
+    from agents.skills.ldap_injection_skill import LDAPInjectionSkill
+    skill = LDAPInjectionSkill(proxy=proxy or None)
+    findings = []
+    target = target_url or kwargs.get("target", "")
+    test_params = params or ([kwargs.get("param_name")] if kwargs.get("param_name") else
+                             ["user", "search", "filter", "dn", "cn", "uid", "mail"])
+    if isinstance(test_params, str):
+        test_params = [test_params]
+    for param in test_params[:4]:
+        if not param:
+            continue
+        try:
+            res = await skill.run(target, param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"LDAPInjectionSkill failed on {param}")
+    return findings
+
+
+async def _run_bug_bounty_master_skill(brain: "AutonomousBrain", target_url: str = "", proxy: str = "",
+                                       **kwargs) -> list:
+    """تشغيل مهارة bug bounty الكاملة على مستوى البرنامج"""
+    from agents.skills.bug_bounty_master_skill import BugBountyMasterSkill
+    skill = BugBountyMasterSkill(proxy=proxy or None)
+    try:
+        target = target_url or kwargs.get("target", "")
+        res = await skill.run(
+            target,
+            param_name=kwargs.get("param_name", ""),
+            authorized=kwargs.get("authorized", False),
+            in_scope=kwargs.get("in_scope"),
+            param_candidates=[(target, kwargs.get("param_name", ""))] if kwargs.get("param_name") else [],
+        )
+        for lg in res.logs:
+            await brain._log(lg)
+        return [res.to_dict()] if res.verified else []
+    except Exception:
+        log.exception("BugBountyMasterSkill failed")
+        return []
+
+
+async def _run_session_flaws_skill(brain: "AutonomousBrain", target_url: str = "", params: list = None,
+                                   proxy: str = "", **kwargs) -> list:
+    """تشغيل Session Flaws Skill (CWE-613 — عيوب إدارة الجلسات)"""
+    from agents.skills.session_flaws_skill import SessionFlawsSkill
+    skill = SessionFlawsSkill(proxy=proxy or None)
+    findings = []
+    test_params = params or ([kwargs.get("param_name")] if kwargs.get("param_name") else ["session", "sessid", "token"])
+    if isinstance(test_params, str):
+        test_params = [test_params]
+    for param in test_params[:3]:
+        if not param:
+            continue
+        try:
+            res = await skill.run(target_url or kwargs.get("target", ""), param)
+            for lg in res.logs:
+                await brain._log(lg)
+            if res.verified:
+                findings.append(res.to_dict())
+        except Exception:
+            log.exception(f"SessionFlawsSkill failed on {param}")
+    return findings
+
+
+async def _run_browser_recon_skill(brain: "AutonomousBrain", target_url: str = "", proxy: str = "",
+                                   **kwargs) -> list:
+    """تشغيل Browser Recon Skill (DOM/الروابط/النماذج/الكوكيز)"""
+    from agents.skills.browser_adapter_skills import BrowserReconAdapterSkill
+    skill = BrowserReconAdapterSkill(proxy=proxy or None)
+    try:
+        res = await skill.run(target_url or kwargs.get("target", ""), kwargs.get("param_name", ""))
+        for lg in res.logs:
+            await brain._log(lg)
+        return [res.to_dict()] if res.verified else []
+    except Exception:
+        log.exception("BrowserReconAdapterSkill failed")
+        return []
+
+
+async def _run_form_intelligence_skill(brain: "AutonomousBrain", target_url: str = "", proxy: str = "",
+                                       **kwargs) -> list:
+    """تشغيل Form Intelligence Skill (خرائط النماذج والمصادقة)"""
+    from agents.skills.browser_adapter_skills import FormIntelligenceAdapterSkill
+    skill = FormIntelligenceAdapterSkill(proxy=proxy or None)
+    try:
+        res = await skill.run(target_url or kwargs.get("target", ""), kwargs.get("param_name", ""))
+        for lg in res.logs:
+            await brain._log(lg)
+        return [res.to_dict()] if res.verified else []
+    except Exception:
+        log.exception("FormIntelligenceAdapterSkill failed")
+        return []
+
+
+async def _run_network_intelligence_skill(brain: "AutonomousBrain", target_url: str = "", proxy: str = "",
+                                          **kwargs) -> list:
+    """تشغيل Network Intelligence Skill (اعتراض XHR/Fetch ونقاط API)"""
+    from agents.skills.browser_adapter_skills import NetworkIntelligenceAdapterSkill
+    skill = NetworkIntelligenceAdapterSkill(proxy=proxy or None)
+    try:
+        res = await skill.run(target_url or kwargs.get("target", ""), kwargs.get("param_name", ""))
+        for lg in res.logs:
+            await brain._log(lg)
+        return [res.to_dict()] if res.verified else []
+    except Exception:
+        log.exception("NetworkIntelligenceAdapterSkill failed")
+        return []
+
+
+async def _run_behavior_analysis_skill(brain: "AutonomousBrain", target_url: str = "", proxy: str = "",
+                                       **kwargs) -> list:
+    """تشغيل Behavior Analysis Skill (محاكاة السلوك وحالات التطبيق)"""
+    from agents.skills.browser_adapter_skills import BehaviorAnalysisAdapterSkill
+    skill = BehaviorAnalysisAdapterSkill(proxy=proxy or None)
+    try:
+        res = await skill.run(target_url or kwargs.get("target", ""), kwargs.get("param_name", ""))
+        for lg in res.logs:
+            await brain._log(lg)
+        return [res.to_dict()] if res.verified else []
+    except Exception:
+        log.exception("BehaviorAnalysisAdapterSkill failed")
+        return []
+
+
+async def _run_browser_sensor_skill(brain: "AutonomousBrain", target_url: str = "", proxy: str = "",
+                                    **kwargs) -> list:
+    """تشغيل Browser Sensor Skill (المستشعر المستمر عبر BrowserBrainLoop)"""
+    from agents.skills.browser_adapter_skills import BrowserSensorAdapterSkill
+    skill = BrowserSensorAdapterSkill(proxy=proxy or None)
+    try:
+        res = await skill.run(target_url or kwargs.get("target", ""), kwargs.get("param_name", ""),
+                              **{k: v for k, v in kwargs.items() if k in ("max_pages", "time_budget_sec", "coverage_threshold")})
+        for lg in res.logs:
+            await brain._log(lg)
+        return [res.to_dict()] if res.verified else []
+    except Exception:
+        log.exception("BrowserSensorAdapterSkill failed")
+        return []
+
+
 TOOL_REGISTRY: Dict[str, Callable] = {
     "VulnerabilityEngine": _run_vuln_engine,
     "LFISkill":           _run_lfi_skill,
@@ -845,6 +1116,19 @@ TOOL_REGISTRY: Dict[str, Callable] = {
     "RaceConditionSkill": _run_race_skill,
     "GraphQLSkill":       _run_graphql_skill,
     "WebSocketSkill":     _run_websocket_skill,
+    "OpenRedirectSkill":      _run_open_redirect_skill,
+    "HostHeaderInjectionSkill": _run_host_header_injection_skill,
+    "NoSQLInjectionSkill":    _run_nosql_injection_skill,
+    "CRLFSkill":              _run_crlf_injection_skill,
+    "HTTPParameterPollutionSkill": _run_http_parameter_pollution_skill,
+    "LDAPInjectionSkill":     _run_ldap_injection_skill,
+    "BugBountyMasterSkill":   _run_bug_bounty_master_skill,
+    "SessionFlawsSkill":        _run_session_flaws_skill,
+    "BrowserReconAdapterSkill":      _run_browser_recon_skill,
+    "FormIntelligenceAdapterSkill":  _run_form_intelligence_skill,
+    "NetworkIntelligenceAdapterSkill": _run_network_intelligence_skill,
+    "BehaviorAnalysisAdapterSkill":  _run_behavior_analysis_skill,
+    "BrowserSensorAdapterSkill":     _run_browser_sensor_skill,
     "ReconAgent":         _run_recon,
     "BugBountyAgent":     _run_bugbounty,
     "BrowserAgent":       _run_browser,

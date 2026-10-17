@@ -50,6 +50,24 @@ from agents.skills.graphql_skill import GraphQLSkill
 from agents.skills.websocket_skill import WebSocketSkill
 from agents.skills.idor_skill import IDORMatrixSkill
 
+# ─── مهارات جديدة (v2 arsenal) ───
+from agents.skills.open_redirect_skill import OpenRedirectSkill
+from agents.skills.host_header_injection_skill import HostHeaderInjectionSkill
+from agents.skills.nosql_injection_skill import NoSQLInjectionSkill
+from agents.skills.crlf_injection_skill import CRLFSkill
+from agents.skills.hpp_skill import HTTPParameterPollutionSkill
+from agents.skills.ldap_injection_skill import LDAPInjectionSkill
+from agents.skills.bug_bounty_master_skill import BugBountyMasterSkill
+from agents.skills.session_flaws_skill import SessionFlawsSkill
+from agents.skills.browser_adapter_skills import (
+    BrowserReconAdapterSkill,
+    FormIntelligenceAdapterSkill,
+    NetworkIntelligenceAdapterSkill,
+    BehaviorAnalysisAdapterSkill,
+    BrowserSensorAdapterSkill,
+)
+from agents.skills.registry import SkillRegistry, SkillMeta, bootstrap_builtin_skills
+
 __all__ = [
     "SQLiSkill",
     "SQLiState",
@@ -89,6 +107,22 @@ __all__ = [
     "RaceConditionSkill",
     "GraphQLSkill",
     "WebSocketSkill",
+    "OpenRedirectSkill",
+    "HostHeaderInjectionSkill",
+    "NoSQLInjectionSkill",
+    "CRLFSkill",
+    "HTTPParameterPollutionSkill",
+    "LDAPInjectionSkill",
+    "BugBountyMasterSkill",
+    "SessionFlawsSkill",
+    "BrowserReconAdapterSkill",
+    "FormIntelligenceAdapterSkill",
+    "NetworkIntelligenceAdapterSkill",
+    "BehaviorAnalysisAdapterSkill",
+    "BrowserSensorAdapterSkill",
+    "SkillRegistry",
+    "SkillMeta",
+    "bootstrap_builtin_skills",
 ]
 
 

@@ -8,9 +8,13 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.testssl_tools import TestsslTools
-from core.testssl.schemas import TestsslFindingRecord, TestsslEvidenceLevel
-from core.testssl.analyzer import TestsslNormalizer, DuplicateDetector, EvidenceReviewer
-from core.testssl.context import ContextEnricher, AdaptiveAdvisor
+from core.testssl.schemas import (
+    TestsslFindingRecord, TestsslEvidenceLevel,
+)
+from core.testssl.analyzer import (
+    TestsslNormalizer, DuplicateDetector, EvidenceReviewer,
+)
+from core.testssl.context import ContextEnricher, AdaptiveTestAdvisor
 
 log = logging.getLogger("testssl.agent")
 
@@ -61,12 +65,14 @@ class TestsslAgent(BaseAgent):
                 final_records.append(rec)
 
         enricher = ContextEnricher()
-        advisor = AdaptiveAdvisor()
+        advisor = AdaptiveTestAdvisor()
 
         for rec in final_records:
             ctx = enricher.enrich(rec)
             advice = advisor.advise(rec, ctx)
             review = self.reviewer.review(rec)
+
+            rec.evidence_level = review["evidence_level"]
 
             finding = {
                 "record_id": rec.record_id,

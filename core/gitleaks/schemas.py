@@ -34,3 +34,22 @@ class GitleaksFindingRecord:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class SecretProfile:
+    rule_id: str
+    secret_type: str
+    file_path: str
+    start_line: int
+    end_line: int
+    secret_value: Optional[str]
+    confidence_score: float
+    confidence_label: str
+    evidence_level: str
+    is_high_risk: bool
+    context_notes: List[str] = field(default_factory=list)
+    adaptive_suggestions: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)

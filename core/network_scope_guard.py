@@ -1,10 +1,13 @@
 """
 HunterAI Network-Level Scope Firewall & Egress Interceptor
 ==========================================================
-Enforces physical network-level boundary controls across all outbound HTTP dispatchers:
+Enforces physical network-level boundary controls across all outbound dispatchers:
 - Operates at the transport / socket boundary (below LLM, Planner, and Agents)
 - Rejects out-of-scope domains, loopback, RFC1918 (unless lab override), and cloud metadata
-- Provides drop-in httpx event hooks, urllib handlers, and assertion guards
+- HTTP(S): drop-in httpx event hooks, urllib handlers, and assertion guards
+- Network endpoints: ``check_endpoint`` / ``assert_endpoint_allowed`` authorize
+  ``protocol://host:port`` (SMB/LDAP/Kerberos/RDP/SSH/raw TCP-UDP ...) behind an
+  explicit protocol allowlist and an ``allow_active_network_tests`` opt-in gate
 - Guarantees 0% out-of-scope packet leakage regardless of LLM hallucinations
 """
 from __future__ import annotations
@@ -14,7 +17,9 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
+from core.network_scope_policy import NetworkScopePolicy
 from core.scope_engine import ScopePolicy, StrictScopeEngine
+from core.security_mode import unrestricted_mode
 
 logger = logging.getLogger("hunter_ai.network_scope_guard")
 
@@ -31,16 +36,38 @@ class NetworkScopeGuard:
     """
     Physical Network Egress Guard.
     Every outbound network call must pass this barrier before opening a socket.
+
+    Two decision surfaces are exposed:
+      * :meth:`check_url` — HTTP(S) destination + redirect authorization.
+      * :meth:`check_endpoint` — transport/application endpoint authorization
+        (``protocol://host:port``) for SMB/LDAP/Kerberos/RDP/SSH/raw TCP-UDP ...
+
+    Both share the same inviolable safety invariants (loopback, cloud metadata,
+    RFC1918 unless an explicit lab override) enforced by the reference
+    :class:`StrictScopeEngine`. Network endpoints add a protocol allowlist and a
+    second, independent ``allow_active_network_tests`` gate.
     """
 
     def __init__(
         self,
         scope_policy: Optional[ScopePolicy] = None,
         audit_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-        policy_name: str = "scope_v1"
+        policy_name: str = "scope_v1",
+        network_policy: Optional[NetworkScopePolicy] = None,
     ):
-        # Fail-closed: with no explicit policy nothing is authorised.
-        self.policy = scope_policy or ScopePolicy(fail_closed=True)
+        # Resolve the network policy and the URL policy it projects onto.
+        if network_policy is not None:
+            self.network_policy = network_policy
+            base_policy = scope_policy or network_policy.to_scope_policy()
+        elif scope_policy is not None:
+            self.network_policy = NetworkScopePolicy.from_scope_policy(scope_policy)
+            base_policy = scope_policy
+        else:
+            # Fail-closed: with no explicit policy nothing is authorised.
+            self.network_policy = NetworkScopePolicy()
+            base_policy = ScopePolicy(fail_closed=True)
+
+        self.policy = base_policy
         self.scope_engine = StrictScopeEngine(self.policy)
         self.audit_callback = audit_callback
         self.policy_name = policy_name
@@ -132,6 +159,143 @@ class NetworkScopeGuard:
                     logger.error(f"Audit callback failed: {e}")
             raise ScopeViolationError(resolved_url, reason)
         return resolved_url
+
+    # ── NETWORK ENDPOINT (non-HTTP) AUTHORIZATION ────────────────────────────
+    def check_host(self, host: str, protocol: str = "tcp") -> Tuple[bool, str]:
+        """Authorize a *host* for a given transport protocol (discovery stage).
+
+        Host-level counterpart of :meth:`check_endpoint` for scans that target a
+        port range before individual ports are known.
+        """
+        if not host or not str(host).strip():
+            return False, "Target host is empty"
+
+        if unrestricted_mode():
+            return True, "Unrestricted owner mode: all hosts authorized."
+
+        proto = (protocol or "").strip().lower()
+        if not self.network_policy.is_protocol_allowed(proto):
+            return False, (
+                f"Protocol '{protocol}' is not in the authorized protocol allowlist "
+                f"{self.network_policy.allowed_protocols}"
+            )
+        if (
+            self.network_policy.requires_active_testing_opt_in(proto)
+            and not self.network_policy.allow_active_network_tests
+        ):
+            return False, (
+                f"Active network testing is disabled: non-HTTP protocol '{proto}' "
+                "requires allow_active_network_tests=True"
+            )
+        return self.scope_engine.is_allowed(str(host).strip())
+
+    def check_endpoint(
+        self,
+        host: str,
+        port: Optional[int],
+        protocol: str = "tcp",
+        method: str = "CONNECT",
+    ) -> Tuple[bool, str]:
+        """Authorize a transport/application endpoint ``protocol://host:port``.
+
+        Enforced, in order:
+          1. Protocol allowlist (fail-closed — HTTP(S) only by default).
+          2. Active-network-testing opt-in for every non-HTTP protocol.
+          3. Host authorization via the reference engine (inviolable invariants,
+             RFC1918 lab override, allowlist/blacklist, testing window, ports).
+          4. Port-level policy (explicit allowlist/ranges + forbidden relay ports).
+        """
+        if not host or not str(host).strip():
+            return False, "Target host is empty"
+
+        if unrestricted_mode():
+            # Owner full-permissions mode: no protocol/port/active-testing gating.
+            return True, "Unrestricted owner mode: all endpoints authorized."
+
+        proto = (protocol or "").strip().lower()
+
+        if not self.network_policy.is_protocol_allowed(proto):
+            return False, (
+                f"Protocol '{protocol}' is not in the authorized protocol allowlist "
+                f"{self.network_policy.allowed_protocols}"
+            )
+
+        if (
+            self.network_policy.requires_active_testing_opt_in(proto)
+            and not self.network_policy.allow_active_network_tests
+        ):
+            return False, (
+                f"Active network testing is disabled: non-HTTP protocol '{proto}' "
+                "requires allow_active_network_tests=True"
+            )
+
+        # Host-level authorization. HTTP methods are meaningful only for web
+        # protocols; every other protocol bypasses the HTTP method allowlist.
+        engine_method = method if proto in ("http", "https") else "GET"
+        allowed, reason = self.scope_engine.is_allowed(
+            str(host).strip(), port=port, method=engine_method
+        )
+        if not allowed:
+            return False, reason
+
+        if port is not None and not self.network_policy.is_port_allowed(int(port)):
+            return False, f"Port {port} is not permitted by network port policy"
+
+        return True, f"Authorized network endpoint {proto}://{host}:{port}"
+
+    def check_ports(
+        self,
+        host: str,
+        ports: List[int],
+        protocol: str = "tcp",
+    ) -> Tuple[List[int], List[Tuple[int, str]]]:
+        """Split a port list into ``(allowed, [(denied_port, reason), ...])``."""
+        allowed: List[int] = []
+        denied: List[Tuple[int, str]] = []
+        for port in ports:
+            ok, reason = self.check_endpoint(host, port, protocol=protocol)
+            if ok:
+                allowed.append(port)
+            else:
+                denied.append((port, reason))
+        return allowed, denied
+
+    def assert_endpoint_allowed(
+        self,
+        host: str,
+        port: Optional[int],
+        protocol: str = "tcp",
+        method: str = "CONNECT",
+        caller_context: str = "",
+    ) -> None:
+        """Hard assertion for a network endpoint; raises and audits on denial."""
+        allowed, reason = self.check_endpoint(host, port, protocol=protocol, method=method)
+        endpoint = f"{protocol}://{host}:{port}"
+        decision_event = {
+            "request": endpoint,
+            "host": host,
+            "port": port,
+            "protocol": protocol,
+            "decision": "ALLOW" if allowed else "DENY",
+            "event_type": "NETWORK_EGRESS_ALLOWED" if allowed else "NETWORK_EGRESS_BLOCKED",
+            "reason": reason,
+            "policy": self.policy_name,
+            "caller_context": caller_context,
+            "timestamp": time.time(),
+        }
+        self.audit_decision_log.append(decision_event)
+
+        if not allowed:
+            logger.critical(
+                f"[NETWORK SCOPE FIREWALL] EGRESS BLOCKED: {endpoint} | "
+                f"Reason: {reason} | Context: {caller_context}"
+            )
+            if self.audit_callback:
+                try:
+                    self.audit_callback(decision_event)
+                except Exception as e:  # pragma: no cover - defensive
+                    logger.error(f"Audit callback failed: {e}")
+            raise ScopeViolationError(endpoint, reason)
 
     def httpx_request_hook(self, request: Any) -> None:
         """Hook for httpx Client to inspect outbound request before socket connection"""

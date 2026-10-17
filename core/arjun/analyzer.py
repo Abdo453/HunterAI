@@ -6,7 +6,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from core.arjun.schemas import ArjunParameterRecord, ArjunEvidenceLevel
+from core.arjun.schemas import (
+    ArjunParameterRecord, ArjunEvidenceLevel,
+)
 
 log = logging.getLogger("arjun.analyzer")
 
@@ -63,7 +65,7 @@ class DuplicateDetector:
 
 
 class EvidenceReviewer:
-    SENSITIVE_PARAMETERS = {"id", "user", "username", "email", "token", "session", "password", "auth", "key", "secret"}
+    SENSITIVE_PARAMETERS = {"id", "user", "username", "email", "token", "session", "auth", "password", "key", "secret"}
 
     def __init__(self):
         pass
@@ -105,7 +107,24 @@ class EvidenceReviewer:
             "evidence_status": "sufficient" if record.evidence_level == ArjunEvidenceLevel.E1 else "insufficient",
             "confidence": round(confidence, 2),
             "confidence_label": "strong" if confidence >= 0.75 else "probable" if confidence >= 0.50 else "possible" if confidence >= 0.25 else "weak",
+            "is_auth_parameter": record.parameter.lower() in self.SENSITIVE_PARAMETERS,
+            "is_id_parameter": record.parameter.lower() in ("id", "uid", "pid", "oid", "cid"),
+            "is_search_parameter": record.parameter.lower() in ("q", "query", "search", "keyword", "filter", "name"),
             "needs_verification": record.evidence_level != ArjunEvidenceLevel.E1,
             "issues": issues,
-            "recommendation": "اختبار المعلمة المكتشفة يدويًا للكشف عن الثغرات المحتملة.",
+            "recommendation": (
+                "اختبار المعلمة المكتشفة يدويًا للكشف عن الثغرات المحتملة."
+                if record.evidence_level == ArjunEvidenceLevel.E1 else
+                "المعامل يحتاج أدلة إضافية قبل اعتباره threat."
+            ),
         }
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 0.75:
+            return "strong"
+        elif score >= 0.50:
+            return "probable"
+        elif score >= 0.25:
+            return "possible"
+        return "weak"

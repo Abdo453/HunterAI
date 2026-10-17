@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Certification](https://img.shields.io/badge/Pre--Kali%20Certification-15%2F15%20Gates%20Passed%20(100%25)-brightgreen?style=for-the-badge&logo=shield)](PRE_KALI_CERTIFICATION.md)
+[![Certification](https://img.shields.io/badge/Pre--Kali%20Certification-16%2F16%20Gates%20Passed%20(100%25)-brightgreen?style=for-the-badge&logo=shield)](PRE_KALI_CERTIFICATION.md)
 [![Tests](https://img.shields.io/badge/Unit%20Tests-42%2F42%20Passing-success?style=for-the-badge&logo=pytest)](tests/)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)](https://python.org)
 [![Architecture](https://img.shields.io/badge/Engine-Evidence%20Court%20%2B%20Code%20Intel-orange?style=for-the-badge)]()
@@ -126,12 +126,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Verify System Integrity (15 Certification Gates)
+### 2. Verify System Integrity (16 Certification Gates)
 Before any engagement, verify the full test and certification suite:
 ```bash
 python certify.py
 ```
-> **Output:** `🎉 ALL 15 CERTIFICATION GATES PASSED SUCCESSFULLY!`
+> **Output:** `🎉 ALL 16 CERTIFICATION GATES PASSED SUCCESSFULLY!`
 
 ### 3. Run Autonomous Scan
 ```bash

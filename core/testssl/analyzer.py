@@ -6,7 +6,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from core.testssl.schemas import TestsslFindingRecord, TestsslEvidenceLevel
+from core.testssl.schemas import (
+    TestsslFindingRecord, TestsslEvidenceLevel,
+)
 
 log = logging.getLogger("testssl.analyzer")
 
@@ -110,5 +112,19 @@ class EvidenceReviewer:
             "confidence_label": "strong" if confidence >= 0.75 else "probable" if confidence >= 0.50 else "possible" if confidence >= 0.25 else "weak",
             "needs_verification": record.evidence_level != TestsslEvidenceLevel.E1,
             "issues": issues,
-            "recommendation": "مراجعة إعدادات TLS وتطبيق التوصيات الأمنية المقترحة.",
+            "recommendation": (
+                "مراجعة إعدادات TLS وتطبيق التوصيات الأمنية المقترحة."
+                if record.evidence_level == TestsslEvidenceLevel.E1 else
+                "الثغرة تحتاج أدلة إضافية قبل اعتمادها."
+            ),
         }
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 0.75:
+            return "strong"
+        elif score >= 0.50:
+            return "probable"
+        elif score >= 0.25:
+            return "possible"
+        return "weak"

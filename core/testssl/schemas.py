@@ -32,3 +32,20 @@ class TestsslFindingRecord:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class TLSFindingProfile:
+    severity: str
+    title: str
+    description: str
+    cve: Optional[str]
+    evidence_level: str
+    confidence_score: float
+    confidence_label: str
+    is_critical: bool = False
+    context_notes: List[str] = field(default_factory=list)
+    adaptive_suggestions: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)

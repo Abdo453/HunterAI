@@ -4,7 +4,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.mission_planner.planner import (
+from core.task_planner.planner import (
     MissionPlanner,
     PlannerTask,
     TaskPriority,
@@ -80,7 +80,7 @@ def test_progress_tracking():
 
 
 def test_agent_import():
-    from core.mission_planner.planner import MissionPlanner
+    from core.task_planner.planner import MissionPlanner
     assert MissionPlanner is not None
     print("[PASS] planner import")
 

@@ -1,4 +1,6 @@
-"""Subfinder Asset Coverage — L2 AI Analyzer + L5 Evidence Reviewer"""
+"""Subfinder Asset Coverage — L2 AI Analyzer + L5 Evidence Reviewer
+Finding Normalizer + Duplicate Detector + Evidence Reviewer (rule-based، لا LLM لكل خطوة)
+"""
 from __future__ import annotations
 
 import json
@@ -7,15 +9,24 @@ from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
 from core.subfinder.schemas import (
-    SubfinderAssetRecord, SubfinderEvidenceLevel, SourceType,
+    SubfinderAssetRecord, AssetCoverageProfile,
+    SubfinderEvidenceLevel, SourceType,
 )
 
 log = logging.getLogger("subfinder.analyzer")
 
 
 class SubfinderNormalizer:
+    """
+    L2: يحول مخرجات subfinder JSON إلى SubfinderAssetRecord موحد،
+    مع تطبيع الحقول واستخراج مصدر الاكتشاف.
+    """
+
     @staticmethod
     def normalize_subfinder_json_line(line: str) -> Optional[SubfinderAssetRecord]:
+        """
+        يُحط سطر JSON واحد من مخرجات subfinder (-json -silent) إلى سجل موحد.
+        """
         line = line.strip()
         if not line:
             return None
@@ -24,11 +35,22 @@ class SubfinderNormalizer:
         except json.JSONDecodeError:
             return None
 
-        subdomain = data.get("host", "") or data.get("subdomain", "") or ""
-        source = data.get("source", "unknown")
-        source_type = data.get("source-type", SourceType.PASSIVE)
-        ip = data.get("ip")
-        cdn = data.get("cdn", False)
+        subdomain = data.get("subdomain", "") or data.get("host", "") or ""
+        source = data.get("source", "") or ""
+        ip = data.get("ip", "") or ""
+        raw_cdn = data.get("cdn", "")
+        cdn = str(raw_cdn) if raw_cdn not in (None, "", False, 0) else None
+        # source-type mapping → SourceType
+        st_raw = str(data.get("source-type", "") or "").lower().strip()
+        known = {
+            "certificate": SourceType.CERTIFICATE,
+            "cert": SourceType.CERTIFICATE,
+            "dns": SourceType.DNS,
+            "passive": SourceType.PASSIVE,
+            "active": SourceType.ACTIVE,
+            "api": SourceType.API,
+        }
+        source_type = known.get(st_raw, SourceType.UNKNOWN)
 
         digest_src = f"{subdomain}:{source}"
         record_id = f"sf_{__import__('hashlib').md5(digest_src.encode()).hexdigest()[:10]}"
@@ -43,10 +65,11 @@ class SubfinderNormalizer:
             evidence_level=SubfinderEvidenceLevel.E0,
             source_tool="subfinder",
             raw_json=data,
-            validation_note=f"Source: {source} | Type: {source_type}",
+            validation_note=f"Subdomain: {subdomain} | Source: {source} | Type: {source_type} | IP: {ip or '—'}",
         )
 
     def normalize_batch(self, subfinder_stdout: str) -> List[SubfinderAssetRecord]:
+        """يحول مخرجات subfinder JSON إلى قائمة سجلات."""
         records: List[SubfinderAssetRecord] = []
         for line in subfinder_stdout.splitlines():
             rec = self.normalize_subfinder_json_line(line)
@@ -56,6 +79,10 @@ class SubfinderNormalizer:
 
 
 class DuplicateDetector:
+    """
+    L2: يكتشف الأصول المكررة (نفس subdomain) ويجمعها في مجموعة واحدة.
+    """
+
     def __init__(self):
         self._groups: Dict[str, List[SubfinderAssetRecord]] = defaultdict(list)
 
@@ -73,58 +100,85 @@ class DuplicateDetector:
 
 
 class EvidenceReviewer:
-    HIGH_VALUE_SUBDOMAINS = {"admin", "dev", "staging", "test", "api", "internal", "vpn", "mail"}
+    """
+    L5 Verification: يراجع الأدلة المرتبطة بكل أصل فرعي ويحدد:
+      - هل الأدلة كافية لدعم الملف؟ (evidence_status)
+      - هل الأصل يحتاج تحقق إضافي؟ (needs_verification)
+      - درجة الثقة المبدئية (بدون LLM)
+    """
+
+    HIGH_VALUE_SUBDOMAINS = {
+        "admin", "api", "dev", "staging", "test", "internal", "vpn", "mail",
+        "webmail", "portal", "backup", "git", "jenkins", "gitlab",
+    }
 
     def __init__(self):
         pass
 
     def review(self, record: SubfinderAssetRecord) -> Dict[str, Any]:
+        """
+        يُرجع تقرير مراجعة للسجل.
+        """
         issues: List[str] = []
-        confidence = 0.2
+        confidence = 0.2  # قاعدة: نتيجة subfinder واحدة غير كافية للإثبات الكامل
 
-        if record.source != "unknown":
-            confidence += 0.2
+        # وجود مصدر 발견 = دليل أقوى
+        if record.source:
+            confidence += 0.15
         else:
-            issues.append("مصدر غير معروف")
+            issues.append("لا يوجد مصدر اكتشاف (source)")
 
-        if record.source_type in (SourceType.CERTIFICATE, SourceType.DNS):
-            confidence += 0.2
-
+        # وجود IP = دليل أقوى
         if record.ip:
             confidence += 0.15
         else:
-            issues.append("لا يوجد عنوان IP مرتبط")
+            issues.append("لا يوجد عنوان IP")
 
+        # وجود CDN = دليل أقوى
         if record.cdn:
-            confidence += 0.05
-            issues.append("محفوظة خلف CDN — قد تكون المخفية")
+            confidence += 0.1
+            issues.append("الدلو محمي بـ CDN")
 
-        label = record.subdomain.split(".")[0] if "." in record.subdomain else record.subdomain
-        if label in self.HIGH_VALUE_SUBDOMAINS:
+        # التحقق من الفرع عالي القيمة
+        subdomain_lower = record.subdomain.lower()
+        is_high_value = any(kw in subdomain_lower for kw in self.HIGH_VALUE_SUBDOMAINS)
+        if is_high_value:
             confidence += 0.15
-            issues.append("نطابق فرعية عالية القيمة — أولوية أعلى")
+            issues.append("نطاق فرعي عالي القيمة — أولوية أعلى")
 
-        if record.source != "unknown" and (record.ip or record.source_type in (SourceType.CERTIFICATE, SourceType.DNS)):
+        # إذا كانت الأدلة مكتملة → E1
+        if record.source and record.ip:
             record.evidence_level = SubfinderEvidenceLevel.E1
 
         confidence = max(0.0, min(confidence, 1.0))
+        label = self._label(confidence)
 
         return {
             "record_id": record.record_id,
             "subdomain": record.subdomain,
             "source": record.source,
-            "source_type": record.source_type,
             "ip": record.ip,
             "cdn": record.cdn,
             "evidence_level": record.evidence_level,
             "evidence_status": "sufficient" if record.evidence_level == SubfinderEvidenceLevel.E1 else "insufficient",
             "confidence": round(confidence, 2),
-            "confidence_label": "strong" if confidence >= 0.75 else "probable" if confidence >= 0.50 else "possible" if confidence >= 0.25 else "weak",
+            "confidence_label": label,
+            "is_high_value": is_high_value,
             "needs_verification": record.evidence_level != SubfinderEvidenceLevel.E1,
             "issues": issues,
             "recommendation": (
                 "أصل فرعي موثق (E1) — يُنصح بالفحص عبر HTTPx و Nmap للتأكيد على الخدمة."
                 if record.evidence_level == SubfinderEvidenceLevel.E1 else
-                "الأصل يحتاج أدلة إضافية قبل اعتماده في نطاق التحقيق."
+                "الأصل يحتاج أدلة إضافية قبل اعتباره is valid."
             ),
         }
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 0.75:
+            return "strong"
+        elif score >= 0.50:
+            return "probable"
+        elif score >= 0.25:
+            return "possible"
+        return "weak"

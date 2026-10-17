@@ -77,6 +77,39 @@
     "command_template": "naabu -host {target} -silent"
   },
   {
+    "id": "masscan",
+    "name": "masscan",
+    "type": "scanner",
+    "category": "ports",
+    "risk": "medium",
+    "permissions": ["recon", "scan"],
+    "purpose": "Ultra-fast asynchronous port discovery feeding the network pipeline discovery stage",
+    "requires_authorization": true,
+    "command_template": "masscan -p{ports} --rate {rate} -oJ {output}"
+  },
+  {
+    "id": "netexec",
+    "name": "netexec",
+    "type": "scanner",
+    "category": "ad",
+    "risk": "high",
+    "permissions": ["recon", "scan", "active_testing"],
+    "purpose": "Active Directory / SMB / LDAP / WinRM enumeration and credential validation",
+    "requires_authorization": true,
+    "command_template": "netexec {protocol} {target} {args}"
+  },
+  {
+    "id": "enum4linux-ng",
+    "name": "enum4linux-ng",
+    "type": "recon",
+    "category": "ad",
+    "risk": "medium",
+    "permissions": ["recon", "scan"],
+    "purpose": "SMB/RPC/AD enumeration (users, shares, groups, password policy)",
+    "requires_authorization": true,
+    "command_template": "enum4linux-ng -A -oJ {output} {target}"
+  },
+  {
     "id": "katana",
     "name": "katana",
     "type": "crawler",

@@ -8,7 +8,8 @@ from tools.tool_manager import ToolManager, ToolResult
 class SubfinderTools:
     """
     L1 Tool Adapter لـ Subfinder.
-    يشغل subfinder بخروج JSON (-json -silent) ويُعيد ToolResult موحد.
+    يشغل subfinder ضد النطاقات مع مخرجات JSON (-json -silent).
+    لا يعدل في الكود الأصلي للأداة؛ طبقة خارجية فقط.
     """
 
     def __init__(self, mgr: ToolManager):
@@ -24,9 +25,33 @@ class SubfinderTools:
         recursive: bool = False,
         timeout: int = 300,
     ) -> ToolResult:
+        """
+        يشغل subfinder ضد النطاق.
+        يرجع JSON عبر stdout (-json -silent) لسهولةパレスينج.
+        """
         cmd_parts = ["subfinder", "-d", domain, "-json", "-silent"]
+
         if sources:
-            cmd_parts += ["-bs", sources]
+            cmd_parts += ["-bs", sources]  # sources filter
         if recursive:
-            cmd_parts.append("-recursive")
-        return await self.mgr.execute(" ".join(cmd_parts), timeout=timeout)
+            cmd_parts.append("-recursive")  # التعداد المتكرر
+
+        cmd = " ".join(cmd_parts)
+        return await self.mgr.execute(cmd, timeout=timeout)
+
+    async def enum_list(
+        self,
+        domains_file: str,
+        timeout: int = 600,
+    ) -> ToolResult:
+        """
+        يشغل subfinder ضد قائمة النطاقات من ملف.
+        """
+        cmd_parts = [
+            "subfinder",
+            "-L", domains_file,  # list file
+            "-json",
+            "-silent",
+        ]
+        cmd = " ".join(cmd_parts)
+        return await self.mgr.execute(cmd, timeout=timeout)

@@ -6,7 +6,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from core.trivy.schemas import TrivyVulnerabilityRecord, TrivyEvidenceLevel
+from core.trivy.schemas import (
+    TrivyVulnerabilityRecord, TrivyEvidenceLevel,
+)
 
 log = logging.getLogger("trivy.analyzer")
 
@@ -114,5 +116,19 @@ class EvidenceReviewer:
             "confidence_label": "strong" if confidence >= 0.75 else "probable" if confidence >= 0.50 else "possible" if confidence >= 0.25 else "weak",
             "needs_verification": record.evidence_level != TrivyEvidenceLevel.E1,
             "issues": issues,
-            "recommendation": "تحديث الحزمة إلى الإصدار المصحح في أقرب وقت ممكن.",
+            "recommendation": (
+                "تحديث الحزمة إلى الإصدار المصحح في أقرب وقت ممكن."
+                if record.evidence_level == TrivyEvidenceLevel.E1 else
+                "الثغرة تحتاج أدلة إضافية قبل الاعتماد عليها."
+            ),
         }
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 0.75:
+            return "strong"
+        elif score >= 0.50:
+            return "probable"
+        elif score >= 0.25:
+            return "possible"
+        return "weak"

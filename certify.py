@@ -2,7 +2,7 @@
 """
 HunterAI Pre-Kali Certification Engine (certify.py)
 ===================================================
-Automated 15-Gate Validation Pipeline to certify that HunterAI is 100% stable,
+Automated 16-Gate Validation Pipeline to certify that HunterAI is 100% stable,
 safe, self-contained, and ready for deployment to Kali Linux.
 
 Gates:
@@ -21,7 +21,8 @@ Gates:
   [Gate 12] Dry Run Simulation Engine
   [Gate 13] Lab Target End-to-End Run
   [Gate 14] Cross-Platform POSIX Path Compliance
-  [Gate 15] Certification Report Generation (PRE_KALI_CERTIFICATION.md)
+  [Gate 15] Network Scope Firewall & Host/Service Model
+  [Gate 16] Certification Report Generation (PRE_KALI_CERTIFICATION.md)
 """
 from __future__ import annotations
 
@@ -59,6 +60,10 @@ PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+class SecurityError(Exception):
+    """Raised when an inviolable security invariant is violated during certification."""
+
+
 class CertificationGateResult:
     def __init__(self, gate_id: str, name: str):
         self.gate_id = gate_id
@@ -73,7 +78,7 @@ class CertificationGateResult:
 
 
 class PreKaliCertificationPipeline:
-    """Executes the 15-Gate Pre-Kali Certification Pipeline"""
+    """Executes the 16-Gate Pre-Kali Certification Pipeline"""
 
     def __init__(self):
         self.results: List[CertificationGateResult] = []
@@ -667,9 +672,109 @@ class PreKaliCertificationPipeline:
         res.duration_sec = time.time() - t0
         return res
 
-    # ── GATE 15: REPORT GENERATION ───────────────────────────────────────────
-    def run_gate_15_generate_report(self) -> CertificationGateResult:
-        res = CertificationGateResult("GATE-15", "Certification Report Generation")
+    # ── GATE 15: NETWORK SCOPE FIREWALL & HOST/SERVICE MODEL ─────────────────
+    def run_gate_15_network_scope(self) -> CertificationGateResult:
+        res = CertificationGateResult("GATE-15", "Network Scope Firewall, Host/Service Model & Pipeline")
+        t0 = time.time()
+        try:
+            from core.network_scope_guard import NetworkScopeGuard, ScopeViolationError
+            from core.network_scope_policy import NetworkScopePolicy
+            from core.network_model import HostGraph, ServiceRecord
+            from core.scope_engine import ScopePolicy
+
+            # 1. Fail-closed by default: no policy => every endpoint denied.
+            if NetworkScopeGuard().check_endpoint("example.com", 443, "https")[0]:
+                raise SecurityError("SECURITY FATAL: default NetworkScopeGuard authorized an endpoint!")
+
+            # 2. Non-HTTP protocol denied without explicit active-testing opt-in.
+            g_http = NetworkScopeGuard(ScopePolicy(allowed_targets=["lab.target.local"]))
+            if g_http.check_endpoint("lab.target.local", 445, "smb")[0]:
+                raise SecurityError("SECURITY FATAL: non-HTTP endpoint authorized by default!")
+
+            # 3. Inviolable cloud metadata stays blocked even with an explicit
+            #    allowlist + lab override + active-testing opt-in.
+            g_meta = NetworkScopeGuard(network_policy=NetworkScopePolicy(
+                allowed_targets=["169.254.169.254"],
+                allowed_protocols=["tcp"],
+                allow_active_network_tests=True,
+                allow_private_ips_override=True,
+            ))
+            if g_meta.check_endpoint("169.254.169.254", 80, "tcp")[0]:
+                raise SecurityError("SECURITY FATAL: cloud metadata endpoint authorized!")
+
+            # 4. A properly authorized lab endpoint is allowed.
+            g_lab = NetworkScopeGuard(network_policy=NetworkScopePolicy(
+                allowed_targets=["10.0.0.0/8"],
+                allowed_protocols=["tcp"],
+                allow_active_network_tests=True,
+                allow_private_ips_override=True,
+                allowed_ports=[445],
+            ))
+            allowed, reason = g_lab.check_endpoint("10.0.0.5", 445, "tcp")
+            if not allowed:
+                raise SecurityError(f"Authorized lab endpoint was denied: {reason}")
+
+            # 5. Host/Service model + graph round-trip.
+            graph = HostGraph()
+            graph.upsert_host("dc01.lab.local", address="10.0.0.10")
+            graph.add_service(ServiceRecord(host="dc01.lab.local", port=445, service_name="microsoft-ds"))
+            if graph.summary()["hosts"] != 1:
+                raise SecurityError("HostGraph failed to register host/service.")
+            if ServiceRecord(host="x", port=1, service_name="microsoft-ds").is_high_value is not True:
+                raise SecurityError("Service high-value classification failed.")
+
+            # 6. masscan discovery normalizer (stream parsing + record model).
+            from core.masscan.analyzer import MasscanNormalizer
+            _mscan = MasscanNormalizer.normalize_batch(
+                '{ "ip": "10.0.0.5", "ports": [ '
+                '{"port": 6379, "proto": "tcp", "status": "open", "reason": "syn-ack", "ttl": 61} ] }'
+            )
+            if len(_mscan) != 1 or _mscan[0].port != 6379:
+                raise SecurityError("masscan discovery normalizer failed to parse output.")
+
+            # 7. Network pipeline (discover→fingerprint→graph→route) must stay candidate-only.
+            import asyncio as _asyncio
+            from core.network_pipeline import NetworkPipeline
+            from core.network_vuln_router import NetworkVulnRouter
+
+            async def _disc(target, ports="1-65535", rate=1000, protocol="tcp"):
+                return [ServiceRecord(host=target, port=6379, protocol="tcp",
+                                      state="open", source_tool="masscan")]
+
+            async def _fprint(host, ports):
+                return [ServiceRecord(host=host, port=6379, protocol="tcp",
+                                      state="open", service_name="redis", source_tool="nmap")]
+
+            pipe = NetworkPipeline(
+                discover=_disc, fingerprint=_fprint, router=NetworkVulnRouter(),
+                scope_guard=NetworkScopeGuard(network_policy=NetworkScopePolicy(
+                    allowed_targets=["10.0.0.0/8"], allowed_protocols=["tcp"],
+                    allow_active_network_tests=True, allow_private_ips_override=True,
+                    allowed_ports=[6379],
+                )),
+            )
+            assessment = _asyncio.run(pipe.run(["10.0.0.5"]))
+            if assessment.stats["candidate_findings"] < 1:
+                raise SecurityError("Network pipeline produced no candidate finding for exposed Redis.")
+            if assessment.stats["confirmed_findings"] != 0:
+                raise SecurityError(
+                    "SECURITY FATAL: network pipeline auto-confirmed a finding without Evidence Court!"
+                )
+            if any(f.status != "candidate" for f in assessment.findings):
+                raise SecurityError("Network pipeline emitted a non-candidate finding.")
+
+            res.log("Network scope fail-closed; metadata blocked; lab endpoint allowed; HostGraph + "
+                    "masscan normalizer + discover→fingerprint→route pipeline OK (candidates only).")
+            res.passed = True
+        except Exception as e:
+            res.passed = False
+            res.error = str(e)
+        res.duration_sec = time.time() - t0
+        return res
+
+    # ── GATE 16: REPORT GENERATION ───────────────────────────────────────────
+    def run_gate_16_generate_report(self) -> CertificationGateResult:
+        res = CertificationGateResult("GATE-16", "Certification Report Generation")
         t0 = time.time()
         try:
             total_gates = len(self.results)
@@ -731,7 +836,7 @@ class PreKaliCertificationPipeline:
 
     def execute_all(self) -> bool:
         print("\n" + "=" * 75)
-        print(f" {BOLD}🚀 HunterAI Pre-Kali Certification Pipeline (15 Systematic Gates){RESET}")
+        print(f" {BOLD}🚀 HunterAI Pre-Kali Certification Pipeline (16 Systematic Gates){RESET}")
         print("=" * 75 + "\n")
 
         gates = [
@@ -750,6 +855,7 @@ class PreKaliCertificationPipeline:
             self.run_gate_12_dry_run,
             self.run_gate_13_lab_run,
             self.run_gate_14_cross_platform,
+            self.run_gate_15_network_scope,
         ]
 
         for gate_fn in gates:
@@ -758,17 +864,17 @@ class PreKaliCertificationPipeline:
             if not res.passed:
                 print(f"\n{RED}🛑 PIPELINE HALTED AT {res.gate_id}: {res.error}{RESET}\n")
                 # Still generate report with failure
-                rep_res = self.run_gate_15_generate_report()
+                rep_res = self.run_gate_16_generate_report()
                 self._add_result(rep_res)
                 return False
 
         # Final Report Gate
-        rep_res = self.run_gate_15_generate_report()
+        rep_res = self.run_gate_16_generate_report()
         self._add_result(rep_res)
 
         total_dur = time.time() - self.start_time
         print("\n" + "=" * 75)
-        print(f" {GREEN}{BOLD}🎉 ALL 15 CERTIFICATION GATES PASSED SUCCESSFULLY! ({total_dur:.2f}s){RESET}")
+        print(f" {GREEN}{BOLD}🎉 ALL 16 CERTIFICATION GATES PASSED SUCCESSFULLY! ({total_dur:.2f}s){RESET}")
         print(f" 📄 Official Certification Report: PRE_KALI_CERTIFICATION.md")
         print(f" 🚀 VERDICT: FULLY CERTIFIED & READY TO TRANSFER TO KALI LINUX")
         print("=" * 75 + "\n")

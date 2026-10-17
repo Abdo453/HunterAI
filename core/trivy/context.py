@@ -1,4 +1,4 @@
-"""Trivy Dependency Risk Analyzer — L3 Context + L4 Adaptive"""
+"""Trivy Dependency Risk Analyzer — L3 Context Intelligence + L4 Adaptive Advisor"""
 from __future__ import annotations
 
 import logging
@@ -19,6 +19,7 @@ class ContextEnricher:
         }
 
         sev_lower = record.severity.lower()
+        pkg_lower = record.package_name.lower()
 
         if sev_lower in ("critical", "high"):
             context["is_critical_severity"] = True
@@ -38,8 +39,12 @@ class ContextEnricher:
         return context
 
 
-class AdaptiveAdvisor:
-    def advise(self, record: TrivyVulnerabilityRecord, context: Optional[Dict[str, Any]] = None) -> List[str]:
+class AdaptiveTestAdvisor:
+    def advise(
+        self,
+        record: TrivyVulnerabilityRecord,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> List[str]:
         context = context or {}
         suggestions: List[str] = []
 
@@ -56,4 +61,5 @@ class AdaptiveAdvisor:
             if s not in seen:
                 seen.add(s)
                 unique.append(s)
+
         return unique[:8]

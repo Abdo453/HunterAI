@@ -2,6 +2,7 @@
 import sys
 import os
 import asyncio
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -62,6 +63,7 @@ def test_connect_disconnect():
     print("[PASS] mcp connect/disconnect")
 
 
+@pytest.mark.asyncio
 async def test_call_tool():
     mgr = MCPToolManager()
     mgr.register_server("fs_server", "Filesystem", "npx", [])

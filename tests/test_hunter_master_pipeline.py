@@ -286,7 +286,8 @@ async def test_orchestrator_safe_mode_restricted(tmp_path):
         session_id="test_safe_sess",
         in_scope=["example.com"],
         authorized=False,
-        workflow="full"
+        workflow="full",
+        allow_no_ai=True,  # بيئة اختبار بلا Ollama — وضع الاستدلال الحتمي
     )
     orch.artifact_root = str(tmp_path)
 
@@ -323,7 +324,8 @@ async def test_orchestrator_authorized_mode(tmp_path):
         session_id="test_auth_sess",
         in_scope=["target.com"],
         authorized=True,
-        workflow="full"
+        workflow="full",
+        allow_no_ai=True,  # بيئة اختبار بلا Ollama — وضع الاستدلال الحتمي
     )
     orch.artifact_root = str(tmp_path)
 

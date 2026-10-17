@@ -8,9 +8,13 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.trivy_tools import TrivyTools
-from core.trivy.schemas import TrivyVulnerabilityRecord, TrivyEvidenceLevel
-from core.trivy.analyzer import TrivyNormalizer, DuplicateDetector, EvidenceReviewer
-from core.trivy.context import ContextEnricher, AdaptiveAdvisor
+from core.trivy.schemas import (
+    TrivyVulnerabilityRecord, TrivyEvidenceLevel,
+)
+from core.trivy.analyzer import (
+    TrivyNormalizer, DuplicateDetector, EvidenceReviewer,
+)
+from core.trivy.context import ContextEnricher, AdaptiveTestAdvisor
 
 log = logging.getLogger("trivy.agent")
 
@@ -64,12 +68,14 @@ class TrivyAgent(BaseAgent):
                 final_records.append(rec)
 
         enricher = ContextEnricher()
-        advisor = AdaptiveAdvisor()
+        advisor = AdaptiveTestAdvisor()
 
         for rec in final_records:
             ctx = enricher.enrich(rec)
             advice = advisor.advise(rec, ctx)
             review = self.reviewer.review(rec)
+
+            rec.evidence_level = review["evidence_level"]
 
             finding = {
                 "record_id": rec.record_id,

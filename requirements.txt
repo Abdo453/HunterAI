@@ -1,49 +1,49 @@
-# PentestAI Unified — Python Dependencies
-# pip install -r requirements.txt
+# ============================================================
+# HunterAI / PentestAI-Unified — الويب والاستخدام الأساسي
+# متطلبات التشغيل الأساسية؛ الـ lock الكامل في requirements.lock
+# ============================================================
 
-# Web Framework
-fastapi>=0.110.0
-uvicorn[standard]>=0.27.0
-websockets>=12.0
-jinja2>=3.1.0
-python-multipart>=0.0.9
-aiofiles>=23.0.0
+# ويب
+fastapi
+uvicorn[standard]
+pydantic>=2.5
+python-multipart
+aiofiles
+jinja2
 
-# HTTP
-httpx>=0.27.0
-aiohttp>=3.9.0
+# HTTP / async
+httpx
+aiohttp
+requests
 
-# Config & Env
-python-dotenv>=1.0.0
-pyyaml>=6.0
-pydantic>=2.5.0
+# إعداد
+python-dotenv
+pyyaml
 
-# CLI
-rich>=13.0.0
+# نماذج (محلي + سحابي)
+ollama
+openai
+anthropic
 
-# AI Local (Ollama)
-ollama>=0.2.0
+# CLI/TUI
+rich
+textual
 
-# AI API (اختياري)
-openai>=1.55.0
-anthropic>=0.49.0
-# google-genai>=1.0.0
+# متصفح
+playwright
+selenium
+beautifulsoup4
+lxml
 
-# Browser & Automation
-selenium>=4.15.0
-webdriver-manager>=4.0.0
-beautifulsoup4>=4.12.0
-playwright>=1.40.0
-
-# Testing & QA
-pytest>=7.4.0
-pytest-asyncio>=0.23.0
-
-# Security
-pwntools>=4.10.0
-
-# Utilities
-psutil>=5.9.0
-
-
-textual>=0.80.0
+# أدوات
+colorama
+tabulate
+fpdf2
+dnspython
+tldextract
+publicsuffix2
+python-whois
+python-nmap
+waybackpy
+python-wappalyzer
+psutil

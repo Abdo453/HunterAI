@@ -5,9 +5,13 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.arjun.schemas import ArjunParameterRecord, ArjunEvidenceLevel
-from core.arjun.analyzer import ArjunNormalizer, DuplicateDetector, EvidenceReviewer
-from core.arjun.context import ContextEnricher, AdaptiveAdvisor
+from core.arjun.schemas import (
+    ArjunParameterRecord, ArjunEvidenceLevel,
+)
+from core.arjun.analyzer import (
+    ArjunNormalizer, DuplicateDetector, EvidenceReviewer,
+)
+from core.arjun.context import ContextEnricher, AdaptiveTestAdvisor
 
 
 ARJUN_SAMPLE = json.dumps({
@@ -33,10 +37,14 @@ def test_duplicate_detector():
     dedup = DuplicateDetector()
 
     rec = norm.normalize_arjun_json_line(ARJUN_SAMPLE)
+    r2 = norm.normalize_arjun_json_line(ARJUN_SAMPLE)
+
     g1 = dedup.add(rec)
     assert g1 is False
+
     g2 = dedup.add(rec)
     assert g2 is True
+
     count = dedup.flush()
     assert count == 1
     print("[PASS] arjun duplicate detector")
@@ -69,7 +77,7 @@ def test_context_enricher():
 
 
 def test_adaptive_advisor():
-    advisor = AdaptiveAdvisor()
+    advisor = AdaptiveTestAdvisor()
     rec = ArjunParameterRecord(
         record_id="arj2",
         parameter="id",

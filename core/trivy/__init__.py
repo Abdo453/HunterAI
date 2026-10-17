@@ -1,7 +1,12 @@
 """Trivy Dependency Risk Analyzer Package"""
-from core.trivy.schemas import TrivyVulnerabilityRecord, TrivyEvidenceLevel
-from core.trivy.analyzer import TrivyNormalizer, DuplicateDetector, EvidenceReviewer
-from core.trivy.context import ContextEnricher, AdaptiveAdvisor
+from core.trivy.schemas import (
+    TrivyVulnerabilityRecord, TrivyEvidenceLevel,
+)
+from core.trivy.analyzer import (
+    TrivyNormalizer, DuplicateDetector, EvidenceReviewer,
+)
+from core.trivy.context import ContextEnricher, AdaptiveTestAdvisor
+from agents.trivy_agent import TrivyAgent
 
 __all__ = [
     "TrivyVulnerabilityRecord",
@@ -10,6 +15,7 @@ __all__ = [
     "DuplicateDetector",
     "EvidenceReviewer",
     "ContextEnricher",
-    "AdaptiveAdvisor",
+    "AdaptiveTestAdvisor",
+    "TrivyAgent",
 ]
 __version__ = "1.0.0-pilot"

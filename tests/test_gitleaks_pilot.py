@@ -5,9 +5,13 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.gitleaks.schemas import GitleaksFindingRecord, GitleaksEvidenceLevel
-from core.gitleaks.analyzer import GitleaksNormalizer, DuplicateDetector, EvidenceReviewer
-from core.gitleaks.context import ContextEnricher, AdaptiveAdvisor
+from core.gitleaks.schemas import (
+    GitleaksFindingRecord, GitleaksEvidenceLevel,
+)
+from core.gitleaks.analyzer import (
+    GitleaksNormalizer, DuplicateDetector, EvidenceReviewer,
+)
+from core.gitleaks.context import ContextEnricher, AdaptiveTestAdvisor
 
 
 GITLEAKS_SAMPLE = json.dumps({
@@ -41,6 +45,7 @@ def test_duplicate_detector():
     assert g1 is False
     g2 = dedup.add(rec)
     assert g2 is True
+
     count = dedup.flush()
     assert count == 1
     print("[PASS] gitleaks duplicate detector")
@@ -77,7 +82,7 @@ def test_context_enricher():
 
 
 def test_adaptive_advisor():
-    advisor = AdaptiveAdvisor()
+    advisor = AdaptiveTestAdvisor()
     rec = GitleaksFindingRecord(
         record_id="gl2",
         rule_id="private-key",

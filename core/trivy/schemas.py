@@ -34,3 +34,22 @@ class TrivyVulnerabilityRecord:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class DependencyRiskProfile:
+    vulnerability_id: str
+    package_name: str
+    installed_version: str
+    fixed_version: Optional[str]
+    severity: str
+    title: str
+    confidence_score: float
+    confidence_label: str
+    evidence_level: str
+    is_critical: bool = False
+    context_notes: List[str] = field(default_factory=list)
+    adaptive_suggestions: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)

@@ -747,6 +747,19 @@ class BurpGateway:
 
     async def start(self):
         await self.task_queue.start()
+        # ── حماية السلوك اللطيف: لو المنفذ مشغول يبقى الـ gateway قائم
+        #    بنفس الخدمة الأصلية — لا تعيد الـ bind وتكسر الـ process ──
+        import socket
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                if s.connect_ex((self.host, self.port)) == 0:
+                    logger.info(
+                        f"[GATEWAY] Port {self.port} already bound — "
+                        f"reusing existing gateway listener (graceful skip).")
+                    return
+        except Exception:
+            pass
         config = uvicorn.Config(
             app=self.app,
             host=self.host,
@@ -757,7 +770,12 @@ class BurpGateway:
         self._server = uvicorn.Server(config)
         self._server.install_signal_handlers = lambda: None
         logger.info(f"[GATEWAY] HunterAI Burp Gateway running on http://{self.host}:{self.port}")
-        await self._server.serve()
+        try:
+            await self._server.serve()
+        except (Exception, SystemExit) as e:
+            # uvicorn يستدعي sys.exit(3) عند فشل الـ bind — لا نسمح لهذا بأن يقتل
+            # الـ process أو يفسد الاختبارات المتسلسلة في نفس الجلسة
+            logger.warning(f"[GATEWAY] Gateway on {self.host}:{self.port} terminated gracefully: {e}")
 
     def stop(self):
         if self._server:

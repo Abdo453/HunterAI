@@ -6,7 +6,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from core.dalfox.schemas import DalfoxFindingRecord, DalfoxEvidenceLevel
+from core.dalfox.schemas import (
+    DalfoxFindingRecord, DalfoxEvidenceLevel,
+)
 
 log = logging.getLogger("dalfox.analyzer")
 
@@ -101,11 +103,27 @@ class EvidenceReviewer:
             "injection_point": record.injection_point,
             "type": record.type,
             "payload": record.payload,
+            "evidence": record.evidence,
             "evidence_level": record.evidence_level,
             "evidence_status": "sufficient" if record.evidence_level == DalfoxEvidenceLevel.E1 else "insufficient",
             "confidence": round(confidence, 2),
             "confidence_label": "strong" if confidence >= 0.75 else "probable" if confidence >= 0.50 else "possible" if confidence >= 0.25 else "weak",
+            "is_vulnerable": record.type in ("reflected", "stored"),
             "needs_verification": record.evidence_level != DalfoxEvidenceLevel.E1,
             "issues": issues,
-            "recommendation": "تحقق من انعكاس XSS يدويًا في المتصفح قبل التبليغ.",
+            "recommendation": (
+                "تحقق من انعكاس XSS يدويًا في المتصفح قبل التبليغ."
+                if record.evidence_level == DalfoxEvidenceLevel.E1 else
+                "تحقق من انعكاس XSS يدويًا قبل التبليغ."
+            ),
         }
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 0.75:
+            return "strong"
+        elif score >= 0.50:
+            return "probable"
+        elif score >= 0.25:
+            return "possible"
+        return "weak"

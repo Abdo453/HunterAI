@@ -5,9 +5,13 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.dalfox.schemas import DalfoxFindingRecord, DalfoxEvidenceLevel
-from core.dalfox.analyzer import DalfoxNormalizer, DuplicateDetector, EvidenceReviewer
-from core.dalfox.context import ContextEnricher, AdaptiveAdvisor
+from core.dalfox.schemas import (
+    DalfoxFindingRecord, DalfoxEvidenceLevel,
+)
+from core.dalfox.analyzer import (
+    DalfoxNormalizer, DuplicateDetector, EvidenceReviewer,
+)
+from core.dalfox.context import ContextEnricher, AdaptiveTestAdvisor
 
 
 DALFOX_SAMPLE = json.dumps({
@@ -39,6 +43,7 @@ def test_duplicate_detector():
     assert g1 is False
     g2 = dedup.add(rec)
     assert g2 is True
+
     count = dedup.flush()
     assert count == 1
     print("[PASS] dalfox duplicate detector")
@@ -74,7 +79,7 @@ def test_context_enricher():
 
 
 def test_adaptive_advisor():
-    advisor = AdaptiveAdvisor()
+    advisor = AdaptiveTestAdvisor()
     rec = DalfoxFindingRecord(
         record_id="dl2",
         url="https://target.local/search",

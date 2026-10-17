@@ -161,7 +161,7 @@ class NotificationManager:
         text = (
             f"{emoji_map.get(alert.severity, 'ℹ️')} *HunterAI Security Alert*\n\n"
             f"*العنوان:* {alert.title}\n"
-            f>*الرسالة:* {alert.message}\n\n"
+            f"*الرسالة:* {alert.message}\n\n"
             f"*الهدف:* `{alert.target}`\n"
             f"*الشدة:* {alert.severity.upper()}\n"
             f"*الثقة:* {alert.confidence:.0%}\n"
