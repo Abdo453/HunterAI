@@ -66,6 +66,26 @@ CODING_KEYWORDS = {
 }
 
 
+def _keyword_present(text: str, kw: str) -> bool:
+    """Match a keyword without letting single letters fire inside other words.
+
+    Word-like keywords (letters/digits/underscore/spaces) are matched on word
+    boundaries; keywords carrying symbols (``c++``, ``c#``, ``ci/cd``) and
+    non-Latin keywords keep a plain substring match.
+
+    Without this, the one-letter language keyword ``"r"`` matched inside
+    ``user``/``vulnerability``/``through`` — so nearly every message (English or
+    Arabic, once the English memory scaffolding was appended) was classified as
+    CODING, and the cloud-first GENERAL route was never reached.
+    """
+    if not kw:
+        return False
+    if re.fullmatch(r"[a-z0-9_ ]+", kw):
+        pattern = r"(?<![a-z0-9_])" + re.escape(kw) + r"(?![a-z0-9_])"
+        return re.search(pattern, text) is not None
+    return kw in text
+
+
 class TaskClassifier:
     """
     يصنف المهمة لتحديد:
@@ -78,8 +98,8 @@ class TaskClassifier:
         text = (user_input + " " + context).lower()
 
         # حساب النقاط
-        sec_hits = [kw for kw in SECURITY_KEYWORDS if kw in text]
-        cod_hits = [kw for kw in CODING_KEYWORDS if kw in text]
+        sec_hits = [kw for kw in SECURITY_KEYWORDS if _keyword_present(text, kw)]
+        cod_hits = [kw for kw in CODING_KEYWORDS if _keyword_present(text, kw)]
 
         sec_score = min(1.0, len(sec_hits) / 3.0)
         cod_score = min(1.0, len(cod_hits) / 3.0)

@@ -232,11 +232,12 @@
       finishAssistant("⚠️ " + (d.message || "خطأ غير متوقّع"), null, true);
       return;
     }
-    if (ev === "token") {
+    if (ev === "token" || ev === "chat_token") {
       // Real token delta from the backend — append and re-render progressively.
+      // Cloud adapters emit {delta}; local Ollama routes emit {token}.
       const textEl = pendingEl && pendingEl.querySelector(".content .text");
       if (textEl) {
-        pendingText += d.delta || "";
+        pendingText += d.delta ?? d.token ?? "";
         textEl.innerHTML = md(pendingText);
         scrollDown();
       }

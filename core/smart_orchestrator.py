@@ -78,8 +78,8 @@ class SmartOrchestrator:
         })
 
         if selected_model == "auto" or not selected_model:
-            # توجيه تلقائي عبر الـ Router
-            result = await self.router.route(user_input, context)
+            # توجيه تلقائي عبر الـ Router (مع دفق الرموز الحقيقية في مسار GENERAL)
+            result = await self.router.route(user_input, context, on_token=self._emit_token)
             final = result.get("final", "")
             route = result.get("route", "UNKNOWN")
             models_used = result.get("models_used", [])

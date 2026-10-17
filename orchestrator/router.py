@@ -100,10 +100,14 @@ class ModelRouter:
     # PUBLIC API
     # ────────────────────────────────────────────────────────────
 
-    async def route(self, user_input: str, context: str = "") -> Dict[str, Any]:
+    async def route(self, user_input: str, context: str = "",
+                    on_token: Optional[Callable] = None) -> Dict[str, Any]:
         """
         نقطة الدخول الرئيسية
         يصنف المهمة ويوجهها للمسار الصح
+
+        ``on_token`` (اختياري): تمرير دلتا الرموز الحقيقية إلى الواجهة في مسار
+        الدردشة العامة (GENERAL). المسارات المحلية تدفق أصلًا عبر ``chat_token``.
         """
         # تصنيف المهمة
         classification = self.classifier.classify(user_input, context)
@@ -124,7 +128,7 @@ class ModelRouter:
         elif classification.task_type == TaskType.MIXED:
             return await self._mixed_route(user_input, context, classification)
         else:
-            return await self._general_route(user_input, context)
+            return await self._general_route(user_input, context, on_token)
 
     # ────────────────────────────────────────────────────────────
     # SECURITY ROUTE
@@ -343,10 +347,13 @@ class ModelRouter:
     # GENERAL ROUTE
     # ────────────────────────────────────────────────────────────
 
-    async def _general_route(self, prompt: str, ctx: str) -> Dict[str, Any]:
+    async def _general_route(self, prompt: str, ctx: str,
+                             on_token: Optional[Callable] = None) -> Dict[str, Any]:
         await self._emit("route_start", {"route": "GENERAL"})
 
         # Unified router: cloud-first per HUNTER_LLM_POLICY, local Ollama fallback.
+        # Streaming: real token deltas are forwarded to ``on_token`` — the same
+        # transport the ``api:`` branch uses. Nothing is faked.
         messages = [
             {"role": "system", "content": "You are a helpful AI assistant."},
             {"role": "user", "content": prompt}
@@ -354,7 +361,7 @@ class ModelRouter:
         result = ""
         try:
             from core.llm_router import get_llm_router
-            resp = await get_llm_router().complete(messages)
+            resp = await get_llm_router().complete_stream(messages, on_token=on_token)
             if resp and resp.content:
                 result = resp.content
         except Exception as e:  # noqa: BLE001

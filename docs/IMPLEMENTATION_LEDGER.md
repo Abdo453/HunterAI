@@ -397,7 +397,7 @@
 | **وصف التغيير** | كل مزوّد يملك نقله: Gemini عبر SSE الأصلي (`streamGenerateContent?alt=sse`)، Anthropic عبر SDK stream، وOpenAI/DeepSeek/Groq عبر SDK `stream=True`، وOpenRouter عبر SSE على httpx. الموجّه يجرّب `stream()` أوّلًا وإن لم يتوفّر (مثل Taskade) يرسل الردّ كاملًا كرقاقة واحدة — **بلا دفق وهمي**. المحلي يستخدم `OllamaManager.chat_stream` القائم. `SmartOrchestrator` يبثّ أحداث `token` فتمرّ عبر الـWebSocket، و`chat.js` يضيفها تدريجيًا. |
 | **الاختبارات المنفَّذة** | `tests/test_llm_streaming.py` (9) + **فحص حيّ فعلي** عبر Gemini: `complete_stream` أرجعت `STREAMED=True` برقاقتين حقيقيتين، والتوكنات المُجمَّعة == المحتوى |
 | **نتائج الاختبارات** | ✅ **9** + 74 انحدار + 1 حيّ (opt-in `HUNTER_LIVE_LLM=1`) |
-| **قيود متبقية** | دفق فرع `auto` (المُوجّه الذكي للمهام) لم يُوصَل بعد — يبقى غير مُدفَّق؛ الدفق مُطبَّق على الموديل المختار يدويًا (وهو الافتراضي في الواجهة). |
+| **قيود متبقية** | دفق فرع `auto` (المُوجّه الذكي للمهام) — **أُغلق في LEDGER-025**. الدفق مُطبَّق على الموديل المختار يدويًا (وهو الافتراضي في الواجهة). |
 | **الحالة الحالية** | ✅ **EXISTS** |
 
 ---
@@ -431,6 +431,26 @@
 | **نتائج الاختبارات** | ✅ معرّفان عاملان ومُدفِّقان مؤكَّدان |
 | **قيود متبقية** | معرّفات بقية المزوّدين لم تُتحقّق حيًّا (لا مفاتيح لها هنا). |
 | **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-025 — دفق فرع `auto` + إصلاح مطابقة كلمات المصنّف (إغلاق قيد LEDGER-022)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | بثّ توكنات حقيقي عند اختيار «Auto (smart router)» على **كل** المسارات (سحابي ومحلي)، مع توجيه صحيح للمصنّف |
+| **الحالة السابقة** | `PARTIAL` — ثلاث فجوات: (أ) `orchestrator/router._general_route` كان يستدعي `LLMRouter.complete()` (بلا دفق) ⇒ صفر دلتا؛ (ب) المسارات المحلية تُصدر حدث `chat_token` والواجهة `chat.js` تتجاهله؛ (ج) `TaskClassifier` كان يطابق الكلمات بـ`kw in text`، والكلمة أحادية الحرف `"r"` تُطابق **داخل** `user`/`vulnerability`/`through` — ومع سياق الذاكرة الإنجليزي المُضاف، كان كل نص تقريبًا (حتى العربي) يُصنَّف `CODING` فلا يُوصَل مسار `GENERAL` السحابي إطلاقًا |
+| **الملفات المفحوصة** | `orchestrator/router.py` · `core/smart_orchestrator.py` · `orchestrator/task_classifier.py` · `orchestrator/resource_manager.py` (`run_local_model` يدفق عبر `chat_stream`) · `ui/web/static/chat.js` · `ui/web/static/app.js` (مستهلك `chat_token` القديم) · `ui/web/app.py` (`/ws/chat`) |
+| **الملفات المتغيرة** | `orchestrator/router.py` · `core/smart_orchestrator.py` · `orchestrator/task_classifier.py` · `ui/web/static/chat.js` · `tests/test_auto_route_streaming.py` (جديد) · `tests/test_task_classifier_routing.py` (جديد) |
+| **وصف التغيير** | 1) `ModelRouter.route(..., on_token=None)` و`_general_route` يستخدم `complete_stream` ⇒ دفق `token` (نفس نقل فرع `api:`). 2) فرع `auto` في `SmartOrchestrator.chat` يمرّر `on_token=self._emit_token`. 3) `chat.js` يعالج `chat_token` (المحلي: `{token}`) كما يعالج `token` (السحابي: `{delta}`) — **بلا تغيير اسم الحدث** (توافق خلفي مع `app.js`). 4) `_keyword_present()` في المصنّف: مطابقة على حدود الكلمات للكلمات الأبجدية/المسافات، وsubstring للكلمات الرمزية (`c++`/`c#`/`ci/cd`) والعربية ⇒ إزالة الإيجاب الكاذب لـ`"r"`. |
+| **الاختبارات المنفَّذة** | `tests/test_auto_route_streaming.py` (4، جديد) + `tests/test_task_classifier_routing.py` (6، جديد) + `test_ai_model_connectivity`/`test_agent_copilot_and_ui`/`test_llm_streaming`/`test_chat_ui` (19) + **فحص حيّ فعلي** بثلاث حالات |
+| **نتائج الاختبارات** | ✅ **10** جديدة + **19** انحدار + فحص حيّ: `CODING` → محلي Qwen (**142** حدث `chat_token`، التوكنات المُجمَّعة == المحتوى) · `GENERAL` → سحابي Gemini (**2** دلتا `token`، التوكنات المُجمَّعة == المحتوى) · العربية → `GENERAL` سحابي |
+| **قيود متبقية** | `_security_route` البديل السحابي (`_call_security_api`) لا يدفق (يُستدعى فقط عند تعطّل Ollama). ومسار `auto` للأسئلة الأمنية يذهب للثالوث **المحلي** بحكم تصميم `ModelRouter` (سياسة local-first) — بينما الموجّه الموحّد (سحابي أولًا) يُستخدم في `GENERAL` وفرع `api:`. توحيد سياسة `auto` مع سياسة المالك السحابية قرار تصميمي منفصل. |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+> **ملاحظة ترقيم (تحتاج قرار المالك):** مسار النماذج/الواجهة (طلب المالك، `LEDGER-020…025`) استهلك الأرقام التي كانت الخطة تحجزها لـ`M3` (`020…022`) و`M4` (`023…026`). لم يُعدَّل `docs/IMPLEMENTATION_PLAN.md` بعد. المقترح: إزاحة مراحل الخطة (M3 → `026…028`, M4 → `029…032`, …) أو عزل مسار النماذج بادئةً مستقلة. القرار قبل بدء «M3 الرسمي».
 
 ---
 
