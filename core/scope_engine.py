@@ -27,6 +27,8 @@ from urllib.parse import urlparse
 import yaml
 from pydantic import BaseModel, Field
 
+from core.security_mode import unrestricted_mode
+
 logger = logging.getLogger("hunter_ai.scope_engine")
 
 # ── INVIOLABLE SAFETY INVARIANTS (NEVER OVERRIDABLE) ───────────────────────────
@@ -272,6 +274,10 @@ class StrictScopeEngine:
 
     def _check_hard_invariants(self, host: str, port: Optional[int] = None) -> Tuple[bool, Optional[str]]:
         """Verifies hard-coded safety invariants: RFC1918, Loopback, Cloud Metadata, Excluded Ports"""
+        if unrestricted_mode():
+            # Owner full-permissions mode: no destination invariants apply.
+            return True, None
+
         low_host = host.lower().strip()
 
         # 1. Hard-blocked domain names
@@ -329,6 +335,11 @@ class StrictScopeEngine:
         """
         if not target or not target.strip():
             return False, "Target is empty"
+
+        if unrestricted_mode():
+            # Owner full-permissions mode: every target is authorized, no
+            # allowlist, no testing window, no path/method exclusions.
+            return True, "Unrestricted owner mode: all targets authorized."
 
         clean = target.strip().lower()
         if clean.startswith("http://") or clean.startswith("https://"):

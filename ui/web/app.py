@@ -62,11 +62,18 @@ app = FastAPI(title="PentestAI Unified", lifespan=lifespan)
 BASE = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 _HTML_PATH = BASE / "templates" / "index.html"
+_CHAT_PATH = BASE / "templates" / "chat.html"
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
     return HTMLResponse(content=_HTML_PATH.read_text(encoding="utf-8"))
+
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_ui():
+    """واجهة محادثة شبيهة بـ Claude — chat-first مع منتقي موديلات موحّد"""
+    return HTMLResponse(content=_CHAT_PATH.read_text(encoding="utf-8"))
 
 
 @app.get("/api/status")
@@ -117,6 +124,13 @@ async def get_ai_diagnostics():
     """تقرير تشخيصي حي لحالة الموديلات المحلية والسحابية"""
     from core.ai_diagnostics import run_full_ai_diagnostics
     return await run_full_ai_diagnostics(verbose=False)
+
+
+@app.get("/api/models/catalog")
+async def get_models_catalog():
+    """كتالوج موحّد لكل الموديلات المتاحة (محلي + كل السحابي) مع السياسة الفعالة"""
+    from core.llm_router import get_llm_router
+    return await get_llm_router().catalog()
 
 
 # ── Global Static Reasoning Engine Instance ──
@@ -1291,6 +1305,15 @@ def get_burp_gateway():
 
 from agents.burp_agent.integrations.api import create_burp_api_router
 app.include_router(create_burp_api_router(get_burp_agent()))
+
+# ── CLI Engine Workers (Phase 1) ──────────────────────────────────────────
+from ui.web.engines_api import create_engines_router
+app.include_router(create_engines_router())
+
+# ── Run Control & Budget (Phase 3) ────────────────────────────────────────
+from ui.web.control_api import create_budget_router, create_run_control_router
+app.include_router(create_run_control_router())
+app.include_router(create_budget_router())
 
 
 # ── V27.2 METAMORPHIC TRIAD, ATTACK SURFACE GRAPH & LEDGER ENDPOINTS ──

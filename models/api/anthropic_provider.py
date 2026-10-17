@@ -35,5 +35,27 @@ class AnthropicProvider(BaseModel):
         except Exception as e:
             return ModelResponse(content="", model_name=self.name, role=self.role, error=str(e))
 
+    async def stream(self, messages: List[Message], on_token=None) -> ModelResponse:
+        """Native Anthropic SSE streaming."""
+        if not AVAILABLE or not self.api_key:
+            return ModelResponse(content="", model_name=self.name, role=self.role, error="Not configured")
+        parts: List[str] = []
+        try:
+            client = sdk.AsyncAnthropic(api_key=self.api_key)
+            system = next((m.content for m in messages if m.role == "system"), "")
+            user_msgs = [{"role": m.role, "content": m.content} for m in messages if m.role != "system"]
+            async with client.messages.stream(model=self.model, max_tokens=4096,
+                                              system=system, messages=user_msgs) as s:
+                async for text in s.text_stream:
+                    if text:
+                        parts.append(text)
+                        if on_token:
+                            await on_token(text)
+            content = "".join(parts)
+            return ModelResponse(content=content, model_name=self.name, role=self.role,
+                                 error=None if content else "empty stream")
+        except Exception as e:
+            return ModelResponse(content="".join(parts), model_name=self.name, role=self.role, error=str(e))
+
     async def is_available(self) -> bool:
         return bool(AVAILABLE and self.api_key)

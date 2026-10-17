@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from core.governance.policy_engine import HIGH_RISK_ACTIVITIES
+from core.security_mode import unrestricted_mode
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,10 @@ class GovernedTaskRouter:
         التحقق مما إذا كانت المهمة تتطلب موافقة بشرية مسبقة
         (فحوصات التنفيذ النشط عالية الخطورة)
         """
+        if unrestricted_mode():
+            # Owner full-permissions mode: no approval gate.
+            return False
+
         if not task.requires_execution:
             return False
 

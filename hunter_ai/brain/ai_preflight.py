@@ -94,6 +94,8 @@ class AIPreflightResult:
     status: str = "FAILED"  # "AI_READY", "DEGRADED", "FAILED"
     allowed: bool = False
     degraded: bool = False
+    backend: str = "ollama"       # "ollama" | "cloud"
+    backend_detail: str = ""      # e.g. "gemini:gemini-3.8-flash"
     error_message: Optional[str] = None
     remediation_steps: List[str] = field(default_factory=list)
 
@@ -111,6 +113,8 @@ class AIPreflightResult:
             "status": self.status,
             "allowed": self.allowed,
             "degraded": self.degraded,
+            "backend": self.backend,
+            "backend_detail": self.backend_detail,
             "error_message": self.error_message,
             "remediation_steps": self.remediation_steps,
         }
@@ -231,13 +235,38 @@ class AIPreflightGate:
             return False, (time.time() - t0) * 1000.0, "", str(e)
 
     @classmethod
+    def _cloud_ready(cls, res: "AIPreflightResult", cloud_backend: str,
+                     reason: Optional[str] = None) -> AIPreflightResult:
+        """Certify the cognitive layer through the unified cloud router.
+
+        The local Ollama triad is unreachable, but a cloud provider key is
+        configured, so AI reasoning is still available. ``online`` deliberately
+        stays ``False`` (the local host really is down) and ``backend`` records
+        which backend is actually carrying the cognitive load.
+        """
+        res.backend = "cloud"
+        res.backend_detail = cloud_backend
+        res.status = "AI_READY"
+        res.allowed = True
+        res.degraded = False
+        res.inference_ok = True
+        res.inference_model = cloud_backend
+        res.error_message = None
+        res.remediation_steps = [
+            f"Local Ollama unavailable ({reason or 'offline'}); "
+            f"cognitive layer routed to {cloud_backend} via the unified router."
+        ]
+        return res
+
+    @classmethod
     def run_preflight(
         cls,
         host: Optional[str] = None,
         allow_degraded: bool = False,
         timeout_sec: float = 5.0,
         inference_timeout_sec: float = 45.0,
-        skip_inference_test: bool = False
+        skip_inference_test: bool = False,
+        cloud_backend: Optional[str] = None
     ) -> AIPreflightResult:
         """
         Executes synchronous 3-Tier Preflight check with multi-model fallback.
@@ -252,6 +281,8 @@ class AIPreflightGate:
         res.all_available_tags = tags
 
         if not online:
+            if cloud_backend:
+                return cls._cloud_ready(res, cloud_backend, conn_err)
             res.error_message = conn_err or "Ollama host unreachable"
             res.remediation_steps = [
                 "Start Ollama service: 'ollama serve'",
@@ -318,6 +349,8 @@ class AIPreflightGate:
                     f"Optional models missing: {', '.join(missing_roles)}. Pipeline will use available local models or deterministic fallbacks."
                 )
         else:
+            if cloud_backend:
+                return cls._cloud_ready(res, cloud_backend)
             if missing_roles:
                 pull_cmds = [f"ollama pull {REQUIRED_MODELS[k]['canonical']}" for k, v in model_results.items() if not v.available]
                 res.remediation_steps.extend(pull_cmds)
@@ -342,7 +375,8 @@ class AIPreflightGate:
         allow_degraded: bool = False,
         timeout_sec: float = 5.0,
         inference_timeout_sec: float = 45.0,
-        skip_inference_test: bool = False
+        skip_inference_test: bool = False,
+        cloud_backend: Optional[str] = None
     ) -> AIPreflightResult:
         """Asynchronous execution wrapper for asyncio loops"""
         loop = asyncio.get_running_loop()
@@ -354,6 +388,7 @@ class AIPreflightGate:
             timeout_sec,
             inference_timeout_sec,
             skip_inference_test,
+            cloud_backend,
         )
 
     @classmethod
@@ -379,6 +414,8 @@ class AIPreflightGate:
         host_status = f"ONLINE ({result.latency_ms:.1f}ms)" if result.online else "OFFLINE / UNREACHABLE"
         host_icon = dot_green if result.online else dot_red
         lines.append(f"║  Host Endpoint    : {result.endpoint:<28} {host_icon} {host_status:<17} ║")
+        if result.backend == "cloud":
+            lines.append(f"║  Cloud Backend    : {result.backend_detail:<28} {dot_green} ACTIVE            ║")
 
         # Models Lines
         if result.models:
@@ -403,7 +440,8 @@ class AIPreflightGate:
 
         # Mode Line
         if result.status == "AI_READY":
-            mode_desc = "AI_POWERED (Full Cognitive Triad Active)"
+            mode_desc = ("AI_POWERED (Cloud Router Active)" if result.backend == "cloud"
+                         else "AI_POWERED (Full Cognitive Triad Active)")
             mode_icon = dot_green
         elif result.status == "DEGRADED":
             mode_desc = "DEGRADED_MODE (Deterministic Heuristics Only)"
@@ -417,7 +455,10 @@ class AIPreflightGate:
 
         # Guidance / Remediation
         if result.status == "AI_READY":
-            lines.append(f"║  ✅ Local AI model server certified and ready for autonomous hunting. ║")
+            if result.backend == "cloud":
+                lines.append(f"║  ✅ Cloud cognitive layer certified: {result.backend_detail:<34}║")
+            else:
+                lines.append(f"║  ✅ Local AI model server certified and ready for autonomous hunting. ║")
         elif result.status == "DEGRADED":
             lines.append(f"║  ⚠️  AI Reasoning is DISABLED. All stages running in deterministic mode.║")
             lines.append(f"║  ⚠️  No LLM queries will be issued. Findings use pure rule verification.║")

@@ -27,6 +27,7 @@ from urllib.parse import urlparse, urljoin, parse_qs
 import httpx
 
 from core.scope_guard import ScopeGuard
+from core.security_mode import unrestricted_mode
 from tools.tool_manager import ToolManager, ToolResult
 from tools.network_tools import NetworkTools
 from tools.web_tools import WebTools
@@ -149,9 +150,20 @@ class HunterPipelineOrchestrator:
         self.allow_no_ai = allow_no_ai
         self.ollama_host = ollama_host
         self.skip_ai_probe = skip_ai_probe
+        if unrestricted_mode():
+            # Owner full-permissions mode: active testing and destructive
+            # actions are always allowed, no human approval is required, and a
+            # missing/offline model server never hard-aborts the run (it falls
+            # back to deterministic heuristics; result-integrity gates such as
+            # the Evidence Court still apply).
+            self.authorized = True
+            self.no_destructive_tests = False
+            self.require_human_approval = False
+            self.allow_no_ai = True
         self.inference_timeout = inference_timeout
         self.ai_preflight_result: Optional[AIPreflightResult] = None
         self.ai_degraded: bool = False
+        self.ai_backend: str = "ollama"   # "ollama" | "cloud" (set by stage_ai_preflight)
         self.program_metadata: Optional[ProgramMetadata] = None
 
         # Target normalization
@@ -585,6 +597,23 @@ class HunterPipelineOrchestrator:
             logger.error(f"Failed to save artifact {filename}: {e}")
             return file_path
 
+    async def _resolve_cloud_backend(self) -> Optional[str]:
+        """Return ``"<provider>:<model>"`` for the preferred cloud provider.
+
+        Consults the unified router so the pipeline honours the same
+        cloud-first policy (``HUNTER_LLM_POLICY``) as the rest of the platform.
+        Returns ``None`` when no cloud key is configured.
+        """
+        try:
+            from core.llm_router import get_llm_router
+
+            specs = get_llm_router().cloud_specs(only_available=True)
+            if specs:
+                return f"{specs[0].id}:{specs[0].default_model}"
+        except Exception as e:  # noqa: BLE001 - probe failures are non-fatal
+            logger.debug(f"[preflight] cloud backend probe failed: {e}")
+        return None
+
     # ── STAGE 00: AI PREFLIGHT GATE ────────────────────────────────────────────
     async def stage_ai_preflight(self) -> bool:
         self.engagement_mgr.start_stage("00_preflight")
@@ -596,6 +625,10 @@ class HunterPipelineOrchestrator:
         # Compute dynamic inference timeout with cold-start tolerance
         inf_timeout = self.inference_timeout or max(45.0, min(120.0, 15.0 * self.timeout_multiplier))
 
+        # Cloud-first fallback: if a cloud provider key is configured the
+        # cognitive layer is available even when local Ollama is down.
+        cloud_backend = await self._resolve_cloud_backend()
+
         # Run 3-tier preflight check asynchronously
         result = await AIPreflightGate.run_preflight_async(
             host=self.ollama_host,
@@ -603,12 +636,28 @@ class HunterPipelineOrchestrator:
             timeout_sec=5.0,
             inference_timeout_sec=inf_timeout,
             skip_inference_test=self.skip_ai_probe,
+            cloud_backend=cloud_backend,
         )
         self.ai_preflight_result = result
         self.ai_degraded = result.degraded
+        self.ai_backend = getattr(result, "backend", "ollama")
 
         # Advance state machine based on result
-        if not result.online:
+        if self.ai_backend == "cloud":
+            # Local triad is offline but the unified cloud router is ready.
+            self.fsm.transition_to(
+                HunterState.MODEL_VERIFYING,
+                f"Resolving cloud model ({result.backend_detail})",
+            )
+            self.fsm.transition_to(
+                HunterState.INFERENCE_VERIFYING,
+                "Certifying cloud cognitive endpoint",
+            )
+            self.fsm.transition_to(
+                HunterState.AI_READY,
+                f"Cloud cognitive layer ready ({result.backend_detail})",
+            )
+        elif not result.online:
             self.fsm.transition_to(HunterState.AI_UNAVAILABLE, result.error_message or "Ollama host unreachable")
             if self.allow_no_ai:
                 self.fsm.transition_to(HunterState.DEGRADED_MODE, "Continuing in deterministic heuristic mode (--allow-no-ai)")
@@ -646,7 +695,9 @@ class HunterPipelineOrchestrator:
             await self._emit("preflight_failed", message=f"AI Preflight Gate FAILED ({result.error_message or 'Server down'}). Pipeline aborted.")
             return False
 
-        if result.degraded:
+        if self.ai_backend == "cloud":
+            await self._emit("preflight_cloud", message=f"Local triad offline — cognitive layer routed to {result.backend_detail}")
+        elif result.degraded:
             await self._emit("preflight_degraded", message="AI Preflight Gate: Operating in DEGRADED_MODE (Deterministic Heuristics Only)")
         else:
             await self._emit("preflight_passed", message=f"AI Preflight Gate: AI_READY (Latency: {result.latency_ms:.1f}ms, Inference: {result.inference_latency_ms:.1f}ms)")
@@ -2047,7 +2098,9 @@ class HunterPipelineOrchestrator:
         os.makedirs(legacy_dir, exist_ok=True)
 
         ranked = PriorityEngine.rank_findings(self.findings)
-        findings_data = [{"priority": tier, **item.model_dump()} for tier, item in ranked]
+        findings_data = self.secret_sanitizer.sanitize_data([
+            {"priority": tier, **item.model_dump()} for tier, item in ranked
+        ])
 
         # JSON Summary
         json_path = os.path.join(reports_dir, "final_findings.json")
@@ -2128,7 +2181,7 @@ class HunterPipelineOrchestrator:
                         md_lines.append(f"- **Reproduction**: `{f.reproduction.curl_command}`")
                     md_lines.append(f"- **Remediation**: {f.remediation}\n")
 
-        md_content = "\n".join(md_lines)
+        md_content = self.secret_sanitizer.sanitize_text("\n".join(md_lines))
         md_path = os.path.join(reports_dir, "bug_bounty_report.md")
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_content)
@@ -2164,7 +2217,7 @@ class HunterPipelineOrchestrator:
   </div>\n"""
         html_content += "</body>\n</html>"
         with open(html_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
+            f.write(self.secret_sanitizer.sanitize_text(html_content))
 
         # Compute Temporal Diff against prior engagement run
         diff_info = {}

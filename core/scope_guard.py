@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from typing import List, Dict, Tuple, Optional, Set
 
 from core.scope_engine import ScopePolicy, StrictScopeEngine, normalize_ip_literal
+from core.security_mode import unrestricted_mode
 
 # Single reference engine, used ONLY for the non-overridable safety invariants
 # (loopback / cloud metadata / RFC1918). This is what unifies every legacy scope
@@ -108,6 +109,9 @@ class ScopeGuard:
         """
         if not target or not target.strip():
             return False, "Target is empty"
+
+        if unrestricted_mode():
+            return True, "Unrestricted owner mode: all targets authorized."
 
         clean = target.strip().lower()
         # Parse hostname

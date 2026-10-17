@@ -290,6 +290,150 @@
 
 ---
 
+## LEDGER-017 — توحيد Scope/Policy (M2 / P1-35)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | محرّك نطاق مرجعي واحد (`StrictScopeEngine`) والبوابات الأخرى تفوّض إليه؛ ولا محرّك «مفتوح افتراضيًا» |
+| **الحالة السابقة** | `PARTIAL` — `core/gateway/policy_engine.PolicyEngine` كان `full_permissions=True` افتراضيًا (`ScopeRule(target="*", mode=ACTIVE)` + حدّ تكرار 99999) ⇒ بوابة مفتوحة. و`agents/security_intelligence/scope_guard.ScopeGuard` كان افتراضه `ScopeRule(target="*")`. و`core/scope_guard.ScopeGuard` بلا ثوابت IP إطلاقًا (permissive عند غياب allowlist، مع `in_scope=[]` في Burp). |
+| **الملفات المفحوصة** | `core/gateway/policy_engine.py` · `core/scope_engine.py` · `core/scope_guard.py` · `core/network_scope_guard.py` · `agents/security_intelligence/scope_guard.py` · `agents/skills/safe_sqli_assessment.py` · `core/control_plane/policy_gate.py` · `core/governance/policy_engine.py` |
+| **الملفات المتغيرة** | `core/gateway/policy_engine.py` · `core/scope_guard.py` · `core/network_scope_guard.py` · `agents/security_intelligence/scope_guard.py` · `tests/test_scope_policy_unification.py` (جديد) |
+| **وصف التغيير** | 1) `PolicyEngine(full_permissions=False)` افتراضيًا، وعند غياب `scope_guard` يُوصَل بـ`_ReferenceScopeGuard` الذي يفوّض كل قرار إلى `StrictScopeEngine` fail-closed (يرفض ما لا صلاحية له). 2) `enable_full_permissions()` صار opt-in صريحًا ومُسجّلًا (لا افتراضي). 3) `agents...ScopeGuard` افتراضه fail-closed (`target=""`). 4) `core/scope_guard.ScopeGuard` يفوّض الثوابت غير القابلة للتجاوز إلى المحرّك المرجعي (مع إبقاء تجاوز IP الصريح لـlab). 5) `NetworkScopeGuard` افتراضه fail-closed. |
+| **الاختبارات المنفَّذة** | `tests/test_scope_policy_unification.py` (24) + `test_policy_engine`/`test_governed_tool_gateway`/`test_scope_and_false_positives`/`test_policy_invariants_on_commands` (38) + حزم النطاق/الحوكمة/Burp (96) + الشبكة/v27/integration (82) + خط الأنابيب/الحوكمة (62) |
+| **نتائج الاختبارات** | ✅ **24** + **38** + **96** + **82** + **62 نجحت** + `py_compile` نظيف |
+| **قيود متبقية** | `agents/skills/safe_sqli_assessment.py` يملك `ScopePolicy`/`ScopeGate` مهارة-محليين (تطبيق نطاق رابع) — لم يُوحَّد بعد. `core/gateway/policy_engine.py` و`core/governance/policy_engine.py` يتشاركان الاسم `PolicyEngine` (الأول صار fail-closed؛ الثاني fail-closed أصلًا) — إعادة التسمية مرشّحة لكنها تكسر الواجهة. |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-018 — إغلاق تجاوزات صيغ IP (M2 / P1-36)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | كل ترميز نصّي لعنوان IP محظور (loopback/metadata/RFC1918) يُرفض — لا تجاوز بصيغة بديلة |
+| **الحالة السابقة** | `PARTIAL` — `_check_hard_invariants` استخدم `ipaddress.ip_address` فقط؛ فـ`127.1` و`2130706433` و`0x7f000001` و`0177.0.0.1` و`::ffff:127.0.0.1` و`[::1]` تفشل التحليل فتُعامَل كأسماء مضيفين وتتجاوز الحجب (خصوصًا مع fallback المتساهل). |
+| **الملفات المفحوصة** | `core/scope_engine.py` (`_check_hard_invariants`, `is_allowed`, `_compile_rule`) |
+| **الملفات المتغيرة** | `core/scope_engine.py` |
+| **وصف التغيير** | أُضيف `normalize_ip_literal()` الذي يحلّل الترميزات القياسية + dotted-short + العشري + الست عشري + الثماني (عبر `socket.inet_aton`) + IPv6 المغلّف/المُشوَّن/المُقوَّس، ويحوّل `::ffff:x` عبر `ipv4_mapped`. واستُخدم في الثوابت. وأُصلح تحليل المضيف في `is_allowed` ليدعم IPv6 بين قوسين مع منفذ. وأُضيف `ScopePolicy.fail_closed` (افتراضيًا False للتوافق الخلفي). |
+| **الاختبارات المنفَّذة** | `tests/test_scope_policy_unification.py::test_reference_engine_blocks_forbidden_destination_encodings` (16 صيغة) + كتلة النطاق الكاملة (96) |
+| **نتائج الاختبارات** | ✅ نجحت (192 عبر حزم M2) + `py_compile` نظيف |
+| **قيود متبقية** | DNS-rebinding (اسم مضيف عام يُحلّ إلى IP داخلي) خارج النطاق — الثوابت تعمل على الحرف لا على نتيجة التحليل. |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-019 — تنقية الأسرار عند مخارج artifacts (M2 / P0-15)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | لا يظهر سرّ بنصّه في أي ملف مخرجات (raw/parsed/meta/timeline/manifest/lineage/log/reports) |
+| **الحالة السابقة** | `PARTIAL` — `save_tool_artifact` كتب `raw_output`/`parsed_data`/`command`/`error` حرفيًّا؛ `save_stage_file`/`log`/`record_timeline_event`/`_save_manifest`/`_save_timeline`/`_save_lineage` بلا تنقية؛ وتقريرات `_generate_reports` تُكتب مباشرة. |
+| **الملفات المفحوصة** | `hunter_ai/pipeline/engagement_manager.py` · `hunter_ai/pipeline/pipeline_orchestrator.py` (`_save_stage_artifact`, `_generate_reports`) · `core/secret_sanitizer.py` |
+| **الملفات المتغيرة** | `hunter_ai/pipeline/engagement_manager.py` · `hunter_ai/pipeline/pipeline_orchestrator.py` · `core/secret_sanitizer.py` · `tests/test_artifact_secret_sanitization.py` (جديد) |
+| **وصف التغيير** | 1) `EngagementManager` يحمل `SecretSanitizer` ويُنقّي كل مخرج: `save_tool_artifact` (raw/command/parsed/error)، `save_stage_file`، `log`، `record_timeline_event` (message+kwargs)، `record_lineage` (asset_value/metadata)، و`_save_manifest`/`_save_timeline`/`_save_lineage`. 2) `_generate_reports` يُنقّي `findings_data` والنصّين MD/HTML قبل الكتابة. 3) تعميم قاعدة سِكَك الاتصال في `SecretSanitizer` لتغطية أي مخطط `scheme://user:pass@host` (كانت postgres/mysql/redis فقط). |
+| **الاختبارات المنفَّذة** | `tests/test_artifact_secret_sanitization.py` (2) + `test_enterprise_casm`/`test_artifact_based_recon`/`test_program_intelligence_and_triad` (21) + خط الأنابيب (62) |
+| **نتائج الاختبارات** | ✅ **2** + **21** + **62 نجحت** + `py_compile` نظيف |
+| **قيود متبقية** | أنماط الأسرار تُغطّي المزوّدين الشائعين فقط؛ أسرار مجهولة الشكل عالية الإنتروبيا لا تُقنَّع تلقائيًا (مرشّح للتوسيع). |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-019b — وضع المالك: صلاحيات كاملة للتنفيذ (M2.5 / طلب المالك)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | الأيجنت ينفّذ **بصلاحيات كاملة** افتراضيًا: أي هدف (بما فيها loopback/metadata/RFC1918)، أي أمر (بلا حجب «مدمّر»)، بلا موافقة بشرية، وبلا توقّف عند تعذّر خادم النماذج. **قيود النتائج لا تُمسّ** (PoE + تنقية الأسرار). |
+| **الحالة السابقة** | `PARTIAL` — كل البوابات fail-closed افتراضيًا (LEDGER-017/018)، وحجب الأوامر المدمّرة (`PolicyGate`)، وبوابة موافقة بشرية، وثالوث Ollama إلزامي (يتوقّف عند غيابه). |
+| **الملفات المفحوصة** | `core/scope_engine.py` · `core/gateway/policy_engine.py` · `core/control_plane/policy_gate.py` · `core/execution_modes.py` · `core/governance/task_router.py` · `core/governance/policy_engine.py` · `core/scope_guard.py` · `core/network_scope_guard.py` · `agents/security_intelligence/scope_guard.py` · `agents/skills/safe_sqli_assessment.py` · `hunter_ai/pipeline/pipeline_orchestrator.py` · `main.py` |
+| **الملفات المتغيرة** | `core/security_mode.py` (جديد) · `core/scope_engine.py` · `core/gateway/policy_engine.py` · `core/control_plane/policy_gate.py` · `core/execution_modes.py` · `core/governance/task_router.py` · `core/governance/policy_engine.py` · `core/scope_guard.py` · `agents/security_intelligence/scope_guard.py` · `agents/skills/safe_sqli_assessment.py` · `hunter_ai/pipeline/pipeline_orchestrator.py` · `main.py` · `tests/conftest.py` (جديد) · `tests/test_unrestricted_mode.py` (جديد) |
+| **وصف التغيير** | مفتاح واحد `core/security_mode.unrestricted_mode()` يقرأ `HUNTER_UNRESTRICTED` وافتراضه **مفعّل** (صلاحيات كاملة). أُوصل في: `StrictScopeEngine.is_allowed`/`_check_hard_invariants`، `PolicyEngine` (كل الطلبات مقبولة، وقرار TIER-4 لا يُحجب)، `PolicyGate.evaluate`، `HumanApprovalGate`, `ModeManager.assert_active_allowed`، `GovernedTaskRouter`/`GovernancePolicyEngine.requires_human_approval`، `core.scope_guard.ScopeGuard`، `agents...ScopeGuard`، `ScopeGate` في مهارة SQLi، و`HunterPipelineOrchestrator.__init__` (يفرض `authorized=True`، `no_destructive_tests=False`، `allow_no_ai=True`). المعكوس: `HUNTER_UNRESTRICTED=0` أو `python main.py --governed`. `tests/conftest.py` يفرض الوضع المحكوم في الاختبارات، و`tests/test_unrestricted_mode.py` يُثبت الوضع المفتوح **وأنّ تقديم finding بلا إثبات ما زال مرفوضًا** (PoE) وأنّ تنقية الأسرار ما زالت تعمل. |
+| **الاختبارات المنفَّذة** | `tests/test_unrestricted_mode.py` (12، جديد) + الحزم الأمنية/الحوكمة/النطاق (91) + خط الأنابيب/v27/integration (151، مع استثناء 4 اختبارات تحتاج Ollama) |
+| **نتائج الاختبارات** | ✅ **12** + **91** + **151 نجحت** + `py_compile` نظيف |
+| **قيود متبقية** | 4 اختبارات خط أنابيب (`test_orchestrator_safe_mode_restricted`/`test_orchestrator_authorized_mode`/`test_orchestrator_passive_profile_and_diff`/`test_orchestrator_artifact_generation`) تتطلّب خادم Ollama شغّالًا (بيئية — أُثبت فشلها في HEAD عبر `git stash`). |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-020 — الموجّه الموحّد للموديلات (M3a / سحابي أولًا ↔ محلي)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | كتالوج واحد لكل الموديلات (محلي + كل السحابي) وسياسة موحّدة: **سحابي أولًا لو فيه مفتاح، وإلا محلي**؛ لا شيء مثبّت على مزوّد واحد |
+| **الحالة السابقة** | `PARTIAL` — `models/api/*` (gemini/openai/anthropic/deepseek/groq/openrouter/taskade) موجودة لكن غير موصولة بموجّه واحد؛ وقناة المحادثة العامة (`orchestrator/router._general_route`) مثبّتة على Ollama محلي (`qwen2.5-coder:14b`)؛ وخط الأنابيب يشترط ثالوث Ollama. |
+| **الملفات المفحوصة** | `models/api/*_provider.py` · `models/base_model.py` · `models/ollama_manager.py` · `core/llm_config/manager.py` · `config/models.yaml` · `core/smart_orchestrator.py` · `orchestrator/router.py` · `ui/web/app.py` |
+| **الملفات المتغيرة** | `core/llm_router.py` (جديد) · `orchestrator/router.py` · `ui/web/app.py` · `tests/test_llm_router.py` (جديد) |
+| **وصف التغيير** | `LLMRouter` يُجمّع المزوّدين السحابيين (مرتّبين بأولوية المالك: Gemini → DeepSeek → Claude → OpenAI → Groq → OpenRouter → Taskade) + موديلات Ollama في كتالوج واحد، ويقدّم `complete()` موحّدًا يتبع `HUNTER_LLM_POLICY` (`cloud_first` افتراضيًا، وأيضًا `local_first`/`local_only`/`cloud_only`). صيغة المعرّفات: `api:<provider>:<model>` و`local:<model>`. أُضيف `GET /api/models/catalog` للواجهة، ورُبط `_general_route` بالموجّه (سحابي أولًا مع رجوع آمن للمحلي). |
+| **الاختبارات المنفَّذة** | `tests/test_llm_router.py` (14، جديد) + `test_ai_model_connectivity`/`test_agent_copilot_and_ui`/`test_ai_diagnostics`/`test_static_reasoning_engine` (30) |
+| **نتائج الاختبارات** | ✅ **14** + **30 نجحت** + `py_compile` نظيف |
+| **قيود متبقية** | الواجهة الشبيهة بـ Claude (منتقي الموديلات + streaming) = المرحلة التالية (M3b). وحتى الآن لم يُوصَل ثالوث خط الأنابيب (`AIPreflightGate`) بالموجّه السحابي — مازال يسبر Ollama المحلي فقط. |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-021 — واجهة محادثة شبيهة بـ Claude (M3b)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | واجهة chat-first أنيقة على `/chat`: شريط جانبي للمحادثات + منتقي موديلات موحّد (كل المزوّدين) + لوحة «خطوات التنفيذ» الحقيقية + عارض Markdown |
+| **الحالة السابقة** | `PARTIAL` — الواجهة الحالية (`index.html`) لوحة تحكّم عامة؛ المحادثة مجرّد قسم صغير، ولا منتقي موديلات موحّد، وصيغة `api:<model>` القديمة تُوجَّه دائمًا عبر OpenRouter. |
+| **الملفات المفحوصة** | `ui/web/app.py` (`/`, `/ws/chat`) · `ui/web/templates/index.html` · `ui/web/static/app.js` · `core/smart_orchestrator.py` (`chat`) |
+| **الملفات المتغيرة** | `ui/web/templates/chat.html` (جديد) · `ui/web/static/chat.css` (جديد) · `ui/web/static/chat.js` (جديد) · `ui/web/app.py` (مسار `/chat`) · `core/smart_orchestrator.py` (توجيه `api:<provider>:<model>` عبر الموجّه) · `tests/test_chat_ui.py` (جديد) |
+| **وصف التغيير** | مسار `/chat` يخدم `chat.html`، وملفّا `chat.css`/`chat.js` عبر `/static`. الواجهة: شريط جانبي (New chat + قائمة محادثات محفوظة في `localStorage` + منتقي موديلات من `GET /api/models/catalog` مجمَّعًا حسب المزوّد، والافتراضي **أول موديل سحابي** التزامًا بسياسة المالك)، ورسائل بجانب المساعد/المستخدم، ولوجة «خطوات التنفيذ» تُعرض من أحداث الـWebSocket الحقيقية (`chat_start`/`task_classified`/`step`/`step_done`/`route_done`) — بلا دفق وهمي. عارض Markdown-lite آمن (تهريب HTML أولًا). ودعم `Shift+Enter`، نسخ الردّ، وحذف المحادثات، ووضع ليلي تلقائي. رُبط `SmartOrchestrator.chat` بالموجّه لصيغة `api:<provider>:<model>` مع إبقاء `api:<model>` القديمة (عبر OpenRouter) للتوافق الخلفي. |
+| **الاختبارات المنفَّذة** | `tests/test_chat_ui.py` (4، جديد) + `test_agent_copilot_and_ui`/`test_ai_model_connectivity`/`test_ai_diagnostics`/`test_llm_router`/`test_unrestricted_mode` (39) + فحص حيّ عبر `TestClient` (`/chat`=200، الأصول=200، الكتالوج `cloud_first` بـ3 اختيارات) |
+| **نتائج الاختبارات** | ✅ **4** + **39 نجحت** + `py_compile` نظيف |
+| **قيود متبقية** | لا دفق tokens حقيقي (المزوّدون السحابيون يرجّعون الردّ كاملًا؛ المحلي عنده `chat_stream` ولم يُوصَل بعد) — **أُغلق في LEDGER-022**. الثالوث السحابي لخط الأنابيب (`AIPreflightGate`) لم يُوصَل بالموجّه — **أُغلق في LEDGER-023**. |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-022 — دفق الرموز الحقيقي (streaming) عبر الموجّه
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | بثّ توكنات حقيقي من الموديل إلى الواجهة: كل محوّل سحابي + Ollama المحلي يدفقان عبر `on_token`، والواجهة ترسم الردّ تدريجيًا |
+| **الحالة السابقة** | `MISSING` — `SmartOrchestrator.chat` كان يستدعي `complete()` ويرجّع الردّ كاملًا؛ الواجهة تعرض نقاط انتظار ثم النصّ كاملًا |
+| **الملفات المفحوصة** | `models/ollama_manager.py` (`chat_stream` موجود ومُهمَل) · `models/api/*_provider.py` · `models/base_model.py` (`ModelResponse`) · `core/llm_router.py` · `core/smart_orchestrator.py` · `ui/web/app.py` (`/ws/chat`) · `ui/web/static/chat.js` |
+| **الملفات المتغيرة** | `models/api/{gemini,openai,deepseek,groq,anthropic,openrouter}_provider.py` (إضافة `stream()`) · `core/llm_router.py` (`complete_stream`, `_dispatch_stream`, `_stream_provider`, `_complete_{cloud,local}_stream`) · `core/smart_orchestrator.py` (`_emit_token` + `complete_stream` في فرع `api:`) · `ui/web/static/chat.js` (معالجة حدث `token`) · `tests/test_llm_streaming.py` (جديد) |
+| **وصف التغيير** | كل مزوّد يملك نقله: Gemini عبر SSE الأصلي (`streamGenerateContent?alt=sse`)، Anthropic عبر SDK stream، وOpenAI/DeepSeek/Groq عبر SDK `stream=True`، وOpenRouter عبر SSE على httpx. الموجّه يجرّب `stream()` أوّلًا وإن لم يتوفّر (مثل Taskade) يرسل الردّ كاملًا كرقاقة واحدة — **بلا دفق وهمي**. المحلي يستخدم `OllamaManager.chat_stream` القائم. `SmartOrchestrator` يبثّ أحداث `token` فتمرّ عبر الـWebSocket، و`chat.js` يضيفها تدريجيًا. |
+| **الاختبارات المنفَّذة** | `tests/test_llm_streaming.py` (9) + **فحص حيّ فعلي** عبر Gemini: `complete_stream` أرجعت `STREAMED=True` برقاقتين حقيقيتين، والتوكنات المُجمَّعة == المحتوى |
+| **نتائج الاختبارات** | ✅ **9** + 74 انحدار + 1 حيّ (opt-in `HUNTER_LIVE_LLM=1`) |
+| **قيود متبقية** | دفق فرع `auto` (المُوجّه الذكي للمهام) لم يُوصَل بعد — يبقى غير مُدفَّق؛ الدفق مُطبَّق على الموديل المختار يدويًا (وهو الافتراضي في الواجهة). |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-023 — بوابة الثالوث الواعية بالسحابة (خط الأنابيب ↔ الموجّه)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | عدم إجهاض خط الأنابيب عند تعذّر Ollama المحلي ما دام مفتاح سحابي مُهيّأ — تُعتمد الطبقة الإدراكية السحابية عبر الموجّه الموحّد |
+| **الحالة السابقة** | `PARTIAL` — `AIPreflightGate` يسبر Ollama فقط؛ إذا كان متوقفًا يُجهض التشغيل في الوضع المحكوم (`ABORTED`) بلا بديل سحابي |
+| **الملفات المفحوصة** | `hunter_ai/brain/ai_preflight.py` · `hunter_ai/pipeline/pipeline_orchestrator.py` (`stage_ai_preflight`) · `hunter_ai/pipeline/state_machine.py` (قواعد الانتقال) · `core/llm_router.py` |
+| **الملفات المتغيرة** | `hunter_ai/brain/ai_preflight.py` (`backend`/`backend_detail` + `_cloud_ready` + `cloud_backend` في `run_preflight`/`run_preflight_async` + البانر) · `hunter_ai/pipeline/pipeline_orchestrator.py` (`_resolve_cloud_backend`, `ai_backend`, مسار FSM سحابي, حدث `preflight_cloud`) · `tests/test_cloud_preflight.py` (جديد) |
+| **وصف التغيير** | يمرّر خط الأنابيب `cloud_backend` (أول مزوّد مفعّل من الموجّه) إلى البوابة. إن تعذّر المحلي، تُصدر البوابة نتيجة `AI_READY` بـ`backend="cloud"` مع **إبقاء `online=False`** (صدق: المضيف المحلي فعلًا متوقف). الآلة الحالية تنتقل بشكل شرعي `AI_CONNECTING → MODEL_VERIFYING → INFERENCE_VERIFYING → AI_READY` (كان ربطًا مباشرًا غير مسموح — كشفه الفحص الحيّ وأُصلح). البانر يعلن المزوّد السحابي. |
+| **الاختبارات المنفَّذة** | `tests/test_cloud_preflight.py` (9، منها اختبار تكامل يبني الأوركستراتور الحقيقي ويؤكّد `stage_ai_preflight()==True` و`ai_backend=="cloud"` و`online=False`) + 23 في `test_ai_preflight` + **فحص حيّ متكامل** بالمفتاح الحقيقي |
+| **نتائج الاختبارات** | ✅ **9** + **23** + فحص حيّ: `returns=True`، `ai_backend=cloud`، `AI_READY`، `online=False`، `preflight_cloud` |
+| **قيود متبقية** | `LocalTriadAgent` (التحليل الإدراكي داخل المراحل) ما زال محليًا؛ البديل السحابي يُعتمد عند البوابة. توصيل الاستدلال السحابي داخل مراحل التحليل مهمّة لاحقة. |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
+## LEDGER-024 — تصحيح كتالوج موديلات السحابة (معرّفات ميتة)
+
+| الحقل | القيمة |
+|---|---|
+| **Capability** | كتالوج موديلات حقيقي قابل للتنفيذ (لا معرّفات 404) |
+| **الحالة السابقة** | `BROKEN` — `CLOUD_PROVIDERS` (Gemini) كان يعرض `gemini-2.0-flash`/`2.5`/`1.5-pro`، وكلّها تُرجع **HTTP 404 "no longer available"** من الـAPI الحيّ (اكتُشف بالفحص الحيّ) |
+| **الملفات المفحوصة** | `core/llm_router.py` · `models/api/gemini_provider.py` |
+| **الملفات المتغيرة** | `core/llm_router.py` (موديلات Gemini) · `models/api/gemini_provider.py` (الافتراضي) · `tests/test_llm_router.py` (تحديث التوقّع) |
+| **وصف التغيير** | تحديث معرّفات Gemini إلى المعرّفات العاملة فعليًا (`gemini-3.8-flash`, `gemini-flash-latest`) بعد إثباتها بنداء حيّ + إثبات الدفق SSE. |
+| **الاختبارات المنفَّذة** | فحص حيّ لـ12 معرّفًا (OK/404) + نداء `streamGenerateContent` ناجح |
+| **نتائج الاختبارات** | ✅ معرّفان عاملان ومُدفِّقان مؤكَّدان |
+| **قيود متبقية** | معرّفات بقية المزوّدين لم تُتحقّق حيًّا (لا مفاتيح لها هنا). |
+| **الحالة الحالية** | ✅ **EXISTS** |
+
+---
+
 ## ما بقي خارج نطاق هذه الجلسة (مقصود)
 
 | البند | الحالة | السبب |

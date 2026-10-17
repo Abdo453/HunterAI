@@ -57,6 +57,10 @@ class SmartOrchestrator:
             except Exception:
                 pass
 
+    async def _emit_token(self, delta: str):
+        """Forward a model token delta to the Web UI (real streaming)."""
+        await self._emit("token", {"delta": delta})
+
     async def chat(self, user_input: str, selected_model: str = "auto") -> Dict[str, Any]:
         """
         المحادثة الرئيسية — يستقبل سؤال/مهمة وموديل اختياري ويرجع نتيجة
@@ -115,20 +119,35 @@ class SmartOrchestrator:
             await self._emit("route_done", {"route": route, "models_used": 1})
 
         elif selected_model.startswith("api:"):
-            # تشغيل موديل API محدد يدوياً (OpenRouter)
-            api_model = selected_model.replace("api:", "").strip()
+            # تشغيل موديل سحابي محدد يدوياً عبر الموجّه الموحّد
+            from core.llm_router import get_llm_router
+
+            target = selected_model
+            rest = selected_model[len("api:"):].strip()
+            if rest and ":" not in rest:
+                # صيغة قديمة "api:<model>" ⇒ توجيه عبر OpenRouter (توافق خلفي)
+                target = f"api:openrouter:{rest}"
+
             await self._emit("task_classified", {
                 "task_type": "MANUAL_API",
                 "confidence": 1.0,
-                "reasoning": f"Manual Cloud API model selected: {api_model}",
-                "models": [api_model],
+                "reasoning": f"Manual Cloud API model selected: {target}",
+                "models": [target],
             })
-            await self._emit("step", {"step": 1, "model": api_model, "action": "Querying Cloud API..."})
+            await self._emit("step", {"step": 1, "model": target, "action": "Querying Cloud API..."})
 
-            final = await self._call_openrouter_direct(api_model, user_input, context)
-            route = f"API:{api_model.split('/')[-1]}"
-            models_used = [api_model]
-            await self._emit("step_done", {"step": 1, "model": api_model, "chars": len(final)})
+            messages = [
+                {"role": "system", "content": "You are a helpful expert security and coding AI assistant."},
+                {"role": "user", "content": f"Context:\n{context}\n\nTask: {user_input}" if context else user_input},
+            ]
+            resp = await get_llm_router().complete_stream(
+                messages, prefer=target, on_token=self._emit_token
+            )
+            final = resp.content or (resp.error or "No response from the selected cloud model.")
+
+            route = f"API:{target.rsplit(':', 1)[-1]}"
+            models_used = [target]
+            await self._emit("step_done", {"step": 1, "model": target, "chars": len(final)})
             await self._emit("route_done", {"route": route, "models_used": 1})
         else:
             result = await self.router.route(user_input, context)

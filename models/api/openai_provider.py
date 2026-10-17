@@ -35,5 +35,28 @@ class OpenAIProvider(BaseModel):
         except Exception as e:
             return ModelResponse(content="", model_name=self.name, role=self.role, error=str(e))
 
+    async def stream(self, messages: List[Message], on_token=None) -> ModelResponse:
+        """Token-by-token streaming via the OpenAI-compatible SDK."""
+        if not self.client:
+            return ModelResponse(content="", model_name=self.name, role=self.role, error="Not configured")
+        parts: List[str] = []
+        try:
+            stream = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": m.role, "content": m.content} for m in messages],
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    parts.append(delta)
+                    if on_token:
+                        await on_token(delta)
+            content = "".join(parts)
+            return ModelResponse(content=content, model_name=self.name, role=self.role,
+                                 error=None if content else "empty stream")
+        except Exception as e:
+            return ModelResponse(content="".join(parts), model_name=self.name, role=self.role, error=str(e))
+
     async def is_available(self) -> bool:
         return bool(AVAILABLE and self.api_key)

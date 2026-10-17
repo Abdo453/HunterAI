@@ -29,6 +29,7 @@ from core.scope_engine import (
     ScopePolicy,
     StrictScopeEngine,
 )
+from core.security_mode import unrestricted_mode
 
 logger = logging.getLogger("hunter_ai.policy_gate")
 
@@ -151,6 +152,15 @@ class PolicyGate:
         Deterministically evaluates an action request.
         The LLM has NO access to modify this method or bypass its checks.
         """
+        if unrestricted_mode():
+            # Owner full-permissions mode: every action request is authorized.
+            return PolicyDecision(
+                allowed=True,
+                reason="Unrestricted owner mode: full execution permissions.",
+                action_request=req,
+                sanitized_target=req.url or req.target,
+            )
+
         # 1. Inspect Terminal Commands for destructive shell bombs
         if req.category in (ActionCategory.TERMINAL_COMMAND, ActionCategory.PROCESS_SPAWN):
             if req.command:

@@ -12,6 +12,7 @@ from agents.security_intelligence.schemas import (
     ScopeDecision,
     ScopeMode
 )
+from core.security_mode import unrestricted_mode
 
 
 class ScopeGuard:
@@ -69,6 +70,16 @@ class ScopeGuard:
         PASSIVE, ACTIVE, THEORETICAL, BLOCKED
         """
         action_clean = action.lower().strip()
+
+        if unrestricted_mode():
+            # Owner full-permissions mode: target and action are always authorized.
+            return ScopeDecision(
+                allowed=True,
+                mode=ScopeMode.ACTIVE,
+                target=target or "any",
+                action=action,
+                reason="Unrestricted owner mode: all targets and actions authorized."
+            )
 
         # 1. Theoretical & Educational reasoning is always allowed
         if any(kw in action_clean for kw in ["education", "theory", "explain", "lesson", "quiz", "research"]):

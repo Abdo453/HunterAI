@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
+from core.security_mode import unrestricted_mode
+
 logger = logging.getLogger(__name__)
 
 # Standard forbidden test activities
@@ -100,6 +102,9 @@ class GovernancePolicyEngine:
 
     def requires_human_approval(self, activity_type: str, is_active_execution: bool = True) -> bool:
         """تحديد ما إذا كان النشاط يتطلب موافقة بشرية مسبقة"""
+        if unrestricted_mode():
+            # Owner full-permissions mode: no human-approval queue.
+            return False
         if not is_active_execution:
             return False
         act = activity_type.lower().strip()

@@ -134,20 +134,20 @@
 
 ---
 
-### M2 — حوكمة وسكوب موحّد + تنقية الأسرار  (LEDGER-017…019)
+### M2 — حوكمة وسكوب موحّد + تنقية الأسرار  (LEDGER-017…019) — ✅ منجَزة (اختُبر 192+)
 
-**LEDGER-017 — توحيد Scope/Policy (P1-35)**
+**LEDGER-017 — توحيد Scope/Policy (P1-35) — ✅**
 - أربع تطبيقات نطاق + اثنان باسم `PolicyEngine` أحدهما مفتوح افتراضيًا (`core/gateway/policy_engine.py:33-40`).
 - العمل: محرّك مرجعي واحد (fail-closed افتراضيًا) وبقية الواجهات تفوّض إليه.
-- القبول: اختبار "مفتوح افتراضيًا = مرفوض".
+- القبول: اختبار "مفتوح افتراضيًا = مرفوض". (منفَّذ: `PolicyEngine(full_permissions=False)` + `_ReferenceScopeGuard` يفوض `StrictScopeEngine` + حزمة `test_scope_policy_unification.py`.)
 
-**LEDGER-018 — إغلاق تجاوزات صيغ IP (P1-36)**
+**LEDGER-018 — إغلاق تجاوزات صيغ IP (P1-36) — ✅**
 - `core/scope_engine.py:196-222` و`:311-312`: تعامل مع `127.1`, `2130706433`, `0x7f000001`, IPv6-mapped.
-- القبول: اختبار ثوابت النطاق (loopback/metadata/RFC1918 + كل صيغة).
+- القبول: اختبار ثوابت النطاق (loopback/metadata/RFC1918 + كل صيغة). (منفَّذ: `normalize_ip_literal` + 16 صيغة مُختبَرة.)
 
-**LEDGER-019 — تنقية الأسرار عند مخارج artifacts (P0-15)**
+**LEDGER-019 — تنقية الأسرار عند مخارج artifacts (P0-15) — ✅**
 - `pipeline_orchestrator.py:1320` → `engagement_manager.py:229,201,174`: تمرير `secret_sanitizer` على كل كتابة artifact خام.
-- القبول: اختبار أن سرًّا محقونًا لا يظهر بنصه في أي ملف مخرجات.
+- القبول: اختبار أن سرًّا محقونًا لا يظهر بنصه في أي ملف مخرجات. (منفَّذ: `EngagementManager` يُنقّي كل المخارج + `test_artifact_secret_sanitization.py`.)
 
 ---
 

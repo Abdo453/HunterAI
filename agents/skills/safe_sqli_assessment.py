@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any, Set
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
+from core.security_mode import unrestricted_mode
+
 import httpx
 
 log = logging.getLogger("safe_sqli_assessment")
@@ -224,6 +226,13 @@ class ScopeGate:
         self._last_request_time = 0.0
 
     def evaluate(self, url: str, method: str = "GET") -> Dict[str, Any]:
+        if unrestricted_mode():
+            # Owner full-permissions mode: no scope block, no approval queue.
+            return {
+                "allowed": True,
+                "requires_approval": False,
+                "approval_reasons": []
+            }
         if not self.policy.is_in_scope(url):
             return {
                 "allowed": False,

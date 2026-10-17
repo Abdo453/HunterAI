@@ -49,6 +49,7 @@ def main():
     p.add_argument("--require-human-approval", action="store_true", help="Require interactive human confirmation before executing test payloads")
     p.add_argument("--dry-run", action="store_true", help="Simulate pipeline plan without sending active network packets")
     p.add_argument("--lab-mode", "--allow-private-ips", dest="lab_mode", action="store_true", help="Allow RFC1918 private IP subnets (10.x, 172.16.x, 192.168.x) for authorized local labs")
+    p.add_argument("--governed", action="store_true", help="Disable owner full-permissions mode and restore fail-closed governance (sets HUNTER_UNRESTRICTED=0)")
     p.add_argument("--triad", "--use-triad", "--cognitive-council", dest="triad", action="store_true", help="Run with 100%% Local AI Triad (WhiteRabbitNeo + xploiter + Qwen 2.5 Coder)")
     p.add_argument("--orchestrator", "--orchestrator-workers", "--blackboard", dest="orchestrator", action="store_true", help="Run with Master Orchestrator-Workers Engine (qwen3:8b + Shared Blackboard)")
     p.add_argument("--allow-no-ai", "--no-ai", "--degraded", dest="allow_no_ai", action="store_true", help="Allow pipeline to run in degraded heuristic mode if local AI model server is offline or models are missing")
@@ -59,6 +60,10 @@ def main():
     p.add_argument("--ask", help="Directly query the Local Triad Agent with a security question, code snippet, or target")
     p.add_argument("--max-steps", type=int, default=15, help="Max steps budget for HunterAI runtime")
     args = p.parse_args()
+
+    if args.governed:
+        os.environ["HUNTER_UNRESTRICTED"] = "0"
+        print("[*] 🛡️ Governed mode: fail-closed scope/policy/approval restored.")
 
     if args.orchestrator and args.target:
         import asyncio

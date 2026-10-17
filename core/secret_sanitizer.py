@@ -84,9 +84,9 @@ class SecretSanitizer:
             scrubbed
         )
 
-        # 8. Database Connection URIs
+        # 8. Credential-bearing connection URIs (ANY scheme): user:password@host
         scrubbed = re.sub(
-            r"((?:postgres|postgresql|mysql|mongodb|redis)://[^:]+:)([^@]+)(@.+)",
+            r"([a-zA-Z][a-zA-Z0-9+.\-]*://[^:/@\s]+:)([^@\s]+)(@)",
             r"\1" + cls.MASK_BULLET + r"\3",
             scrubbed
         )

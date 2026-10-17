@@ -10,6 +10,7 @@ from typing import Optional, Dict, List
 from core.gateway.schemas import ActionProposal, PolicyVerdict, RiskTier
 from core.gateway.risk_classifier import RiskClassifier
 from core.scope_engine import ScopePolicy, StrictScopeEngine
+from core.security_mode import unrestricted_mode
 from agents.security_intelligence.scope_guard import ScopeGuard
 from agents.security_intelligence.schemas import ScopeRule, ScopeMode
 
@@ -78,12 +79,15 @@ class PolicyEngine:
         scope_guard: Optional[ScopeGuard] = None,
         risk_classifier: Optional[RiskClassifier] = None,
         max_repeated_actions: Optional[int] = None,
-        full_permissions: bool = False
+        full_permissions: Optional[bool] = None
     ):
-        # Fail-closed by default. An explicitly injected scope guard is honoured
-        # as-is; otherwise the engine routes through the reference
-        # StrictScopeEngine and DENIES any non-authorised target. Unrestricted
-        # scope is an explicit, auditable opt-in (enable_full_permissions()).
+        # Owner mode grants full permissions by default (fail-closed governance
+        # returns when HUNTER_UNRESTRICTED=0). An explicitly injected scope guard
+        # is always honoured; otherwise the engine routes through the reference
+        # StrictScopeEngine.
+        if full_permissions is None:
+            full_permissions = unrestricted_mode()
+
         if scope_guard is not None:
             self.scope_guard = scope_guard
         else:
@@ -97,10 +101,10 @@ class PolicyEngine:
         self._action_counts: Dict[str, int] = {}
 
     def enable_full_permissions(self):
-        """Explicit, auditable opt-in to unrestricted scope.
+        """Switch this engine to unrestricted scope.
 
-        This is NEVER a default: the caller must invoke it deliberately, so the
-        system cannot drift into open-scope mode by accident.
+        Under owner mode this is already the default; calling it is idempotent
+        and exists for callers that explicitly request full permissions.
         """
         self.full_permissions = True
         self.max_repeated_actions = 99999
@@ -119,6 +123,17 @@ class PolicyEngine:
         """
         # 1. Classify Risk Tier
         risk_tier, risk_reason = self.risk_classifier.classify_proposal(proposal)
+
+        if unrestricted_mode():
+            # Owner full-permissions mode: no destructive-tier block, no scope
+            # gate, no active-testing restriction and no rate-limit loop guard.
+            return PolicyVerdict(
+                allowed=True,
+                risk_tier=risk_tier,
+                status="APPROVED",
+                reason="Unrestricted owner mode: full execution permissions.",
+                sanitized_args=self._sanitize_command_args(proposal.command_args),
+            )
 
         # Rule A: Instantly Block Destructive Commands (TIER 4)
         if risk_tier == RiskTier.TIER_4_PROHIBITED_DESTRUCTIVE:

@@ -24,6 +24,7 @@ from hunter_ai.pipeline.schemas import (
     StageExecutionRecord,
     ToolExecutionMeta,
 )
+from core.secret_sanitizer import SecretSanitizer
 
 logger = logging.getLogger("hunter_ai.engagement_manager")
 
@@ -69,6 +70,11 @@ class EngagementManager:
             self.domain = domain.strip().lower()
         self.session_id = session_id or f"hunter_{int(time.time())}"
         self.workflow = workflow
+
+        # Every artifact written to disk is scrubbed through the single secret
+        # sanitizer, so a credential captured by a tool can never end up in
+        # plaintext in a report, log, timeline, manifest or lineage file.
+        self.sanitizer = SecretSanitizer()
 
         # Clean target folder name (e.g., app.target.com -> app_target_com)
         clean_target = re.sub(r'[^a-zA-Z0-9_\-]', '_', self.domain).strip('_')
@@ -143,7 +149,7 @@ class EngagementManager:
         """Atomically persist manifest.json"""
         try:
             with open(self.manifest_path, "w", encoding="utf-8") as f:
-                json.dump(self.manifest.model_dump(), f, indent=2, default=str)
+                json.dump(self.sanitizer.sanitize_data(self.manifest.model_dump()), f, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error persisting manifest.json: {e}")
 
@@ -151,7 +157,7 @@ class EngagementManager:
         """Atomically persist timeline.json"""
         try:
             with open(self.timeline_path, "w", encoding="utf-8") as f:
-                json.dump(self.timeline_events, f, indent=2, default=str)
+                json.dump(self.sanitizer.sanitize_data(self.timeline_events), f, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error persisting timeline.json: {e}")
 
@@ -172,14 +178,14 @@ class EngagementManager:
                 for r in self.lineage_records
             }
             with open(self.lineage_path, "w", encoding="utf-8") as f:
-                json.dump(lineage_dict, f, indent=2, default=str)
+                json.dump(self.sanitizer.sanitize_data(lineage_dict), f, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error persisting lineage_graph.json: {e}")
 
     def log(self, message: str):
-        """Appends timestamped message to run.log"""
+        """Appends timestamped message to run.log (secret-scrubbed)"""
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        entry = f"[{ts}] {message}\n"
+        entry = f"[{ts}] {self.sanitizer.sanitize_text(message)}\n"
         try:
             with open(self.run_log_path, "a", encoding="utf-8") as f:
                 f.write(entry)
@@ -193,8 +199,8 @@ class EngagementManager:
             "iso_time": datetime.utcnow().isoformat() + "Z",
             "stage": stage,
             "event": event,
-            "message": message,
-            **kwargs,
+            "message": self.sanitizer.sanitize_text(message),
+            **self.sanitizer.sanitize_data(kwargs),
         }
         self.timeline_events.append(evt)
         self._save_timeline()
@@ -213,13 +219,13 @@ class EngagementManager:
         """Records data lineage proving asset origin and provenance"""
         rec = DataLineageRecord(
             asset_id=asset_id,
-            asset_value=asset_value,
+            asset_value=self.sanitizer.sanitize_text(asset_value),
             asset_type=asset_type,
             discovered_by_tool=tool,
             stage=stage,
             parent_asset_id=parent_id,
             timestamp=time.time(),
-            metadata=metadata or {},
+            metadata=self.sanitizer.sanitize_data(metadata or {}),
         )
         self.lineage_records.append(rec)
         self._save_lineage()
@@ -273,6 +279,13 @@ class EngagementManager:
         command = kwargs.get("command_used", command)
         if "duration_ms" in kwargs and not duration:
             duration = kwargs["duration_ms"] / 1000.0
+
+        # Scrub secrets BEFORE any bytes reach disk: raw output, command line,
+        # parsed results and error text all pass through the single sanitizer.
+        command = self.sanitizer.sanitize_text(command)
+        raw_output = self.sanitizer.sanitize_text(raw_output)
+        error = self.sanitizer.sanitize_text(error) if error else error
+        parsed_data = self.sanitizer.sanitize_data(parsed_data)
 
         stage_dir = self.get_stage_dir(stage)
         now_iso = datetime.utcnow().isoformat() + "Z"
@@ -367,6 +380,8 @@ class EngagementManager:
         """Saves a structured file within the stage directory and records it in the manifest"""
         stage_dir = self.get_stage_dir(stage)
         file_path = os.path.join(stage_dir, filename)
+        # Scrub secrets before writing, no matter which caller path reached here.
+        content = self.sanitizer.sanitize_data(content)
         try:
             with open(file_path, "w", encoding="utf-8", errors="replace") as f:
                 if isinstance(content, (dict, list)):

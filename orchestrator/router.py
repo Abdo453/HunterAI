@@ -346,15 +346,27 @@ class ModelRouter:
     async def _general_route(self, prompt: str, ctx: str) -> Dict[str, Any]:
         await self._emit("route_start", {"route": "GENERAL"})
 
-        result = await self.rm.run_local_model(
-            model_name="qwen2.5-coder:14b",
-            messages=[
-                {"role": "system", "content": "You are a helpful AI assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.5,
-            progress_cb=self.cb
-        )
+        # Unified router: cloud-first per HUNTER_LLM_POLICY, local Ollama fallback.
+        messages = [
+            {"role": "system", "content": "You are a helpful AI assistant."},
+            {"role": "user", "content": prompt}
+        ]
+        result = ""
+        try:
+            from core.llm_router import get_llm_router
+            resp = await get_llm_router().complete(messages)
+            if resp and resp.content:
+                result = resp.content
+        except Exception as e:  # noqa: BLE001
+            log.warning(f"LLMRouter general route failed, falling back to local: {e}")
+
+        if not result:
+            result = await self.rm.run_local_model(
+                model_name="qwen2.5-coder:14b",
+                messages=messages,
+                temperature=0.5,
+                progress_cb=self.cb
+            )
 
         await self._emit("route_done", {"route": "GENERAL"})
         return {"route": "GENERAL", "results": {"response": result}, "final": result}

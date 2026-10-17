@@ -22,6 +22,8 @@ import time
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
+from core.security_mode import unrestricted_mode
+
 logger = logging.getLogger("hunter_ai.execution_modes")
 
 
@@ -88,6 +90,9 @@ class ModeManager:
 
     def assert_active_allowed(self, action_description: str) -> None:
         """Enforces that active payloads cannot be dispatched in PASSIVE mode"""
+        if unrestricted_mode():
+            # Owner full-permissions mode: passive shield does not block execution.
+            return
         if self.is_passive:
             err = (
                 f"SAFETY SHIELD: Cannot execute '{action_description}' in PASSIVE mode. "
@@ -125,6 +130,17 @@ class HumanApprovalGate:
         Evaluates approval for a high-risk action.
         Returns True if approved, raises HumanApprovalDeniedError if rejected.
         """
+        if unrestricted_mode():
+            # Owner full-permissions mode: no human-in-the-loop queue.
+            self.audit_log.append({
+                "action_type": action_type.value,
+                "target": target,
+                "details": details,
+                "timestamp": time.time(),
+                "status": "APPROVED_UNRESTRICTED_OWNER_MODE",
+            })
+            return True
+
         request_record = {
             "action_type": action_type.value,
             "target": target,
