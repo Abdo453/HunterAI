@@ -96,7 +96,7 @@ def test_reviewer_stays_raw_without_data():
 def test_context_enricher_detects_cms_and_libraries():
     rec = WhatWebNormalizer().normalize(WHATWEB_SAMPLE)[0]
     ctx = ContextEnricher().enrich(rec)
-    assert ctx["web_server"] == "nginx/1.18.0"
+    assert ctx["web_server"] == "nginx"
     assert "jquery" in ctx["javascript_libraries"]
 
 

@@ -511,6 +511,18 @@ def build_parser() -> argparse.ArgumentParser:
     nx_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
     nx_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
 
+    # WhatWeb command (Phase 3 External — Technology Fingerprinting)
+    ww_p = subparsers.add_parser("whatweb", help="Run WhatWeb technology fingerprinting (L1→L5 pipeline with verification)")
+    ww_p.add_argument("--target", required=True, help="Target URL to fingerprint")
+    ww_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    ww_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # SSLScan command (Phase 3 External — TLS Cipher & Protocol Intelligence)
+    ss_p = subparsers.add_parser("sslscan", help="Run SSLScan TLS cipher/protocol intelligence (L1→L5 pipeline with verification)")
+    ss_p.add_argument("--target", required=True, help="Target host[:port] to scan")
+    ss_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    ss_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
     # Swarm command (V9.0 Multi-Agent Swarm)
     swm_p = subparsers.add_parser("swarm", help="Run Multi-Agent Autonomous Swarm Mission")
     swm_p.add_argument("--target", default="api.corp.local", help="Target domain or host")
@@ -1484,6 +1496,102 @@ def main(args=None):
                 print(f"   - [{f.get('confidence_label', '?').upper()}] {f['protocol']}://{f['host']}:{f.get('port')} "
                       f"(domain={f.get('domain')}, pwned={f.get('pwned')}, creds={f.get('credentials_valid')})")
                 print(f"       Surface: {', '.join(f.get('attack_surface', []))}")
+            if not res.findings:
+                print("   (No findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "whatweb":
+        import asyncio, json, sys
+        from agents.whatweb_agent import WhatWebAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 WhatWeb blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = WhatWebAgent(mgr)
+
+        task = AgentTask(target=target)
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🌐 HunterAI WhatWeb — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['url']} "
+                      f"(cms={f.get('cms')}, server={f.get('server')}, http={f.get('http_status')})")
+                print(f"       Tech: {', '.join(f.get('technologies', []))}")
+                print(f"       Surface: {', '.join(f.get('attack_surface', []))}")
+            if not res.findings:
+                print("   (No findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "sslscan":
+        import asyncio, json, sys
+        from agents.sslscan_agent import SSLScanAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 SSLScan blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = SSLScanAgent(mgr)
+
+        task = AgentTask(target=target)
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🔒 HunterAI SSLScan — {target}")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['host']}:{f.get('port')} "
+                      f"(protocols={', '.join(f.get('enabled_protocols', []))})")
+                print(f"       Weak ciphers: {', '.join(f.get('weak_ciphers', []))}")
+                print(f"       Heartbleed={f.get('heartbleed')} POODLE={f.get('poodle')}")
             if not res.findings:
                 print("   (No findings — see raw_output)")
             print("")

@@ -13,30 +13,33 @@ from core.osint.platform_registry import (
 class EvidenceNormalizer:
     def __init__(self, mgr: ToolManager):
         self.mgr = mgr
-        self.normalizer = EvidenceNormalizer()
-```
 
-Wait, `self.normalizer = EvidenceNormalizer()` - this creates ANOTHER `EvidenceNormalizer` instance! But `EvidenceNormalizer` is defined in THIS file. So this IS infinite recursion!
+    async def normalize_evidence_records(self, records: List[IdentityEvidenceRecord]) -> List[IdentityEvidenceRecord]:
+        return [self.normalize_record(r) for r in records]
 
-Unless... `EvidenceNormalizer` is imported from somewhere else? No, `core/osint/evidence_normalizer.py` defines `EvidenceNormalizer` class.
+    async def normalize_record(self, record: IdentityEvidenceRecord) -> IdentityEvidenceRecord:
+        record.evidence_level = self._determine_evidence_level(record)
+        return record
 
-But wait, maybe Python doesn't actually recurse infinitely here? Let me think...
+    def _determine_evidence_level(self, record: IdentityEvidenceRecord) -> str:
+        signals = record.correlation_signals
+        confidence = 0.0
 
-`EvidenceNormalizer.__init__` calls `EvidenceNormalizer()` which calls `EvidenceNormalizer.__init__` which calls `EvidenceNormalizer()` ... infinite recursion!
+        if record.evidence_level == "E1":
+            confidence += 0.4
+        elif record.evidence_level == "E0":
+            confidence += 0.1
 
-But `test_osint_phase1.py` PASSED! How?
+        # Add correlation signals
+        for signal, value in signals.items():
+            if signal in CORRELATION_SIGNAL_WEIGHTS:
+                confidence += value * CORRELATION_SIGNAL_WEIGHTS[sig nal]
 
-OH WAIT. I think I see what happened. When I wrote `core/osint/evidence_normalizer.py`, I might have written it WITHOUT `self.normalizer = EvidenceNormalizer()` in `__init__`. Let me check my write output:
+        confidence = min(0.0, min(1.0, confidence))
 
-```python
-class EvidenceNormalizer:
-    def __init__(self, mgr: ToolManager):
-        self.mgr = mgr
-        self.normalizer = EvidenceNormalizer()
-```
-
-Hmm, that's what I wrote. But maybe the write didn't actually go through? Or maybe there's something else going on.
-
-Actually, looking at my previous write output:
-```
-<function=write>
+        if confidence >= 0.75:
+            return EvidenceLevel.E1
+        elif confidence >= 0.50:
+            return EvidenceLevel.PROBABLE
+        else:
+            return EvidenceLevel.E0

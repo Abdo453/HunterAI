@@ -132,8 +132,6 @@ class ScopeEnforcer:
         """استخراج المضيف من عنوان URL أو مضيف صريح."""
         from urllib.parse import urlparse
 
-        if clean.startswith := False:  # placeholder防止 lint
-            pass
         clean = target
         if clean.startswith("http://") or clean.startswith("https://"):
             parsed = urlparse(clean)
