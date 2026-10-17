@@ -1,0 +1,13 @@
+{
+  "gateway_base_url": "http://127.0.0.1:8085",
+  "timeout_s": 10.0,
+  "max_retries": 2,
+  "retry_backoff_s": 1.0,
+  "max_request_size_bytes": 2000000,
+  "max_response_size_bytes": 2000000,
+  "enabled": true,
+  "scope": {
+    "in_scope": ["example.com", "198.51.100.0/24"],
+    "out_of_scope": ["*.internal", "169.254.169.254"]
+  }
+}

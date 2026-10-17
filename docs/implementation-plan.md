@@ -62,7 +62,23 @@
 | حدث 버스 دائم | `BaseAgent.emit()` بسيط | `core/event_bus.py` (أحداث مرتبة لكل run، مستمر) | asyncio | تنقية الأحداث قبل النشر | اختبارات ترتيب الأحداث، إعادة تشغيل، حد الاحتفاظ | أحداث run مرتبة ومتاحة عبر API |
 | Dead-end / Hypothesis tracking | غير موجود | `core/evidence_store.py` (كيانات Hypothesis/DeadEnd) | لا تبعات جديدة | لا تدّعي تأكيدًا बिना أدلة | اختبارات ربط إثبات بفرضية، تسجيل طريق مسدود | الفرضية تتطلب إثباتات داعمة |
 
-### Phase E — محولات الأدوات الآمنة (CLI / MCP / وكلاء برمجة)
+### Phase E — محولات الأدوات الآمنة (CLI / MCP / وكلاء برمجة) ✅ مكتمل (هذه الجلسة)
+- `core/mcp_config.py` — schema إعداد خوادم MCP (Pydantic: server_id، النقل، الأمر، المصادقة، الصلاحيات لكل أداة).
+- `core/mcp_client.py` — عميل MCP حقيقي (stdio عبر asyncio subprocess، JSON-RPC 2.0، initialize، tools/list، tools/call، الإلغاء، إعادة اتصال bounded retry، سجل تدقيق) + `MCPClientManager` لعدة خوادم مع namespaces.
+- `core/coding_agent_adapter.py` — واجهة `CodingAgentAdapter` مجردة + `CLICodingAgentAdapter` ( CodeX/Claude/OpenCode عبر argv فقط، مساحة عمل مصرح بها، مراجعة diff قبل التطبيق، إلغاء، مهلة) + `CodingAgentRegistry` مع مصفوفة قدرات.
+- `core/tool_registry.py` — `MCPTool` wrapper + `register_mcp_tools()` لربط أدوات MCP بالسجل المركب.
+- `config/mcp.example.json` — مثال إعداد (بدون أسرار).
+- `docs/mcp-setup.md`، `docs/coding-agent-setup.md` — توثيق الإعداد والأمان.
+- `tests/test_mcp_client.py` (11)، `tests/test_coding_agent_adapter.py` (19) — جميعها ناجحة.
+
+### Phase G — صندوق رمل + فرض نطاق الشبكة ✅ مكتمل (جلسة سابقة)
+- `core/sandbox.py` (`LocalSandbox` + `DockerSandbox` موثق).
+- `core/scope_enforcer.py` (`ScopeEnforcer`: حظر metadata/loopback/RFC1918، التحقق من re
+directs، حدود المعدل، سجل تدقيق).
+- ربط `CliTool.execute` بـ `LocalSandbox` + `CliTool.authorize` بـ `ScopeEnforcer`.
+
+### Phase H — واجهة API / واجهة أمامية + رصد ✅ جزئيًا (جلسة سابقة)
+- `core/global_state.py`، `ui/web/runs_api.py`، `/api/runs/{id}/events\|evidence\|findings`.
 
 **الأهداف:**
 - محول CLI آمن: مصفوفات وسيطات (argument arrays)، validation لمسار الملف التنفيذي، رفض أسماء غير متوقعة، مهلة، إ截اق الإخراج، json output.parser، لا shell strings.
@@ -212,10 +228,22 @@
 | runs_api | 2 | ✅ |
 | sandbox | 6 | ✅ |
 | scope_enforcer | 11 | ✅ |
+| mcp_client | 11 | ✅ |
+| coding_agent_adapter | 19 | ✅ |
+| burp_adapter | 16 | ✅ |
 | action_evaluator_and_policy (pre-existing) | 4 | ✅ |
-| **المجموع** | **206** | ✅ **كلها ناجحة** |
+| **المجموع** | **252** | ✅ **كلها ناجحة** |
 
-### Phase G — صندوق رمل + فرض نطاق الشبكة ✅ مكتمل (هذه الجلسة)
+### Phase F — تكامل بورب ✅ مكتمل (هذه الجلسة)
+- `core/burp_adapter.py` — محول بورب ثابت مع 9 عمليات موثقة (`health_check`、`get_available_capabilities`、`retrieve_authorized_http_history`、`retrieve_request`、`retrieve_response`、`submit_supported_analysis_job`、`retrieve_analysis_results`、`import_supported_findings`、`export_supported_findings`).
+- يُحلق فوق البنية القائمة (`core/burp_gateway/`): البوابة المحلية، مخزن الحركات، مصدّر النتائج (`BurpIssueExporter`)، محرك المصدر.
+- يكشف بصراحة: بورب لا توفر REST API رسمية عامة؛ التكامل عبر إضافة Burp (BApp) ترسل الترافيك إلى البوابة المحلية.
+- ضوابط أمنية: إخفاء كوكيز/Authorization/توكنز، تسجيل المنشأ لكل نتيجة، لا يُدعى تأكيدًا بدون أداة حقيقية، تدهور لطيف إذا بورب غير متاح.
+- `config/burp.example.json` — مثال إعداد (بدون أسرار).
+- `docs/burp-setup.md` — دليل الإعداد والأمان.
+- `tests/test_burp_adapter.py` (16) — جميعها ناجحة (محاكاة، لا أنظمة خارجية).
+
+### Phase G — صندوق رمل + فرض نطاق الشبكة ✅ مكتمل (جلسة سابقة)
 - `core/sandbox.py` — واجهة `Sandbox` مجردة + `LocalSandbox` (تنفيذ محلي عبر `create_subprocess_exec` بلا shell string، cwd مقيد، env محدود، timeout مع process termination، حد إخراج) + `DockerSandbox` موثق لتشغيل Kali/خادم.
 - `core/scope_enforcer.py` — `ScopeEnforcer` يغلف `core/scope_guard.py` القائمة: حظر خدمات metadata (169.254.169.254، metadata.google.internal)، منع loopback/RFC1918 ما لم يُصرح، التحقق من إعادة التوجيه (redirects) ضد النطاق، حدود معدل لكل هدف، سجل تدقيق لكل قرار نطاق.
 - `core/tool_registry.py` — `CliTool` يُنفذ الآن عبر `LocalSandbox.run` بدلاً من `create_subprocess_exec` المباشر؛ `CliTool.authorize` يستدعي `ScopeEnforcer.enforce_target` عندما يتوفر.

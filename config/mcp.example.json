@@ -1,0 +1,41 @@
+{
+  "servers": [
+    {
+      "server_id": "filesystem-local",
+      "name": "Local Filesystem MCP",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/allowed/workspace"],
+      "capabilities": ["tools", "resources"],
+      "tool_permissions": [
+        { "tool_name": "read_file", "allowed": true, "requires_approval": false, "risk_level": "low" },
+        { "tool_name": "write_file", "allowed": true, "requires_approval": true, "risk_level": "high" },
+        { "tool_name": "list_directory", "allowed": true, "requires_approval": false, "risk_level": "low" }
+      ],
+      "timeout_s": 30.0,
+      "max_retries": 3,
+      "retry_backoff_s": 1.0,
+      "enabled": true
+    },
+    {
+      "server_id": "github-mcp",
+      "name": "GitHub MCP Server",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {},
+      "auth_token_env": "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "capabilities": ["tools"],
+      "tool_permissions": [
+        { "tool_name": "search_repositories", "allowed": true, "requires_approval": false, "risk_level": "low" },
+        { "tool_name": "create_issue", "allowed": true, "requires_approval": true, "risk_level": "medium" }
+      ],
+      "timeout_s": 60.0,
+      "max_retries": 3,
+      "retry_backoff_s": 2.0,
+      "enabled": true
+    }
+  ],
+  "default_timeout_s": 30.0,
+  "max_concurrent_servers": 5
+}

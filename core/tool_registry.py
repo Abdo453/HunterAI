@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import re
 import shlex
@@ -599,6 +600,112 @@ class ToolRegistry:
             except Exception:
                 out[tid] = False
         return out
+
+    # ── دمج أدوات MCP ──────────────────────────────────────────────────
+
+    def register_mcp_tools(self, manager: Any) -> int:
+        """
+        تسجيل أدوات العملاء المتصلين من MCPClientManager كأدوات في السجل.
+        كل أداة تُعرّف بمعرف namespaced (server_id::tool_name) وتُنفذ عبر
+        MCPClient.call_tool مع نطاق وإذن.
+        يعيد عدد الأدوات المسجلة.
+        """
+        count = 0
+        for sid, client in manager.list_tools_all().items():
+            for info in client:
+                tool_id = info.namespaced_name
+                if self.get(tool_id) is not None:
+                    continue  # مسجلة بالفعل
+                definition = ToolDefinition(
+                    tool_id=tool_id,
+                    name=info.tool_name,
+                    description=info.description,
+                    backend="mcp",
+                    input_schema=info.input_schema or {},
+                    output_schema=info.output_schema,
+                    required_permissions=["run_tool"],
+                    risk_level="medium",
+                    timeout_s=30.0,
+                    max_output_bytes=1_000_000,
+                    approval_required=False,
+                    enabled=True,
+                    scope_relevant=True,
+                )
+                self.register(MCPTool(definition, client))
+                count += 1
+        return count
+
+
+class MCPTool(Tool):
+    """غلاف لأداة MCP يُنفّذ عبر MCPClient.call_tool."""
+
+    def __init__(self, definition: ToolDefinition, client: Any):
+        self.defn = definition
+        self._client = client  # MCPClient
+
+    def describe(self) -> ToolDefinition:
+        return self.defn
+
+    def validate_input(self, arguments: Dict[str, Any]) -> None:
+        schema = self.defn.input_schema or {}
+        required = schema.get("required", [])
+        for key in required:
+            if key not in arguments:
+                raise ToolError(
+                    f"معامل مطلوب مفقود: {key}", category="VALIDATION",
+                    tool_id=self.defn.tool_id)
+        properties = schema.get("properties", {})
+        for key, value in arguments.items():
+            if key not in properties:
+                raise ToolError(
+                    f"معامل غير معروف: {key}", category="VALIDATION",
+                    tool_id=self.defn.tool_id)
+            expected = properties[key].get("type")
+            if expected and not _type_ok(value, expected):
+                raise ToolError(
+                    f"نوع غير صحيح لـ {key}: متوقع {expected}",
+                    category="VALIDATION", tool_id=self.defn.tool_id)
+
+    def authorize(self, ctx: AuthContext, arguments: Dict[str, Any]) -> None:
+        for perm in self.defn.required_permissions:
+            if perm not in ctx.granted_permissions:
+                raise ToolError(
+                    f"العامل {ctx.worker_id} لا يملك الإذن: {perm}",
+                    category="PERMISSION_DENIED", tool_id=self.defn.tool_id)
+        if self.defn.scope_relevant:
+            target = arguments.get("target") or arguments.get("url") or ""
+            if target and ctx.scope_enforcer is not None:
+                allowed, reason = ctx.scope_enforcer.enforce_target(target)
+                if not allowed:
+                    raise ToolError(
+                        f"الهدف خارج النطاق: {target} ({reason})",
+                        category="SCOPE_VIOLATION", tool_id=self.defn.tool_id)
+
+    async def execute(self, arguments: Dict[str, Any],
+                      ctx: AuthContext) -> ToolResult:
+        server_id, tool_name = self.defn.tool_id.split("::", 1)
+        call_result = await self._client.call_tool(
+            self.defn.tool_id, arguments,
+            timeout_s=self.defn.timeout_s)
+        return ToolResult(
+            ok=call_result.ok, tool_id=self.defn.tool_id,
+            output=json.dumps(call_result.content, ensure_ascii=False)
+            if call_result.content else str(call_result.structured or ""),
+            raw_output=str(call_result.structured or call_result.content),
+            exit_code=0 if call_result.ok else 1,
+            duration_s=call_result.duration_s,
+            error=call_result.error,
+            error_category=call_result.error_category,
+            metadata={"server_id": server_id, "mcp_tool": tool_name})
+
+    async def cancel(self, run_id: str) -> bool:
+        return False
+
+    async def health_check(self) -> bool:
+        try:
+            return await self._client.health_check()
+        except Exception:  # noqa: BLE001
+            return False
 
 
 # ---------------------------------------------------------------------------

@@ -23,3 +23,17 @@ class OSINTTools:
 
     async def shodan_host(self, ip: str) -> ToolResult:
         return await self.mgr.execute(f"shodan host {ip}", timeout=30)
+
+    async def gobuster_dns(self, domain: str, wordlist: str = "directories") -> ToolResult:
+        return await self.mgr.execute(
+            f"gobuster dns -d {domain} -w {wordlist} -q", timeout=300)
+
+    async def dnsx_brute(self, domain: str) -> ToolResult:
+        return await self.mgr.execute(f"dnsx -d {domain} -silent", timeout=120)
+
+    async def amass_brute(self, domain: str) -> ToolResult:
+        return await self.mgr.execute(f"amass enum -d {domain} -passive", timeout=300)
+
+    async def puredns_brute(self, domain: str, wordlist: str = "directories") -> ToolResult:
+        return await self.mgr.execute(
+            f"puredns bruteforce {domain} {wordlist} -q", timeout=300)

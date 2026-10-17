@@ -20,7 +20,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 try:
-    from pydantic import BaseModel, Field, validator
+    from pydantic import BaseModel, Field, field_validator
     _HAS_PYDANTIC = True
 except ImportError:  # pragma: no cover - fallback when pydantic missing
     _HAS_PYDANTIC = False
@@ -120,13 +120,13 @@ if _HAS_PYDANTIC:
         retry_backoff_s: float = 1.0
         enabled: bool = True
 
-        @validator("transport")
+        @field_validator("transport")
         def _validate_transport(cls, v: str) -> str:
             if v not in ("stdio", "http"):
                 raise ValueError("transport must be 'stdio' or 'http'")
             return v
 
-        @validator("server_id")
+        @field_validator("server_id")
         def _validate_server_id(cls, v: str) -> str:
             if not v or not v.replace("-", "").replace("_", "").isalnum():
                 raise ValueError("server_id must be alphanumeric (with -/_ allowed)")

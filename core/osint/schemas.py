@@ -22,6 +22,10 @@ class EvidenceLevel(str, Enum):
     E1 = "E1"
 
 
+# تسمية مستعارة لتوافق استيراد units القديمة (IdentityEvidenceLevel)
+IdentityEvidenceLevel = EvidenceLevel
+
+
 class DetectionMethod(str, Enum):
     WEB_STATUS = "web_status"
     MOBILE_API = "mobile_api"
