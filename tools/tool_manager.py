@@ -25,6 +25,34 @@ class ToolResult:
     def output(self) -> str:
         return self.stdout or self.stderr
 
+    def to_contract(
+        self,
+        task_id: str = "",
+        action: str = "",
+        parameters: Optional[Dict[str, Any]] = None,
+        target: Optional[str] = None,
+    ):
+        """Adapt this raw process outcome to the canonical ``ToolExecutionResult``.
+
+        This is the single bridge from the real executor (``ToolManager``) to the
+        universal contract consumed by the pipeline, so a tool run has one
+        authoritative representation instead of a parallel ad-hoc shape.
+        """
+        from core.contracts.task_contracts import ToolExecutionResult
+        return ToolExecutionResult(
+            task_id=task_id,
+            tool_name=self.tool,
+            action=action or self.tool,
+            target=target if target is not None else "",
+            parameters=dict(parameters or {}),
+            success=self.success,
+            exit_code=self.returncode,
+            duration_ms=round(self.duration * 1000.0, 2),
+            raw_output=self.output,
+            errors=[self.error] if self.error else [],
+            error_category=self.error_category or "",
+        )
+
 
 # Shell exit codes that mean "the executable was never launched".
 _MISSING_TOOL_EXIT_CODES = {127, 9009}

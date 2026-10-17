@@ -91,6 +91,7 @@ class TaskScheduler:
         depends_on: Optional[List[str]] = None,
         success_criteria: Optional[List[str]] = None,
         rules: Optional[List[ConditionalRule]] = None,
+        parameters: Optional[Dict[str, Any]] = None,
         task_id: Optional[str] = None,
     ) -> TaskContract:
         tid = task_id or f"TASK-{uuid.uuid4().hex[:6].upper()}"
@@ -101,6 +102,7 @@ class TaskScheduler:
             action=action,
             target=target,
             priority=priority,
+            parameters=parameters or {},
             depends_on=depends_on or [],
             success_criteria=success_criteria or [],
             status=TaskLifecycleStatus.PENDING if (depends_on and len(depends_on) > 0) else TaskLifecycleStatus.READY,
@@ -213,9 +215,19 @@ class TaskScheduler:
     def set_context(self, key: str, value: Any) -> None:
         self._context[key] = value
 
-    def execute_task(self, task_id: str, owner_agent: str = "Executor") -> Dict[str, Any]:
+    def execute_task(
+        self,
+        task_id: str,
+        owner_agent: str = "Executor",
+        reviewer_agent: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Executes a task synchronously (evaluates rules, invokes handler, runs auto-review).
+
+        The auto-review goes through :meth:`review_task` so the anti-self-grading
+        invariant is always enforced. A task is never sealed ``DONE`` by its own
+        owner, and an action with no registered handler is *not* reported as a
+        success (it used to pass through as a "simulated noop").
         """
         task = self._tasks.get(task_id)
         if not task:
@@ -236,7 +248,8 @@ class TaskScheduler:
                 effective_action = resolved_action
                 break
 
-        # Execute registered handler or mock
+        # Execute registered handler — an unregistered action is a real failure,
+        # never a silently-successful "simulated noop".
         handler = self._handlers.get(effective_action)
         t0 = time.time()
         result_data: Dict[str, Any]
@@ -248,7 +261,9 @@ class TaskScheduler:
                 raw = handler(task=task, context=self._context)
                 result_data = raw if isinstance(raw, dict) else {"output": raw}
             else:
-                result_data = {"notice": f"Simulated noop for action '{effective_action}'."}
+                success = False
+                err = [f"NO_HANDLER: no handler registered for action '{effective_action}'."]
+                result_data = {"error": err[0]}
         except Exception as e:
             success = False
             err = [str(e)]
@@ -262,6 +277,7 @@ class TaskScheduler:
             tool_name=effective_action,
             action=effective_action,
             target=task.target,
+            parameters=dict(task.parameters),
             success=success,
             duration_ms=duration_ms,
             raw_output=json.dumps(result_data),
@@ -271,13 +287,20 @@ class TaskScheduler:
 
         task.submit_for_review(tool_result)
 
-        # Automatic review by Reviewer Agent
-        reviewer = f"Reviewer_{task.team.value}"
-        if success:
-            task.approve_review(reviewer, "Execution verified successfully.")
-            self._update_readiness()
+        # Automatic review through the guarded path (anti-self-grading enforced).
+        reviewer = reviewer_agent or f"Reviewer_{task.team.value}"
+        if reviewer == owner_agent:
+            logger.error(
+                "Auto-review skipped: owner '%s' cannot review its own task '%s'.",
+                owner_agent, task_id,
+            )
         else:
-            task.reject_review(reviewer, f"Execution failed: {err}")
+            self.review_task(
+                task_id,
+                reviewer_agent=reviewer,
+                approved=success,
+                notes="Execution verified successfully." if success else f"Execution failed: {err}",
+            )
 
         self._persist_state()
         self._log_task_execution(task)
@@ -314,6 +337,7 @@ class TaskScheduler:
                     target=item.get("target", ""),
                     action=item.get("action", "noop"),
                     priority=int(item.get("priority", 5)),
+                    parameters=dict(item.get("parameters", {}) or {}),
                     depends_on=list(item.get("depends_on", [])),
                     status=TaskLifecycleStatus(item.get("status", TaskLifecycleStatus.PENDING.value)),
                 )
@@ -335,6 +359,7 @@ class TaskScheduler:
                         action=item.get("action", "noop"),
                         target=item.get("target", ""),
                         priority=int(item.get("priority", 5)),
+                        parameters=dict(item.get("parameters", {}) or {}),
                         depends_on=list(item.get("depends_on", [])),
                         task_id=tid,
                     )

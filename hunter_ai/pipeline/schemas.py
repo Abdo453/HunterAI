@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 from pydantic import BaseModel, Field
@@ -244,6 +245,72 @@ class ToolExecutionMeta(BaseModel):
     @property
     def parsed_data_file(self) -> str:
         return self.parsed_output_file
+
+    @classmethod
+    def from_result(
+        cls,
+        result: Any,
+        *,
+        stage: str,
+        raw_output_file: str,
+        parsed_output_file: str,
+        metadata_file: Optional[str] = None,
+        item_count: int = 0,
+        input_source: Optional[str] = None,
+        next_stage: Optional[str] = None,
+        status: Optional[str] = None,
+        error: Optional[str] = None,
+        target: Optional[str] = None,
+        command: Optional[str] = None,
+    ) -> "ToolExecutionMeta":
+        """Adapter: build pipeline metadata from the canonical ``ToolExecutionResult``.
+
+        Makes ``ToolExecutionResult`` (core.contracts) the single source of truth
+        for a tool run, with this pydantic model acting only as the persisted
+        artifact-metadata projection.
+        """
+        duration_ms = getattr(result, "duration_ms", None)
+        if duration_ms is None:
+            duration_ms = float(getattr(result, "duration", 0.0) or 0.0) * 1000.0
+        duration_s = round(duration_ms / 1000.0, 2)
+        if status is None:
+            status = "success" if getattr(result, "success", False) else "failure"
+        result_error = getattr(result, "error", None)
+        if error is None:
+            error = result_error
+        elif result_error:
+            # A legacy error was passed, but the result-driven error is authoritative.
+            error = result_error
+        now = datetime.now(timezone.utc).isoformat()
+        return cls(
+            tool=getattr(result, "tool", "") or "",
+            target=target if target is not None else (getattr(result, "target", "") or ""),
+            stage=stage,
+            command=command if command is not None else (getattr(result, "action", "") or getattr(result, "tool", "") or ""),
+            started_at=now,
+            finished_at=now,
+            duration_seconds=duration_s,
+            status=status,
+            raw_output_file=raw_output_file,
+            parsed_output_file=parsed_output_file,
+            metadata_file=metadata_file,
+            item_count=item_count,
+            input_source=input_source,
+            next_stage=next_stage,
+            error=error,
+        )
+
+    def to_result(self) -> Any:
+        """Adapter (reverse): project this metadata back to ``ToolExecutionResult``."""
+        from core.contracts.task_contracts import ToolExecutionResult
+        return ToolExecutionResult(
+            tool_name=self.tool,
+            action=self.tool,
+            target=self.target,
+            success=(self.status == "success"),
+            duration_ms=round(self.duration_seconds * 1000.0, 2),
+            errors=[self.error] if self.error else [],
+        )
 
 
 class DataLineageRecord(BaseModel):

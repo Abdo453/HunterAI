@@ -267,6 +267,7 @@ class EngagementManager:
         duration: float = 0.0,
         status: str = "success",
         error: Optional[str] = None,
+        execution_result: Any = None,
         **kwargs
     ) -> ToolExecutionMeta:
         """
@@ -329,7 +330,20 @@ class EngagementManager:
         # 3. Save Metadata .meta.json
         meta_filename = f"{tool_name}.meta.json"
         meta_path = os.path.join(stage_dir, meta_filename)
-        meta = ToolExecutionMeta(
+        meta = ToolExecutionMeta.from_result(
+            execution_result,
+            stage=stage,
+            raw_output_file=raw_path,
+            parsed_output_file=parsed_path,
+            metadata_file=meta_path,
+            item_count=item_count,
+            input_source=input_source,
+            next_stage=next_stage,
+            status=status,
+            error=error,
+            target=self.domain,
+            command=command,
+        ) if execution_result is not None else ToolExecutionMeta(
             tool=tool_name,
             target=self.domain,
             stage=stage,

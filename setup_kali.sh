@@ -113,6 +113,17 @@ else
     echo -e "${YELLOW}Make sure Windows Firewall allows port 11434 and OLLAMA_HOST=0.0.0.0:11434 is set on Windows.${NC}"
 fi
 
+# ── post-install tool verification (fail fast if required tools missing) ────
+echo -e "${CYAN}[*] Running Kali toolchain verification...${NC}"
+if [ -f "scripts/verify_kali_toolchain.py" ] && command -v python3 >/dev/null 2>&1; then
+    python3 scripts/verify_kali_toolchain.py --strict || {
+        echo -e "${RED}[!] Toolchain verification failed. Fix the MISSING tools above before running the agent.${NC}"
+        exit 1
+    }
+else
+    echo -e "${YELLOW}[!] scripts/verify_kali_toolchain.py not found or python3 missing; skipping strict verification.${NC}"
+fi
+
 echo -e "${GREEN}"
 echo "======================================================================"
 echo " 🎉 PentestAI Unified Setup Complete!"

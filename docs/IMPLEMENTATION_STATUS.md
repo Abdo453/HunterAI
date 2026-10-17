@@ -17,23 +17,25 @@
 
 | # | المرحلة | الحالة | ملاحظة |
 |---|---------|--------|--------|
-| 1 | Architecture Audit | 🔄 جارٍ | لم يُكتمل بعد |
-| 2 | Unified Tool Registry | ⏳ | تنتظر موافقة |
-| 3 | Agent Profiles + Skills + Model Presets | ⏳ | تنتظر موافقة |
-| 4 | Project Isolation | ⏳ | تنتظر موافقة |
-| 5 | Memory 2.0 | ⏳ | تنتظر موافقة |
-| 6 | Subagents 2.0 | ⏳ | تنتظر موافقة |
-| 7 | Terminal Execution Layer | ⏳ | تنتظر موافقة |
-| 8 | Browser 2.0 + DOM Annotation | ⏳ | تنتظر موافقة |
-| 9 | Host Bridge | ⏳ | تنتظر موافقة |
-| 10 | Snapshots / Time Travel | ⏳ | تنتظر موافقة |
-| 11 | Plugin System | ⏳ | تنتظر موافقة |
-| 12 | MCP + A2A | ⏳ | تنتظر موافقة |
-| 13 | Task Automation | ⏳ | تنتظر موافقة |
-| 14 | Information Gain Planner | ⏳ | تنتظر موافقة |
-| 15 | Recovery Engine | ⏳ | تنتظر موافقة |
-| 16 | Unified Dashboard | ⏳ | تنتظر موافقة |
-| 17 | End-to-End Testing | ⏳ | تنتظر موافقة |
+| 1 | Architecture Audit | ✅ مكتملة | التدقيق الفعلي مكتمل (docs/IMPLEMENTATION_AUDIT.md) |
+| 2 | Unified Tool Registry | ✅ موجودة في الكود | core.tool_registry.ToolRegistry + config/tools.json (capability_matrix PASS) |
+| 3 | Agent Profiles + Skills + Model Presets | ✅ موجودة في الكود | profiles/*.json + core.model_preset.ModelPreset (capability_matrix PASS) |
+| 4 | Project Isolation | ✅ موجودة في الكود | core.project_isolation.ProjectIsolationManager (capability_matrix PASS) |
+| 5 | Memory 2.0 | ✅ موجودة في الكود | core.memory_manager_v2.MemoryManager + core.system/* (capability_matrix PASS) |
+| 6 | Subagents 2.0 | ✅ موجودة في الكود | core.subagent_manager_v2.SubagentManager + core.system/subagent_manager_v2.py (capability_matrix PASS) |
+| 7 | Terminal Execution Layer | ✅ موجودة في الكود | core.terminal_bridge.TerminalBridge + core/system/terminal_bridge.py (capability_matrix PASS) |
+| 8 | Browser 2.0 + DOM Annotation | ✅ موجودة في الكود | core.browser_agent.BrowserAgent + core/system/browser_v2.py (capability_matrix PASS) |
+| 9 | Host Bridge | ✅ موجودة في الكود | core.host_bridge.HostBridge + core/system/host_bridge.py (capability_matrix PASS) |
+| 10 | Snapshots / Time Travel | ✅ موجودة في الكود | core.snapshot_manager.SnapshotManager + core/system/snapshot_manager.py (capability_matrix PASS) |
+| 11 | Plugin System | ✅ موجودة في الكود | core.plugin_system.PluginLoader + core/system/plugin_system.py (capability_matrix PASS) |
+| 12 | MCP + A2A | ✅ موجودة في الكود | core.system.mcp_a2a.MCPClient (capability_matrix PASS) |
+| 13 | Task Automation | ✅ موجودة في الكود | core.system.task_scheduler.TaskScheduler (capability_matrix PASS) |
+| 14 | Information Gain Planner | ✅ موجودة في الكود | core.system.information_gain_planner.InformationGainPlanner (capability_matrix PASS) |
+| 15 | Recovery Engine | ✅ موجودة في الكود | core.system.recovery_engine.RecoveryEngine (capability_matrix PASS) |
+| 16 | Unified Dashboard | ✅ موجودة في الكود | ui/web/dashboard.py + ui/web/app.py (capability_matrix PASS) |
+| 17 | End-to-End Testing | ✅ موجودة في الكود | tests/test_e2e_phase17.py 10/10 (capability_matrix PASS) |
+
+> **ملاحظة:** الحالة أعلاه تُ표ّض الوجود الفعلي للمكونات في الكود (مطابق لـ `capability_matrix.json`). هذا لا يعني جاهزية إنتاجية كاملة: وفقًا لـ `docs/IMPLEMENTATION_AUDIT.md` (تدقيق فعلي بالأسطر)، بعض المكونات لا تزال `PARTIAL` أو `MISSING` (خاصة العقود الموحّدة، الحالة المشتركة، الفرق/الجدولة، وإنتاج findings مؤكدة). المراحل M0–M5 من `docs/IMPLEMENTATION_PLAN.md` تُقدّم خطة الإغلاق مرتبة بالأولوية.
 
 ---
 
@@ -288,13 +290,13 @@
 | docs/AGENT_ZERO_GAP_ANALYSIS.md | ⏳ |
 | docs/HUNTERAI_AGENT_ARCHITECTURE.md | ⏳ |
 | docs/IMPLEMENTED_AGENT_ZERO_CAPABILITIES.md | ⏳ |
-| data/agent_capability_matrix.json | ⏳ |
-| design.md | ⏳ |
-| security.md | ⏳ |
-| usage.md | ⏳ |
-| capability_matrix.json | ⏳ |
-| end_to_end_test_results.md | ⏳ |
-| security_audit.md | ⏳ |
+| data/agent_capability_matrix.json | ✅ |
+| design.md | ✅ |
+| security.md | ✅ |
+| usage.md | ✅ |
+| capability_matrix.json | ✅ |
+| end_to_end_test_results.md | ✅ |
+| security_audit.md | ✅ |
 
 ---
 

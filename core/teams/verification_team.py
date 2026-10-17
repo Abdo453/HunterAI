@@ -54,7 +54,7 @@ class CounterexampleAgent:
                 s in probed_response for s in ["$(", "expr ", "; echo", "__PTST"]
             )
             if syntax_echo:
-                return True, "Counterexample found: Command syntax is reflected literally in response (Echo != Execution)."
+                return True, "Counterexample found: Command syntax is reflected literally in response (Reflection != Execution)."
 
         # Test 2: Natural Jitter vs Real Delta
         baseline_len = len(baseline_response)

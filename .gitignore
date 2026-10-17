@@ -61,6 +61,11 @@ artifacts/threat_intel/*
 artifacts/reports/*
 !artifacts/reports/.gitkeep
 
+# Test-run artifacts (must not pollute tracked files — P2-37)
+task_logs/
+data/benchmark_*.json
+data/*_sched_state.json
+
 # Archive files
 *.zip
 *.tar.gz

@@ -753,11 +753,13 @@ class MasterToolRegistry:
         error_msg = None
         raw_str = ""
         parsed = []
+        contract_result = None
 
         try:
             if self.is_available(tool_name) and spec and spec.command_template:
                 print(f"[*] [{stage.upper()}] ⚡ Dispatching {tool_name} (Max Timeout: {effective_timeout}s)...")
                 res = await self.tm.execute(cmd_str, timeout=effective_timeout)
+                contract_result = res.to_contract(action=tool_name)
                 raw_str = res.output
                 parsed = spec.parser(res.stdout) if spec.parser else res.stdout.splitlines()
                 if not res.success:
@@ -783,6 +785,7 @@ class MasterToolRegistry:
             else:
                 print(f"[*] [{stage.upper()}] ⚡ Running {tool_name}...")
                 res = await self.tm.execute(cmd_str)
+                contract_result = res.to_contract(action=tool_name)
                 raw_str = res.output
                 parsed = [res.stdout] if res.stdout else []
                 duration = time.time() - t0
@@ -812,6 +815,7 @@ class MasterToolRegistry:
             duration=duration,
             status=status,
             error=error_msg,
+            execution_result=contract_result,
         )
 
         self._notify_observer({

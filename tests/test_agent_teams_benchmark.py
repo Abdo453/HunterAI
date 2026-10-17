@@ -21,6 +21,7 @@ from core.contracts import (
     EvidenceSignificance,
     TaskContract,
     TaskLifecycleStatus,
+    ToolExecutionResult,
 )
 from core.coverage import AssetType, CoverageLedger, UntestableReason
 from core.system.task_scheduler import TaskScheduler

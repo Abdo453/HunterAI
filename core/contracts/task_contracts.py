@@ -98,6 +98,9 @@ class ToolExecutionResult:
     # Diagnostics & safety
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    # Structured failure category (TOOL_UNAVAILABLE / NONZERO_EXIT / TIMEOUT /
+    # EXECUTION_ERROR / POLICY_DENIED / POLICY_ERROR). Empty when not a failure.
+    error_category: str = ""
     
     # Generated evidence & intelligence
     evidence_artifacts: List[EvidenceArtifact] = field(default_factory=list)
