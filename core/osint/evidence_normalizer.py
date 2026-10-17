@@ -33,9 +33,9 @@ class EvidenceNormalizer:
         # Add correlation signals
         for signal, value in signals.items():
             if signal in CORRELATION_SIGNAL_WEIGHTS:
-                confidence += value * CORRELATION_SIGNAL_WEIGHTS[sig nal]
+                confidence += value * CORRELATION_SIGNAL_WEIGHTS[signal]
 
-        confidence = min(0.0, min(1.0, confidence))
+        confidence = max(0.0, min(1.0, confidence))
 
         if confidence >= 0.75:
             return EvidenceLevel.E1
