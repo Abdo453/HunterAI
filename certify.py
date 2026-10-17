@@ -674,7 +674,7 @@ class PreKaliCertificationPipeline:
 
     # ── GATE 15: NETWORK SCOPE FIREWALL & HOST/SERVICE MODEL ─────────────────
     def run_gate_15_network_scope(self) -> CertificationGateResult:
-        res = CertificationGateResult("GATE-15", "Network Scope Firewall, Host/Service Model & Pipeline")
+        res = CertificationGateResult("GATE-15", "Network Scope Firewall, Host/Service Model & External Pipeline")
         t0 = time.time()
         try:
             from core.network_scope_guard import NetworkScopeGuard, ScopeViolationError
@@ -763,8 +763,60 @@ class PreKaliCertificationPipeline:
             if any(f.status != "candidate" for f in assessment.findings):
                 raise SecurityError("Network pipeline emitted a non-candidate finding.")
 
+            # 8. External pilots (whatweb/sslscan) + Evidence Court handoff — candidates only.
+            from core.whatweb import WhatWebNormalizer
+            from core.sslscan import SSLScanNormalizer
+            from core.evidence_court import EvidenceCourt, CourtVerdict
+
+            _ww = WhatWebNormalizer().normalize(
+                '{"target":"http://example.com","http_status":200,"server":"nginx","plugins":{}}'
+            )
+            if len(_ww) != 1 or _ww[0].http_status != 200:
+                raise SecurityError("whatweb normalizer failed.")
+
+            _ss = SSLScanNormalizer().normalize_xml(
+                '<sslscan><target host="example.com" port="443"/>'
+                '<ssltls><protocol version="TLS 1.2" enabled="yes"/></ssltls>'
+                '<ciphers><cipher name="AES128-SHA" bits="128" used="yes"/></ciphers>'
+                '</sslscan>'
+            )
+            if len(_ss) != 1 or _ss[0].port != 443:
+                raise SecurityError("sslscan normalizer failed.")
+
+            # Evidence Court: an external scan result with no independent verifier
+            # must stay non-confirmed / non-reportable (never auto-confirmed).
+            judgment = EvidenceCourt.adjudicate(
+                target_url="http://example.com",
+                parameter="",
+                vuln_class="TECHNOLOGY_FINGERPRINT",
+                finder_claim={"source": "whatweb", "technologies": ["nginx"]},
+                is_in_scope=True,
+            )
+            if judgment.verdict == CourtVerdict.CONFIRMED:
+                raise SecurityError(
+                    "SECURITY FATAL: Evidence Court auto-confirmed an external finding without proof!"
+                )
+            if judgment.reportable:
+                raise SecurityError(
+                    "Evidence Court marked an unverified external finding as reportable!"
+                )
+            if judgment.verdict not in (CourtVerdict.UNVERIFIED, CourtVerdict.INCONCLUSIVE):
+                raise SecurityError("Evidence Court returned an unexpected verdict for an unverified claim.")
+
+            # Out-of-scope external target must be rejected.
+            judgment_oos = EvidenceCourt.adjudicate(
+                target_url="http://evil.example.net",
+                parameter="",
+                vuln_class="TECHNOLOGY_FINGERPRINT",
+                is_in_scope=False,
+            )
+            if judgment_oos.verdict != CourtVerdict.OUT_OF_SCOPE:
+                raise SecurityError("Evidence Court did not reject out-of-scope external target!")
+
             res.log("Network scope fail-closed; metadata blocked; lab endpoint allowed; HostGraph + "
-                    "masscan normalizer + discover→fingerprint→route pipeline OK (candidates only).")
+                    "masscan normalizer + discover→fingerprint→route pipeline OK (candidates only). "
+                    "whatweb/sslscan normalizers OK; Evidence Court handoff: candidates only, "
+                    "out-of-scope rejected, zero auto-confirmation.")
             res.passed = True
         except Exception as e:
             res.passed = False
