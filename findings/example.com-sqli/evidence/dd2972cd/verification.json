@@ -1,0 +1,11 @@
+{
+  "bundle_id": "dd2972cd",
+  "target": "example.com",
+  "vuln_class": "sqli",
+  "verdict": "REFUTED",
+  "rationale": "Marker absent on re-check — likely false positive",
+  "original_sha256": "b1025575c5efee805efb82da6c78910e60dbda5c416e1a7fd6c0eeb7c02da90e",
+  "current_sha256": "e7e70e545039079c175ea039b26142eb4ea3420e2a57208d4ca9996b8dbf07b9",
+  "sha_match": false,
+  "verified_at": "2026-10-18T15:48:01Z"
+}

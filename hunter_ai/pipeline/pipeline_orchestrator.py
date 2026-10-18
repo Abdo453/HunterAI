@@ -1,7 +1,7 @@
 """
 HunterAI Master Pipeline Orchestrator
 Executes the Autonomous Bug Bounty Workflow following the Finite State Machine:
-SCOPE_CHECK -> DISCOVER -> ENUMERATE -> NORMALIZE -> MAP -> CLASSIFY -> SURFACE -> TRIAGE -> HYPOTHESIZE -> TEST -> VERIFY -> CORRELATE -> ASSESS_IMPACT -> REPORT -> COMPLETE
+SCOPE_CHECK -> DISCOVER -> ENUMERATE (with AI Preflight + ENV_READINESS local gate before DISCOVER) -> NORMALIZE -> MAP -> CLASSIFY -> SURFACE -> TRIAGE -> HYPOTHESIZE -> TEST -> VERIFY -> CORRELATE -> ASSESS_IMPACT -> REPORT -> COMPLETE
 
 Guarantees:
 1. Scope adherence (ScopeGuard) & Active Authorization Gate
@@ -68,6 +68,8 @@ from core.tool_registry import ToolRegistry, CapabilityMatrix
 from core.decision_core import DecisionCore
 from core.control_plane.action_loop import AutonomousActionLoop
 from core.wordlist_manager import WordlistManager
+from core.readiness.gate import run_mission_gate
+from core.readiness.checker import ReadinessGateError
 from hunter_ai.pipeline.investigation_controller import InvestigationController
 from hunter_ai.pipeline.url_canonicalizer import URLCanonicalizer, CanonicalEndpointFamily
 from hunter_ai.pipeline.parameter_intelligence import (
@@ -122,6 +124,7 @@ class HunterPipelineOrchestrator:
         inference_timeout: Optional[float] = None,
         browser_type: str = "firefox",
         require_burp_browser: bool = False,
+        require_ready: bool = False,
     ):
         self.raw_target = target.strip()
         self.session_id = session_id or f"hunter_{int(time.time())}"
@@ -130,6 +133,13 @@ class HunterPipelineOrchestrator:
         self.net = NetworkTools(self.tm)
         self.web = WebTools(self.tm)
         self.master_tools = MasterToolRegistry(self.tm)
+        # Phase 2: توصيل السجل الموحد لكل تنفيذ أداة (line الأدلة الكامل)
+        try:
+            from core.evidence_store import EvidenceStore
+            self.master_tools.evidence_store = EvidenceStore()
+            self.master_tools.run_id = self.session_id
+        except Exception:
+            self.master_tools.evidence_store = None
         self.proxy = proxy
         self.authorized = authorized
         self.browser_type = browser_type or os.getenv("BROWSER_TYPE", "firefox")
@@ -138,6 +148,10 @@ class HunterPipelineOrchestrator:
         # all verified first.
         self.require_burp_browser = require_burp_browser
         self.integration_preflight: Dict[str, Any] = {}
+        # Phase 1: بوابة جاهزية البيئة المحلية (أدوات/عقل AI) قبل بدء المهمة.
+        # HUNTERAI_REQUIRE_READY=1 يفعّلها خارجيًا (CLI/بيئة التشغيل).
+        self.require_ready = bool(require_ready or os.getenv("HUNTERAI_REQUIRE_READY") in ("1", "true", "True"))
+        self.readiness_report: Dict[str, Any] = {}
         self.workflow = workflow
         self.mode = mode
         self.scope_file = scope_file
@@ -763,6 +777,92 @@ class HunterPipelineOrchestrator:
         else:
             await self._emit("preflight_passed", message=f"AI Preflight Gate: AI_READY (Latency: {result.latency_ms:.1f}ms, Inference: {result.inference_latency_ms:.1f}ms)")
 
+        return True
+
+    # ── STAGE 00.5: ENVIRONMENT READINESS GATE (Phase 1) ──────────────────────
+    async def stage_env_readiness(self) -> bool:
+        """
+        بوابة جاهزية البيئة — كشف الفحوص المحليّة فقط (--version/TCP/ملفات).
+        لا يلمس أي هدف. strict والفحص لم يعدم → ABORTED/error (fail-closed).
+        """
+        from core.readiness import save_readiness_artifact
+
+        self.engagement_mgr.start_stage("00_readiness")
+        self.fsm.transition_to(
+            HunterState.ENV_READINESS,
+            "Local environment readiness gate (tools/AI/Burp/Playwright)",
+        )
+        await self._emit("readiness_start", message="Checking local environment readiness...")
+
+        gate_data = {
+            "require_ready": self.require_ready,
+            "use_proxy": bool(self.proxy),
+            "use_browser": bool(self.require_burp_browser),
+            "require_burp_browser": self.require_burp_browser,
+        }
+        try:
+            report = await run_mission_gate(
+                gate_data, target="local-env", session_id=self.session_id,
+            )
+        except ReadinessGateError as gate_exc:
+            blocked_report = getattr(gate_exc, "report", None)
+            if blocked_report is not None:
+                blocked_dict = blocked_report.to_dict()
+            else:
+                blocked_dict = {"error": str(gate_exc)}
+            self.readiness_report = blocked_dict
+            save_readiness_artifact(blocked_report) if blocked_report is not None else None
+            self._save_stage_artifact("00_readiness", "readiness_report.json", blocked_dict)
+            self.engagement_mgr.complete_stage("00_readiness", item_count=0)
+            await self._emit(
+                "readiness_blocked",
+                blocked=[r.get("name") for r in blocked_dict.get("blocked", [])],
+                message=f"Environment readiness gate FAILED (strict) — mission start denied locally: {gate_exc}",
+            )
+            self.fsm.transition_to(
+                HunterState.ERROR,
+                "Environment not ready in strict mode — fail-closed",
+            )
+            return False
+        except Exception as exc:  # لا يُسقط المهمة إلا في strict — الافتراضي إنذار
+            if self.require_ready:
+                self.readiness_report = {"error": str(exc)}
+                self._save_stage_artifact("00_readiness", "readiness_report.json", self.readiness_report)
+                self.engagement_mgr.complete_stage("00_readiness", item_count=0)
+                await self._emit("readiness_blocked", message=f"Readiness gate crashed in strict mode: {exc}")
+                self.fsm.transition_to(HunterState.ERROR, f"Readiness gate crash: {exc}")
+                return False
+            await self._emit("readiness_degraded", message=f"Readiness gate crashed (advisory only): {exc}")
+            self.engagement_mgr.complete_stage("00_readiness", item_count=0)
+            return True
+
+        # غير strict (علم وقت الأمر فقط) أو strict ناجح — نوثق ونعي آمن
+        report_dict = report.to_dict()
+        self.readiness_report = report_dict
+        save_readiness_artifact(report)
+        self._save_stage_artifact("00_readiness", "readiness_report.json", report_dict)
+        counts = report_dict.get("counts", {})
+        blocked_names = [r.get("name") for r in report_dict.get("blocked", [])]
+        self.engagement_mgr.complete_stage("00_readiness", item_count=sum(counts.values()))
+
+        if self.require_ready:
+            await self._emit(
+                "readiness_passed",
+                message=(
+                    f"Environment readiness gate PASSED (strict): "
+                    f"READY={counts.get('READY', 0)} MISSING={counts.get('MISSING', 0)}"
+                ),
+            )
+        else:
+            await self._emit(
+                "readiness_advisory",
+                blocked=blocked_names,
+                message=(
+                    f"Environment readiness report (advisory, no gate): "
+                    f"READY={counts.get('READY', 0)} MISSING={counts.get('MISSING', 0)}"
+                    + (f" — missing: {', '.join(blocked_names[:10])}" if blocked_names else "")
+                ),
+            )
         return True
 
     # ── STAGE 00: SCOPE & SAFETY ───────────────────────────────────────────────
@@ -2139,6 +2239,29 @@ class HunterPipelineOrchestrator:
 
         # ── ASSESS IMPACT & PRIORITY RANKING ──────────────────────────────────
         self.fsm.transition_to(HunterState.ASSESS_IMPACT, "Calculating dynamic CVSS scores and assigning priorities (P0 - P5)")
+
+        # ── STAGE: FINAL EVIDENCE COURT (Phase 3) ──────────────────────────────
+        # جلسة محكمة أخيرة على القائمة كاملة: أي نتيجة بلا سلسلة إثبات سليمة
+        # تُخفَّض إلى deferred_hypotheses ولا تُعرض في التقرير مطلقًا.
+        court_report = self._run_final_court()
+        if court_report["stats"]["DEMOTED"] > 0:
+            await self._emit(
+                "final_court_demoted",
+                demoted=court_report["stats"]["DEMOTED"],
+                passed=court_report["stats"]["PASSED"],
+                message=(
+                    "Final Evidence Court DEMOTED "
+                    f"{court_report['stats']['DEMOTED']} findings to deferred hypotheses "
+                    "(insufficient evidence chain) — only court-passed findings reach the report."
+                ),
+            )
+        else:
+            await self._emit(
+                "final_court_all_passed",
+                passed=court_report["stats"]["PASSED"],
+                message="Final Evidence Court: every finding's evidence chain fully verified.",
+            )
+
         self.fsm.transition_to(HunterState.REPORT, "Generating final Executive and Technical reports")
 
         await self._emit("report_start", message="Writing final scan reports and persistent tool logs...")
@@ -2149,6 +2272,58 @@ class HunterPipelineOrchestrator:
         await self._emit("pipeline_complete", findings=len(self.findings), reports=rep_paths)
 
         return self.findings
+
+    def _run_final_court(self) -> Dict[str, Any]:
+        """
+        جلسة المحكمة النهائية (Phase 3): تحكيم كل نتيجة قبل التقرير.
+        - المحجب يُنقل إلى deferred_hypotheses (يبقى إثباته للاستمرار التحقيقي).
+        - كل حكم يُسجل في EvidenceStore الموحد (court_verdict JSONL).
+        - الجلسة كلها artifact في 13_evidence/court_session.json.
+        آمن ضد الانفجار: لو المحكمة نفسها فشلت، القائمة تعود سليمة (fail-open للقائمة
+        الموجودة، fail-closed في الجودة القديمة — لأن inspection القائم كان court-gated).
+        """
+        from hunter_ai.pipeline.final_court import FinalEvidenceCourt
+        from core.evidence_store import EvidenceStore
+
+        report = FinalEvidenceCourt(run_id=self.session_id).audit_docket(self.findings)
+        try:
+            store = EvidenceStore()
+            for entry in report.entries:
+                try:
+                    store.record_court_verdict(
+                        run_id=self.session_id,
+                        finding_id=entry.finding_id,
+                        title=entry.title,
+                        endpoint=entry.endpoint,
+                        verdict=entry.verdict,
+                        reason_code=entry.reason_code,
+                        rationale=entry.rationale,
+                        session_id=self.session_id,
+                    )
+                except Exception as ve:  # noqa: BLE001
+                    logger.debug(f"[FinalCourt] verdict record notice: {ve}")
+        except Exception as se:  # noqa: BLE001
+            logger.debug(f"[FinalCourt] evidence store notice: {se}")
+
+        # تنفيذ الأحكام: الإسقاط الفعلي (نشطب بالمُعرِّف — عناوين مكررة/فارغة لا تلعق سجلًا)
+        if report.demoted:
+            demoted_ids = {e.finding_id for e in report.entries if e.verdict == "DEMOTED"}
+            self.deferred_hypotheses.extend(report.demoted)
+            kept: List[Any] = []
+            for f in self.findings:
+                d = f if isinstance(f, dict) else f.model_dump()
+                if str(d.get("id", "")) in demoted_ids:
+                    continue
+                kept.append(f)
+            self.findings = kept
+
+        session = report.to_dict()
+        session["deferred_by_court"] = report.demoted
+        try:
+            self._save_stage_artifact("13_evidence", "court_session.json", session)
+        except Exception:  # noqa: BLE001
+            pass
+        return session
 
     async def _generate_reports(self) -> Dict[str, str]:
         """Generate final JSON, Markdown, and HTML reports ordered by Priority Tier across 14_reports and legacy 09_reports"""
@@ -2357,6 +2532,15 @@ class HunterPipelineOrchestrator:
                 "target": self.raw_target,
                 "error": self.ai_preflight_result.error_message if self.ai_preflight_result else "AI server offline",
                 "preflight": self.ai_preflight_result.to_dict() if self.ai_preflight_result else {},
+            }
+
+        # Step 1.5: Environment Readiness Gate (Phase 1 — local probes only)
+        if not await self.stage_env_readiness():
+            return {
+                "status": "aborted",
+                "reason": "environment_not_ready",
+                "target": self.raw_target,
+                "readiness": self.readiness_report,
             }
 
         # Step 2: Recon & Subdomains

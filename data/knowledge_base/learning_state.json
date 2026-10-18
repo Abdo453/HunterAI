@@ -1,15 +1,15 @@
 {
   "last_run": {
-    "cisa_kev": "2026-09-08T23:09:13.816965",
-    "nvd": "2026-09-08T23:09:18.684626",
-    "medium": "2026-09-08T23:09:21.837499",
-    "payloads": "2026-09-08T23:09:28.222448",
-    "portswigger": "2026-09-03T17:10:24.964324",
-    "exploit_db": "2026-09-08T23:09:31.057185"
+    "cisa_kev": "2026-10-18T10:44:40.140173",
+    "nvd": "2026-10-18T10:44:43.371694",
+    "medium": "2026-10-18T10:44:49.835622",
+    "payloads": "2026-10-18T10:44:56.261067",
+    "portswigger": "2026-10-18T10:44:58.897811",
+    "exploit_db": "2026-10-18T10:45:01.722885"
   },
   "total_articles_learned": 0,
-  "total_cves_indexed": 60,
-  "total_payloads_saved": 264,
-  "last_full_run": "2026-09-08T23:09:33.075945",
-  "learning_cycles": 2
+  "total_cves_indexed": 90,
+  "total_payloads_saved": 396,
+  "last_full_run": "2026-10-18T10:45:03.757553",
+  "learning_cycles": 3
 }

@@ -108,6 +108,45 @@ class TestToolExecution:
         assert last["status"] == "finished"
         assert last["exit_code"] == 0
 
+    # ── Phase 2: خط الأدلة الكامل ─────────────────────────────────────
+    def test_tool_execution_full_traceability(self, store):
+        """كل نتيجة تُربط بالأمر الأصلي + المرحلة + الهدف + الـ endpoint."""
+        te = store.record_tool_execution(
+            run_id="r", worker_id="w", tool_id="katana.crawl",
+            command='katana -u https://app.example.com -d 3',
+            stage="SURFACE", target="app.example.com",
+            endpoint="https://app.example.com/",
+            output_excerpt="https://app.example.com/admin (200)",
+            artifact_reference="data/tool_outputs/katana_1.txt")
+        assert te.command == "katana -u https://app.example.com -d 3"
+        assert te.stage == "SURFACE"
+        assert te.target == "app.example.com"
+        assert te.endpoint == "https://app.example.com/"
+        assert "admin" in te.output_excerpt
+        # persisted وللقراءة
+        recs = store._read_all("tool_execution")
+        last = [r for r in recs if r["execution_id"] == te.execution_id][-1]
+        assert last["stage"] == "SURFACE"
+        assert last["command"].startswith("katana")
+
+    def test_old_jsonl_records_still_load(self, store):
+        """توافق عكسي: سجل قديم بدون الحقول الجديدة يُحمَّل ويبدأ الافتراضي."""
+        import json
+        legacy = {
+            "execution_id": "TE-LEGACY01", "run_id": "r", "worker_id": "w",
+            "tool_id": "subfinder.enum", "status": "started",
+        }
+        with open(store._path("tool_execution"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(legacy) + "\n")
+        ok = store.finish_tool_execution("TE-LEGACY01", "finished", 0)
+        assert ok is True
+        recs = store._read_all("tool_execution")
+        legacy_finished = [r for r in recs if r["execution_id"] == "TE-LEGACY01"][-1]
+        assert legacy_finished["status"] == "finished"
+        # الحقول المضافة بأصواف افتراضية — لا اهتزاز قديم
+        assert legacy_finished.get("command", "") == ""
+        assert legacy_finished.get("stage", "") == ""
+
 
 class TestEvents:
     def test_events_append_and_order(self, store):

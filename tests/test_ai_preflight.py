@@ -205,3 +205,27 @@ class TestPreflightStateMachine:
         fsm.transition_to(HunterState.PREFLIGHT, "Start preflight")
         with pytest.raises(IllegalStateTransitionError):
             fsm.transition_to(HunterState.REPORT, "Illegal jump")
+
+    # ── المرحلة 1: ENV_READINESS في دورة FSM ─────────────────────────
+    def test_env_readiness_happy_path(self):
+        fsm = HunterStateMachine("target.local", "session_test")
+        fsm.transition_to(HunterState.PREFLIGHT, "Start preflight")
+        fsm.transition_to(HunterState.ENV_READINESS, "Environment gate: tools/Ollama/Burp/Playwright")
+        assert fsm.current_state == HunterState.ENV_READINESS
+        fsm.transition_to(HunterState.SCOPE_CHECK, "Environment ready, checking scope")
+        assert fsm.current_state == HunterState.SCOPE_CHECK
+
+    def test_env_readiness_fail_closes_to_error(self):
+        fsm = HunterStateMachine("target.local", "session_test")
+        fsm.transition_to(HunterState.PREFLIGHT, "Start preflight")
+        fsm.transition_to(HunterState.ENV_READINESS, "Environment gate: strict")
+        fsm.transition_to(HunterState.ERROR, "Toolchain not ready — strict gate")
+        assert fsm.current_state == HunterState.ERROR
+
+    def test_env_readiness_cannot_jump_to_report(self):
+        """المعادلة الحرجة: RETRIEVE الإمساك — لا قفز من ENV_READINESS إلى REPORT."""
+        fsm = HunterStateMachine("target.local", "session_test")
+        fsm.transition_to(HunterState.PREFLIGHT, "Start preflight")
+        fsm.transition_to(HunterState.ENV_READINESS, "Environment gate")
+        with pytest.raises(IllegalStateTransitionError):
+            fsm.transition_to(HunterState.REPORT, "Illegal direct jump")

@@ -1,0 +1,10 @@
+{
+    "method": "GET",
+    "url": "https://example.com/search?q=test",
+    "host": "example.com",
+    "headers": {
+        "User-Agent": "Mozilla/5.0",
+        "Authorization": "Bearer sk-abcdef1234567890"
+    },
+    "body": ""
+}

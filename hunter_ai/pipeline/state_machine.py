@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class HunterState(str, Enum):
     INIT = "INIT"
     PREFLIGHT = "PREFLIGHT"
+    ENV_READINESS = "ENV_READINESS"  # المرحلة 1: بوابة جاهزية البيئة (أدوات/Ollama/Burp/Playwright)
     AI_CONNECTING = "AI_CONNECTING"
     MODEL_VERIFYING = "MODEL_VERIFYING"
     INFERENCE_VERIFYING = "INFERENCE_VERIFYING"
@@ -60,12 +61,13 @@ class HunterStateMachine:
     # Allowed forward transitions
     VALID_TRANSITIONS: Dict[HunterState, Set[HunterState]] = {
         HunterState.INIT: {HunterState.PREFLIGHT, HunterState.SCOPE_CHECK, HunterState.ERROR, HunterState.ABORTED},
-        HunterState.PREFLIGHT: {HunterState.AI_CONNECTING, HunterState.AI_READY, HunterState.DEGRADED_MODE, HunterState.SCOPE_CHECK, HunterState.ABORTED, HunterState.ERROR},
+        HunterState.PREFLIGHT: {HunterState.AI_CONNECTING, HunterState.AI_READY, HunterState.DEGRADED_MODE, HunterState.SCOPE_CHECK, HunterState.ENV_READINESS, HunterState.ABORTED, HunterState.ERROR},
+        HunterState.ENV_READINESS: {HunterState.SCOPE_CHECK, HunterState.DISCOVER, HunterState.AI_CONNECTING, HunterState.ABORTED, HunterState.ERROR},
         HunterState.AI_CONNECTING: {HunterState.MODEL_VERIFYING, HunterState.AI_UNAVAILABLE, HunterState.DEGRADED_MODE, HunterState.ERROR, HunterState.ABORTED},
         HunterState.MODEL_VERIFYING: {HunterState.INFERENCE_VERIFYING, HunterState.MODEL_MISSING, HunterState.DEGRADED_MODE, HunterState.ERROR, HunterState.ABORTED},
         HunterState.INFERENCE_VERIFYING: {HunterState.AI_READY, HunterState.INFERENCE_FAILED, HunterState.DEGRADED_MODE, HunterState.ERROR, HunterState.ABORTED},
-        HunterState.AI_READY: {HunterState.SCOPE_CHECK, HunterState.DISCOVER, HunterState.ERROR, HunterState.ABORTED},
-        HunterState.DEGRADED_MODE: {HunterState.SCOPE_CHECK, HunterState.DISCOVER, HunterState.ERROR, HunterState.ABORTED},
+        HunterState.AI_READY: {HunterState.ENV_READINESS, HunterState.SCOPE_CHECK, HunterState.DISCOVER, HunterState.ERROR, HunterState.ABORTED},
+        HunterState.DEGRADED_MODE: {HunterState.ENV_READINESS, HunterState.SCOPE_CHECK, HunterState.DISCOVER, HunterState.ERROR, HunterState.ABORTED},
         HunterState.AI_UNAVAILABLE: {HunterState.DEGRADED_MODE, HunterState.ABORTED, HunterState.ERROR},
         HunterState.MODEL_MISSING: {HunterState.DEGRADED_MODE, HunterState.ABORTED, HunterState.ERROR},
         HunterState.INFERENCE_FAILED: {HunterState.DEGRADED_MODE, HunterState.ABORTED, HunterState.ERROR},

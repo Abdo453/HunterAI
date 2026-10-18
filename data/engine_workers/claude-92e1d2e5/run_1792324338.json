@@ -1,0 +1,12 @@
+{
+  "engine": "claude",
+  "model": "",
+  "target": "http://t.local",
+  "ok": false,
+  "exit_code": 1,
+  "session_id": "",
+  "duration_s": 0.0,
+  "steps_count": 0,
+  "output_tail": "boom",
+  "error": "boom"
+}

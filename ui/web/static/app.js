@@ -47,6 +47,7 @@ function switchTab(tab, btn) {
   if(tab === 'flags') flagsLoad();
   if(tab === 'extensions') extLoad();
   if(tab === 'control') { controlLoadRuns(); budgetSnapshot(); }
+  if(tab === 'readiness') maybeRunReadiness();
 }
 
 function switchView(view, btn) {
@@ -427,6 +428,25 @@ async function checkBurpStatus() {
   }
 }
 
+async function refreshReadiness() {
+  const summary = document.getElementById('readiness-summary');
+  try {
+    const response = await fetch('/api/diagnostics/preflight');
+    const data = await response.json();
+    if (!summary) return data;
+    const ready = data.strict_ready === true;
+    const tools = `${data.tools_ready_count || 0}/${data.total_tools || 0} أدوات`;
+    summary.style.color = ready ? '#00ff41' : '#ffaa00';
+    summary.textContent = ready
+      ? `جاهز: Burp + Gateway + Playwright + Ollama + ${tools} + SecLists`
+      : `ناقص: ${tools} | Burp:${data.burp?.online ? '✓' : '✗'} | Gateway:${data.gateway?.online ? '✓' : '✗'} | Browser:${data.browser?.playwright_available ? '✓' : '✗'} | Ollama:${data.ollama?.online ? '✓' : '✗'} | SecLists:${data.seclists?.available ? '✓' : '✗'}`;
+    return data;
+  } catch (error) {
+    if (summary) { summary.style.color = '#ff2a4b'; summary.textContent = 'تعذر قراءة حالة الجاهزية المحلية'; }
+    return null;
+  }
+}
+
 function onBurpToggleChange() {
   const chk = document.getElementById('use-proxy-chk');
   if (chk && chk.checked) {
@@ -543,6 +563,12 @@ async function startScan() {
 
   const useProxyChk = document.getElementById('use-proxy-chk');
   let useProxyVal = useProxyChk ? useProxyChk.checked : false;
+  const strictReady = document.getElementById('strict-ready-chk')?.checked === true;
+  const readiness = await refreshReadiness();
+  if (strictReady && (!readiness || !readiness.strict_ready)) {
+    alert('لا يمكن بدء المهمة: فحص الجاهزية الصارم لم يكتمل. شغّل Burp وGateway وOllama وثبّت Playwright وأدوات Kali/SecLists أولاً.');
+    return;
+  }
 
   // Pre-flight check for Burp Suite
   if (useProxyVal) {
@@ -608,6 +634,7 @@ async function startScan() {
       mode: modeVal,
       use_browser: useBrowserVal,
       use_proxy: useProxyVal,
+      require_ready: strictReady,
       burp_proxy: '127.0.0.1:8080',
       auth: {
         username: authUser.trim(),
@@ -625,6 +652,8 @@ async function startScan() {
     loadSessions();
   };
 }
+
+document.addEventListener('DOMContentLoaded', () => { refreshReadiness(); });
 
 function handleScanEvent(d) {
   const ev = d.event;
@@ -2129,4 +2158,126 @@ switchTab = function(tab, btn) {
   if (tab === 'flags') flagsLoad();
   if (tab === 'extensions') extLoad();
   if (tab === 'control') { controlLoadRuns(); budgetSnapshot(); }
+  if (tab === 'readiness') maybeRunReadiness();
 };
+
+// ── ✅ Readiness Tab (Phase 1 — جاهزية البيئة بإثبات محلي) ──────
+let _readinessScanned = false;
+
+function maybeRunReadiness() {
+  if (!_readinessScanned) runReadinessScan();
+}
+
+async function runReadinessScan() {
+  const btn = document.getElementById('readiness-btn');
+  const badge = document.getElementById('readiness-state-badge');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري الفحص المحلي...';
+  badge.textContent = '⏳ جاري الفحص...';
+  badge.style.background = '#ffaa00';
+  badge.style.color = '#000';
+  try {
+    const r = await fetch('/api/diagnostics/readiness');
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    renderReadiness(d);
+  } catch(e) {
+    badge.textContent = '❌ فشل الفحص';
+    badge.style.background = '#ff2a4b';
+    badge.style.color = '#fff';
+    document.getElementById('readiness-list').innerHTML =
+      `<div style="color:#ff2a4b;padding:10px;">خطأ: ${e}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔎 افحص الجاهزية الآن';
+  }
+}
+
+function _rdStatusChip(status) {
+  const map = {
+    READY:    {bg:'#00ff41', fg:'#000', txt:'✅ جاهز'},
+    MISSING:  {bg:'#ff2a4b', fg:'#fff', txt:'❌ مفقود'},
+    UNHEALTHY:{bg:'#ffaa00', fg:'#000', txt:'⚠️ غير سليم'},
+    SKIPPED:  {bg:'#555',    fg:'#fff', txt:'⏭️ متخطى'},
+  };
+  const m = map[status] || {bg:'#888', fg:'#fff', txt: status};
+  return `<span style="background:${m.bg};color:${m.fg};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap;">${m.txt}</span>`;
+}
+
+function _rdIcon(name) {
+  if (name.startsWith('kali_tool:')) return '🛠️';
+  if (name === 'ollama_server' || name.startsWith('ollama:')) return '🧠';
+  if (name === 'burp_proxy') return '🥷';
+  if (name === 'burp_gateway') return '🌉';
+  if (name === 'playwright') return '🌐';
+  if (name.startsWith('wordlist:')) return '📚';
+  return '🔧';
+}
+
+function renderReadiness(d) {
+  _readinessScanned = true;
+  const results = d.results || [];
+  const counts = d.counts || {};
+  const badge = document.getElementById('readiness-state-badge');
+
+  // البادج العام
+  if (d.strict_ready) {
+    badge.textContent = '🟢 البيئة جاهزة (strict)';
+    badge.style.background = '#00ff41';
+    badge.style.color = '#000';
+  } else {
+    badge.textContent = '🔴 غير جاهز — ممنوع بدء مهمة strict';
+    badge.style.background = '#ff2a4b';
+    badge.style.color = '#fff';
+  }
+
+  // كروت الملخص
+  const summary = document.getElementById('readiness-summary');
+  summary.style.display = 'grid';
+  const cards = [
+    {v: counts.READY || 0,     l:'جاهز',    bg:'#00ff41', fg:'#000'},
+    {v: counts.MISSING || 0,   l:'مفقود',   bg:'#ff2a4b', fg:'#fff'},
+    {v: counts.UNHEALTHY || 0, l:'غير سليم', bg:'#ffaa00', fg:'#000'},
+    {v: counts.SKIPPED || 0,   l:'متخطى',   bg:'#555',    fg:'#fff'},
+    {v: results.length,        l:'إجمالي الفحوص', bg:'#3399ff', fg:'#fff'},
+  ];
+  summary.innerHTML = cards.map(c => `
+    <div style="background:#161b22;border:1px solid ${c.bg};border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:26px;font-weight:bold;color:${c.bg};">${c.v}</div>
+      <div style="color:#888;font-size:12px;">${c.l}</div>
+    </div>`).join('');
+
+  // صندوق المحجوب (strict)
+  const blockedBox = document.getElementById('readiness-blocked-box');
+  const blocked = d.blocked || [];
+  if (!d.strict_ready && blocked.length) {
+    blockedBox.style.display = 'block';
+    blockedBox.innerHTML = `
+      <div style="background:#2d0a12;border:1px solid #ff2a4b;border-radius:8px;padding:12px;">
+        <div style="color:#ff2a4b;font-weight:bold;margin-bottom:6px;">⛔ 
+          حاجب بدء المهمة في الوضع strict (${blocked.length}):</div>
+        <div style="color:#ff8899;font-size:13px;font-family:monospace;">${blocked.map(function (b) { return '• ' + String(b.name || b) + ' (' + (b.status || '') + ')'; }).join('<br>')}</div>
+      </div>`;
+  } else {
+    blockedBox.style.display = 'none';
+  }
+
+  // قائمة النتائج
+  const list = document.getElementById('readiness-list');
+  list.innerHTML = results.map(r => {
+    const safe = s => String(s || '').replace(/</g, '&lt;');
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid #21262d;flex-wrap:wrap;">
+      <div style="min-width:0;">
+        <span style="color:#ddd;font-family:monospace;font-size:13px;">${_rdIcon(r.name)} ${safe(r.name)}</span>
+        <div style="color:#888;font-size:11px;font-family:monospace;word-break:break-all;">${safe(r.probe)}</div>
+        ${r.detail ? `<div style="color:#9aa;font-size:11px;font-family:monospace;word-break:break-all;">${safe(r.detail)}</div>` : ''}
+      </div>
+      ${_rdStatusChip(r.status)}
+    </div>`;
+  }).join('');
+
+  document.getElementById('readiness-artifact').innerHTML =
+    d.artifact_path ? `📄 تقرير الإثبات محفوظ: <span style="color:#3399ff;font-family:monospace;">${d.artifact_path}</span>` : '';
+}

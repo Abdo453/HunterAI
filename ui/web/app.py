@@ -165,28 +165,44 @@ async def get_static_reasoning_memory():
     return {"reasoning_memory": engine.reasoning_memory}
 
 
+@app.get("/api/diagnostics/readiness")
+async def run_readiness_scan():
+    """الفحص الموحد لجاهزية البيئة (core.readiness) — محلي فقط، لا يلمس أي هدف."""
+    try:
+        from core.readiness import ReadinessChecker, save_readiness_artifact
+
+        checker = ReadinessChecker()
+        report = await checker.run_all(target="dashboard-local", session_id="readiness_tab")
+        artifact_path = save_readiness_artifact(report)
+        data = report.to_dict()
+        data["artifact_path"] = str(artifact_path) if artifact_path else None
+        return data
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
 @app.get("/api/diagnostics/preflight")
-
-
 async def check_preflight():
-    """فحص جاهزية النظام والبروكسي والأدوات قبل بدء الفحص"""
+    """Local-only readiness report. Never contacts an assessment target."""
     import socket
     import shutil
     import httpx
-    
-    # 1. Burp Suite Proxy Check
+    import sys
+    import yaml
+
+    def tcp_ready(host: str, port: int) -> bool:
+        try:
+            with socket.create_connection((host, port), timeout=0.6):
+                return True
+        except OSError:
+            return False
+
+    # Burp Proxy and the local HunterAI gateway are intentionally TCP-only
+    # checks.  They do not create traffic for a user supplied target.
     burp_host = "127.0.0.1"
     burp_port = 8080
-    burp_online = False
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(0.6)
-        res = sock.connect_ex((burp_host, burp_port))
-        if res == 0:
-            burp_online = True
-        sock.close()
-    except Exception:
-        burp_online = False
+    burp_online = tcp_ready(burp_host, burp_port)
+    gateway_online = tcp_ready("127.0.0.1", 8085)
 
     # 2. Ollama Local Server Check
     ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
@@ -199,16 +215,45 @@ async def check_preflight():
     except Exception:
         ollama_online = False
 
-    # 3. Security Tools Available in PATH
-    tools = ["httpx", "nuclei", "katana", "sqlmap", "ffuf", "wafw00f", "nmap"]
-    tools_status = {}
-    for t in tools:
-        tools_status[t] = shutil.which(t) is not None or shutil.which(f"{t}.exe") is not None
+    manifest_path = Path("environment/manifest.json")
+    tools_config_path = Path("config/tools.yaml")
+    required_tools = ["nmap", "subfinder", "httpx", "katana", "nuclei", "ffuf", "sqlmap", "wpscan", "curl"]
+    if manifest_path.exists():
+        required_tools = json.loads(manifest_path.read_text(encoding="utf-8")).get("required_kali_tools", required_tools)
+
+    configured_commands: Dict[str, str] = {}
+    if tools_config_path.exists():
+        config = yaml.safe_load(tools_config_path.read_text(encoding="utf-8")) or {}
+        for group in config.values():
+            if isinstance(group, dict):
+                for name, spec in group.items():
+                    if isinstance(spec, dict) and spec.get("cmd"):
+                        configured_commands[name] = str(spec["cmd"])
+
+    tools_status = {
+        name: bool(shutil.which(configured_commands.get(name, name)) or shutil.which(f"{configured_commands.get(name, name)}.exe"))
+        for name in required_tools
+    }
+
+    try:
+        from core.browser.playwright_controller import PLAYWRIGHT_AVAILABLE
+        playwright_available = bool(PLAYWRIGHT_AVAILABLE)
+    except Exception:
+        playwright_available = False
+
+    seclists_roots = [
+        Path("/usr/share/seclists"), Path("/usr/share/wordlists/seclists"),
+        Path.home() / "wordlist" / "SecLists",
+    ]
+    seclists_path = next((str(path) for path in seclists_roots if path.is_dir()), None)
 
     # 4. APIs
     api_ready = bool(os.getenv("GEMINI_API_KEY") or os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY"))
 
+    essential_ready = all(tools_status.values()) and bool(seclists_path)
     return {
+        "safe_check": "Only local service, package, PATH, and directory checks were run; no assessment target was contacted.",
+        "host": {"platform": sys.platform, "python": sys.version.split()[0]},
         "burp": {
             "host": burp_host,
             "port": burp_port,
@@ -219,10 +264,15 @@ async def check_preflight():
             "online": ollama_online,
             "host": ollama_host
         },
+        "gateway": {"host": "127.0.0.1", "port": 8085, "online": gateway_online},
+        "browser": {"playwright_available": playwright_available, "launch_verified": False},
+        "seclists": {"available": bool(seclists_path), "path": seclists_path},
         "tools": tools_status,
         "tools_ready_count": sum(1 for v in tools_status.values() if v),
-        "total_tools": len(tools),
-        "api_ready": api_ready
+        "total_tools": len(required_tools),
+        "api_ready": api_ready,
+        "kali_tools_ready": essential_ready,
+        "strict_ready": bool(burp_online and gateway_online and playwright_available and ollama_online and essential_ready),
     }
 
 
@@ -2120,6 +2170,16 @@ async def ws_scan(ws: WebSocket):
         burp_proxy = data.get("burp_proxy", "127.0.0.1:8080")
         auth_data = data.get("auth", {})
 
+        if data.get("require_ready", False):
+            readiness = await check_preflight()
+            if not readiness.get("strict_ready", False):
+                await ws.send_text(json.dumps({
+                    "event": "error",
+                    "message": "Readiness gate failed: Agent/Burp/Gateway/Browser/Ollama/Kali tools are not all ready.",
+                    "readiness": readiness,
+                }))
+                return
+
         from core.smart_orchestrator import SmartOrchestrator
         result = await SmartOrchestrator(progress_callback=cb).run_scan(
             target=target,
@@ -2154,6 +2214,28 @@ async def start_autonomous_mission(req: Request):
 
     if not target:
         return JSONResponse(status_code=400, content={"error": "Target parameter is required"})
+
+    # ── Phase 1: Readiness Gate — لا مهمة بدون بيئة مثبتة محليًا ──────
+    if data.get("require_ready", False) or data.get("strict", False):
+        from core.readiness import (
+            ReadinessChecker,
+            ReadinessGateError,
+            run_mission_gate,
+            save_readiness_artifact,
+        )
+        try:
+            readiness_report = await run_mission_gate(
+                data, target, session_id, checker=ReadinessChecker())
+            save_readiness_artifact(readiness_report)
+        except ReadinessGateError as gate_exc:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": f"Readiness gate failed: {gate_exc}",
+                    "status": "blocked",
+                    "readiness": gate_exc.report.to_dict(),
+                },
+            )
 
     from agents.autonomous_mission_agent import AutonomousMissionAgent
     from agents.base_agent import AgentTask

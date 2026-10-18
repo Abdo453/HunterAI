@@ -94,5 +94,29 @@ BUILTIN_CONTRACTS: Dict[str, SkillContract] = {
         risk_level="low",
         success_conditions=["SSH service reachable", "Algorithm audit parsed from tool output"],
         failure_conditions=["No SSH auditing tool available", "SSH port unreachable"]
+    ),
+    "tls_audit": SkillContract(
+        name="tls_audit",
+        purpose="Audits TLS/SSL service configuration (protocol versions, ciphers, certificate posture).",
+        inputs=["target_domain"],
+        outputs=["tls_audit.txt", "tls_audit_findings.json"],
+        dependencies=[],
+        permissions=["network.tcp"],
+        timeout_seconds=150,
+        risk_level="low",
+        success_conditions=["TLS service reachable", "Protocol/cipher audit parsed"],
+        failure_conditions=["No TLS auditing tool available", "TLS port unreachable"]
+    ),
+    "smb_enum": SkillContract(
+        name="smb_enum",
+        purpose="Enumerates SMB/NetBIOS/AD surface (signing, SMBv1, null sessions, shares, users, domain).",
+        inputs=["target_domain"],
+        outputs=["smb_enum.txt", "smb_enum_findings.json"],
+        dependencies=[],
+        permissions=["network.tcp"],
+        timeout_seconds=180,
+        risk_level="medium",
+        success_conditions=["SMB service reachable", "Enumeration output parsed"],
+        failure_conditions=["No SMB enumeration tool available", "SMB port unreachable"]
     )
 }

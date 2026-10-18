@@ -1,0 +1,5 @@
+GET https://example.com/search?q=test HTTP/1.1
+Host: example.com
+User-Agent: Mozilla/5.0
+Authorization: Bearer sk-abcdef1234567890
+

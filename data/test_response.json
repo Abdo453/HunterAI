@@ -1,0 +1,10 @@
+{
+    "status_code": 200,
+    "reason": "OK",
+    "headers": {
+        "Content-Type": "text/html",
+        "Server": "nginx"
+    },
+    "body": "<html>Search results for: test</html>",
+    "elapsed_ms": 145
+}

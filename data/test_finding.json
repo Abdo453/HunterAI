@@ -1,0 +1,15 @@
+{
+    "title": "SQL Injection on login form",
+    "target": "https://example.com",
+    "evidence": {
+        "poc": "' OR 1=1 --",
+        "arithmetic_proof": "72",
+        "differential_response": true,
+        "poe_verified": true,
+        "real_exploit_path": true,
+        "impact": "Database extraction possible",
+        "severity": "high",
+        "request_hash": "abc123",
+        "response_hash": "def456"
+    }
+}

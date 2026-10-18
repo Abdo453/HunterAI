@@ -1,0 +1,22 @@
+name: smb_enum
+category: recon
+description: "Enumerate SMB/NetBIOS/AD surface (signing, SMBv1, null sessions, shares, users, domain) using netexec, enum4linux-ng, or smbclient"
+version: "1.0"
+input:
+  - target_domain: str
+  - nmap_services.txt
+output:
+  - smb_enum.txt
+  - smb_enum_findings.json
+depends_on: []
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required:
+  - netexec
+fallback_tools:
+  - enum4linux-ng
+  - smbclient
+timeout_seconds: 180
+max_retries: 2
+enabled: true

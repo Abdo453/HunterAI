@@ -12,6 +12,7 @@ depends_on:
 next_skills:
   - crawling
   - endpoint_discovery
+  - waf_detection
 fallback_skills: []
 tools_required:
   - whatweb

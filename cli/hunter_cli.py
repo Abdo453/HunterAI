@@ -629,6 +629,18 @@ def build_parser() -> argparse.ArgumentParser:
     # Preflight command
     subparsers.add_parser("preflight", help="Execute self-test diagnostics")
 
+    # Skills registry command (list / show / graph the skill system)
+    sk_p = subparsers.add_parser("skills", help="Inspect the modular Skill system (list/show/graph)")
+    sk_sub = sk_p.add_subparsers(dest="skills_action", help="Skills action")
+    sk_list = sk_sub.add_parser("list", help="List discovered skills")
+    sk_list.add_argument("--category", default=None, help="Filter by category (recon, analysis, web, browser, reporting)")
+    sk_list.add_argument("--json", action="store_true", help="Output raw JSON")
+    sk_show = sk_sub.add_parser("show", help="Show a skill's metadata, contract and tools")
+    sk_show.add_argument("name", help="Skill name")
+    sk_show.add_argument("--json", action="store_true", help="Output raw JSON")
+    sk_graph = sk_sub.add_parser("graph", help="Show the skill dependency graph (DAG)")
+    sk_graph.add_argument("--json", action="store_true", help="Output raw JSON")
+
     return parser
 
 
@@ -2925,6 +2937,114 @@ def process_debit(user_id, amount):
 
     elif parsed.command == "preflight":
         print("\nHunterAI Preflight Diagnostics: ALL SUB-SYSTEMS PASS\n")
+
+    elif parsed.command == "skills":
+        from core.skill_registry import SkillRegistry
+
+        registry = SkillRegistry()
+        action = getattr(parsed, "skills_action", None)
+
+        if action == "list" or action is None:
+            registry.discover()
+            metas = registry.get_all()
+            category = getattr(parsed, "category", None)
+            if category:
+                metas = [m for m in metas if m.category == category]
+            metas = sorted(metas, key=lambda m: (m.category, m.name))
+
+            if getattr(parsed, "json", False):
+                print(json.dumps({
+                    "total": len(metas),
+                    "skills": [m.to_dict() for m in metas],
+                }, indent=2))
+            else:
+                sep = "=" * 74
+                print(f"\n{sep}\n 🧩 HunterAI Modular Skill Registry — {len(metas)} skill(s)\n{sep}")
+                current_cat = None
+                for m in metas:
+                    if m.category != current_cat:
+                        current_cat = m.category
+                        print(f"\n[{current_cat.upper()}]")
+                    tools = ", ".join(m.tools_required) or "-"
+                    deps = ", ".join(m.depends_on) or "-"
+                    print(f"  • {m.name:<20} tools=[{tools}] deps=[{deps}]")
+                    if m.description:
+                        print(f"      {m.description}")
+                print(f"\n{sep}\n")
+
+        elif action == "show":
+            registry.discover()
+            name = parsed.name
+            meta = registry.get_skill(name)
+            if meta is None:
+                print(f"\n❌ Skill not found: {name}")
+                print(f"   Available: {', '.join(registry.list_names())}\n")
+                sys.exit(1)
+
+            from core.skills.skill_contract import BUILTIN_CONTRACTS
+            contract = BUILTIN_CONTRACTS.get(name)
+
+            if getattr(parsed, "json", False):
+                payload = {"metadata": meta.to_dict()}
+                if contract is not None:
+                    payload["contract"] = {
+                        "purpose": contract.purpose,
+                        "inputs": contract.inputs,
+                        "outputs": contract.outputs,
+                        "permissions": contract.permissions,
+                        "risk_level": contract.risk_level,
+                        "timeout_seconds": contract.timeout_seconds,
+                        "success_conditions": contract.success_conditions,
+                        "failure_conditions": contract.failure_conditions,
+                    }
+                print(json.dumps(payload, indent=2))
+            else:
+                sep = "=" * 74
+                print(f"\n{sep}\n 🧩 Skill: {meta.name}  [{meta.category}]\n{sep}")
+                print(f" Description:     {meta.description or '-'}")
+                print(f" Version:         {meta.version}")
+                print(f" Enabled:         {meta.enabled}")
+                print(f" Tools required:  {', '.join(meta.tools_required) or '-'}")
+                print(f" Fallback tools:  {', '.join(meta.fallback_tools) or '-'}")
+                print(f" Depends on:      {', '.join(meta.depends_on) or '-'}")
+                print(f" Next skills:     {', '.join(meta.next_skills) or '-'}")
+                print(f" Timeout:         {meta.timeout_seconds}s | Retries: {meta.max_retries}")
+                print(f" Skill file:      {meta.skill_file}")
+                if contract is not None:
+                    print(" Contract:")
+                    print(f"   purpose:    {contract.purpose}")
+                    print(f"   inputs:     {', '.join(contract.inputs) or '-'}")
+                    print(f"   outputs:    {', '.join(contract.outputs) or '-'}")
+                    print(f"   risk_level: {contract.risk_level}")
+                print(f"\n{sep}\n")
+
+        elif action == "graph":
+            registry.discover()
+            graph = {}
+            for m in registry.get_all():
+                graph[m.name] = {
+                    "category": m.category,
+                    "depends_on": list(m.depends_on),
+                    "next_skills": list(m.next_skills),
+                }
+            if getattr(parsed, "json", False):
+                print(json.dumps(graph, indent=2))
+            else:
+                sep = "=" * 74
+                print(f"\n{sep}\n 🧩 Skill Dependency Graph (DAG)\n{sep}")
+                for name in sorted(graph):
+                    node = graph[name]
+                    deps = ", ".join(node["depends_on"]) or "(entry point)"
+                    print(f"  {name:<20} [{node['category']:<9}] depends_on: {deps}")
+                    if node["next_skills"]:
+                        print(f"      ↳ unlocks: {', '.join(node['next_skills'])}")
+                print(f"\n{sep}\n")
+
+        else:
+            print("\nUsage: hunter skills {list|show|graph} [options]\n")
+            print("  list   List discovered skills (--category, --json)")
+            print("  show   Show a skill's metadata and contract (hunter skills show <name>)")
+            print("  graph  Show the skill dependency graph (--json)\n")
 
     elif parsed.command == "replay":
         from core.replay_lab.replay_lab import ReplayLab

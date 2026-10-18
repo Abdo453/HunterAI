@@ -55,6 +55,7 @@
       
       <!-- Top Navigation Tabs (Unified Views: Agent Mission + Interactive Chat + Split View) -->
       <div class="tabs">
+        <button class="tab" onclick="switchTab('readiness',this)">✅ جاهزية البيئة (Readiness)</button>
         <button class="tab active" onclick="switchTab('scan',this)">🤖 مهمات الـ Agent (Mission Control)</button>
         <button class="tab" onclick="switchTab('chat',this)">💬 شات وتوجيه الـ Agent (Interactive Chat)</button>
         <button class="tab" onclick="switchTab('split',this)">⚡ العرض المزدوج (Split: شات + إيجنت)</button>
@@ -95,10 +96,21 @@
             <span class="toggle-label">🌐 تصفح تفاعلي بالمتصفح (Browser Automation)</span>
           </label>
 
+          <label class="toggle-group" style="margin-right:15px;">
+            <input type="checkbox" id="strict-ready-chk" checked>
+            <span class="toggle-label">🛡️ لا تبدأ قبل اكتمال الجاهزية</span>
+          </label>
+
           <div style="margin-right:auto;display:flex;align-items:center;gap:8px;">
             <span style="font-size:0.75em;color:#ffaa00;">💡 توجيهات المستخدم النشطة:</span>
             <span id="active-hints-counter" class="header-badge" style="background:#ffaa00;color:#000;font-weight:bold;cursor:pointer;" onclick="switchTab('chat', document.querySelector('button[onclick*=\'chat\']'))" title="انقر لعرض الشات وتقديم نصائح">0 نصيحة</span>
           </div>
+        </div>
+
+        <div id="readiness-panel" style="margin:0 0 12px;padding:9px 12px;border:1px solid rgba(0,204,255,.25);border-radius:6px;background:#080d16;font-size:12px;color:#aab6c8;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <strong style="color:#00ccff;">🧪 فحص الجاهزية:</strong>
+          <span id="readiness-summary">جارِ فحص Agent / Burp / Browser / Kali tools…</span>
+          <button class="btn-sm" onclick="refreshReadiness()">🔄 تحديث</button>
         </div>
 
         <div style="display:grid;grid-template-columns:2.5fr 1.5fr 1fr;gap:12px;margin-bottom:12px;">
@@ -225,6 +237,33 @@
         </div>
         <div id="poc-results-box" style="display:none;margin-top:10px;"></div>
       </details>
+    </div>
+
+    <!-- ── 0. READINESS TAB (Phase 1 — جاهزية البيئة قبل أي مهمة) ─────── -->
+    <div id="tab-readiness" class="tab-content">
+      <div class="card">
+        <div class="card-hdr">
+          <h2>✅ جاهزية البيئة (Unified Readiness — لا مهمة بدون إثبات محلي)</h2>
+          <span id="readiness-state-badge" class="header-badge" style="background:#666;color:#fff;">لم يُفحص بعد</span>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+          <button onclick="runReadinessScan()" id="readiness-btn" class="btn" style="background:#00ff41;color:#000;font-weight:bold;">🔎 افحص الجاهزية الآن</button>
+          <span style="color:#888;font-size:12px;">probe محلي فقط (--version / TCP connect / مسارات ملفات) — لا كالس أي هدف</span>
+        </div>
+
+        <!-- الملخص -->
+        <div id="readiness-summary" style="display:none;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;"></div>
+
+        <!-- الخطأ النهائي عند الحجب -->
+        <div id="readiness-blocked-box" style="display:none;margin-bottom:14px;"></div>
+
+        <!-- قائمة المكونات -->
+        <div id="readiness-list" style="max-height:58vh;overflow-y:auto;"></div>
+
+        <!-- مسار الـ artifact -->
+        <div id="readiness-artifact" style="color:#888;font-size:11px;margin-top:10px;"></div>
+      </div>
     </div>
 
     <!-- ── 2. HTTP & BURP ANALYZER TAB ────────────────────────── -->

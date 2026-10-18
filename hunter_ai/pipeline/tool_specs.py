@@ -46,6 +46,9 @@ class MasterToolRegistry:
         self.tm = tool_manager or ToolManager()
         self.specs: Dict[str, ToolSpec] = {}
         self._result_observer: Optional[Any] = None
+        # Phase 2: ledgers موحد لكل تنفيذ أداة (اختياري — يوصله الـ orchestrator)
+        self.evidence_store: Optional[Any] = None
+        self.run_id: str = ""
         self._init_master_specs()
 
     def set_result_observer(self, observer: Any) -> None:
@@ -830,7 +833,51 @@ class MasterToolRegistry:
             "next_stage": spec.next_stage if spec else None,
             "input_source": input_source,
         })
+        self._record_unified_execution(
+            tool_name=tool_name, stage=stage, status=status,
+            cmd_str=cmd_str, raw_str=raw_str, context=context,
+            input_source=input_source, meta=meta, error_msg=error_msg,
+        )
         return (parsed, meta)
+
+    def _record_unified_execution(self, *, tool_name: str, stage: str, status: str,
+                                  cmd_str: str, raw_str: str, context: Dict[str, Any],
+                                  input_source: Optional[str], meta: Any,
+                                  error_msg: Optional[str]) -> None:
+        """
+        Phase 2: كل تنفيذ أداة يترك سجلًا موحدًا في EvidenceStore (append-only).
+        يحمل خط الأدلة الكامل: الأمر الفعلي + المرحلة + الهدف + الـ endpoint +
+        مقتطف الإخراج + مرجع الـ artifact. لا يُسقط فحصًا أبدًا (telemetry فقط).
+        """
+        store = getattr(self, "evidence_store", None)
+        if store is None:
+            return
+        try:
+            from core.evidence_store import _redact_secrets
+            rec = store.record_tool_execution(
+                run_id=getattr(self, "run_id", "") or "",
+                worker_id=f"registry:{tool_name}",
+                tool_id=tool_name,
+                redacted_arguments={"stage": stage, "input_source": input_source or ""},
+                artifact_reference=getattr(meta, "raw_output_file", None),
+                command=_redact_secrets(str(cmd_str or ""))[:500],
+                stage=stage,
+                target=str(context.get("domain") or context.get("host")
+                           or context.get("target") or ""),
+                endpoint=str(context.get("url") or context.get("endpoint") or ""),
+                output_excerpt=_redact_secrets(str(raw_str or ""))[:240],
+            )
+            final_status = "finished" if status in ("success", "fallback") else "failed"
+            exit_code = 0 if status == "success" else (
+                None if status == "fallback" else 1
+            )
+            ok = store.finish_tool_execution(rec.execution_id, final_status, exit_code)
+            logger.info(
+                "Unified tool execution recorded: %s (%s/%s, finished=%s)",
+                rec.execution_id, tool_name, status, ok,
+            )
+        except Exception as e:  # never let telemetry break a scan
+            logger.warning("Unified tool execution record failed for %s: %s", tool_name, e)
 
 
     async def _execute_fallback(self, fallback_name: str, context: Dict[str, Any]) -> Tuple[List[Any], Optional[str]]:

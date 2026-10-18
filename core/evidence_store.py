@@ -38,6 +38,7 @@ _ENTITY_FILES = {
     "hypothesis": "hypothesis.jsonl",
     "dead_end": "dead_end.jsonl",
     "tool_execution": "tool_execution.jsonl",
+    "court_verdict": "court_verdict.jsonl",
     "event": "event.jsonl",
     "run": "run.jsonl",
 }
@@ -108,6 +109,12 @@ class ToolExecutionRecord:
     started_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
     artifact_reference: Optional[str] = None
+    # ── Phase 2: خط الأدلة الكامل — الذهاب من أي نتيجة إلى الأمر الأصلي ──
+    command: str = ""           # الأمر الذي أُنفِّذ فعلاً (بعد تنقية الأسرار)
+    stage: str = ""             # مرحلة الـ pipeline (SCOPE_CHECK/DISCOVER/...)
+    target: str = ""            # الهدف العام للمهمة (hostname/IP)
+    endpoint: str = ""          # الـ endpoint الذي لمسته الأداة
+    output_excerpt: str = ""    # مقتطف قصير من raw output للـ traceability
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -120,6 +127,24 @@ class EventRecord:
     event_type: str
     timestamp: float
     payload: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class CourtVerdictRecord:
+    """حكم محكمة الأدلة على نتيجة واحدة — جلسة قابلة للتدقيق (Phase 3)."""
+    court_id: str
+    run_id: str
+    finding_id: str
+    title: str
+    endpoint: str
+    verdict: str              # PASSED | DEMOTED
+    reason_code: str          # no_evidence | unverified_evidence | standard_web_behavior | ...
+    rationale: str = ""
+    session_id: str = ""
+    decided_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -284,13 +309,20 @@ class EvidenceStore:
     def record_tool_execution(self, *, run_id: str, worker_id: str,
                               tool_id: str,
                               redacted_arguments: Optional[Dict[str, Any]] = None,
-                              artifact_reference: Optional[str] = None
+                              artifact_reference: Optional[str] = None,
+                              command: str = "",
+                              stage: str = "",
+                              target: str = "",
+                              endpoint: str = "",
+                              output_excerpt: str = "",
                               ) -> ToolExecutionRecord:
         rec = ToolExecutionRecord(
             execution_id=f"TE-{uuid.uuid4().hex[:8].upper()}",
             run_id=run_id, worker_id=worker_id, tool_id=tool_id,
             redacted_arguments=dict(redacted_arguments or {}),
-            artifact_reference=artifact_reference)
+            artifact_reference=artifact_reference,
+            command=command, stage=stage, target=target,
+            endpoint=endpoint, output_excerpt=output_excerpt)
         self._append("tool_execution", rec.to_dict())
         return rec
 
@@ -310,6 +342,28 @@ class EvidenceStore:
             target.exit_code = exit_code
         self._append("tool_execution", target.to_dict())
         return True
+
+    # -- أحكام محكمة الأدلة (Phase 3) --
+    def record_court_verdict(self, *, run_id: str, finding_id: str,
+                             title: str, endpoint: str,
+                             verdict: str, reason_code: str,
+                             rationale: str = "",
+                             session_id: str = "") -> CourtVerdictRecord:
+        rec = CourtVerdictRecord(
+            court_id=f"CRT-{uuid.uuid4().hex[:8].upper()}",
+            run_id=run_id, finding_id=finding_id,
+            title=title, endpoint=endpoint,
+            verdict=verdict, reason_code=reason_code,
+            rationale=rationale, session_id=session_id)
+        self._append("court_verdict", rec.to_dict())
+        return rec
+
+    def list_court_verdicts(self, run_id: Optional[str] = None) -> List[CourtVerdictRecord]:
+        out: List[CourtVerdictRecord] = []
+        for d in self._read_all("court_verdict"):
+            if run_id is None or d.get("run_id") == run_id:
+                out.append(CourtVerdictRecord(**d))
+        return out
 
     # -- الأحداث (تاريخ دائم لكل run) --
     def add_event(self, *, run_id: str, event_type: str,

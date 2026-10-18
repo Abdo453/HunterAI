@@ -13,6 +13,9 @@ depends_on: []
 next_skills:
   - tech_detection
   - crawling
+  - ssh_audit
+  - tls_audit
+  - smb_enum
 fallback_skills:
   - tech_detection
 tools_required:

@@ -1,0 +1,872 @@
+{
+  "target": "",
+  "session_id": "cli",
+  "started_at": 1792319175.3929484,
+  "duration_sec": 9.09,
+  "strict": true,
+  "strict_ready": true,
+  "safe_check": "Local probes only (--version/--help, TCP connect, file existence). لامس أي هدف.",
+  "counts": {
+    "READY": 64,
+    "MISSING": 1,
+    "UNHEALTHY": 0,
+    "SKIPPED": 1
+  },
+  "blocked": [],
+  "results": [
+    {
+      "component": "kali_tool",
+      "name": "nmap",
+      "status": "READY",
+      "required": true,
+      "detail": "nmap (mock) v1.0.0-mock",
+      "probe": "nmap --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\nmap.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319175.581888
+    },
+    {
+      "component": "kali_tool",
+      "name": "masscan",
+      "status": "READY",
+      "required": false,
+      "detail": "masscan (mock) v1.0.0-mock",
+      "probe": "masscan --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\masscan.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319175.6701493
+    },
+    {
+      "component": "kali_tool",
+      "name": "rustscan",
+      "status": "READY",
+      "required": false,
+      "detail": "rustscan (mock) v1.0.0-mock",
+      "probe": "rustscan --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\rustscan.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319175.7526953
+    },
+    {
+      "component": "kali_tool",
+      "name": "netexec",
+      "status": "READY",
+      "required": false,
+      "detail": "netexec (mock) v1.0.0-mock",
+      "probe": "netexec --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\netexec.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319175.8452334
+    },
+    {
+      "component": "kali_tool",
+      "name": "enum4linux",
+      "status": "READY",
+      "required": false,
+      "detail": "enum4linux (mock) v1.0.0-mock",
+      "probe": "enum4linux-ng --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\enum4linux-ng.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319175.9348989
+    },
+    {
+      "component": "kali_tool",
+      "name": "ssh-audit",
+      "status": "READY",
+      "required": false,
+      "detail": "ssh-audit (mock) v1.0.0-mock",
+      "probe": "ssh-audit --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\ssh-audit.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.0190282
+    },
+    {
+      "component": "kali_tool",
+      "name": "responder",
+      "status": "READY",
+      "required": false,
+      "detail": "responder (mock) v1.0.0-mock",
+      "probe": "responder --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\responder.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.1020014
+    },
+    {
+      "component": "kali_tool",
+      "name": "nbtscan",
+      "status": "READY",
+      "required": false,
+      "detail": "nbtscan (mock) v1.0.0-mock",
+      "probe": "nbtscan --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\nbtscan.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.1837199
+    },
+    {
+      "component": "kali_tool",
+      "name": "snmpwalk",
+      "status": "READY",
+      "required": false,
+      "detail": "snmpwalk (mock) v1.0.0-mock",
+      "probe": "snmpwalk --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\snmpwalk.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.2615545
+    },
+    {
+      "component": "kali_tool",
+      "name": "gobuster",
+      "status": "READY",
+      "required": false,
+      "detail": "gobuster (mock) v1.0.0-mock",
+      "probe": "gobuster --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\gobuster.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.347649
+    },
+    {
+      "component": "kali_tool",
+      "name": "ffuf",
+      "status": "READY",
+      "required": true,
+      "detail": "ffuf (mock) v1.0.0-mock",
+      "probe": "ffuf --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\ffuf.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.3969011
+    },
+    {
+      "component": "kali_tool",
+      "name": "feroxbuster",
+      "status": "READY",
+      "required": false,
+      "detail": "feroxbuster (mock) v1.0.0-mock",
+      "probe": "feroxbuster --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\feroxbuster.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.4753807
+    },
+    {
+      "component": "kali_tool",
+      "name": "nuclei",
+      "status": "READY",
+      "required": true,
+      "detail": "nuclei (mock) v1.0.0-mock",
+      "probe": "nuclei --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\nuclei.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.558079
+    },
+    {
+      "component": "kali_tool",
+      "name": "sqlmap",
+      "status": "READY",
+      "required": true,
+      "detail": "sqlmap (mock) v1.0.0-mock",
+      "probe": "sqlmap --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\sqlmap.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.6360803
+    },
+    {
+      "component": "kali_tool",
+      "name": "nikto",
+      "status": "READY",
+      "required": false,
+      "detail": "nikto (mock) v1.0.0-mock",
+      "probe": "nikto --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\nikto.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.7160568
+    },
+    {
+      "component": "kali_tool",
+      "name": "dalfox",
+      "status": "READY",
+      "required": false,
+      "detail": "dalfox (mock) v1.0.0-mock",
+      "probe": "dalfox --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\dalfox.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.795437
+    },
+    {
+      "component": "kali_tool",
+      "name": "wpscan",
+      "status": "READY",
+      "required": true,
+      "detail": "wpscan (mock) v1.0.0-mock",
+      "probe": "wpscan --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\wpscan.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.880396
+    },
+    {
+      "component": "kali_tool",
+      "name": "httpx",
+      "status": "READY",
+      "required": true,
+      "detail": "httpx (mock) v1.0.0-mock",
+      "probe": "httpx --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\httpx.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319176.960506
+    },
+    {
+      "component": "kali_tool",
+      "name": "wafw00f",
+      "status": "READY",
+      "required": false,
+      "detail": "wafw00f (mock) v1.0.0-mock",
+      "probe": "wafw00f --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\wafw00f.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.0380313
+    },
+    {
+      "component": "kali_tool",
+      "name": "katana",
+      "status": "READY",
+      "required": true,
+      "detail": "katana (mock) v1.0.0-mock",
+      "probe": "katana --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\katana.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.1152022
+    },
+    {
+      "component": "kali_tool",
+      "name": "gau",
+      "status": "READY",
+      "required": false,
+      "detail": "gau (mock) v1.0.0-mock",
+      "probe": "gau --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\gau.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.2052174
+    },
+    {
+      "component": "kali_tool",
+      "name": "arjun",
+      "status": "READY",
+      "required": false,
+      "detail": "arjun (mock) v1.0.0-mock",
+      "probe": "arjun --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\arjun.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.294838
+    },
+    {
+      "component": "kali_tool",
+      "name": "paramspider",
+      "status": "READY",
+      "required": false,
+      "detail": "paramspider (mock) v1.0.0-mock",
+      "probe": "paramspider --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\paramspider.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.3979409
+    },
+    {
+      "component": "kali_tool",
+      "name": "dirsearch",
+      "status": "READY",
+      "required": false,
+      "detail": "dirsearch (mock) v1.0.0-mock",
+      "probe": "dirsearch --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\dirsearch.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.4804685
+    },
+    {
+      "component": "kali_tool",
+      "name": "hakrawler",
+      "status": "READY",
+      "required": false,
+      "detail": "hakrawler (mock) v1.0.0-mock",
+      "probe": "hakrawler --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\hakrawler.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.5721145
+    },
+    {
+      "component": "kali_tool",
+      "name": "waybackurls",
+      "status": "READY",
+      "required": false,
+      "detail": "waybackurls (mock) v1.0.0-mock",
+      "probe": "waybackurls --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\waybackurls.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.6634765
+    },
+    {
+      "component": "kali_tool",
+      "name": "subfinder",
+      "status": "READY",
+      "required": true,
+      "detail": "subfinder (mock) v1.0.0-mock",
+      "probe": "subfinder --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\subfinder.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.7512572
+    },
+    {
+      "component": "kali_tool",
+      "name": "amass",
+      "status": "READY",
+      "required": false,
+      "detail": "amass (mock) v1.0.0-mock",
+      "probe": "amass --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\amass.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.8242683
+    },
+    {
+      "component": "kali_tool",
+      "name": "fierce",
+      "status": "READY",
+      "required": false,
+      "detail": "fierce (mock) v1.0.0-mock",
+      "probe": "fierce --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\fierce.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319177.9304504
+    },
+    {
+      "component": "kali_tool",
+      "name": "dnsenum",
+      "status": "READY",
+      "required": false,
+      "detail": "dnsenum (mock) v1.0.0-mock",
+      "probe": "dnsenum --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\dnsenum.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.0273247
+    },
+    {
+      "component": "kali_tool",
+      "name": "theharvester",
+      "status": "READY",
+      "required": false,
+      "detail": "theharvester (mock) v1.0.0-mock",
+      "probe": "theHarvester --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\theHarvester.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.1072202
+    },
+    {
+      "component": "kali_tool",
+      "name": "assetfinder",
+      "status": "READY",
+      "required": false,
+      "detail": "assetfinder (mock) v1.0.0-mock",
+      "probe": "assetfinder --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\assetfinder.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.2012641
+    },
+    {
+      "component": "kali_tool",
+      "name": "findomain",
+      "status": "READY",
+      "required": false,
+      "detail": "findomain (mock) v1.0.0-mock",
+      "probe": "findomain --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\findomain.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.29529
+    },
+    {
+      "component": "kali_tool",
+      "name": "shodan",
+      "status": "READY",
+      "required": false,
+      "detail": "shodan (mock) v1.0.0-mock",
+      "probe": "shodan --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\shodan.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.4025238
+    },
+    {
+      "component": "kali_tool",
+      "name": "hydra",
+      "status": "READY",
+      "required": false,
+      "detail": "hydra (mock) v1.0.0-mock",
+      "probe": "hydra --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\hydra.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.4969034
+    },
+    {
+      "component": "kali_tool",
+      "name": "john",
+      "status": "READY",
+      "required": false,
+      "detail": "john (mock) v1.0.0-mock",
+      "probe": "john --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\john.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.5827925
+    },
+    {
+      "component": "kali_tool",
+      "name": "hashcat",
+      "status": "READY",
+      "required": false,
+      "detail": "hashcat (mock) v1.0.0-mock",
+      "probe": "hashcat --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\hashcat.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.6634967
+    },
+    {
+      "component": "kali_tool",
+      "name": "medusa",
+      "status": "READY",
+      "required": false,
+      "detail": "medusa (mock) v1.0.0-mock",
+      "probe": "medusa --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\medusa.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.761558
+    },
+    {
+      "component": "kali_tool",
+      "name": "gdb",
+      "status": "READY",
+      "required": false,
+      "detail": "gdb (mock) v1.0.0-mock",
+      "probe": "gdb --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\gdb.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.8471425
+    },
+    {
+      "component": "kali_tool",
+      "name": "radare2",
+      "status": "READY",
+      "required": false,
+      "detail": "radare2 (mock) v1.0.0-mock",
+      "probe": "r2 --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\r2.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319178.9357324
+    },
+    {
+      "component": "kali_tool",
+      "name": "binwalk",
+      "status": "READY",
+      "required": false,
+      "detail": "binwalk (mock) v1.0.0-mock",
+      "probe": "binwalk --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\binwalk.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.0182836
+    },
+    {
+      "component": "kali_tool",
+      "name": "checksec",
+      "status": "READY",
+      "required": false,
+      "detail": "checksec (mock) v1.0.0-mock",
+      "probe": "checksec --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\checksec.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.1050692
+    },
+    {
+      "component": "kali_tool",
+      "name": "strings",
+      "status": "READY",
+      "required": false,
+      "detail": "strings (mock) v1.0.0-mock",
+      "probe": "strings --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\strings.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.1970766
+    },
+    {
+      "component": "kali_tool",
+      "name": "file",
+      "status": "READY",
+      "required": false,
+      "detail": "file (mock) v1.0.0-mock",
+      "probe": "file --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\file.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.2771957
+    },
+    {
+      "component": "kali_tool",
+      "name": "prowler",
+      "status": "READY",
+      "required": false,
+      "detail": "prowler (mock) v1.0.0-mock",
+      "probe": "prowler --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\prowler.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.3551905
+    },
+    {
+      "component": "kali_tool",
+      "name": "trivy",
+      "status": "READY",
+      "required": false,
+      "detail": "trivy (mock) v1.0.0-mock",
+      "probe": "trivy --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\trivy.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.4323208
+    },
+    {
+      "component": "kali_tool",
+      "name": "kube_hunter",
+      "status": "READY",
+      "required": false,
+      "detail": "kube_hunter (mock) v1.0.0-mock",
+      "probe": "kube-hunter --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\kube-hunter.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.5148916
+    },
+    {
+      "component": "kali_tool",
+      "name": "checkov",
+      "status": "READY",
+      "required": false,
+      "detail": "checkov (mock) v1.0.0-mock",
+      "probe": "checkov --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\checkov.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.5875475
+    },
+    {
+      "component": "kali_tool",
+      "name": "sherlock",
+      "status": "READY",
+      "required": false,
+      "detail": "sherlock (mock) v1.0.0-mock",
+      "probe": "sherlock --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\sherlock.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.66603
+    },
+    {
+      "component": "kali_tool",
+      "name": "recon_ng",
+      "status": "READY",
+      "required": false,
+      "detail": "recon_ng (mock) v1.0.0-mock",
+      "probe": "recon-ng --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\recon-ng.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.7490249
+    },
+    {
+      "component": "kali_tool",
+      "name": "spiderfoot",
+      "status": "READY",
+      "required": false,
+      "detail": "spiderfoot (mock) v1.0.0-mock",
+      "probe": "spiderfoot --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\spiderfoot.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.8387744
+    },
+    {
+      "component": "kali_tool",
+      "name": "volatility",
+      "status": "READY",
+      "required": false,
+      "detail": "volatility (mock) v1.0.0-mock",
+      "probe": "vol --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\vol.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.9209292
+    },
+    {
+      "component": "kali_tool",
+      "name": "exiftool",
+      "status": "READY",
+      "required": false,
+      "detail": "exiftool (mock) v1.0.0-mock",
+      "probe": "exiftool --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\exiftool.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319179.9994912
+    },
+    {
+      "component": "kali_tool",
+      "name": "zsteg",
+      "status": "READY",
+      "required": false,
+      "detail": "zsteg (mock) v1.0.0-mock",
+      "probe": "zsteg --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\zsteg.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319180.0828955
+    },
+    {
+      "component": "kali_tool",
+      "name": "steghide",
+      "status": "READY",
+      "required": false,
+      "detail": "steghide (mock) v1.0.0-mock",
+      "probe": "steghide --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\steghide.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319180.1706734
+    },
+    {
+      "component": "kali_tool",
+      "name": "foremost",
+      "status": "READY",
+      "required": false,
+      "detail": "foremost (mock) v1.0.0-mock",
+      "probe": "foremost --version/--help",
+      "evidence": {
+        "binary": "E:\\Agant\\PentestAI-Unified\\.tmp_mock_tools\\foremost.CMD",
+        "platform_root": "E:\\Agant\\PentestAI-Unified"
+      },
+      "checked_at": 1792319180.2497551
+    },
+    {
+      "component": "ollama",
+      "name": "ollama_server",
+      "status": "READY",
+      "required": true,
+      "detail": "Ollama reachable at http://127.0.0.1:11434, 5 model(s) present",
+      "probe": "GET http://127.0.0.1:11434/api/tags",
+      "evidence": {
+        "configured_host": "0.0.0.0:11434",
+        "probed_host": "http://127.0.0.1:11434",
+        "models_seen": 5
+      },
+      "checked_at": 1792319181.2808583
+    },
+    {
+      "component": "ollama_model",
+      "name": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
+      "status": "READY",
+      "required": true,
+      "detail": "model available",
+      "probe": "GET http://127.0.0.1:11434/api/tags",
+      "evidence": {
+        "configured_host": "0.0.0.0:11434",
+        "probed_host": "http://127.0.0.1:11434"
+      },
+      "checked_at": 1792319181.2808583
+    },
+    {
+      "component": "ollama_model",
+      "name": "xploiter/pentester:latest",
+      "status": "READY",
+      "required": true,
+      "detail": "model available",
+      "probe": "GET http://127.0.0.1:11434/api/tags",
+      "evidence": {
+        "configured_host": "0.0.0.0:11434",
+        "probed_host": "http://127.0.0.1:11434"
+      },
+      "checked_at": 1792319181.2808583
+    },
+    {
+      "component": "ollama_model",
+      "name": "qwen2.5-coder:14b",
+      "status": "READY",
+      "required": true,
+      "detail": "model available",
+      "probe": "GET http://127.0.0.1:11434/api/tags",
+      "evidence": {
+        "configured_host": "0.0.0.0:11434",
+        "probed_host": "http://127.0.0.1:11434"
+      },
+      "checked_at": 1792319181.2808583
+    },
+    {
+      "component": "burp_proxy",
+      "name": "burp_proxy@127.0.0.1:8080",
+      "status": "MISSING",
+      "required": false,
+      "detail": "TCP refused on 127.0.0.1:8080",
+      "probe": "TCP connect 127.0.0.1:8080",
+      "evidence": {},
+      "checked_at": 1792319182.0988147
+    },
+    {
+      "component": "burp_gateway",
+      "name": "gateway@127.0.0.1:8085",
+      "status": "SKIPPED",
+      "required": false,
+      "detail": "TCP not listening on 127.0.0.1:8085",
+      "probe": "TCP connect 127.0.0.1:8085",
+      "evidence": {},
+      "checked_at": 1792319182.9088333
+    },
+    {
+      "component": "playwright",
+      "name": "playwright_chromium",
+      "status": "READY",
+      "required": false,
+      "detail": "Playwright Chromium ready at C:\\Users\\Computer Market\\AppData\\Local\\ms-playwright\\chromium-1187\\chrome-win\\chrome.exe",
+      "probe": "import playwright_controller + playwright.chromium.executable_path",
+      "evidence": {
+        "executable": "C:\\Users\\Computer Market\\AppData\\Local\\ms-playwright\\chromium-1187\\chrome-win\\chrome.exe",
+        "executable_exists": true,
+        "state": {
+          "available": true,
+          "executable": "C:\\Users\\Computer Market\\AppData\\Local\\ms-playwright\\chromium-1187\\chrome-win\\chrome.exe"
+        }
+      },
+      "checked_at": 1792319184.4597373
+    },
+    {
+      "component": "wordlists",
+      "name": "wordlist:directories",
+      "status": "READY",
+      "required": false,
+      "detail": "resolved to E:\\Agant\\PentestAI-Unified\\data\\wordlists\\common.txt (exists)",
+      "probe": "resolve_wordlist(directories,'standard')",
+      "evidence": {
+        "path": "E:\\Agant\\PentestAI-Unified\\data\\wordlists\\common.txt"
+      },
+      "checked_at": 1792319184.482907
+    },
+    {
+      "component": "wordlists",
+      "name": "wordlist:subdomains",
+      "status": "READY",
+      "required": false,
+      "detail": "resolved to E:\\Agant\\PentestAI-Unified\\data\\wordlists\\subdomains.txt (exists)",
+      "probe": "resolve_wordlist(subdomains,'standard')",
+      "evidence": {
+        "path": "E:\\Agant\\PentestAI-Unified\\data\\wordlists\\subdomains.txt"
+      },
+      "checked_at": 1792319184.4838438
+    },
+    {
+      "component": "wordlists",
+      "name": "wordlist:parameters",
+      "status": "READY",
+      "required": false,
+      "detail": "resolved to E:\\Agant\\PentestAI-Unified\\data\\wordlists\\parameters.txt (exists)",
+      "probe": "resolve_wordlist(parameters,'standard')",
+      "evidence": {
+        "path": "E:\\Agant\\PentestAI-Unified\\data\\wordlists\\parameters.txt"
+      },
+      "checked_at": 1792319184.4848459
+    }
+  ]
+}

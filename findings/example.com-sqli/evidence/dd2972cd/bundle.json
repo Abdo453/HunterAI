@@ -1,0 +1,15 @@
+{
+  "bundle_id": "dd2972cd",
+  "target": "example.com",
+  "vuln_class": "sqli",
+  "created_at": "2026-10-18T15:47:48Z",
+  "response_sha256": "b1025575c5efee805efb82da6c78910e60dbda5c416e1a7fd6c0eeb7c02da90e",
+  "files": [
+    "request.http",
+    "response.http",
+    "repro.sh",
+    "evidence.har",
+    "evidence.md"
+  ],
+  "secrets_redacted": true
+}

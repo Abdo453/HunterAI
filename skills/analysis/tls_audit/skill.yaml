@@ -1,0 +1,22 @@
+name: tls_audit
+category: analysis
+description: "Audit TLS/SSL service configuration (protocol versions, weak ciphers, certificate) using testssl.sh, sslscan, or openssl"
+version: "1.0"
+input:
+  - target_domain: str
+  - nmap_services.txt
+output:
+  - tls_audit.txt
+  - tls_audit_findings.json
+depends_on: []
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required:
+  - testssl.sh
+fallback_tools:
+  - sslscan
+  - openssl
+timeout_seconds: 150
+max_retries: 2
+enabled: true
