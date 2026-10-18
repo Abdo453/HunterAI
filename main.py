@@ -57,6 +57,7 @@ def main():
     p.add_argument("--skip-ai-probe", "--skip-inference-probe", dest="skip_ai_probe", action="store_true", help="Skip live inference prompt test during AI Preflight Gate")
     p.add_argument("--inference-timeout", type=float, default=None, help="Timeout in seconds for live AI inference probe (default: 45s, scales with --timeout-multiplier)")
     p.add_argument("--proxy", "--burp", dest="proxy", default=None, help="Upstream HTTP/Burp Suite proxy (e.g. http://127.0.0.1:8080)")
+    p.add_argument("--require-burp-browser", action="store_true", help="Fail before contacting a target unless Burp proxy, gateway, and proxied Playwright browser are verified")
     p.add_argument("--ask", help="Directly query the Local Triad Agent with a security question, code snippet, or target")
     p.add_argument("--max-steps", type=int, default=15, help="Max steps budget for HunterAI runtime")
     args = p.parse_args()
@@ -140,6 +141,7 @@ def main():
                 skip_ai_probe=args.skip_ai_probe,
                 inference_timeout=args.inference_timeout,
                 browser_type=args.browser_type,
+                require_burp_browser=args.require_burp_browser,
             )
             res = asyncio.run(orch.run())
             if res.get("status") == "aborted":

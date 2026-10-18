@@ -121,6 +121,7 @@ class HunterPipelineOrchestrator:
         skip_ai_probe: bool = False,
         inference_timeout: Optional[float] = None,
         browser_type: str = "firefox",
+        require_burp_browser: bool = False,
     ):
         self.raw_target = target.strip()
         self.session_id = session_id or f"hunter_{int(time.time())}"
@@ -132,6 +133,11 @@ class HunterPipelineOrchestrator:
         self.proxy = proxy
         self.authorized = authorized
         self.browser_type = browser_type or os.getenv("BROWSER_TYPE", "firefox")
+        # Opt-in fail-closed mode: do not touch the target unless the local
+        # Burp proxy, HunterAI gateway, and a proxied Playwright browser are
+        # all verified first.
+        self.require_burp_browser = require_burp_browser
+        self.integration_preflight: Dict[str, Any] = {}
         self.workflow = workflow
         self.mode = mode
         self.scope_file = scope_file
@@ -352,6 +358,61 @@ class HunterPipelineOrchestrator:
 
         except Exception as be:
             logger.warning(f"[BURP] BurpAgent startup notice: {be}")
+
+    async def stage_integration_preflight(self) -> bool:
+        """Verify the local Agent → Browser → Burp path without contacting a target."""
+        import socket
+
+        checks: Dict[str, Any] = {
+            "strict": self.require_burp_browser,
+            "proxy": {"configured": self.proxy, "reachable": False},
+            "gateway": {"ready": self._burp_agent is not None},
+            "browser": {"available": False, "launched": False, "proxy_configured": False},
+        }
+
+        if self.proxy:
+            parsed = urlparse(self.proxy if "://" in self.proxy else f"http://{self.proxy}")
+            host, port = parsed.hostname, parsed.port or 8080
+            if host:
+                try:
+                    with socket.create_connection((host, port), timeout=1.0):
+                        checks["proxy"]["reachable"] = True
+                except OSError as exc:
+                    checks["proxy"]["error"] = str(exc)
+
+        try:
+            from core.browser.playwright_controller import PlaywrightBrowserController, PLAYWRIGHT_AVAILABLE
+            checks["browser"]["available"] = PLAYWRIGHT_AVAILABLE
+            # Browser launch can provision a missing engine.  Only perform that
+            # potentially slow local action when the operator explicitly asked
+            # for a strict Agent → Browser → Burp preflight.
+            prerequisites_ready = checks["proxy"]["reachable"] and checks["gateway"]["ready"]
+            if PLAYWRIGHT_AVAILABLE and self.require_burp_browser and prerequisites_ready:
+                controller = PlaywrightBrowserController(
+                    output_dir=Path(self.artifact_root) / "00_integration" / "browser_preflight",
+                    policy_gate=self.policy_gate,
+                    headless=True,
+                    proxy=self.proxy,
+                )
+                try:
+                    checks["browser"]["launched"] = await controller.launch(self.browser_type)
+                    checks["browser"]["proxy_configured"] = bool(controller.proxy) and checks["browser"]["launched"]
+                finally:
+                    await controller.close()
+        except Exception as exc:
+            checks["browser"]["error"] = str(exc)
+
+        checks["ready"] = bool(
+            checks["proxy"]["reachable"]
+            and checks["gateway"]["ready"]
+            and checks["browser"]["launched"]
+            and checks["browser"]["proxy_configured"]
+        )
+        self.integration_preflight = checks
+        self._save_stage_artifact("00_integration", "agent_burp_browser.json", checks)
+        message = "Agent/Burp/browser integration verified" if checks["ready"] else "Agent/Burp/browser integration is incomplete"
+        await self._emit("integration_preflight", message=message, details=checks)
+        return checks["ready"] or not self.require_burp_browser
 
     async def _process_burp_traffic_event(self, payload: Dict[str, Any]):
         """
@@ -2278,6 +2339,15 @@ class HunterPipelineOrchestrator:
 
         # 🔴 BurpAgent & Gateway Subsystem (Auto-Detect 127.0.0.1:8080 & Launch Port 8085)
         await self._init_burp_agent_subsystem()
+
+        # Validate local integration before AI, scope, or any target-facing stage.
+        if not await self.stage_integration_preflight():
+            return {
+                "status": "aborted",
+                "reason": "agent_burp_browser_preflight_failed",
+                "target": self.raw_target,
+                "preflight": self.integration_preflight,
+            }
 
         # Step 1: AI Preflight Gate (3-Tier Check: Host, Models, Live Inference)
         if not await self.stage_ai_preflight():

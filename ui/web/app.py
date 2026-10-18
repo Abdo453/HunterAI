@@ -1319,6 +1319,10 @@ app.include_router(create_budget_router())
 from ui.web.runs_api import router as runs_api_router
 app.include_router(runs_api_router)
 
+# ── Phase F/G/H UI APIs ──────────────────────────────────────────
+from ui.web.phase_g_api import router as phase_g_api_router
+app.include_router(phase_g_api_router)
+
 # ── V27.2 METAMORPHIC TRIAD, ATTACK SURFACE GRAPH & LEDGER ENDPOINTS ──
 @app.get("/api/v27/attack-surface")
 async def get_v27_attack_surface():

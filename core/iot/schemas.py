@@ -25,7 +25,6 @@ class IoTProtocol(str):
 class IoTDeviceRecord:
     """سجل جهاز إنترنت الأشياء واحد موحّد."""
 
-    record_id: str
     mac: str
     ip: Optional[str] = None
     vendor: Optional[str] = None
@@ -39,6 +38,7 @@ class IoTDeviceRecord:
     source_tool: str = "zigbee2mqtt"
     raw_json: Dict[str, Any] = field(default_factory=dict)
     validation_note: str = ""
+    record_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.record_id:

@@ -523,6 +523,27 @@ def build_parser() -> argparse.ArgumentParser:
     ss_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
     ss_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
 
+    # Wireless command (Phase 4 Wireless/IoT/OT — WiFi Discovery & Security)
+    wl_p = subparsers.add_parser("wireless", help="Run Wireless/WiFi discovery & security (L1→L5 pipeline with verification)")
+    wl_p.add_argument("--target", required=True, help="Target interface or host[:port] to scan")
+    wl_p.add_argument("--source", default="auto", help="Source: kismet | airodump | auto")
+    wl_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    wl_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # IoT command (Phase 4 Wireless/IoT/OT — IoT Device Discovery)
+    io_p = subparsers.add_parser("iot", help="Run IoT device discovery (L1→L5 pipeline with verification)")
+    io_p.add_argument("--target", required=True, help="Target host[:port] or MQTT broker to enumerate")
+    io_p.add_argument("--source", default="zigbee2mqtt", help="Source: zigbee2mqtt | nmap | ble")
+    io_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    io_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
+    # OT command (Phase 4 Wireless/IoT/OT — OT/ICS Asset Discovery)
+    ot_p = subparsers.add_parser("ot", help="Run OT/ICS asset discovery (L1→L5 pipeline with verification)")
+    ot_p.add_argument("--target", required=True, help="Target host to enumerate OT assets")
+    ot_p.add_argument("--ports", default="502,102,44818", help="OT ports to scan (default: 502,102,44818)")
+    ot_p.add_argument("--json", action="store_true", help="Output results in raw JSON")
+    ot_p.add_argument("--safe-mode", action="store_true", help="Enforce scope gate before execution (recommended)")
+
     # Swarm command (V9.0 Multi-Agent Swarm)
     swm_p = subparsers.add_parser("swarm", help="Run Multi-Agent Autonomous Swarm Mission")
     swm_p.add_argument("--target", default="api.corp.local", help="Target domain or host")
@@ -1598,14 +1619,15 @@ def main(args=None):
 
         sys.exit(exit_code)
 
-    elif parsed.command == "swarm":
+    elif parsed.command == "wireless":
         import asyncio, json, sys
-        from agents.subjack_agent import SubjackAgent
+        from agents.wireless_agent import WirelessAgent
         from tools.tool_manager import ToolManager
         from agents.base_agent import AgentTask
         from core.scope_engine import ScopePolicy, StrictScopeEngine
 
         target = parsed.target
+        source = (getattr(parsed, "source", "auto") or "auto").strip().lower()
 
         # ── Scope Gate (P0 Constitution) ──
         policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
@@ -1613,14 +1635,14 @@ def main(args=None):
         allowed, reason = scope_engine.validate_target(target)
 
         if not allowed:
-            print(f"\n🚫 Subjack blocked by Scope Gate: {target}")
+            print(f"\n🚫 Wireless blocked by Scope Gate: {target}")
             print(f"   Reason: {reason}\n")
             sys.exit(1)
 
         mgr = ToolManager()
-        agent = SubjackAgent(mgr)
+        agent = WirelessAgent(mgr)
 
-        task = AgentTask(target=target, extra={})
+        task = AgentTask(target=target, extra={"source": source})
         res = asyncio.run(agent.run(task))
         exit_code = 0 if res.success else 1
 
@@ -1631,16 +1653,15 @@ def main(args=None):
                 "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
             }, ensure_ascii=False, indent=2))
         else:
-            print(f"\n🕸️ HunterAI Subjack Subdomain Takeover — {target}")
+            print(f"\n📶 HunterAI Wireless — {target} ({source})")
             print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
-            print(f"   Tool Available: {agent.tools.is_available()}")
+            print(f"   Tool Available: kismet/airodump-ng")
             print(f"   Findings: {len(res.findings)}")
             for f in res.findings:
-                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['subdomain']} ({f.get('takeover_risk', 'unknown')}, confidence={f.get('confidence', 0):.2f})")
-                print(f"       CNAME: {f.get('cname', '—')} | Status: {f.get('status_code', '—')}")
-                print(f"       Recommendation: {f.get('recommendation','')[:140]}")
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['ssid']} ({f['bssid']}) ch={f.get('channel')} enc={f.get('encryption')}")
+                print(f"       Weak={f.get('is_weak')} Open={f.get('is_open')} WPS={f.get('wps')} Hidden={f.get('hidden')} Risk={f.get('risk_tier')}")
             if not res.findings:
-                print("   (No takeover findings — see raw_output for tool errors or empty results)")
+                print("   (No findings — see raw_output)")
             print("")
 
         sys.exit(exit_code)
@@ -1782,6 +1803,100 @@ def main(args=None):
                 print(f"       Recommendation: {f.get('recommendation','')[:140]}")
             if not res.findings:
                 print("   (No soft-404 findings — see raw_output for tool errors or empty results)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "iot":
+        import asyncio, json, sys
+        from agents.iot_agent import IoTAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+        source = (getattr(parsed, "source", "zigbee2mqtt") or "zigbee2mqtt").strip().lower()
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 IoT blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = IoTAgent(mgr)
+
+        task = AgentTask(target=target, extra={"source": source})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n🏷️ HunterAI IoT — {target} ({source})")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: {source}")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['mac']} ({f.get('ip')}) proto={f.get('protocol')} risk={f.get('risk_tier')}")
+                print(f"       DefaultCreds={f.get('default_creds')} Unauth={f.get('unauthenticated')} HighRisk={f.get('is_high_risk')}")
+            if not res.findings:
+                print("   (No findings — see raw_output)")
+            print("")
+
+        sys.exit(exit_code)
+
+    elif parsed.command == "ot":
+        import asyncio, json, sys
+        from agents.ot_agent import OTAgent
+        from tools.tool_manager import ToolManager
+        from agents.base_agent import AgentTask
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        target = parsed.target
+        ports = (getattr(parsed, "ports", "502,102,44818") or "502,102,44818").strip()
+
+        # ── Scope Gate (P0 Constitution) ──
+        policy = ScopePolicy(allowed_targets=[target], rate_limit_rps=2.0, max_request_budget=5000)
+        scope_engine = StrictScopeEngine(policy=policy)
+        allowed, reason = scope_engine.validate_target(target)
+
+        if not allowed:
+            print(f"\n🚫 OT blocked by Scope Gate: {target}")
+            print(f"   Reason: {reason}\n")
+            sys.exit(1)
+
+        mgr = ToolManager()
+        agent = OTAgent(mgr)
+
+        task = AgentTask(target=target, extra={"ports": ports})
+        res = asyncio.run(agent.run(task))
+        exit_code = 0 if res.success else 1
+
+        if parsed.json:
+            print(json.dumps({
+                "agent": res.agent_name, "target": res.target, "success": res.success,
+                "exit_code": exit_code, "findings_count": len(res.findings),
+                "findings": res.findings, "raw_output": res.raw_output, "errors": res.errors,
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"\n⚙️ HunterAI OT — {target} (ports={ports})")
+            print(f"   Scope Check: {'ALLOWED' if allowed else 'BLOCKED'} ({reason or 'OK'})")
+            print(f"   Tool Available: nmap ICS scripts / modbus-cli")
+            print(f"   Findings: {len(res.findings)}")
+            for f in res.findings:
+                print(f"   - [{f.get('confidence_label', '?').upper()}] {f['ip']}:{f.get('port')} proto={f.get('protocol')} safety={f.get('safety_impact')}")
+                print(f"       Unauth={f.get('unauthenticated')} Write={f.get('write_access')} HighRisk={f.get('is_high_risk')}")
+            if not res.findings:
+                print("   (No findings — see raw_output)")
             print("")
 
         sys.exit(exit_code)

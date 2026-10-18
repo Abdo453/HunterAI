@@ -70,5 +70,29 @@ BUILTIN_CONTRACTS: Dict[str, SkillContract] = {
         risk_level="low",
         success_conditions=["1=1 vs 1=2 differential matched", "Benign calculation verified"],
         failure_conditions=["WAF rate-limit block", "Target connection reset"]
+    ),
+    "waf_detection": SkillContract(
+        name="waf_detection",
+        purpose="Detects and fingerprints Web Application Firewalls in front of target hosts.",
+        inputs=["target_domain"],
+        outputs=["waf_detection.txt"],
+        dependencies=[],
+        permissions=["network.http"],
+        timeout_seconds=120,
+        risk_level="low",
+        success_conditions=["At least one target probed", "WAF detection output parsed"],
+        failure_conditions=["No target available", "Tool produced no parsable output"]
+    ),
+    "ssh_audit": SkillContract(
+        name="ssh_audit",
+        purpose="Audits SSH server algorithms (KEX, ciphers, MACs, host keys) for weak/deprecated configuration.",
+        inputs=["target_domain"],
+        outputs=["ssh_audit.txt", "ssh_audit_findings.json"],
+        dependencies=[],
+        permissions=["network.tcp"],
+        timeout_seconds=120,
+        risk_level="low",
+        success_conditions=["SSH service reachable", "Algorithm audit parsed from tool output"],
+        failure_conditions=["No SSH auditing tool available", "SSH port unreachable"]
     )
 }

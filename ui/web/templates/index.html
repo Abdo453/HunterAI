@@ -61,6 +61,14 @@
         <button class="tab" onclick="switchTab('http',this)">🔍 محلل الترافيك والـ HTTP</button>
         <button class="tab" onclick="switchTab('learning',this)">🎓 التعلم الذاتي والمهارات</button>
         <button class="tab" onclick="switchTab('engines',this)">⚙️ وكلاء المحركات (CLI Engines)</button>
+        <button class="tab" onclick="switchTab('mcp',this)">🔌 خوادم MCP</button>
+        <button class="tab" onclick="switchTab('burp',this)">🥷 تكامل بورب (Burp)</button>
+        <button class="tab" onclick="switchTab('sandbox',this)">📦 صندوق الرمل (Sandbox)</button>
+        <button class="tab" onclick="switchTab('scope',this)">🛡️ فرض النطاق (Scope)</button>
+        <button class="tab" onclick="switchTab('evidence',this)">📊 الإثباتات والنتائج (Evidence)</button>
+        <button class="tab" onclick="switchTab('flags',this)">🏁 الفلوغات (CTF Flags)</button>
+        <button class="tab" onclick="switchTab('extensions',this)">🧩 الإضافات (Extensions)</button>
+        <button class="tab" onclick="switchTab('control',this)">🎛️ التحكم والميزانية (Control)</button>
       </div>
     </header>
 
@@ -607,6 +615,201 @@
         </div>
       </div>
     </div>
+
+<!-- ── 8. MCP SERVERS TAB ────────────────────────────────────────── -->
+<div id="tab-mcp" class="tab-content">
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <h2>🔌 خوادم MCP (Model Context Protocol)</h2>
+      <button onclick="loadMcpServers()" class="btn-sm">🔄 تحديث القائمة</button>
+    </div>
+    <p style="color:#888;font-size:12px;margin-bottom:10px;">إدارة خوادم MCP المتصلة، اكتشاف الأدوات، وتنفيذ الأدوات المصرح بها.</p>
+    <div id="mcp-servers-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3 style="color:#00ccff;margin-bottom:8px;">تنفيذ أداة MCP</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <div><label>الخادم: <input type="text" id="mcp-server-id" placeholder="filesystem-local"></label></div>
+        <div><label>الأداة: <input type="text" id="mcp-tool-name" placeholder="read_file"></label></div>
+        <div><label>الوسيطات (JSON): <textarea id="mcp-tool-args" style="width:100%;height:40px;">{"path":"/etc/hostname"}</textarea></label></div>
+      </div>
+      <button onclick="callMcpTool()" class="btn-sm">▶️ تنفيذ الأداة</button>
+      <div id="mcp-tool-result" style="margin-top:10px;font-family:monospace;font-size:12px;white-space:pre-wrap;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 9. BURP INTEGRATION TAB ────────────────────────────────────────── -->
+<div id="tab-burp" class="tab-content">
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <h2>🥷 تكامل بورب (Burp Suite)</h2>
+      <div style="display:flex;gap:8px;">
+        <button onclick="burpHealthCheck()" class="btn-sm">🩺 فحص الاتصال</button>
+        <button onclick="burpCapabilities()" class="btn-sm">🧠 عرض القدرات</button>
+        <button onclick="burpImportFindings()" class="btn-sm">📥 استيراد النتائج</button>
+      </div>
+    </div>
+    <div id="burp-status" style="margin-bottom:10px;font-family:monospace;font-size:12px;"></div>
+    <div id="burp-capabilities" style="margin-bottom:10px;"></div>
+    <div style="margin-bottom:10px;">
+      <h3 style="color:#00ccff;margin-bottom:8px;">استرجاع حركة HTTP</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div><label>الهدف: <input type="text" id="burp-target" placeholder="example.com"></label></div>
+        <div><label>الحد الأقصى: <input type="number" id="burp-limit" value="20"></label></div>
+      </div>
+      <button onclick="burpHistory()" class="btn-sm">📜 جلب الحركة</button>
+    </div>
+    <div id="burp-history" style="margin-top:10px;font-family:monospace;font-size:11px;max-height:300px;overflow-y:auto;border:1px solid #333;padding:8px;"></div>
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3 style="color:#00ccff;margin-bottom:8px;">تحليل وظيفة (Analysis Job)</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div><label>الهدف: <input type="text" id="burp-job-target" placeholder="https://target.com/login"></label></div>
+        <div><label>نوع الوظيفة: <select id="burp-job-type" style="width:100%;"><option value="passive_scan">فحص سلبي</option><option value="active_scan">فحص نشط</option></select></label></div>
+      </div>
+      <button onclick="burpSubmitJob()" class="btn-sm">▶️ إرسال وظيفة تحليل</button>
+      <div id="burp-job-result" style="margin-top:10px;font-family:monospace;font-size:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 10. SANDBOX TAB ────────────────────────────────────────── -->
+<div id="tab-sandbox" class="tab-content">
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <h2>📦 صندوق الرمل (Sandbox)</h2>
+      <button onclick="sandboxHealth()" class="btn-sm">🩺 فحص الصندوق</button>
+    </div>
+    <p style="color:#888;font-size:12px;margin-bottom:10px;">تنفيذ أوامر آمنة في بيئة معزولة (argv فقط، لا shell strings، cwd مقيد، مهلة processes).</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div><label>الأمر: <input type="text" id="sandbox-cmd" placeholder="python -c 'print(1)'"></label></div>
+      <div><label>المهلة (ثانية): <input type="number" id="sandbox-timeout" value="30"></label></div>
+    </div>
+    <button onclick="sandboxRun()" class="btn-sm">▶️ تنفيذ الأمر</button>
+    <div id="sandbox-result" style="margin-top:10px;font-family:monospace;font-size:12px;white-space:pre-wrap;"></div>
+  </div>
+</div>
+
+<!-- ── 11. SCOPE ENFORCEMENT TAB ────────────────────────────────────────── -->
+<div id="tab-scope" class="tab-content">
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <h2>🛡️ فرض النطاق (Scope Enforcement)</h2>
+      <button onclick="scopeLoad()" class="btn-sm">🔄 تحميل التكوين</button>
+    </div>
+    <p style="color:#888;font-size:12px;margin-bottom:10px;">تحديد الأهداف المسموحة والمحظورة، مع حظر تلقائي لخدمات metadata والloopback والPrivate IPs.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div><label>النطاق المسموح (in_scope): <input type="text" id="scope-in" placeholder="example.com, 198.51.100.0/24"></label></div>
+      <div><label>النطاق المحظور (out_of_scope): <input type="text" id="scope-out" placeholder="*.internal, 169.254.169.254"></label></div>
+    </div>
+    <button onclick="scopeSave()" class="btn-sm">💾 حفظ النطاق</button>
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3 style="color:#00ccff;margin-bottom:8px;">فحص هدف</h3>
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;"><input type="text" id="scope-check-target" placeholder="أدخل الهدف للفحص"></div>
+        <button onclick="scopeCheck()" class="btn-sm">🔍 فحص</button>
+      </div>
+      <div id="scope-result" style="margin-top:10px;font-family:monospace;font-size:12px;"></div>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3 style="color:#00ccff;margin-bottom:8px;">سجل تدقيق النطاق</h3>
+      <div id="scope-audit" style="font-family:monospace;font-size:11px;max-height:200px;overflow-y:auto;border:1px solid #333;padding:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 12. EVIDENCE & FINDINGS TAB ────────────────────────────────────────── -->
+<div id="tab-evidence" class="tab-content">
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <h2>📊 الإثباتات والنتائج (Evidence & Findings)</h2>
+      <button onclick="evidenceLoadRuns()" class="btn-sm">🔄 تحديث التشغيلات</button>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label>معرف التشغيل (run_id): <input type="text" id="evidence-run-id" placeholder="اترك فارغًا للجميع"></label>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:10px;">
+      <button onclick="evidenceList()" class="btn-sm">📋 قائمة الإثباتات</button>
+      <button onclick="evidenceFindings()" class="btn-sm">🎯 النتائج المؤكدة</button>
+    </div>
+    <div id="evidence-output" style="font-family:monospace;font-size:12px;max-height:400px;overflow-y:auto;border:1px solid #333;padding:10px;background:#0a0a0f;"></div>
+  </div>
+</div>
+
+<!-- ── 13. CTF FLAGS TAB ────────────────────────────────────────── -->
+<div id="tab-flags" class="tab-content">
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <h2>🏁 الفلوغات (CTF Flag Pipeline)</h2>
+      <button onclick="flagsLoad()" class="btn-sm">🔄 تحديث الحالة</button>
+    </div>
+    <p style="color:#888;font-size:12px;margin-bottom:10px;">استخراج الفلوغات من النصوص، dedupe، false-positive، وإرسال تلقائي لمنصات CTF.</p>
+    <div style="margin-bottom:10px;">
+      <label>نص للاستخراج: <textarea id="flags-text" style="width:100%;height:60px;">found flag{test_flag_123} here</textarea></label>
+    </div>
+    <button onclick="flagsIngest()" class="btn-sm">🔍 استخراج فلوغات</button>
+    <div id="flags-result" style="margin-top:10px;font-family:monospace;font-size:12px;"></div>
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3 style="color:#00ccff;margin-bottom:8px;">إرسال تلقائي لمنصة CTF</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div><label>عنوان المنصة: <input type="text" id="ctf-url" placeholder="https://ctf.example.com"></label></div>
+        <div><label>التوكن: <input type="text" id="ctf-token" placeholder="your_token"></label></div>
+        <div><label>معرف التحدي: <input type="text" id="ctf-challenge" placeholder="10"></label></div>
+      </div>
+      <button onclick="ctfSubmitPending()" class="btn-sm">🚀 إرسال الفلوغات pendin</button>
+      <div id="ctf-submit-result" style="margin-top:10px;font-family:monospace;font-size:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 14. EXTENSIONS TAB ────────────────────────────────────────── -->
+<div id="tab-extensions" class="tab-content">
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <h2>🧩 نظام الإضافات (Extensions)</h2>
+      <button onclick="extLoad()" class="btn-sm">🔄 تحديث القائمة</button>
+    </div>
+    <p style="color:#888;font-size:12px;margin-bottom:10px;">إضافات manifest fail-closed مع مستويات ثقة وصلاحيات مقيّدة.</p>
+    <div style="margin-bottom:10px;">
+      <label>مسار الإضافة: <input type="text" id="ext-path" placeholder="./extensions/my-ext"></label>
+    </div>
+    <button onclick="extInstall()" class="btn-sm">📦 تثبيت الإضافة</button>
+    <div id="ext-result" style="margin-top:10px;font-family:monospace;font-size:12px;"></div>
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3 style="color:#00ccff;margin-bottom:8px;">قائمة الإضافات المثبتة</h3>
+      <div id="ext-list" style="font-family:monospace;font-size:12px;max-height:300px;overflow-y:auto;border:1px solid #333;padding:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 15. RUN CONTROL & BUDGET TAB ────────────────────────────────────────── -->
+<div id="tab-control" class="tab-content">
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hdr">
+      <h2>🎛️ التحكم والميزانية (Run Control & Budget)</h2>
+      <div style="display:flex;gap:8px;">
+        <button onclick="controlLoadRuns()" class="btn-sm">🔄 تحديث التشغيلات</button>
+        <button onclick="budgetSnapshot()" class="btn-sm">💰 لقطة الميزانية</button>
+      </div>
+    </div>
+    <div id="control-runs" style="font-family:monospace;font-size:12px;max-height:300px;overflow-y:auto;border:1px solid #333;padding:8px;margin-bottom:10px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div><label>معرف التشغيل: <input type="text" id="control-run-id" placeholder="run-..."></label></div>
+      <div><label>الإجراء: <select id="control-action" style="width:100%;"><option value="pause">إيقاف مؤقت</option><option value="resume">استئناف</option><option value="stop">إيقاف فوري</option></select></label></div>
+    </div>
+    <button onclick="controlAction()" class="btn-sm">⚡ تنفيذ الإجراء</button>
+    <div id="control-result" style="margin-top:10px;font-family:monospace;font-size:12px;"></div>
+    <div style="margin-top:12px;border-top:1px solid #333;padding-top:10px;">
+      <h3 style="color:#00ccff;margin-bottom:8px;">تحديث الميزانية</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+        <div><label>لكل تشغيل (USD): <input type="number" id="budget-per-run" step="0.01" value="5"></label></div>
+        <div><label>لكل يوم (USD): <input type="number" id="budget-per-day" step="0.01" value="20"></label></div>
+        <div><label>لكل solved (USD): <input type="number" id="budget-per-solver" step="0.01" value="10"></label></div>
+      </div>
+      <button onclick="budgetUpdate()" class="btn-sm">💾 تحديث سقوف الميزانية</button>
+      <div id="budget-output" style="margin-top:10px;font-family:monospace;font-size:12px;white-space:pre-wrap;"></div>
+    </div>
+  </div>
+</div>
 
   </main>
 </div>

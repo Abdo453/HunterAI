@@ -39,6 +39,14 @@ function switchTab(tab, btn) {
   if(tab === 'methodology') loadMethodology();
   if(tab === 'graph') setTimeout(refreshGraph, 100);
   if(tab === 'engines') loadEngines();
+  if(tab === 'mcp') loadMcpServers();
+  if(tab === 'burp') burpHealthCheck();
+  if(tab === 'sandbox') sandboxHealth();
+  if(tab === 'scope') scopeLoad();
+  if(tab === 'evidence') evidenceLoadRuns();
+  if(tab === 'flags') flagsLoad();
+  if(tab === 'extensions') extLoad();
+  if(tab === 'control') { controlLoadRuns(); budgetSnapshot(); }
 }
 
 function switchView(view, btn) {
@@ -1827,3 +1835,298 @@ async function runEngineTask() {
     if (btn) { btn.disabled = false; btn.textContent = '▶️ تشغيل المهمة'; }
   }
 }
+// ── MCP SERVERS ──────────────────────────────
+async function loadMcpServers() {
+  const el = document.getElementById('mcp-servers-list');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/mcp/servers');
+    const d = await r.json();
+    el.innerHTML = (d.servers || []).map(s => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #333;border-radius:6px;">
+        <div><b style="color:#00ccff;">${s.server_id || s.name}</b><br><span style="color:#666;font-size:11px;">${s.transport || 'stdio'} · ${s.status || 'disconnected'}</span></div>
+        <div style="font-size:11px;color:${s.status === 'connected' ? '#00ff41' : '#ffaa00'};">${s.status || 'disconnected'}</div>
+      </div>
+    `).join('') || '<div style="color:#888;">لا توجد خوادم MCP.</div>';
+  } catch(e) { el.innerHTML = `<div style="color:#ff2a4b;">فشل التحميل: ${e}</div>`; }
+}
+
+async function callMcpTool() {
+  const server = document.getElementById('mcp-server-id').value;
+  const tool = document.getElementById('mcp-tool-name').value;
+  const args = document.getElementById('mcp-tool-args').value;
+  const res = document.getElementById('mcp-tool-result');
+  if (!server || !tool) { alert('حدد الخادم والأداة'); return; }
+  try {
+    const r = await fetch('/api/mcp/call', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({server_id: server, tool_name: tool, arguments: JSON.parse(args || '{}')})
+    });
+    const d = await r.json();
+    res.innerHTML = `\n      <div style="color:${d.ok ? '#00ff41' : '#ff2a4b'};">${d.ok ? '✅' : '❌'} ${d.ok ? 'تم التنفيذ' : 'فشل'}</div>\n      <pre style="color:#aaa;font-size:11px;">${JSON.stringify(d, null, 2).slice(0, 3000)}</pre>\n    `;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+// ── BURP ──────────────────────────────
+async function burpHealthCheck() {
+  const res = document.getElementById('burp-status');
+  try {
+    const r = await fetch('/api/burp/health');
+    const d = await r.json();
+    res.innerHTML = `<div style="color:${d.available ? '#00ff41' : '#ff2a4b'};">${d.available ? '✅ بورب متصل' : '❌ غير متصل'} · ${d.reason}</div>`;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function burpCapabilities() {
+  const res = document.getElementById('burp-capabilities');
+  try {
+    const r = await fetch('/api/burp/capabilities');
+    const d = await r.json();
+    res.innerHTML = `<div style="color:#00ccff;margin-bottom:6px;">القدرات المتاحة:</div>\n      ${Object.entries(d.operations || {}).map(([k,v]) => `\n        <div style="color:${v ? '#00ff41' : '#888'};">${v ? '✅' : '❌'} ${k}</div>\n      `).join('')}\n    `;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function burpHistory() {
+  const target = document.getElementById('burp-target').value;
+  const limit = document.getElementById('burp-limit').value;
+  const res = document.getElementById('burp-history');
+  try {
+    const r = await fetch('/api/burp/history', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target, limit: parseInt(limit) || 50})
+    });
+    const d = await r.json();
+    res.innerHTML = (d.transactions || []).map(t => `\n      <div style="border-bottom:1px solid #222;padding:6px;">\n        <div style="color:#00ccff;">${t.method} ${t.url}</div>\n        <div style="color:#aaa;font-size:10px;">${t.target_host} · ${t.status_code} · ${t.tool_source}</div>\n      </div>\n    `).join('') || '<div style="color:#888;">لا توجد حركة.</div>';
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function burpSubmitJob() {
+  const target = document.getElementById('burp-job-target').value;
+  const type = document.getElementById('burp-job-type').value;
+  const res = document.getElementById('burp-job-result');
+  try {
+    const r = await fetch('/api/burp/analysis', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target, job_type: type})
+    });
+    const d = await r.json();
+    res.innerHTML = `<div style="color:${d.accepted ? '#00ff41' : '#ff2a4b'};">${d.accepted ? '✅ تم الإرسال' : '❌ فشل'} · Job: ${d.job_id}</div>`;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function burpImportFindings() {
+  const res = document.getElementById('burp-history');
+  try {
+    const r = await fetch('/api/burp/findings', {method: 'POST'});
+    const d = await r.json();
+    res.innerHTML = `\n      <div style="color:#00ccff;margin-bottom:6px;">نتائج مستوردة (${d.count || 0}):</div>\n      ${(d.findings || []).map(f => `\n        <div style="border-bottom:1px solid #222;padding:4px;">\n          <div style="color:#00ff41;">${f.issue_name}</div>\n          <div style="color:#aaa;font-size:10px;">${f.severity} · ${f.confidence} · verified: ${f.verified_by_burp}</div>\n        </div>\n      `).join('')}\n    `;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+// ── SANDBOX ──────────────────────────────
+async function sandboxHealth() {
+  const res = document.getElementById('sandbox-result');
+  try {
+    const r = await fetch('/api/sandbox/health');
+    const d = await r.json();
+    res.innerHTML = `<div style="color:${d.ok ? '#00ff41' : '#ff2a4b'};">${d.ok ? '✅ الصندوق جاهز' : '❌ غير جاهز'}</div>`;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function sandboxRun() {
+  const cmd = document.getElementById('sandbox-cmd').value;
+  const timeout = document.getElementById('sandbox-timeout').value;
+  const res = document.getElementById('sandbox-result');
+  if (!cmd) { alert('اكتب الأمر'); return; }
+  try {
+    const r = await fetch('/api/sandbox/run', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({command: cmd, timeout_s: parseInt(timeout) || 30})
+    });
+    const d = await r.json();
+    res.innerHTML = `\n      <div style="color:${d.ok ? '#00ff41' : '#ff2a4b'};">${d.ok ? '✅ نجح' : '❌ فشل'} · Exit: ${d.exit_code} · ${d.duration_s}s</div>\n      <div style="color:#aaa;">${d.stdout || ''}</div>\n      ${d.error ? `<div style="color:#ff2a4b;">${d.error}</div>` : ''}\n    `;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+// ── SCOPE ──────────────────────────────
+async function scopeLoad() {
+  try {
+    const r = await fetch('/api/scope');
+    const d = await r.json();
+    document.getElementById('scope-in').value = (d.in_scope || []).join(', ');
+    document.getElementById('scope-out').value = (d.out_of_scope || []).join(', ');
+  } catch(e) {}
+}
+
+async function scopeSave() {
+  const inScope = document.getElementById('scope-in').value.split(',').map(s => s.trim()).filter(Boolean);
+  const outScope = document.getElementById('scope-out').value.split(',').map(s => s.trim()).filter(Boolean);
+  try {
+    const r = await fetch('/api/scope', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({in_scope: inScope, out_of_scope: outScope})
+    });
+    const d = await r.json();
+    alert(d.status || 'تم الحفظ');
+  } catch(e) { alert('فشل: ' + e); }
+}
+
+async function scopeCheck() {
+  const target = document.getElementById('scope-check-target').value;
+  const res = document.getElementById('scope-result');
+  if (!target) { alert('أدخل هدف'); return; }
+  try {
+    const r = await fetch('/api/scope/check', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({target})
+    });
+    const d = await r.json();
+    res.innerHTML = `<div style="color:${d.allowed ? '#00ff41' : '#ff2a4b'};">${d.allowed ? '✅ مسموح' : '❌ محظور'} · ${d.reason}</div>`;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+// ── EVIDENCE ──────────────────────────────
+async function evidenceLoadRuns() {
+  try {
+    const r = await fetch('/api/runs');
+    const d = await r.json();
+    const runs = d.runs || [];
+    const html = runs.map(run => `\n      <div style="border-bottom:1px solid #222;padding:6px;">\n        <div style="color:#00ccff;">${run.run_id}</div>\n        <div style="color:#aaa;font-size:11px;">${run.goal} · ${run.status}</div>\n      </div>\n    `).join('') || '<div style="color:#888;">لا توجد تشغيلات.</div>';
+    document.getElementById('evidence-output').innerHTML = html;
+  } catch(e) { document.getElementById('evidence-output').innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function evidenceList() {
+  const runId = document.getElementById('evidence-run-id').value;
+  const res = document.getElementById('evidence-output');
+  try {
+    const r = await fetch(`/api/runs/${runId || 'all'}/evidence`);
+    const d = await r.json();
+    res.innerHTML = `\n      <div style="color:#00ccff;margin-bottom:6px;">إثباتات (${d.count || 0}):</div>\n      ${(d.evidence || []).map(e => `\n        <div style="border-bottom:1px solid #222;padding:6px;">\n          <div style="color:#00ff41;">${e.evidence_type} · confidence: ${e.confidence}</div>\n          <div style="color:#aaa;font-size:11px;">${e.sanitized_content.slice(0, 200)}</div>\n        </div>\n      `).join('')}\n    `;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function evidenceFindings() {
+  const runId = document.getElementById('evidence-run-id').value;
+  const res = document.getElementById('evidence-output');
+  try {
+    const r = await fetch(`/api/runs/${runId || 'all'}/findings`);
+    const d = await r.json();
+    res.innerHTML = `\n      <div style="color:#00ccff;margin-bottom:6px;">نتائج (${d.findings_count || 0}):</div>\n      ${(d.findings || []).map(f => `\n        <div style="border-bottom:1px solid #222;padding:6px;">\n          <div style="color:#00ff41;">${f.title}</div>\n          <div style="color:#aaa;font-size:11px;">${f.category} · confidence: ${f.confidence} · ${f.verification_status}</div>\n        </div>\n      `).join('')}\n    `;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+// ── CTF FLAGS ──────────────────────────────
+async function flagsLoad() {
+  try {
+    const r = await fetch('/api/flags/progress');
+    const d = await r.json();
+    document.getElementById('flags-result').innerHTML = `\n      <div style="color:#00ccff;">التقدم: ${d.accepted_count || 0}/${d.expected_count || 0} قبلت · مكتمل: ${d.complete}</div>\n    `;
+  } catch(e) {}
+}
+
+async function flagsIngest() {
+  const text = document.getElementById('flags-text').value;
+  const res = document.getElementById('flags-result');
+  try {
+    const r = await fetch('/api/flags/ingest', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text})
+    });
+    const d = await r.json();
+    res.innerHTML = `\n      <div style="color:#00ff4a;margin-bottom:6px;">تم استخراج (${d.fresh || 0} فلوغ جديد):</div>\n      ${(d.candidates || []).map(c => `\n        <div style="border-bottom:1px solid #222;padding:4px;">\n          <div style="color:#00ff41;">${c.value}</div>\n          <div style="color:#aaa;font-size:10px;">confidence: ${c.confidence}</div>\n        </div>\n      `).join('')}\n    `;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function ctfSubmitPending() {
+  const url = document.getElementById('ctf-url').value;
+  const token = document.getElementById('ctf-token').value;
+  const challenge = document.getElementById('ctf-challenge').value;
+  const res = document.getElementById('ctf-submit-result');
+  try {
+    const r = await fetch('/api/ctf/submit', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({platform_url: url, token, challenge_id: challenge})
+    });
+    const d = await r.json();
+    res.innerHTML = `\n      <div style="color:#00ff41;margin-bottom:6px;">الإرسال: ${d.accepted || 0} قبلت · ${d.wrong || 0} خطأ · ${d.throttled || 0} توقف</div>\n    `;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+// ── EXTENSIONS ──────────────────────────────
+async function extLoad() {
+  try {
+    const r = await fetch('/api/extensions');
+    const d = await r.json();
+    document.getElementById('ext-list').innerHTML = (d.extensions || []).map(e => `\n      <div style="border-bottom:1px solid #222;padding:6px;">\n        <div style="color:#00ccff;">${e.name}</div>\n        <div style="color:#aaa;font-size:11px;">الثقة: ${e.trust} · الحالة: ${e.enabled ? 'مفعل' : 'معطل'}</div>\n      </div>\n    `).join('') || '<div style="color:#888;">لا توجد إضافات.</div>';
+  } catch(e) {}
+}
+
+async function extInstall() {
+  const path = document.getElementById('ext-path').value;
+  const res = document.getElementById('ext-result');
+  try {
+    const r = await fetch('/api/extensions/install', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path})
+    });
+    const d = await r.json();
+    res.innerHTML = `<div style="color:${d.ok ? '#00ff41' : '#ff2a4b'};">${d.ok ? '✅ تم التثبيت' : '❌ فشل'} · ${d.message || ''}</div>`;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+// ── CONTROL & BUDGET ──────────────────────────────
+async function controlLoadRuns() {
+  try {
+    const r = await fetch('/api/runs?active_only=true');
+    const d = await r.json();
+    document.getElementById('control-runs').innerHTML = (d.runs || []).map(run => `\n      <div style="border-bottom:1px solid #222;padding:6px;">\n        <div style="color:#00ccff;">${run.run_id}</div>\n        <div style="color:#aaa;font-size:11px;">${run.kind} · ${run.state}</div>\n      </div>\n    `).join('') || '<div style="color:#888;">لا توجد تشغيلات نشطة.</div>';
+  } catch(e) {}
+}
+
+async function controlAction() {
+  const runId = document.getElementById('control-run-id').value;
+  const action = document.getElementById('control-action').value;
+  const res = document.getElementById('control-result');
+  if (!runId) { alert('أدخل معرف التشغيل'); return; }
+  try {
+    const r = await fetch(`/api/runs/${runId}/${action}`, {method: 'POST'});
+    const d = await r.json();
+    res.innerHTML = `<div style="color:#00ff41;">✅ ${action} تم · الحالة: ${d.state}</div>`;
+  } catch(e) { res.innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+
+async function budgetSnapshot() {
+  try {
+    const r = await fetch('/api/budget');
+    const d = await r.json();
+    document.getElementById('budget-output').innerHTML = `\n      <div style="color:#00ccff;">الميزانية العالمية: ${d.global_usd || 0} USD · مكالمات: ${d.calls || 0}</div>\n      <div style="color:#aaa;">اليوم: ${d.today_usd || 0} USD</div>\n    `;
+  } catch(e) {}
+}
+
+async function budgetUpdate() {
+  const perRun = document.getElementById('budget-per-run').value;
+  const perDay = document.getElementById('budget-per-day').value;
+  const perSolver = document.getElementById('budget-per-solver').value;
+  try {
+    const r = await fetch('/api/budget', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({per_run_usd: parseFloat(perRun), per_day_usd: parseFloat(perDay), per_solver_usd: parseFloat(perSolver)})
+    });
+    const d = await r.json();
+    document.getElementById('budget-output').innerHTML = `\n      <div style="color:#00ff41;">✅ تم التحديث · اليوم: ${d.today_usd || 0} USD</div>\n    `;
+  } catch(e) { document.getElementById('budget-output').innerHTML = `<div style="color:#ff2a4b;">فشل: ${e}</div>`; }
+}
+// ── تحديث التبويبات الجديدة ──────────────────────────────
+const _origSwitchTab = switchTab;
+switchTab = function(tab, btn) {
+  _origSwitchTab(tab, btn);
+  if (tab === 'mcp') loadMcpServers();
+  if (tab === 'burp') burpHealthCheck();
+  if (tab === 'sandbox') sandboxHealth();
+  if (tab === 'scope') scopeLoad();
+  if (tab === 'evidence') evidenceLoadRuns();
+  if (tab === 'flags') flagsLoad();
+  if (tab === 'extensions') extLoad();
+  if (tab === 'control') { controlLoadRuns(); budgetSnapshot(); }
+};

@@ -24,7 +24,6 @@ class EncryptionStrength(str):
 class WiFiNetworkRecord:
     """سجل شبكة WiFi واحدة موحّد."""
 
-    record_id: str
     ssid: str
     bssid: str
     channel: Optional[int] = None
@@ -41,6 +40,7 @@ class WiFiNetworkRecord:
     source_tool: str = "kismet"
     raw_json: Dict[str, Any] = field(default_factory=dict)
     validation_note: str = ""
+    record_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.record_id:

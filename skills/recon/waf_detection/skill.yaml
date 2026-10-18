@@ -1,0 +1,23 @@
+name: waf_detection
+category: recon
+description: "Detect and fingerprint Web Application Firewalls (wafw00f + header/banner heuristic fallback)"
+version: "1.0"
+input:
+  - live_hosts.txt
+  - target_domain: str
+output:
+  - waf_detection.txt
+depends_on: []
+next_skills:
+  - crawling
+  - endpoint_discovery
+fallback_skills:
+  - tech_detection
+tools_required:
+  - wafw00f
+fallback_tools:
+  - httpx
+  - curl
+timeout_seconds: 120
+max_retries: 2
+enabled: true

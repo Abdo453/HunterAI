@@ -24,7 +24,6 @@ class OTProtocol(str):
 class OTAssetRecord:
     """سجل أصل OT واحد موحّد."""
 
-    record_id: str
     ip: str
     port: int
     protocol: str = OTProtocol.UNKNOWN
@@ -39,6 +38,7 @@ class OTAssetRecord:
     source_tool: str = "nmap"
     raw_json: Dict[str, Any] = field(default_factory=dict)
     validation_note: str = ""
+    record_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.record_id:

@@ -879,6 +879,40 @@ class PreKaliCertificationPipeline:
                 f.write(report_md)
 
             res.log(f"Generated comprehensive report: {report_path.name}")
+            # ── Network Court Adjudication + Report Generation (Phase 5) ─────
+            from core.network_model import NetworkFinding
+            from core.reporting.network_court_adjudicator import NetworkCourtAdjudicator
+            from core.reporting.network_report_generator import NetworkReportGenerator
+
+            _net_finding = NetworkFinding(
+                title="Network Court Test Finding",
+                host="10.0.0.5",
+                port=6379,
+                protocol="tcp",
+                service_name="redis",
+                vuln_class="UNAUTHENTICATED_SERVICE",
+                severity="HIGH",
+                confidence=0.5,
+                evidence_level="E0",
+                status="candidate",
+                description="Redis without authentication",
+                reproduction_command="redis-cli -h 10.0.0.5 -p 6379 INFO",
+                remediation="Bind to loopback, enable requirepass",
+                cwe="CWE-306",
+                evidence_ids=["svc_test"],
+            )
+            _court = NetworkCourtAdjudicator(is_in_scope=True)
+            _net_report = _court.adjudicate([_net_finding], target="10.0.0.5")
+            if _net_report.confirmed_findings != 0:
+                raise SecurityError(
+                    "SECURITY FATAL: Network court auto-confirmed a finding without DERIVED proof!"
+                )
+            if _net_report.unconfirmed_findings != 1:
+                raise SecurityError("Network court failed to classify candidate as unconfirmed.")
+
+            _gen = NetworkReportGenerator(output_dir="data/reports")
+            _gen.generate(_net_report, "10.0.0.5", formats=["json", "markdown"])
+            res.log("Network court adjudication + report generation OK (candidates only, zero auto-confirmation).")
             res.passed = all_passed
         except Exception as e:
             res.passed = False

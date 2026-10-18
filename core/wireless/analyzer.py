@@ -226,7 +226,6 @@ class EvidenceReviewer:
             "bssid": record.bssid,
             "channel": record.channel,
             "encryption": record.encryption,
-            "encryption_strength": record.encryption_strength,
             "signal_dbm": record.signal_dbm,
             "wps": record.wps,
             "hidden": record.hidden,

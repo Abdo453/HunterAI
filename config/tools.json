@@ -207,5 +207,60 @@
     "purpose": "Playwright automated browser session controller for DOM analysis",
     "requires_authorization": false,
     "command_template": "playwright launch {target}"
+  },
+  {
+    "id": "kismet",
+    "name": "kismet",
+    "type": "scanner",
+    "category": "wireless",
+    "risk": "medium",
+    "permissions": ["recon", "scan", "active_testing"],
+    "purpose": "Wireless network detection, sniffing, and IDS for 802.11",
+    "requires_authorization": true,
+    "command_template": "kismet --json {target}"
+  },
+  {
+    "id": "aircrack-ng",
+    "name": "aircrack-ng",
+    "type": "scanner",
+    "category": "wireless",
+    "risk": "high",
+    "permissions": ["recon", "scan", "active_testing"],
+    "purpose": "WiFi security auditing: capture, injection, and WEP/WPA cracking",
+    "requires_authorization": true,
+    "command_template": "aircrack-ng {capture_file} -w {wordlist}"
+  },
+  {
+    "id": "wifite",
+    "name": "wifite",
+    "type": "scanner",
+    "category": "wireless",
+    "risk": "high",
+    "permissions": ["recon", "scan", "active_testing"],
+    "purpose": "Automated WiFi auditing tool (WEP/WPA/WPS)",
+    "requires_authorization": true,
+    "command_template": "wifite -i {interface} --wps"
+  },
+  {
+    "id": "zigbee2mqtt",
+    "name": "zigbee2mqtt",
+    "type": "recon",
+    "category": "iot",
+    "risk": "medium",
+    "permissions": ["recon", "scan"],
+    "purpose": "Zigbee to MQTT bridge for IoT device discovery and control",
+    "requires_authorization": true,
+    "command_template": "zigbee2mqtt {target}"
+  },
+  {
+    "id": "modbus-cli",
+    "name": "modbus-cli",
+    "type": "scanner",
+    "category": "ot",
+    "risk": "high",
+    "permissions": ["recon", "scan", "active_testing"],
+    "purpose": "Modbus TCP client for OT/ICS register read/write testing",
+    "requires_authorization": true,
+    "command_template": "modbus-cli read-holding-registers -a {target} -u {unit_id}"
   }
 ]

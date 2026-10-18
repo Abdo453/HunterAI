@@ -8,6 +8,7 @@ network:
   rustscan:     {cmd: rustscan,     args: "-a",          timeout: 60}
   netexec:      {cmd: netexec,      args: "",            timeout: 120}
   enum4linux:   {cmd: enum4linux-ng, args: "-A",        timeout: 180}
+  ssh-audit:    {cmd: ssh-audit,    args: "",            timeout: 120}
   responder:    {cmd: responder,    args: "-I eth0",     timeout: 0}
   nbtscan:      {cmd: nbtscan,      args: "",            timeout: 60}
   snmpwalk:     {cmd: snmpwalk,     args: "",            timeout: 60}

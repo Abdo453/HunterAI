@@ -1,0 +1,22 @@
+name: ssh_audit
+category: analysis
+description: "Audit SSH server configuration (KEX, ciphers, MACs, host keys) for weak/deprecated algorithms using ssh-audit"
+version: "1.0"
+input:
+  - target_domain: str
+  - nmap_services.txt
+output:
+  - ssh_audit.txt
+  - ssh_audit_findings.json
+depends_on: []
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required:
+  - ssh-audit
+fallback_tools:
+  - nmap
+  - nc
+timeout_seconds: 120
+max_retries: 2
+enabled: true

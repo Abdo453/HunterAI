@@ -135,6 +135,17 @@ python3 scripts/verify_kali_toolchain.py --strict
 
 هذا الفحص لا يتصل بأي موقع؛ يشغّل فقط `--version` أو `--help` لكل أداة ويخرج تقرير JSON مرتبًا. إذا كانت أداة مطلوبة مفقودة أو لا تعمل، ينتهي بكود خطأ بدل أن يبدأ الـAgent بفحص ناقص.
 
+### التحقق من Agent + Burp + Browser قبل أي موقع
+
+شغّل Burp Suite مع Proxy listener على `127.0.0.1:8080`، ثم استخدم الوضع الصارم:
+
+```bash
+python3 main.py -t https://your-authorized-target.example \
+  --authorized --proxy http://127.0.0.1:8080 --require-burp-browser
+```
+
+هذا الوضع لا يبدأ أي مرحلة تتصل بالموقع إلا إذا تحقّق من: اتصال Proxy الخاص بـBurp، تشغيل HunterAI Gateway محليًا، وإطلاق Playwright مع إعداد نفس الـProxy. نتيجة الفحص تحفظ في `00_integration/agent_burp_browser.json` داخل artifacts الخاصة بالجلسة.
+
 المتوقع:
 ```
 [*] Testing Ollama at: http://192.168.72.1:11434
