@@ -14,6 +14,7 @@ KNOWN_TOOLS = [
     "gobuster", "dirsearch", "dalfox", "sqlmap", "amass",
     "gau", "waybackurls", "hakrawler", "assetfinder", "wpscan",
     "trivy", "wafw00f", "arjun", "naabu", "masscan",
+    "sniper",
 ]
 
 

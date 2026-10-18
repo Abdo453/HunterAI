@@ -44,6 +44,7 @@ python pentest.py report target.com "finding" --platform hackerone
 | `/scan-cves <host>` | Nuclei CVE sweep |
 | `/web3-audit <contract.sol>` | Smart contract audit |
 | `/token-scan <contract>` | Token rug pull scanner |
+| `/sniper <target> [--mode recon|full|web|vuln]` | Automated reconnaissance |
 | `/poc-bundle <target> <class> <req.json> [resp.json]` | PoC evidence bundle |
 | `/verify <bundle-dir>` | Independent re-verification |
 

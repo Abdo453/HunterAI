@@ -43,6 +43,7 @@ python pentest.py report target.com "finding title" --platform hackerone
 | `/scan-cves` | `/scan-cves <host>` — nuclei CVE sweep |
 | `/web3-audit` | `/web3-audit <contract.sol>` — smart contract audit |
 | `/token-scan` | `/token-scan <contract>` — token rug pull scanner |
+| `/sniper` | `/sniper <target> [--mode recon|full|web|vuln]` — automated reconnaissance |
 | `/arsenal` | `/arsenal` — list installed external tools |
 | `/poc-bundle` | `/poc-bundle <target> <class> <req.json> [resp.json]` — PoC evidence bundle |
 | `/verify` | `/verify <bundle-dir>` — independent re-verification |
