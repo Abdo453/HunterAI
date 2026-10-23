@@ -33,10 +33,15 @@ class TrafficBridge:
         db_path: str = "data/traffic.db",
         evidence_graph: Optional[EvidenceGraph] = None,
         on_new_endpoint_cb: Optional[Callable[[str, str, List[str]], Any]] = None,
+        evidence_store: Optional[Any] = None,
+        run_id: str = "",
     ):
         self.db_path = db_path
         self.evidence_graph = evidence_graph
         self.on_new_endpoint_cb = on_new_endpoint_cb
+        # Phase 5: السجل الموحد للترافيك المعترض (اختياري — يوصله الـ orchestrator)
+        self.evidence_store = evidence_store
+        self.run_id = run_id
 
         self._seen_endpoints: Set[str] = set()
         self._seen_params: Set[str] = set()
@@ -130,6 +135,12 @@ class TrafficBridge:
             resource_type=resource_type,
             headers=event_data.get("headers", {}),
         )
+        self._record_unified_txn(
+            source=str(event_data.get("source") or "browser"),
+            method=method, url=url, host=host, path=path,
+            status_code=0, resource_type=resource_type,
+            headers=event_data.get("headers", {}),
+        )
 
     def ingest_response(self, event_data: Dict[str, Any]) -> None:
         """
@@ -157,6 +168,34 @@ class TrafficBridge:
                 param_name="",
                 observation_text=obs
             )
+        self._record_unified_txn(
+            source=str(event_data.get("source") or "browser"),
+            method=str(event_data.get("method") or "GET"),
+            url=url, host=host, path=path,
+            status_code=int(status or 0),
+            resource_type=str(event_data.get("resource_type") or "document"),
+            headers=headers,
+        )
+
+    def _record_unified_txn(self, *, source: str, method: str, url: str,
+                            host: str, path: str, status_code: int,
+                            resource_type: str, headers: Dict[str, Any]) -> None:
+        """Phase 5: كل معاملة ش travels تفضى في EvidenceStore (NET-).
+        أسماء الهيدرز فقط — لا قيم. فشل التسجيل لا يضوي الاستخلاص أبداً."""
+        store = getattr(self, "evidence_store", None)
+        if store is None:
+            return
+        try:
+            store.record_network_transaction(
+                run_id=getattr(self, "run_id", "") or "",
+                source=source, method=method, url=url,
+                host=host, path=path,
+                status_code=status_code,
+                resource_type=resource_type,
+                headers=headers,
+            )
+        except Exception as e:  # telemetry فقط
+            logger.debug(f"Unified transaction record error: {e}")
 
     def _record_to_db(
         self,

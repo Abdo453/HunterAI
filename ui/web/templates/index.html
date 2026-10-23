@@ -56,6 +56,7 @@
       <!-- Top Navigation Tabs (Unified Views: Agent Mission + Interactive Chat + Split View) -->
       <div class="tabs">
         <button class="tab" onclick="switchTab('readiness',this)">✅ جاهزية البيئة (Readiness)</button>
+        <button class="tab" onclick="switchTab('ledger',this)">🗂️ سجل الأدلة (Evidence Ledger)</button>
         <button class="tab active" onclick="switchTab('scan',this)">🤖 مهمات الـ Agent (Mission Control)</button>
         <button class="tab" onclick="switchTab('chat',this)">💬 شات وتوجيه الـ Agent (Interactive Chat)</button>
         <button class="tab" onclick="switchTab('split',this)">⚡ العرض المزدوج (Split: شات + إيجنت)</button>
@@ -263,6 +264,24 @@
 
         <!-- مسار الـ artifact -->
         <div id="readiness-artifact" style="color:#888;font-size:11px;margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <!-- ── 0b. EVIDENCE LEDGER TAB (Phase 7 — الأربع سجلات الموحدة) ────── -->
+    <div id="tab-ledger" class="tab-content">
+      <div class="card">
+        <div class="card-hdr">
+          <h2>🗂️ سجل الأدلة الدائم (Unified Ledger — append-only)</h2>
+          <span id="ledger-state-badge" class="header-badge" style="background:#3399ff;color:#000;font-weight:bold;">—</span>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
+          <button onclick="loadLedger()" id="ledger-btn" class="btn" style="background:#3399ff;color:#000;font-weight:bold;">🔄 حدّث السجل</button>
+          <span style="color:#888;font-size:12px;">كل تنفيذ أداة · استدلال AI · معاملة شبكة · حكم محكمة — موثق بـ run_id</span>
+        </div>
+        <!-- ملخص العدادات -->
+        <div id="ledger-summary" style="display:none;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px;"></div>
+        <!-- لو تبي تُحدث الفلاتر لنشاط تربوي حقيقي — قائمة كل كيان -->
+        <div id="ledger-list" style="max-height:60vh;overflow-y:auto;"></div>
       </div>
     </div>
 

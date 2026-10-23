@@ -14,6 +14,7 @@ Guarantees:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -268,7 +269,9 @@ class HunterPipelineOrchestrator:
         )
         self.traffic_bridge = TrafficBridge(
             db_path=str(Path("data") / "traffic.db"),
-            evidence_graph=self.evidence_graph
+            evidence_graph=self.evidence_graph,
+            evidence_store=self.master_tools.evidence_store,
+            run_id=self.session_id,
         )
         self.action_loop = AutonomousActionLoop(
             target_domain=self.domain,
@@ -570,6 +573,35 @@ class HunterPipelineOrchestrator:
             "raw_evidence": (raw_evidence or "")[:300],
             "timestamp": time.time(),
         })
+
+    def _record_reasoning(self, *, kind: str, model: str, prompt_frame: str,
+                          output: Any, latency_ms: Optional[float] = None) -> None:
+        """
+        Phase 4: كل استدلال AI يترك سجلًا موحدًا (RSN-) في EvidenceStore.
+        - إطار الطلب يُلخَّص بـ sha256 digest (بلا أسرار).
+        - المخرجات تُقتطع وتُنقّى من الأسرار.
+        القاعدة المعمارية: العقل لا يُنشئ نتائج مباشرة — النتائج تعبر
+        FindingQualificationGate ثم FINAL COURT فقط. فشل التسجيل لا يسقط
+        الفحص (telemetry فقط).
+        """
+        store = getattr(self.master_tools, "evidence_store", None)
+        if store is None:
+            return
+        try:
+            from core.evidence_store import _redact_secrets
+            digest = hashlib.sha256(
+                str(prompt_frame).encode("utf-8", "replace")
+            ).hexdigest()
+            store.record_reasoning(
+                run_id=self.session_id,
+                kind=kind, model=model,
+                prompt_digest=digest,
+                output_excerpt=_redact_secrets(str(output))[:500],
+                latency_ms=latency_ms,
+            )
+            logger.info("[Reasoning] recorded RSN: %s (%s)", kind, model)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("[Reasoning] ledger notice: %s", e)
 
     def _observe_tool_result(self, payload: Dict[str, Any]) -> None:
         """Records every tool outcome in the coverage ledger.
@@ -2140,6 +2172,11 @@ class HunterPipelineOrchestrator:
                     endpoints=ep_list
                 )
                 self._save_stage_artifact("12_vulnerabilities", "ai_triage_recon.json", triage_result)
+                self._record_reasoning(
+                    kind="triage_recon_assets", model="xploiter/pentester",
+                    prompt_frame=f"{self.base_url}|{subdomain_list}|{port_list}|{ep_list}",
+                    output=triage_result,
+                )
                 logger.info(f"[AI/xploiter] Recon triage done: {len(str(triage_result.get('analysis', '')))} chars")
                 await self._emit("ai_triad_done", model="xploiter/pentester", chars=len(str(triage_result.get("analysis", ""))))
 
@@ -2153,6 +2190,11 @@ class HunterPipelineOrchestrator:
                             code_content=s.matched_string
                         )
                         js_audit_results.append(code_result)
+                        self._record_reasoning(
+                            kind="js_audit", model="qwen2.5-coder",
+                            prompt_frame=f"{s.file_url}|audit:{s.secret_type}",
+                            output=code_result,
+                        )
                     except Exception as e:
                         logger.debug(f"[AI/Qwen] JS audit error: {e}")
                 if js_audit_results:

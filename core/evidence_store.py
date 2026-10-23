@@ -39,6 +39,8 @@ _ENTITY_FILES = {
     "dead_end": "dead_end.jsonl",
     "tool_execution": "tool_execution.jsonl",
     "court_verdict": "court_verdict.jsonl",
+    "reasoning": "reasoning.jsonl",
+    "network_txn": "network_txn.jsonl",
     "event": "event.jsonl",
     "run": "run.jsonl",
 }
@@ -145,6 +147,53 @@ class CourtVerdictRecord:
     rationale: str = ""
     session_id: str = ""
     decided_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ReasoningRecord:
+    """استدلال عقل AI موثّق — خط أدلة التفكير (Phase 4).
+
+    القاعدة المعمارية: العقل (LLM) لا ينشئ نتائج مباشرة أبدًا؛ مخرجاته
+    توثّق هنا وتُقرأ من البشر/الأنظمة كمدخل تحقيقي. النتائج تمر من
+    FindingQualificationGate ثم FINAL COURT فقط.
+    """
+    reasoning_id: str
+    run_id: str
+    kind: str                 # triage_recon_assets | js_audit | strategy | ...
+    model: str
+    prompt_digest: str        # sha256 hex لملخص إطار الطلب (بدون أسرار)
+    output_excerpt: str       # أول جزء من المخرجات (منقّي من الأسرار)
+    latency_ms: Optional[float] = None
+    decided_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class NetworkTransactionRecord:
+    """ترافيك مُعترض موثّق — Burp proxy أو متصفح (Phase 5).
+
+    لا يخزّن قيم الهيدرز أبدًا (قد تحمل Authorization/Cookie) — يخزّن
+    أسماء الهيدرز فقط + hash للطلب نفسه. القيم الكاملة تبقى في
+    traffic.db تحت إدارة الطبقة المتخصصة الخاصة بها.
+    """
+    txn_id: str
+    run_id: str
+    source: str               # browser | burp_proxy | python_http
+    method: str
+    url: str
+    host: str
+    path: str
+    status_code: int = 0
+    resource_type: str = "document"
+    is_api: bool = False
+    header_names: List[str] = field(default_factory=list)
+    request_digest: str = ""  # sha256 hex لمنهج+موقع (تعريف ثابت للمطابقة)
+    captured_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -381,6 +430,67 @@ class EvidenceStore:
             if d.get("run_id") == run_id:
                 out.append(EventRecord(**d))
         return sorted(out, key=lambda r: r.timestamp)
+
+    # -- سجل الاستدلال الموحد (Phase 4) --
+    def record_reasoning(self, *, run_id: str, kind: str, model: str,
+                         prompt_digest: str, output_excerpt: str,
+                         latency_ms: Optional[float] = None) -> ReasoningRecord:
+        rec = ReasoningRecord(
+            reasoning_id=f"RSN-{uuid.uuid4().hex[:8].upper()}",
+            run_id=run_id, kind=kind, model=model,
+            prompt_digest=prompt_digest,
+            output_excerpt=output_excerpt,
+            latency_ms=latency_ms)
+        self._append("reasoning", rec.to_dict())
+        return rec
+
+    def list_reasoning(self, run_id: Optional[str] = None,
+                       kind: Optional[str] = None) -> List[ReasoningRecord]:
+        out: List[ReasoningRecord] = []
+        for d in self._read_all("reasoning"):
+            if run_id is not None and d.get("run_id") != run_id:
+                continue
+            if kind is not None and d.get("kind") != kind:
+                continue
+            out.append(ReasoningRecord(**d))
+        return out
+
+    # -- الترافيك المعترض الموحد (Phase 5) --
+    def record_network_transaction(self, *, run_id: str, source: str,
+                                   method: str, url: str, host: str, path: str,
+                                   status_code: int = 0,
+                                   resource_type: str = "document",
+                                   headers: Optional[Dict[str, Any]] = None,
+                                   ) -> NetworkTransactionRecord:
+        from hashlib import sha256
+        is_api = ("/api/" in path.lower() or "json" in resource_type.lower())
+        rec = NetworkTransactionRecord(
+            txn_id=f"NET-{uuid.uuid4().hex[:8].upper()}",
+            run_id=run_id, source=source,
+            method=method.upper(), url=url, host=host, path=path,
+            status_code=int(status_code or 0),
+            resource_type=resource_type,
+            is_api=is_api,
+            header_names=sorted(str(k) for k in (headers or {}).keys()),
+            request_digest=sha256(f"{method.upper()}:{url}".encode("utf-8", "replace")).hexdigest()[:16],
+        )
+        self._append("network_txn", rec.to_dict())
+        return rec
+
+    def list_network_transactions(self, run_id: Optional[str] = None,
+                                  source: Optional[str] = None,
+                                  is_api: Optional[bool] = None,
+                                  ) -> List[NetworkTransactionRecord]:
+        out: List[NetworkTransactionRecord] = []
+        for d in self._read_all("network_txn"):
+            if run_id is not None and d.get("run_id") != run_id:
+                continue
+            if source is not None and d.get("source") != source:
+                continue
+            if is_api is not None and bool(d.get("is_api")) != is_api:
+                continue
+            out.append(NetworkTransactionRecord(**d))
+        return out
 
     # -- التشغيلات --
     def record_run(self, *, run_id: str, goal: str, scope: Dict[str, Any],

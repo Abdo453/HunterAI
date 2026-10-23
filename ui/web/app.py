@@ -181,6 +181,52 @@ async def run_readiness_scan():
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
+@app.get("/api/evidence/ledger")
+async def evidence_ledger():
+    """سجل الأدلة الموحد — عدادات + آخر تبعات لكل كيان (Phase 7). محلي فقط."""
+    try:
+        from core.evidence_store import EvidenceStore
+
+        store = EvidenceStore()
+        entities = ["run", "tool_execution", "reasoning", "network_txn",
+                    "court_verdict", "event", "evidence", "hypothesis", "dead_end"]
+        counts = {e: len(store._read_all(e)) for e in entities}
+
+        runs: List[str] = []
+        for e in entities:
+            for d in store._read_all(e):
+                rid = d.get("run_id")
+                if rid and rid not in runs:
+                    runs.append(rid)
+        runs = sorted(runs)[-20:]
+
+        recent: Dict[str, List[Dict[str, Any]]] = {}
+        for e in entities:
+            data = store._read_all(e)[-15:]
+            # تنظيف آمن: لا قيم هيدرز ولا أسرار — نرسل حقول محددة فقط
+            if e == "network_txn":
+                safe_keys = ["txn_id", "run_id", "source", "method", "host",
+                             "path", "status_code", "is_api", "header_names",
+                             "request_digest", "captured_at"]
+            elif e == "tool_execution":
+                safe_keys = ["execution_id", "run_id", "tool_id", "status",
+                             "exit_code", "command", "stage", "target",
+                             "endpoint", "output_excerpt", "artifact_reference", "started_at"]
+            elif e == "reasoning":
+                safe_keys = ["reasoning_id", "run_id", "kind", "model",
+                             "prompt_digest", "output_excerpt", "latency_ms", "decided_at"]
+            elif e == "court_verdict":
+                safe_keys = ["court_id", "run_id", "finding_id", "title",
+                             "endpoint", "verdict", "reason_code", "rationale", "decided_at"]
+            else:
+                safe_keys = list(data[0].keys()) if data else []
+            recent[e] = [{k: d.get(k) for k in safe_keys} for d in data]
+
+        return {"counts": counts, "runs": runs, "recent": recent}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
 @app.get("/api/diagnostics/preflight")
 async def check_preflight():
     """Local-only readiness report. Never contacts an assessment target."""

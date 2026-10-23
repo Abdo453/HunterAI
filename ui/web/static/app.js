@@ -48,6 +48,7 @@ function switchTab(tab, btn) {
   if(tab === 'extensions') extLoad();
   if(tab === 'control') { controlLoadRuns(); budgetSnapshot(); }
   if(tab === 'readiness') maybeRunReadiness();
+  if(tab === 'ledger') loadLedger();
 }
 
 function switchView(view, btn) {
@@ -2280,4 +2281,117 @@ function renderReadiness(d) {
 
   document.getElementById('readiness-artifact').innerHTML =
     d.artifact_path ? `📄 تقرير الإثبات محفوظ: <span style="color:#3399ff;font-family:monospace;">${d.artifact_path}</span>` : '';
+}
+
+// ── 🗂️ Evidence Ledger Tab (Phase 7 — السجل الموحد Append-only) ──
+const _LEDGER_ENTITIES = [
+  {key: 'tool_execution', label: '⚙️ تنفيذ الأدوات', color: '#00ff41'},
+  {key: 'reasoning',      label: '🧠 استدلال AI',     color: '#b26bff'},
+  {key: 'network_txn',    label: '🌐 معاملات الشبكة',  color: '#3399ff'},
+  {key: 'court_verdict',  label: '⚖️ أحكام المحكمة',   color: '#ffaa00'},
+  {key: 'event',          label: '📡 أحداث',          color: '#888'},
+  {key: 'hypothesis',     label: '💡 فرضيات',         color: '#00cccc'},
+  {key: 'dead_end',       label: '🚧 طرق مسدودة',     color: '#ff2a4b'},
+];
+
+async function loadLedger() {
+  const btn = document.getElementById('ledger-btn');
+  const badge = document.getElementById('ledger-state-badge');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري القراءة...';
+  badge.textContent = '⏳ قراءة...';
+  badge.style.background = '#ffaa00';
+  badge.style.color = '#000';
+  try {
+    const r = await fetch('/api/evidence/ledger');
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    _renderLedger(d);
+    const total = Object.values(d.counts || {}).reduce((a, b) => a + (b || 0), 0);
+    badge.textContent = `✅ ${total} سجل`;
+    badge.style.background = '#00ff41';
+    badge.style.color = '#000';
+  } catch (e) {
+    badge.textContent = '❌ فشل القراءة';
+    badge.style.background = '#ff2a4b';
+    badge.style.color = '#fff';
+    document.getElementById('ledger-list').innerHTML =
+      `<div style="color:#ff2a4b;padding:12px;">فشل تحميل السجل: ${e}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 حدّث السجل';
+  }
+}
+
+function _renderLedger(d) {
+  const counts = d.counts || {};
+  const runs = d.runs || [];
+  const recent = d.recent || {};
+
+  // كروت العدادات
+  const summaryEl = document.getElementById('ledger-summary');
+  summaryEl.style.display = 'grid';
+  summaryEl.innerHTML = _LEDGER_ENTITIES.map(en => `
+    <div style="background:#161b22;border:1px solid ${en.color};border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:22px;font-weight:bold;color:${en.color};">${counts[en.key] || 0}</div>
+      <div style="color:#888;font-size:11px;">${en.label}</div>
+    </div>`).join('');
+
+  // قائمة الكيانات والسجلات الأخيرة
+  const esc = s => String(s === undefined || s === null ? '' : s).replace(/</g, '&lt;');
+  const list = document.getElementById('ledger-list');
+  list.innerHTML = _LEDGER_ENTITIES.map(en => {
+    const rows = recent[en.key] || [];
+    if (!rows.length) return `
+      <div style="border:1px solid #21262d;border-radius:8px;padding:10px;margin-bottom:10px;background:#0d1117;">
+        <div style="color:${en.color};font-weight:bold;margin-bottom:6px;">${en.label} — <span style="color:#555;">فارغ (لا سجلات بعد)</span></div>
+      </div>`;
+    return `
+    <div style="border:1px solid #21262d;border-radius:8px;padding:10px;margin-bottom:10px;background:#0d1117;">
+      <div style="color:${en.color};font-weight:bold;margin-bottom:6px;">
+        ${en.label} <span style="color:#555;font-size:11px;">(آخر ${rows.length} من ${counts[en.key] || rows.length})</span>
+      </div>
+      ${rows.map(row => _ledgerRow(en, row, esc, runs)).join('')}
+    </div>`;
+  }).join('');
+}
+
+function _ledgerRow(en, row, esc, runs) {
+  const rid = row.run_id || '';
+  const runTag = rid ? `<span style="color:#555;font-size:10px;font-family:monospace;">${esc(rid)}</span>` : '';
+  if (en.key === 'tool_execution') {
+    return `<div style="border-bottom:1px solid #161b22;padding:5px 0;font-family:monospace;font-size:12px;">
+      <span style="color:${row.status === 'finished' ? '#00ff41' : '#ff2a4b'};">${esc(row.status || '?')}</span>
+      <span style="color:#ddd;">${esc(row.tool_id)}</span>
+      <span style="color:#888;">exit=${esc(row.exit_code)}</span>
+      <span style="color:#555;">${esc(row.stage || '')}${row.target ? ' @ ' + esc(row.target) : ''}</span>
+      ${runTag}</div>`;
+  }
+  if (en.key === 'reasoning') {
+    return `<div style="border-bottom:1px solid #161b22;padding:5px 0;font-family:monospace;font-size:12px;">
+      <span style="color:#b26bff;">${esc(row.kind)}</span>
+      <span style="color:#888;">${esc(row.model)}</span>
+      <span style="color:#555;">digest=${esc(String(row.prompt_digest || '').slice(0, 12))}</span>
+      ${runTag}</div>`;
+  }
+  if (en.key === 'network_txn') {
+    return `<div style="border-bottom:1px solid #161b22;padding:5px 0;font-family:monospace;font-size:12px;">
+      <span style="color:#3399ff;">${esc(row.source)}</span>
+      <span style="color:#ddd;">${esc(row.method)} ${esc(row.host)}${esc(row.path)}</span>
+      <span style="color:${row.status_code >= 400 ? '#ff2a4b' : '#888'};">${esc(row.status_code)}</span>
+      ${row.is_api ? '<span style="color:#00cccc;">API</span>' : ''}
+      ${runTag}</div>`;
+  }
+  if (en.key === 'court_verdict') {
+    return `<div style="border-bottom:1px solid #161b22;padding:5px 0;font-family:monospace;font-size:12px;">
+      <span style="color:${row.verdict === 'accepted' ? '#00ff41' : '#ffaa00'};">${esc(row.verdict)}</span>
+      <span style="color:#888;">${esc(row.verdict ? row.verdict.toUpperCase() : '') !== esc(row.verdict) ? '' : ''}</span>
+      <span style="color:#ddd;">${esc(row.finding_id)} ${esc(row.title || '')}</span>
+      ${row.reason_code ? `<span style="color:#ff8899;">${esc(row.reason_code)}</span>` : ''}
+      ${runTag}</div>`;
+  }
+  // generic
+  return `<div style="border-bottom:1px solid #161b22;padding:5px 0;font-family:monospace;font-size:12px;color:#999;">
+    ${esc(JSON.stringify(row)).slice(0, 220)} ${runTag}</div>`;
 }
