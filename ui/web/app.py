@@ -181,6 +181,34 @@ async def run_readiness_scan():
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
+@app.get("/api/diagnostics/install-plan")
+async def diagnostics_install_plan():
+    """خطة تثبيت الأدوات من artifact المرحلة 6 — عرض فقط، بلا تنفيذ."""
+    from pathlib import Path
+    art = Path("data") / "readiness" / "tool_installation_plan.json"
+    if not art.is_file():
+        return {"plan": None, "message": "لا خطة محفوظة بعد — شغّل python -m core.readiness.tool_mgmt"}
+    try:
+        import json
+        raw = json.loads(art.read_text(encoding="utf-8"))
+        safe_steps = [
+            {k: s.get(k) for k in ("tool", "channel", "command", "required",
+                                   "verified", "executed")}
+            for s in raw.get("steps", [])
+        ]
+        return {
+            "plan": {
+                "target_platform": raw.get("target_platform"),
+                "summary": raw.get("summary"),
+                "prerequisites": raw.get("prerequisites", []),
+                "notes": raw.get("notes", []),
+                "steps": safe_steps,
+            },
+        }
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
 @app.get("/api/evidence/ledger")
 async def evidence_ledger():
     """سجل الأدلة الموحد — عدادات + آخر تبعات لكل كيان (Phase 7). محلي فقط."""

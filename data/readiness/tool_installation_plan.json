@@ -1,10 +1,10 @@
 {
   "target_platform": "windows",
-  "created_at": 1792745166.288147,
+  "created_at": 1792750954.8862295,
   "approved": false,
   "summary": {
-    "steps": 15,
-    "required_missing": 7,
+    "steps": 9,
+    "required_missing": 1,
     "verified": 0
   },
   "prerequisites": [
@@ -56,65 +56,10 @@
       "decided_at": null
     },
     {
-      "tool": "ffuf",
-      "channel": "go",
-      "command": "go install -v github.com/ffuf/ffuf/v2@latest",
-      "required": true,
-      "probed_after": null,
-      "executed": false,
-      "verified": false,
-      "note": "",
-      "decided_at": null
-    },
-    {
       "tool": "gau",
       "channel": "go",
       "command": "go install -v github.com/lc/gau/v2/cmd/gau@latest",
       "required": false,
-      "probed_after": null,
-      "executed": false,
-      "verified": false,
-      "note": "",
-      "decided_at": null
-    },
-    {
-      "tool": "httpx",
-      "channel": "go",
-      "command": "go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest",
-      "required": true,
-      "probed_after": null,
-      "executed": false,
-      "verified": false,
-      "note": "",
-      "decided_at": null
-    },
-    {
-      "tool": "katana",
-      "channel": "go",
-      "command": "go install -v github.com/projectdiscovery/katana/cmd/katana@latest",
-      "required": true,
-      "probed_after": null,
-      "executed": false,
-      "verified": false,
-      "note": "",
-      "decided_at": null
-    },
-    {
-      "tool": "nuclei",
-      "channel": "go",
-      "command": "go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
-      "required": true,
-      "probed_after": null,
-      "executed": false,
-      "verified": false,
-      "note": "",
-      "decided_at": null
-    },
-    {
-      "tool": "subfinder",
-      "channel": "go",
-      "command": "go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
-      "required": true,
       "probed_after": null,
       "executed": false,
       "verified": false,
@@ -155,17 +100,6 @@
       "decided_at": null
     },
     {
-      "tool": "sqlmap",
-      "channel": "pipx",
-      "command": "pipx install sqlmap",
-      "required": true,
-      "probed_after": null,
-      "executed": false,
-      "verified": false,
-      "note": "",
-      "decided_at": null
-    },
-    {
       "tool": "wpscan",
       "channel": "gem",
       "command": "sudo gem install wpscan",
@@ -179,6 +113,6 @@
   ],
   "notes": [
     "أدوات مفقودة بلا قناة معروفة مونّحتلها أوامر مختلقة: rustscan, netexec, enum4linux, ssh-audit, responder, nbtscan, snmpwalk, feroxbuster, dalfox, paramspider, hakrawler, waybackurls, amass, fierce, dnsenum, theharvester, assetfinder, findomain, shodan, john, hashcat, medusa, radare2, binwalk, checksec, file, prowler, trivy, kube_hunter, checkov, sherlock, recon_ng, spiderfoot, volatility, exiftool, zsteg, steghide, foremost",
-    "built from readiness report: data\\readiness\\phase6_truth.json (strict_ready=False)"
+    "built from readiness report: data\\readiness\\post_install_truth.json (strict_ready=False)"
   ]
 }

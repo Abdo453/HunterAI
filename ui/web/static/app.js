@@ -2281,6 +2281,41 @@ function renderReadiness(d) {
 
   document.getElementById('readiness-artifact').innerHTML =
     d.artifact_path ? `📄 تقرير الإثبات محفوظ: <span style="color:#3399ff;font-family:monospace;">${d.artifact_path}</span>` : '';
+
+  loadInstallPlan();
+}
+
+// ── 🔧 Install Plan (مرحلة 6 → 7: من المفقود إلى أمر قابل للتنفيذ المعتمد) ──
+async function loadInstallPlan() {
+  const box = document.getElementById('install-plan-box');
+  if (!box) return;
+  try {
+    const r = await fetch('/api/diagnostics/install-plan');
+    const d = await r.json();
+    if (!d.plan) { box.style.display = 'none'; return; }
+    const p = d.plan;
+    const esc = s => String(s === undefined || s === null ? '' : s).replace(/</g, '&lt;');
+    const s = p.summary || {};
+    box.style.display = 'block';
+    box.innerHTML = `
+      <div style="border:1px solid #ffaa00;border-radius:8px;background:#161b22;padding:12px;">
+        <div style="color:#ffaa00;font-weight:bold;margin-bottom:6px;">🔧 خطة تثبيت الأدوات (${s.steps || 0} خطوة · ${s.required_missing || 0} مطلوبة · ${p.target_platform})</div>
+        ${p.prerequisites.map(pr => `<div style="color:#ff8899;font-size:12px;margin-bottom:4px;">⚠️ ${esc(pr)}</div>`).join('')}
+        <div style="max-height:200px;overflow-y:auto;font-family:monospace;font-size:12px;">
+          ${p.steps.map(st => `
+            <div style="padding:3px 0;border-bottom:1px solid #21262d;flex-wrap:wrap;">
+              <span style="color:${st.verified ? '#00ff41' : '#ffaa00'};">${st.verified ? '✅' : '⬜'}</span>
+              <span style="color:#ddd;">${esc(st.tool)}</span>
+              <span style="color:#555;">[${esc(st.channel)}]</span>
+              ${st.required ? '<span style="color:#ff2a4b;">REQUIRED</span>' : ''}
+              <div style="color:#888;font-size:11px;word-break:break-all;">${esc(st.command)}</div>
+            </div>`).join('')}
+        </div>
+        <div style="color:#555;font-size:11px;margin-top:6px;">التثبيت يتطلب موافقة صريحة: <span style="font-family:monospace;">python -m core.readiness.tool_mgmt</span> (عرض فقط هنا — لا تنفيذ من المتصفح)</div>
+      </div>`;
+  } catch (e) {
+    box.style.display = 'none';
+  }
 }
 
 // ── 🗂️ Evidence Ledger Tab (Phase 7 — السجل الموحد Append-only) ──
