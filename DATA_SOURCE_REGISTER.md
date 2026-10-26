@@ -88,7 +88,7 @@ GET https://services.nvd.nist.gov/rest/json/cves/2.0
 - Enrichment (CVSS/CPE) may lag publication; `lastModified` changes are expected.
 - 2026 is in progress; the dataset is never "complete" for the current year.
 
-**Status:** implemented in this increment with mocked tests. Live verification is opt-in (`HUNTERAI_LIVE_NVD=1`) and must be recorded with actual results.
+**Status:** implemented in this increment with mocked tests. A bounded live verification was performed on 2026-10-26 (2024-01-15, 68 records, 0 errors); see `LIVE_NVD_VERIFICATION.md`. The automated live test is opt-in (`RUN_LIVE_NVD=1`) and skipped by default.
 
 ---
 
@@ -272,7 +272,8 @@ Every connector must implement:
 | Date | Source | Action | Result | Artifact |
 |---|---|---|---|---|
 | 2026-10-26 | — | Register created | No live source contacted | this file |
-| 2026-10-26 | NVD | Connector implemented + mocked tests | See final report | `tests/test_vuln_intel_nvd.py` |
-| 2026-10-26 | NVD | Live probe (optional) | Record actual status/count/time if run | `tests/integration/test_vuln_intel_nvd_live.py` |
+| 2026-10-26 | NVD | Connector implemented + mocked tests | 134 new hermetic tests green | `tests/vuln_intel/` |
+| 2026-10-26 | NVD | Live probe (`RUN_LIVE_NVD=1`) | 1 passed; real NVD 2.0 response normalized | `tests/integration/test_vuln_intel_nvd_live.py` |
+| 2026-10-26 | NVD | Manual bounded sync | 2024-01-15: 1 page, 68 retrieved/inserted, 0 errors; coverage `complete=false` | `LIVE_NVD_VERIFICATION.md` |
 
 > When a live sync is performed, append the exact command, HTTP status, record count, date range, and elapsed time. Do not write "success" without these details.

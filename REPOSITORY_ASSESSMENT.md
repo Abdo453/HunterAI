@@ -11,7 +11,7 @@
 
 ## A. Concise repository assessment
 
-HunterAI is a large Python 3.11+ security-automation monorepo. It combines a multi-agent pentest pipeline, a Burp/browser/code "sensory triad", an evidence/verdict layer, a FastAPI/Web UI, a CLI, local SQLite stores, and a learning subsystem. The codebase is substantial (≈1,810 Python files including tests, ≈292 test modules) and is not a greenfield project.
+HunterAI is a large Python 3.11+ security-automation monorepo. It combines a multi-agent pentest pipeline, a Burp/browser/code "sensory triad", an evidence/verdict layer, a FastAPI/Web UI, a CLI, local SQLite stores, and a learning subsystem. The codebase is substantial (≈1,810 Python files including tests, ≈304 test modules) and is not a greenfield project.
 
 The strongest existing assets are:
 
@@ -19,7 +19,7 @@ The strongest existing assets are:
 2. **An evidence-first finding model** (Evidence Court / Proof-of-Execution) that already distinguishes observation from confirmed vulnerability.
 3. **A working multi-stage hunt pipeline** (`hunter_ai/pipeline/pipeline_orchestrator.py`) with artifact-based stages and reports.
 4. **A sandboxed command layer** (`core/tool_registry.py`, `core/sandbox.py`) with risk levels and allowlists.
-5. **A real test suite** (2,003 passed + 1 skipped in the four-group run; see §Test baseline).
+5. **A real test suite** (2,191 passed + 1 skipped in the hermetic run; see §Test baseline).
 
 The weakest area relative to the new mission is **vulnerability intelligence**. What exists today is mostly retrieval, not intelligence:
 
@@ -72,7 +72,7 @@ There is **no normalized vulnerability database, no schema migrations, no increm
 | `tools/` | Tool integrations and managers |
 | `ui/web/` | FastAPI app, templates, static dashboard |
 | `cli/` | CLI implementation |
-| `tests/` | ~292 test modules; `tests/integration` excluded from CI |
+| `tests/` | ~304 test modules; `tests/integration` excluded from CI (live/opt-in) |
 | `data/` | JSON knowledge files, SQLite databases, engagement artifacts |
 | `artifacts/`, `reports/`, `findings/`, `logs/` | Runtime output |
 | `docs/` | 20+ design/audit/plan documents (overlapping) |
@@ -172,7 +172,7 @@ No evidence was found of a centralized provider abstraction with per-provider po
 
 `docs/` contains `architecture-audit.md`, `design.md`, `implementation-plan.md`, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_LEDGER.md`, `IMPLEMENTATION_STATUS.md`, `security.md`, `security_audit.md`, `OPERATIONAL_GUIDE.md`, `usage.md`, `burp-setup.md`, `mcp-setup.md`, `AGENT_SYSTEMS.md`, `CLAUDE_THINKING_ARCHITECTURE.md`, `end_to_end_test_results.md`, and more. Root-level `ARCHITECTURE.md`, `THREAT_MODEL.md`, `WORKFLOW.md`, `TEST_BASELINE.md`, `BLIND_SPOTS.md`, `PRE_KALI_CERTIFICATION.md`.
 
-**Gap:** documents overlap and disagree; the README badge claims "42/42" tests while the suite is 2,003 passing tests (1 skipped). There is no single authoritative status document.
+**Gap:** documents overlap and disagree; the README badge claims "42/42" tests while the hermetic suite is 2,191 passing tests (1 skipped). There is no single authoritative status document.
 
 ---
 
@@ -195,27 +195,27 @@ No evidence was found of a centralized provider abstraction with per-provider po
 | Console encoding safety | `core/console.py`; regression tests pass |
 | Process-tree cleanup | `core/process_utils.py`; regression tests pass |
 | Readiness gate | `core/readiness.py`; CI smoke step |
-| Test suite | 2,003 passed + 1 skipped across four groups (Group 1: 524, Group 2: 437, Group 3: 568, Group 4: 474 passed / 1 skipped) |
+| Test suite | 2,191 passed + 1 skipped in the hermetic run (four groups: 524 + 437 + 569 + 474; `tests/v27` + console safety: 53; `tests/vuln_intel`: 134). Opt-in live NVD test: 1 passed when enabled. |
 
 ### C.2 Missing (required by the new mission)
 
-| Missing capability | Current state | Consequence |
-|---|---|---|
-| Normalized vulnerability schema | None; JSON blob with 3 records | Cannot search, dedupe, or triage reliably |
-| Historical backfill 2000–2026 | None | No historical corpus |
-| Incremental sync + checkpoints | None | Re-downloads or misses data; no resume |
-| Source connectors (NVD, OSV, GHSA, PHP, Composer, vendors) | CIRCL lookup + raw fetcher only | No authoritative, licensed, rate-limited ingestion |
-| Provenance and confidence model | Not modeled per record | AI claims cannot be traced to evidence |
-| Version-range applicability | None | Cannot answer "does this advisory affect my project?" |
-| PHP-specific classification | None | Cannot distinguish runtime/extension/framework/package/application |
-| Project inventory and triage | None | No project-aware findings |
-| Capability registry for tools | Five partial registries, no capability metadata | Tool selection is popularity/name-driven |
-| Safe lab cases | No structured lab corpus | Cannot validate detectors reproducibly |
-| Continuous scheduler | No durable scheduler/retry queue | No continuous monitoring |
-| Structured audit logs/metrics | Partial logs only | Hard to investigate failures |
-| Coverage reporting | None | Cannot honestly claim historical completeness |
-| Report schema for vuln intelligence | Ad hoc Markdown/JSON | Inconsistent, non-auditable reports |
-| Self-improvement workflow | None | No controlled branch/PR/test loop |
+| Capability | Before | After P1–P5 (this increment) | Remaining consequence |
+|---|---|---|---|
+| Normalized vulnerability schema | JSON blob with 3 records | `core/vuln_intel` SQLite schema with migrations, aliases, CWEs, references, affected packages | Legacy JSON remains separate; no migration of old data |
+| Historical backfill 2000–2026 | None | Bounded NVD proof: 68 records for 2024-01-15, 0 errors | Full 2000–2026 corpus not ingested; no completeness claim |
+| Incremental sync + checkpoints | None | Resumable NVD sync with per-page checkpoints and overlap | OSV/GHSA/vendor sources still missing |
+| Source connectors | CIRCL lookup + raw fetcher only | NVD 2.0 connector (rate limit, retries, size cap, pagination) | OSV, GHSA, PHP/Composer, and vendor feeds planned |
+| Provenance and confidence model | Not modeled per record | Source ID, timestamps, content hash, confidence labels, raw payload opt-in | AI-cited evidence still future work |
+| Version-range applicability | None | Deterministic version comparator and five-level triage | Not a full Composer/npm semver implementation |
+| PHP-specific classification | None | Evidence-based runtime/extension/framework/package/application/config classifier | Text-only ambiguity remains; confidence is explicit |
+| Project inventory and triage | None | JSON `ProjectProfile` + `triage` CLI with reasons and matched packages | Inventory import from manifests is future work |
+| Capability registry for tools | Five partial registries, no capability metadata | Unchanged | Tool selection is popularity/name-driven |
+| Safe lab cases | No structured lab corpus | Unchanged | Cannot validate detectors reproducibly |
+| Continuous scheduler | No durable scheduler/retry queue | Unchanged | No continuous monitoring yet |
+| Structured audit logs/metrics | Partial logs only | Sync runs, checkpoints, and error rows persisted | No metrics/alerting yet |
+| Coverage reporting | None | Measured monthly coverage, gaps, limitations, `complete=false` by default | No denominator means no completeness claim |
+| Report schema for vuln intelligence | Ad hoc Markdown/JSON | Unchanged | Inconsistent, non-auditable reports |
+| Self-improvement workflow | None | Unchanged | No controlled branch/PR/test loop |
 
 ### C.3 Simulated or misleading features (must be labeled)
 
@@ -393,14 +393,18 @@ core/vuln_intel/php.py             # PHP classification
 core/vuln_intel/triage.py          # project-aware applicability
 core/vuln_intel/cli.py             # python -m core.vuln_intel.cli
 core/vuln_intel/README.md          # usage + limitations
-tests/test_vuln_intel_models.py
-tests/test_vuln_intel_store.py
-tests/test_vuln_intel_nvd.py
-tests/test_vuln_intel_sync.py
-tests/test_vuln_intel_php.py
-tests/test_vuln_intel_triage.py
-tests/test_vuln_intel_cli.py
-tests/test_vuln_intel_injection.py
+tests/vuln_intel/conftest.py
+tests/vuln_intel/test_models.py
+tests/vuln_intel/test_versions.py
+tests/vuln_intel/test_db.py
+tests/vuln_intel/test_sources_base.py
+tests/vuln_intel/test_nvd.py
+tests/vuln_intel/test_sync.py
+tests/vuln_intel/test_coverage.py
+tests/vuln_intel/test_php.py
+tests/vuln_intel/test_triage.py
+tests/vuln_intel/test_cli.py
+tests/vuln_intel/test_security.py
 tests/integration/test_vuln_intel_nvd_live.py  # opt-in, skipped by default
 ```
 
@@ -419,17 +423,20 @@ No changes to the existing orchestrator, scope engine, or tool registries in thi
 
 | Test file | Verifies |
 |---|---|
-| `test_vuln_intel_models.py` | Required fields, UTC normalization, `published_at` vs `imported_at`, unknown handling, confidence enum, hash stability |
-| `test_vuln_intel_store.py` | Migration idempotency, insert/update/unchanged counts, alias dedupe, CVE↔GHSA merge, search by date/product/CWE/severity, JSON/CSV export, checkpoint persistence, sync-run persistence |
-| `test_vuln_intel_nvd.py` | NVD JSON normalization, English description preference, CVSS v4/v3.1/v3.0/v2 preference, CPE range extraction, rejected/withdrawn handling, malformed record rejection, pagination cursor |
-| `test_vuln_intel_sync.py` | Multi-page sync, checkpoint resume after simulated interruption, idempotent re-run (0 inserted), rejected-record accounting, coverage gaps, no false "complete" claim |
-| `test_vuln_intel_php.py` | PHP runtime vs extension vs framework vs package vs application classification; PHP mention alone does not imply vulnerability |
-| `test_vuln_intel_triage.py` | Version-range matching, fixed-version exclusion, unknown version → insufficient evidence, name-only match → not confirmed, ecosystem mismatch → not applicable |
-| `test_vuln_intel_cli.py` | `sync` (fake connector), `coverage`, `search`, `show`, `triage`, `export` exit codes and JSON output |
-| `test_vuln_intel_injection.py` | Advisory text containing prompt-injection/tool-command strings is stored verbatim as data and never executed; no shell/network side effects |
-| `tests/integration/test_vuln_intel_nvd_live.py` | Opt-in live NVD request (`HUNTERAI_LIVE_NVD=1`), skipped by default, records actual result |
+| `test_models.py` | Required fields, UTC normalization, `published_at` vs `imported_at`, unknown handling, confidence enum, hash stability |
+| `test_versions.py` | Numeric cores, suffixes, prerelease/unknown handling; no guessed comparisons |
+| `test_db.py` | Migration idempotency, insert/update/unchanged counts, alias dedupe, CVE↔GHSA merge, search by date/product/CWE/severity, JSON/CSV export, checkpoint persistence, sync-run persistence, connection cleanup |
+| `test_sources_base.py` | Rate limiting, retry/backoff, `Retry-After`, redirect allowlist, TLS verification, response-size cap |
+| `test_nvd.py` | NVD JSON normalization, English description preference, CVSS v4/v3.1/v3.0/v2 preference, CPE range extraction, rejected/withdrawn handling, malformed record rejection, pagination cursor |
+| `test_sync.py` | Multi-page sync, checkpoint resume after simulated interruption, idempotent re-run (0 inserted), rejected-record accounting, `max_pages`, overlapping windows |
+| `test_coverage.py` | Measured months, gaps, pre-2002/current-year limitations, no false `complete=true` |
+| `test_php.py` | PHP runtime vs extension vs framework vs package vs application classification; PHP mention alone does not imply vulnerability; plugin/theme handling; `php-fpm` is runtime |
+| `test_triage.py` | Version-range matching, fixed-version exclusion, unknown version → insufficient evidence, name-only match → not confirmed, ecosystem mismatch → not applicable |
+| `test_cli.py` | `init`, `sources`, `sync` (fake connector), `coverage`, `search`, `show`, `triage`, `classify-php`, `export` exit codes and JSON output |
+| `test_security.py` | Advisory text containing prompt-injection/tool-command strings is stored verbatim as data and never executed; SQL injection is parameterized; no shell/network side effects |
+| `tests/integration/test_vuln_intel_nvd_live.py` | Opt-in live NVD request (`RUN_LIVE_NVD=1`), skipped by default, records actual result |
 
-All unit tests use mocked HTTP (`httpx.MockTransport` or a fake connector) and a temporary SQLite file. No test requires Ollama, Burp, or internet.
+All hermetic unit tests use mocked HTTP (`httpx.MockTransport` or a fake connector) and a temporary SQLite file. No hermetic test requires Ollama, Burp, or internet. The opt-in live test and the manual NVD check do use the internet.
 
 ---
 
@@ -450,16 +457,30 @@ No credential is required to run the new unit tests. The live NVD integration te
 
 ## Test baseline (measured)
 
-Four-group split (≈63 files per group), run locally on 2026-10-26:
+Hermetic suite, run locally on 2026-10-26:
 
 | Group | Result |
 |---|---|
 | Group 1 | **524 passed**, 0 failed |
 | Group 2 | **437 passed**, 0 failed |
-| Group 3 | **568 passed**, 0 failed |
+| Group 3 | **569 passed**, 0 failed |
 | Group 4 | **474 passed**, 1 skipped, 0 failed |
+| `tests/v27` + `tests/test_console_safety.py` | **53 passed**, 0 failed |
+| `tests/vuln_intel` (new) | **134 passed**, 0 failed |
 
-**Total: 2,003 passed, 1 skipped, 0 failed.** (The skip is an existing opt-in/integration guard, not a failure.)
+**Total: 2,191 passed, 1 skipped, 0 failed.** (The skip is an existing opt-in/integration guard, not a failure.)
+
+The live/opt-in NVD test is outside the hermetic count:
+
+```powershell
+$env:RUN_LIVE_NVD = "1"
+python -m pytest tests/integration/test_vuln_intel_nvd_live.py -q
+# 1 passed
+```
+
+A bounded manual live NVD sync (2024-01-15, 68 records, 0 errors) is recorded in
+`LIVE_NVD_VERIFICATION.md`. It is not a 2000–2026 backfill and does not support a
+completeness claim.
 
 Baseline fixes made during this assessment:
 
@@ -479,17 +500,18 @@ A separate, real leak was found in `ToolManager.execute`: on timeout it called `
 
 ## Assumptions and limitations of this assessment
 
-1. Inspection was static plus test execution; no live NVD/OSV/GHSA synchronization was performed during assessment.
+1. The initial assessment was static plus test execution and did not contact external sources. A later bounded NVD check is recorded in `LIVE_NVD_VERIFICATION.md`; no OSV/GHSA/vendor synchronization was performed.
 2. "Works" means the module imports and its tests pass; it does not mean every integration path is production-ready.
-3. Test counts are from the local four-group run, not from CI.
+3. Test counts are from local runs, not from CI. The four groups, `tests/v27`, `tests/test_console_safety.py`, and `tests/vuln_intel` are counted; `tests/integration` is opt-in/live and excluded.
 4. The repository is large; modules not directly relevant to vulnerability intelligence were reviewed at the level needed to assess architecture, not line-by-line.
-5. External services (NVD, OSV, GitHub, PHP) were not contacted, so their current availability/rate limits are stated from documentation, not measured here.
+5. NVD availability and rate limits were measured for one bounded request/day; OSV/GitHub/PHP availability is stated from documentation, not measured here.
 
 ---
 
 ## Immediate next actions
 
-1. Implement `core/vuln_intel` vertical slice with tests (see §G–I).
-2. Run the new tests plus the existing suite (at least the affected groups).
-3. Record actual results in `IMPLEMENTATION_ROADMAP.md` / final report.
+1. ~~Implement `core/vuln_intel` vertical slice with tests~~ — done (P1–P5).
+2. ~~Run the new tests plus the existing suite~~ — done: 2,191 passed, 1 skipped, 0 failed.
+3. ~~Record actual results~~ — done in `IMPLEMENTATION_ROADMAP.md`, `core/vuln_intel/README.md`, and `LIVE_NVD_VERIFICATION.md`.
 4. Commit locally; do not push without explicit authorization.
+5. Next capability increment: tool capability registry (P6) or OSV/GHSA connectors, not a full historical backfill yet.

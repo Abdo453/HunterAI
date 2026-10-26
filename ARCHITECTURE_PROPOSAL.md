@@ -1,6 +1,9 @@
 # HunterAI — Architecture Proposal
 
-**Status:** proposal, grounded in the actual repository
+**Status:** proposal, grounded in the actual repository. P1–P5 (vulnerability
+intelligence, NVD ingestion, coverage, PHP classification, and triage) are now
+implemented in `core/vuln_intel`; see `IMPLEMENTATION_ROADMAP.md` and
+`LIVE_NVD_VERIFICATION.md`.
 **Date:** 2026-10-26
 **Scope:** vulnerability intelligence, adaptive authorized testing, and safe capability development
 **Constraint:** extend the existing architecture; do not replace it

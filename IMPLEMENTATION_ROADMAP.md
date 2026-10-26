@@ -21,12 +21,12 @@
 
 | Phase | Name | Priority | Status | Evidence |
 |---|---|---|---|---|
-| P0 | Baseline quality & trust | P0 | 🟡 | Four groups green: 2,003 passed, 1 skipped, 0 failed; fixes recorded |
-| P1 | Vulnerability data model + store | P1 | ⬜ (this session) | — |
-| P2 | Historical ingestion (NVD first) | P1 | ⬜ (this session) | — |
-| P3 | Incremental sync + coverage | P1 | ⬜ (this session) | — |
-| P4 | PHP intelligence | P2 | ⬜ (this session) | — |
-| P5 | Project-aware triage | P2 | ⬜ (this session) | — |
+| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,191 passed, 1 skipped, 0 failed; remaining P0 items listed below |
+| P1 | Vulnerability data model + store | P1 | ✅ | `core/vuln_intel/{models,db}.py`; 134 new tests green |
+| P2 | Historical ingestion (NVD first) | P1 | ✅ | `sources/nvd.py`, `sync.py`, `cli.py`; live one-day NVD check: 68 records, 0 errors |
+| P3 | Incremental sync + coverage | P1 | ✅ | `coverage.py`; measured gaps/limitations; `complete=false` by default |
+| P4 | PHP intelligence | P2 | ✅ | `php.py`; evidence + confidence; plugin/theme and `php-fpm` tests |
+| P5 | Project-aware triage | P2 | ✅ | `triage.py`; five-level applicability; fixed-version and unknown-version tests |
 | P6 | Tool capability registry + selection | P2 | ⬜ | — |
 | P7 | Safe lab + detectors | P3 | ⬜ | — |
 | P8 | Continuous monitoring scheduler | P3 | ⬜ | — |
@@ -53,7 +53,7 @@
 3. **Hermetic orchestrator tests** — `tests/test_hunter_master_pipeline.py` now mocks `execute_artifact` (previously invoked real crt.sh/subfinder).
 4. **Live test separation** — `tests/integration/test_artifact_based_recon_e2e.py` holds the live orchestrator test; CI already ignores `tests/integration`.
 5. **ToolManager timeout reaping** — the timeout path now uses `kill_process_tree` and awaits the transport; regression test asserts the reaper is invoked.
-6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 437, Group 3 = 568, Group 4 = 474 passed + 1 skipped; **2,003 passed, 0 failed**.
+6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 437, Group 3 = 569, Group 4 = 474 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (134); **2,191 passed, 1 skipped, 0 failed**. The opt-in live NVD test passed separately with `RUN_LIVE_NVD=1`.
 7. **Test-hang diagnosis** — Group 3's stall was unmocked `execute_artifact` (real crt.sh/subfinder), not the secret sanitizer; the test now mocks the boundary.
 
 ### Remaining
@@ -74,6 +74,8 @@
 ---
 
 ## P1 — Vulnerability data model + store
+
+**Status:** ✅ implemented and tested in this increment.
 
 ### Deliverables
 
@@ -111,6 +113,9 @@
 
 ## P2 — Historical ingestion (NVD first)
 
+**Status:** ✅ implemented and tested in this increment. Live check: one NVD day,
+68 records, 0 errors; see `LIVE_NVD_VERIFICATION.md`.
+
 ### Deliverables
 
 - `core/vuln_intel/sources/base.py`:
@@ -134,7 +139,7 @@
   - idempotent re-run
   - graceful stop on interrupt; checkpoint remains usable
 - `core/vuln_intel/cli.py`:
-  - `sync nvd --start ... --end ... --db ... [--max-pages N] [--page-size N] [--no-resume]`
+  - `sync --start ... --end ... --db ... [--max-pages N] [--page-size N] [--no-resume]`
   - `coverage`, `search`, `show`, `export`
 
 ### Tests
@@ -158,12 +163,15 @@
 
 ### Live verification (optional)
 
-- `tests/integration/test_vuln_intel_nvd_live.py`, skipped unless `HUNTERAI_LIVE_NVD=1`.
+- `tests/integration/test_vuln_intel_nvd_live.py`, skipped unless `RUN_LIVE_NVD=1`.
 - If run, record actual HTTP status, record count, date range, and elapsed time in the final report. **Do not claim success without the artifact.**
+- Result on 2026-10-26: `RUN_LIVE_NVD=1` → 1 passed. Manual one-day sync → 68 records, 0 errors; see `LIVE_NVD_VERIFICATION.md`.
 
 ---
 
 ## P3 — Incremental sync + coverage
+
+**Status:** ✅ implemented and tested in this increment.
 
 ### Deliverables
 
@@ -191,6 +199,8 @@
 ---
 
 ## P4 — PHP intelligence
+
+**Status:** ✅ implemented and tested in this increment.
 
 ### Deliverables
 
@@ -221,6 +231,8 @@
 ---
 
 ## P5 — Project-aware triage
+
+**Status:** ✅ implemented and tested in this increment.
 
 ### Deliverables
 
@@ -414,9 +426,13 @@
 | 9 | Implement P5 triage | version-range tests pass |
 | 10 | Implement CLI | CLI tests pass |
 | 11 | Run new tests + affected existing tests | all green |
-| 12 | Optional live NVD probe | record actual artifact |
-| 13 | Update docs with actual results | honest status |
-| 14 | Commit | local only |
+| 12 | Optional live NVD probe | ✅ 1 passed; manual 2024-01-15 sync: 68 records, 0 errors |
+| 13 | Update docs with actual results | ✅ counts and limits updated |
+| 14 | Commit | local only (pending final review) |
+
+All hermetic steps are complete: **2,191 passed, 1 skipped, 0 failed**. The
+integration directory remains opt-in/live; the orchestrator live test is not
+part of the hermetic count.
 
 ### Explicit non-goals this session
 
