@@ -13,6 +13,8 @@ Comprehensive verification of:
 """
 import json
 import os
+import sys
+import asyncio
 import pytest
 from pathlib import Path
 
@@ -119,6 +121,40 @@ async def test_computer_control_terminal_execution_and_audit(tmp_path):
         entry = json.loads(line)
         assert entry["tool"] == "python"
         assert entry["exit_code"] == 0
+
+
+@pytest.mark.asyncio
+async def test_computer_control_timeout_reaps_child(tmp_path):
+    """A timed-out command must be killed AND reaped (no orphan, no leaked pipe)."""
+    policy = ScopePolicy(allowed_targets=["target.com"])
+    gate = PolicyGate(scope_policy=policy, authorized=True)
+    ctrl = ComputerControl(workspace_dir=str(tmp_path), policy_gate=gate)
+
+    marker = tmp_path / "marker.txt"
+    script = tmp_path / "slow_child.py"
+    script.write_text(
+        "import time\n"
+        "from pathlib import Path\n"
+        "time.sleep(2.0)\n"
+        f"Path({str(marker)!r}).write_text('child survived')\n",
+        encoding="utf-8",
+    )
+
+    rec = await ctrl.execute_command(
+        command=f'"{sys.executable}" "{script}"',
+        tool="python",
+        stage="init",
+        reason="Timeout reaping probe",
+        timeout=0.3,
+    )
+
+    assert rec.exit_code == -2
+    assert rec.error_message == "CommandTimeout"
+
+    # Give the child time to finish if it were still alive, then prove it was
+    # actually terminated (the marker must never be written).
+    await asyncio.sleep(2.5)
+    assert not marker.exists()
 
 
 def test_computer_control_filesystem_operations(tmp_path):

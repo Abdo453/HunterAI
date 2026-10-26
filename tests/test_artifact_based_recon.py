@@ -5,18 +5,17 @@ Verifies:
 2. Target run isolation & latest.txt pointer
 3. Triple Artifact Pattern (.raw.txt, .parsed.json, .meta.json)
 4. Manifest, Timeline, and Lineage Graph persistence
-5. Full orchestrator artifact generation end-to-end
+
+The live end-to-end orchestrator test lives in
+``tests/integration/test_artifact_based_recon_e2e.py`` because it performs
+real network/AI work.
 """
 import json
-import os
-import shutil
+
 import pytest
 from pathlib import Path
 
 from hunter_ai.pipeline.engagement_manager import EngagementManager
-from hunter_ai.pipeline.pipeline_orchestrator import HunterPipelineOrchestrator
-from hunter_ai.pipeline.tool_specs import MasterToolRegistry
-from tools.tool_manager import ToolManager, ToolResult
 
 
 @pytest.fixture
@@ -143,36 +142,3 @@ def test_lineage_and_manifest_tracking(temp_engagement_dir):
     with open(mgr.timeline_file, "r", encoding="utf-8") as f:
         tl = json.load(f)
     assert len(tl) >= 2
-
-
-@pytest.mark.asyncio
-async def test_orchestrator_artifact_generation(tmp_path):
-    base_dir = tmp_path / "engagements"
-
-    orch = HunterPipelineOrchestrator(
-        target="http://example.com",
-        authorized=False,
-        workflow="passive"
-    )
-    orch.engagement_mgr.base_dir = base_dir
-    orch.engagement_mgr.target_dir = base_dir / orch.engagement_mgr.clean_target
-    orch.engagement_mgr.run_dir = orch.engagement_mgr.target_dir / orch.engagement_mgr.timestamp
-    for sc in orch.engagement_mgr.stages:
-        (orch.engagement_mgr.run_dir / sc).mkdir(parents=True, exist_ok=True)
-    orch.artifact_root = orch.engagement_mgr.run_dir
-
-    result = await orch.run()
-
-    assert result["status"] == "completed"
-    assert "engagement_directory" in result
-    assert "manifest_file" in result
-
-    assert (orch.engagement_mgr.run_dir / "00_scope" / "scope.json").exists()
-    assert (orch.engagement_mgr.run_dir / "01_osint" / "google_dorks.txt").exists()
-    assert (orch.engagement_mgr.run_dir / "02_subdomains" / "all_subdomains.txt").exists()
-    assert (orch.engagement_mgr.run_dir / "04_alive" / "alive_hosts.txt").exists()
-    assert (orch.engagement_mgr.run_dir / "14_reports" / "bug_bounty_report.md").exists()
-    assert (orch.engagement_mgr.run_dir / "14_reports" / "report.html").exists()
-
-    assert orch.engagement_mgr.manifest_file.exists()
-    assert orch.engagement_mgr.lineage_file.exists()

@@ -373,7 +373,10 @@ class ToolManager:
             try:
                 out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             except asyncio.TimeoutError:
-                proc.kill()
+                # A shell child (cmd.exe) can outlive ``proc.kill()``; reap the
+                # whole tree and close the transport so no pipes/tasks leak.
+                from core.process_utils import kill_process_tree
+                await kill_process_tree(proc)
                 dur = time.time() - t0
                 err_msg = f"Timeout after {timeout}s"
                 out_f = self._save_tool_output(tool, command_str, "", "", -1, dur, error=err_msg)

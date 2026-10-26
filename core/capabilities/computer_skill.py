@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core.capabilities.capability_manager import Capability, CapabilityManager, CapabilityToken
+from core.process_utils import kill_process_tree
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ class ComputerSkill:
             return {"success": False, "error": "Missing process.run capability"}
 
         t0 = time.time()
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 *command_args,
@@ -89,6 +91,7 @@ class ComputerSkill:
                 "duration": round(time.time() - t0, 2)
             }
         except asyncio.TimeoutError:
+            await kill_process_tree(proc)
             return {"success": False, "error": f"Process exceeded timeout of {timeout_seconds}s", "duration": timeout_seconds}
         except Exception as exc:
             return {"success": False, "error": str(exc), "duration": round(time.time() - t0, 2)}

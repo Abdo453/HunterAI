@@ -8,8 +8,10 @@ Defect (before the fix):
 """
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -55,3 +57,23 @@ async def test_successful_command_has_no_error(tmp_path):
     assert res.error is None
     assert res.error_category is None
     assert "hunterai-ok" in res.stdout
+
+
+@pytest.mark.asyncio
+async def test_timeout_reaps_process_tree(tmp_path):
+    """A timeout must reap the whole tree, not just the shell parent."""
+
+    class _SlowProc:
+        pid = 999999
+        returncode = None
+
+        async def communicate(self):
+            await asyncio.sleep(10)
+
+    tm = ToolManager(output_dir=str(tmp_path))
+    with patch("asyncio.create_subprocess_shell", AsyncMock(return_value=_SlowProc())), \
+         patch("core.process_utils.kill_process_tree", new_callable=AsyncMock) as reaper:
+        res = await tm.execute("slow-command", timeout=0.01, use_cache=False)
+
+    assert res.error_category == "TIMEOUT"
+    reaper.assert_awaited_once()

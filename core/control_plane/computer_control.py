@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.control_plane.policy_gate import ActionCategory, ActionRequest, PolicyGate
+from core.process_utils import kill_process_tree
 
 logger = logging.getLogger("hunter_ai.computer_control")
 
@@ -166,10 +167,8 @@ class ComputerControl:
                 exit_code = proc.returncode or 0
                 error_msg = None if exit_code == 0 else f"Process exited with code {exit_code}"
             except asyncio.TimeoutError:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
+                # Kill the whole tree: cmd.exe's child is the real workload.
+                await kill_process_tree(proc)
                 stdout_str = ""
                 stderr_str = f"Execution timed out after {timeout} seconds"
                 exit_code = -2

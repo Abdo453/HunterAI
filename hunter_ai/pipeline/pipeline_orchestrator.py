@@ -27,6 +27,7 @@ from urllib.parse import urlparse, urljoin, parse_qs
 
 import httpx
 
+from core.console import configure_stdio, safe_print
 from core.scope_guard import ScopeGuard
 from core.security_mode import unrestricted_mode
 from tools.tool_manager import ToolManager, ToolResult
@@ -791,7 +792,7 @@ class HunterPipelineOrchestrator:
                         self.fsm.transition_to(HunterState.ABORTED, "Scan aborted: live inference failed")
 
         banner = AIPreflightGate.format_status_banner(result)
-        print(f"\n{banner}\n")
+        safe_print(f"\n{banner}\n")
 
         # Save artifacts
         self._save_stage_artifact("00_preflight", "ai_status.json", result.to_dict())
@@ -2541,6 +2542,9 @@ class HunterPipelineOrchestrator:
 
     async def run(self) -> Dict[str, Any]:
         """Execute full HunterAI Master Pipeline end-to-end"""
+        # Windows consoles may use a legacy code page (e.g. cp1256) that cannot
+        # encode the Unicode banners/emoji printed below.  Make stdio safe first.
+        configure_stdio()
         t0 = time.time()
         await self._emit("pipeline_start", target=self.raw_target, message=f"Starting HunterAI Pipeline on {self.domain}")
 

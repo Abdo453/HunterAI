@@ -17,6 +17,8 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import httpx
 
+from core.process_utils import kill_process_tree
+
 log = logging.getLogger("sqli_skill")
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1865,6 +1867,7 @@ class SQLiSkill:
         if proxy:
             cmd.extend(["--proxy", proxy])
 
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -1907,10 +1910,7 @@ class SQLiSkill:
                 return None
         except asyncio.TimeoutError:
             log.warning("[SQLiSkill/Fallback] sqlmap timed out after 25s fast-fail window.")
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            await kill_process_tree(proc)
             return None
         except Exception as e:
             log.warning(f"[SQLiSkill/Fallback] sqlmap failed to execute: {e}")

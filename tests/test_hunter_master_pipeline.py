@@ -292,8 +292,10 @@ async def test_orchestrator_safe_mode_restricted(tmp_path):
     orch.artifact_root = str(tmp_path)
 
     # Mock tool executions and external network
-    with patch.object(orch.master_tools, "execute", new_callable=AsyncMock) as mock_exec:
+    with patch.object(orch.master_tools, "execute", new_callable=AsyncMock) as mock_exec, \
+         patch.object(orch.master_tools, "execute_artifact", new_callable=AsyncMock) as mock_artifact:
         mock_exec.return_value = ([], None)
+        mock_artifact.return_value = ([], None)
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_http_get:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
@@ -329,8 +331,10 @@ async def test_orchestrator_authorized_mode(tmp_path):
     )
     orch.artifact_root = str(tmp_path)
 
-    with patch.object(orch.master_tools, "execute", new_callable=AsyncMock) as mock_exec:
+    with patch.object(orch.master_tools, "execute", new_callable=AsyncMock) as mock_exec, \
+         patch.object(orch.master_tools, "execute_artifact", new_callable=AsyncMock) as mock_artifact:
         mock_exec.return_value = ([], None)
+        mock_artifact.return_value = ([], None)
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_http_get:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
