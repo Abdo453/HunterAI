@@ -1,5 +1,7 @@
 # HunterAI Pre-Kali Test Baseline
 
+> **Current status (2026-10-26):** the hermetic suite is **2,191 passed, 1 skipped, 0 failed**; the opt-in live NVD test passed separately. See `REPOSITORY_ASSESSMENT.md` §Test baseline. The dated baseline below is kept as historical evidence and is not the current count.
+
 - **Date:** 2026-09-12
 - **Environment:** Windows Host / Python 3.11.9
 - **Baseline Test Suite Results:** 38 / 38 Passed (100%)

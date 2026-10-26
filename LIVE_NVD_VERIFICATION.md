@@ -10,8 +10,9 @@ NVD 2.0 API.
 - Repository: `E:\Agant\PentestAI-Unified`
 - Python: 3.11.9 (Windows)
 - Test database: `.tmp_live_nvd.sqlite3` (local, not committed)
-- Database SHA-256: `3AA549E97D7E294C1865496C8BE666FDCDB050C48624FDBE060AA330305A4CF4`
-- Database size: 397,312 bytes
+- Database SHA-256 immediately after sync: `3AA549E97D7E294C1865496C8BE666FDCDB050C48624FDBE060AA330305A4CF4`
+- Database size after sync: 397,312 bytes
+- Note: SQLite may rewrite the file when it checkpoints WAL on a later open, so the file hash is not a stable artifact. The sync/coverage reports below are the stable evidence.
 - NVD source: `https://services.nvd.nist.gov/rest/json/cves/2.0`
 - No NVD API key was used (anonymous rate limit).
 

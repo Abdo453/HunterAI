@@ -222,7 +222,7 @@ No evidence was found of a centralized provider abstraction with per-provider po
 1. `hunter_ai/tools/cve_scan.py` returns **hard-coded simulated** CVEs and prints "Found N CVEs". It is not a scanner. It must either be wired to a real tool or clearly renamed/deprecated.
 2. `data/cve_knowledge_base.json` contains 3 records, not a historical database.
 3. `core/cve_intel.py` contains example CVE identifiers and a CIRCL lookup; it is not a knowledge base.
-4. README badges/claims are stale (e.g., "42/42 tests", certification claims) relative to the current suite and missing intelligence features.
+4. The README test-count badge was reconciled to 2,191 hermetic tests in this increment; certification claims still need a separate evidence review.
 5. `core/cve_feed_learner.py` is described as a "learning engine" but only fetches 15 recent items into JSON; it does not learn, validate, or version.
 
 ---
