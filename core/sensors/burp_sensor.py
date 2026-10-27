@@ -372,13 +372,6 @@ class BurpSensor:
         """Drains and returns all unconsumed observations for the Brain's OODA loop."""
         obs = list(self._pending_observations)
         self._pending_observations.clear()
-        # Forward canonical transaction to Research Controller & Event Stream
-        try:
-            can_tx = BurpTrafficNormalizer.normalize_dict(ctx.to_dict())
-            self.research_controller.ingest_canonical(can_tx)
-            self.event_stream.publish_event("REQUEST_INGESTED", can_tx.to_dict())
-        except Exception as e:
-            logger.warning(f"[BURP_SENSOR] Error syncing to research controller: {e}")
 
         return obs
 

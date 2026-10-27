@@ -192,7 +192,7 @@ class ScopeEnforcer:
         if self.on_decision is not None:
             try:
                 self.on_decision(entry)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("on_decision callback failed: %s", exc)
         allowed = decision == ScopeDecision.ALLOWED
         logger.info("نطاق %s: %s — %s", target, decision, reason)

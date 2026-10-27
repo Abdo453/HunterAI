@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
 logger = logging.getLogger("hunter_ai.attack_surface_graph")

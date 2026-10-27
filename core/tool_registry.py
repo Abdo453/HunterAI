@@ -37,6 +37,7 @@ import json
 import logging
 import re
 import shlex
+import shutil
 import time
 import uuid
 from abc import ABC, abstractmethod

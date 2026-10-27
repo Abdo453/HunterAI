@@ -62,7 +62,7 @@
 | سجل أدوات مركب (Tool Registry) مع schema + إذن + مخاطرة | ❌ غير موجود | `agents/` تستخدم `ToolManager` موجود لكن لا يطابق واجهة `Tool` من المواصفة |
 | تنفيذ CLI عبر argument arrays (لا shell strings) | ⚠️ جزئي | `engines/runner.py` يستخدم subprocess بآمن نسبيًا، لكن لا يوجد سجل أدوات عام مع allowlist |
 | تكامل MCP client رسمي | ❌ غير موجود | `core/mcp_server.py` موجود (خادم)، ليس عميل MCP |
-| تكامل Burp Suite حقيقي | ⚠️ جزئي | `agents/burp_agent.py` موجود + ملفات validate_burp_*.py —需要 audit لتحديد إن كان واجهة حقيقية أم استخراج GUI |
+| تكامل Burp Suite حقيقي | ⚠️ جزئي | `agents/burp_agent/` موجود + ملفات validate_burp_*.py —需要 audit لتحديد إن كان واجهة حقيقية أم استخراج GUI |
 | تكامل وكلاء برمجة (Codex/Claude Code/Cursor/OpenCode) | ✅ جزئي | `engines/drivers/` يغطي claude/codex/opencode كعمال CLI فقط |
 | لوحة سوداء مشتركة لإثباتات مع مصدر ومصداقية | ✅ موجود | `core/shared_evidence.py` (فقط في الذاكرة، غير دائم) |
 | التحقق من الصحة / controlling false positives | ✅ جزئي | `flags/` للفلوغات فقط، ليس للنواقب الأمنية العامة |

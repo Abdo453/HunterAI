@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.katana_tools import KatanaTools
-from core.katana.schemas import KatanaEndpointRecord, KatanaEvidenceLevel
+from core.katana.schemas import KatanaEndpointRecord, KatanaEvidenceLevel, EndpointProfile
 from core.katana.analyzer import KatanaNormalizer, DuplicateDetector, EvidenceReviewer
 from core.katana.context import ContextEnricher, AdaptiveTestAdvisor
 

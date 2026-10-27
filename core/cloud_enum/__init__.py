@@ -7,7 +7,6 @@ from core.cloud_enum.analyzer import (
     CloudEnumNormalizer, DuplicateDetector, EvidenceReviewer,
 )
 from core.cloud_enum.context import ContextEnricher, AdaptiveTestAdvisor
-from agents.cloud_enum_agent import CloudEnumAgent
 
 __all__ = [
     "CloudBucketRecord",
@@ -18,6 +17,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveTestAdvisor",
-    "CloudEnumAgent",
 ]
 __version__ = "1.0.0-pilot"

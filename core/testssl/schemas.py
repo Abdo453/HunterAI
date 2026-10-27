@@ -9,12 +9,14 @@ import hashlib
 
 
 class TestsslEvidenceLevel(str):
+    __test__ = False
     E0 = "E0"
     E1 = "E1"
 
 
 @dataclass
 class TestsslFindingRecord:
+    __test__ = False
     record_id: str
     severity: str
     title: str

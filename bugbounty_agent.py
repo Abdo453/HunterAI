@@ -417,7 +417,7 @@ class BugBountyAgent:
             except Exception as e:
                 self.log(f"فشل httpx، الانتقال للفحص عبر requests: {e}", "warn")
 
-        all_hosts = [self.domain] + subdomoms if False else [self.domain] + subdomains
+        all_hosts = [self.domain] + subdomains
         for sub in all_hosts:
             for scheme in ["https", "http"]:
                 url = f"{scheme}://{sub}"

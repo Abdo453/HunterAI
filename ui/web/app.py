@@ -2313,8 +2313,9 @@ async def start_autonomous_mission(req: Request):
 
     from agents.autonomous_mission_agent import AutonomousMissionAgent
     from agents.base_agent import AgentTask
+    from tools.tool_manager import ToolManager
 
-    agent = AutonomousMissionAgent(tool_manager=tm)
+    agent = AutonomousMissionAgent(tool_manager=ToolManager())
     task = AgentTask(target=target, mode=mode, session_id=session_id, extra=data.get("extra", {}))
 
     # Background async task execution

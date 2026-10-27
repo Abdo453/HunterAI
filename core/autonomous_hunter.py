@@ -24,7 +24,7 @@ from tools.browser_tools import BrowserController
 from orchestrator.resource_manager import ResourceManager
 from models.ollama_manager import OllamaManager
 from core.vulnerability_correlator import VulnerabilityCorrelator
-from core.task_planner import TaskPlanner, TaskKind
+from core.deterministic_task_planner import TaskPlanner, TaskKind
 
 
 class AutonomousHunter:

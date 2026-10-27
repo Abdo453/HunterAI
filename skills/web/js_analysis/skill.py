@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 import urllib.parse
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 import httpx
 

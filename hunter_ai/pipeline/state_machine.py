@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import time
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 

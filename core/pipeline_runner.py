@@ -10,6 +10,7 @@ import os
 import re
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Callable
+from urllib.parse import urlparse
 
 from core.scope_guard import ScopeGuard
 from tools.waf_evasion import WAFEvasionEngine

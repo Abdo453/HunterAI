@@ -11,7 +11,11 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.subfinder_tools import SubfinderTools
-from core.subfinder.schemas import SubfinderAssetRecord, SubfinderEvidenceLevel
+from core.subfinder.schemas import (
+    AssetCoverageProfile,
+    SubfinderAssetRecord,
+    SubfinderEvidenceLevel,
+)
 from core.subfinder.analyzer import SubfinderNormalizer, DuplicateDetector, EvidenceReviewer
 from core.subfinder.context import ContextEnricher, AdaptiveTestAdvisor
 
@@ -110,7 +114,7 @@ class SubfinderAgent(BaseAgent):
                 ip=rec.ip,
                 cdn=rec.cdn,
                 is_high_value=review["is_high_value"],
-                is_live_web=context.get("is_live_web", False),
+                is_live_web=ctx.get("is_live_web", False),
                 confidence_score=review["confidence"],
                 confidence_label=review["confidence_label"],
                 evidence_level=rec.evidence_level,
@@ -129,7 +133,7 @@ class SubfinderAgent(BaseAgent):
                 "confidence_label": review["confidence_label"],
                 "evidence_status": review["evidence_status"],
                 "is_high_value": review["is_high_value"],
-                "is_live_web": context.get("is_live_web", False),
+                "is_live_web": ctx.get("is_live_web", False),
                 "context": ctx,
                 "adaptive_suggestions": advice,
                 "recommendation": review["recommendation"],

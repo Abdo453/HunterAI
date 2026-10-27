@@ -6,7 +6,6 @@ from core.testssl.analyzer import (
     TestsslNormalizer, DuplicateDetector, EvidenceReviewer,
 )
 from core.testssl.context import ContextEnricher, AdaptiveTestAdvisor
-from agents.testssl_agent import TestsslAgent
 
 __all__ = [
     "TestsslFindingRecord",
@@ -16,6 +15,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveTestAdvisor",
-    "TestsslAgent",
 ]
 __version__ = "1.0.0-pilot"

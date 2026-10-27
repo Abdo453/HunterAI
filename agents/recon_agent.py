@@ -1,4 +1,5 @@
 """Recon Agent — Port scan + subdomain + tech detection"""
+import os
 import re
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager

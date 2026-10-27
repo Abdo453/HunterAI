@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.nmap_tools import NmapTools
-from core.nmap.schemas import NmapPortRecord, NmapEvidenceLevel
+from core.nmap.schemas import NmapPortRecord, NmapEvidenceLevel, ServiceProfile
 from core.nmap.analyzer import NmapNormalizer, DuplicateDetector, EvidenceReviewer
 from core.nmap.context import ContextEnricher, AdaptiveTestAdvisor
 

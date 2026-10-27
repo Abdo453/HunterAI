@@ -25,6 +25,7 @@ class APIEscalationManager:
         tasks = []
         if os.getenv("GEMINI_API_KEY"):
             gem_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+            m = importlib.import_module("models.api.gemini_provider")
             tasks.append(self._call_one("gemini", m.GeminiProvider(model=gem_model).generate(prompt)))
         if os.getenv("OPENROUTER_API_KEY"):
             m = importlib.import_module("models.api.openrouter_provider")

@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.httpx_tools import HTTPxTools
-from core.httpx.schemas import HTTPxAssetRecord, HTTPxEvidenceLevel
+from core.httpx.schemas import HTTPxAssetRecord, HTTPxEvidenceLevel, TechnologyProfile
 from core.httpx.analyzer import HTTPxNormalizer, DuplicateDetector, EvidenceReviewer
 from core.httpx.context import ContextEnricher, AdaptiveTestAdvisor
 

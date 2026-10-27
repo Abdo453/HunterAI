@@ -690,16 +690,16 @@ class MasterToolRegistry:
             elif spec and not spec.prerequisites:
                 live.append(f"{t} [built-in]")
 
-        print("\n" + "─" * 60)
-        print(f"  🛠  TOOL STATUS CHECK  (profile={profile})")
-        print("─" * 60)
+        print("\n" + "-" * 60)
+        print(f"  [TOOLS] TOOL STATUS CHECK  (profile={profile})")
+        print("-" * 60)
         if live:
-            print(f"  ✅  LIVE ({len(live)}): {', '.join(live)}")
+            print(f"  [LIVE] ({len(live)}): {', '.join(live)}")
         if fallback:
-            print(f"  🔄  FALLBACK ({len(fallback)}): {', '.join(fallback)}")
+            print(f"  [FALLBACK] ({len(fallback)}): {', '.join(fallback)}")
         if missing:
-            print(f"  ❌  MISSING / NO FALLBACK ({len(missing)}): {', '.join(missing)}")
-        print("─" * 60 + "\n")
+            print(f"  [MISSING] / NO FALLBACK ({len(missing)}): {', '.join(missing)}")
+        print("-" * 60 + "\n")
 
 
     async def execute(self, tool_name: str, context: Dict[str, Any]) -> Tuple[List[Any], Optional[str]]:

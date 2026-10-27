@@ -7,7 +7,6 @@ from core.subjack.analyzer import (
     SubjackNormalizer, DuplicateDetector, EvidenceReviewer,
 )
 from core.subjack.context import ContextEnricher, AdaptiveTestAdvisor
-from agents.subjack_agent import SubjackAgent
 
 __all__ = [
     "SubdomainTakeoverRecord",
@@ -18,6 +17,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveTestAdvisor",
-    "SubjackAgent",
 ]
 __version__ = "1.0.0-pilot"

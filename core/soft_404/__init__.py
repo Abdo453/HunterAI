@@ -7,7 +7,6 @@ from core.soft_404.analyzer import (
     Soft404Normalizer, DuplicateDetector, EvidenceReviewer,
 )
 from core.soft_404.context import ContextEnricher, AdaptiveTestAdvisor
-from agents.soft_404_agent import Soft404Agent
 
 __all__ = [
     "Soft404Record",
@@ -18,6 +17,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveTestAdvisor",
-    "Soft404Agent",
 ]
 __version__ = "1.0.0-pilot"

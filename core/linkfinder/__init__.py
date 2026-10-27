@@ -7,7 +7,6 @@ from core.linkfinder.analyzer import (
     LinkFinderNormalizer, DuplicateDetector, EvidenceReviewer,
 )
 from core.linkfinder.context import ContextEnricher, AdaptiveTestAdvisor
-from agents.linkfinder_agent import LinkFinderAgent
 
 __all__ = [
     "JSFindingRecord",
@@ -18,6 +17,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveTestAdvisor",
-    "LinkFinderAgent",
 ]
 __version__ = "1.0.0-pilot"

@@ -281,14 +281,6 @@ class CaptureStore:
         if not req_path.exists():
             return None
 
-    def list_transactions(self, limit: Optional[int] = None) -> List[CapturedTransaction]:
-        """Returns captured transactions in insertion order without duplicate aliases."""
-        unique: Dict[str, CapturedTransaction] = {}
-        for transaction in self.transactions.values():
-            unique[transaction.tx_id] = transaction
-        transactions = list(unique.values())
-        return transactions[-limit:] if limit is not None else transactions
-
         try:
             with open(req_path, "r", encoding="utf-8") as f:
                 r_data = json.load(f)
@@ -326,6 +318,14 @@ class CaptureStore:
         except Exception as e:
             logger.debug(f"Failed to load transaction {request_id}: {e}")
             return None
+
+    def list_transactions(self, limit: Optional[int] = None) -> List[CapturedTransaction]:
+        """Returns captured transactions in insertion order without duplicate aliases."""
+        unique: Dict[str, CapturedTransaction] = {}
+        for transaction in self.transactions.values():
+            unique[transaction.tx_id] = transaction
+        transactions = list(unique.values())
+        return transactions[-limit:] if limit is not None else transactions
 
     def get_by_trace_id(self, trace_id: str) -> List[CapturedTransaction]:
         """Returns all transactions associated with a trace_id"""

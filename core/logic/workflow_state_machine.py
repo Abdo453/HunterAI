@@ -8,7 +8,7 @@ Identifies illegal state transitions and parameter skipping.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 @dataclass

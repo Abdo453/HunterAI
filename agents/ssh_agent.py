@@ -97,7 +97,7 @@ class SSHAgent(BaseAgent):
                 "recommendation": review["recommendation"],
                 "raw_json": rec.raw_json,
             }
-            r.findings.append(finding)
+            r.findings.append(profile)
 
         await self.emit("complete", {
             "findings": len(r.findings),

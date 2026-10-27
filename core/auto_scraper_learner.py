@@ -4,6 +4,7 @@ Auto Scraper & Vectorized Skill Learning Engine
 مدمج من (HackerOne, GitHub, Medium, OWASP, PortSwigger)
 مع دعم الموديلات المحلية (Ollama) والـ Cloud APIs (OpenRouter, Gemini, OpenAI)
 """
+import asyncio
 import os
 import re
 import json

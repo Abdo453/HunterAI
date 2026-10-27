@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.soft_404_tools import Soft404Tools
-from core.soft_404.schemas import Soft404Record, Soft404EvidenceLevel
+from core.soft_404.schemas import Soft404Record, Soft404EvidenceLevel, Soft404Profile
 from core.soft_404.analyzer import Soft404Normalizer, DuplicateDetector, EvidenceReviewer
 from core.soft_404.context import ContextEnricher, AdaptiveTestAdvisor
 

@@ -6,7 +6,6 @@ from core.arjun.analyzer import (
     ArjunNormalizer, DuplicateDetector, EvidenceReviewer,
 )
 from core.arjun.context import ContextEnricher, AdaptiveTestAdvisor
-from agents.arjun_agent import ArjunAgent
 
 __all__ = [
     "ArjunParameterRecord",
@@ -16,6 +15,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveTestAdvisor",
-    "ArjunAgent",
 ]
 __version__ = "1.0.0-pilot"

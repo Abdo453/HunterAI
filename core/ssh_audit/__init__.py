@@ -7,7 +7,6 @@ from core.ssh_audit.analyzer import (
     SSHAuditNormalizer, DuplicateDetector, EvidenceReviewer,
 )
 from core.ssh_audit.context import ContextEnricher, AdaptiveTestAdvisor
-from agents.ssh_agent import SSHAgent
 
 __all__ = [
     "SSHAssetRecord",
@@ -18,6 +17,5 @@ __all__ = [
     "EvidenceReviewer",
     "ContextEnricher",
     "AdaptiveTestAdvisor",
-    "SSHAgent",
 ]
 __version__ = "1.0.0-pilot"

@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.linkfinder_tools import LinkFinderTools
-from core.linkfinder.schemas import JSFindingRecord, LinkFinderEvidenceLevel
+from core.linkfinder.schemas import JSFindingRecord, LinkFinderEvidenceLevel, JSEndpointProfile
 from core.linkfinder.analyzer import LinkFinderNormalizer, DuplicateDetector, EvidenceReviewer
 from core.linkfinder.context import ContextEnricher, AdaptiveTestAdvisor
 

@@ -8,7 +8,11 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.cloud_enum_tools import CloudEnumTools
-from core.cloud_enum.schemas import CloudBucketRecord, CloudEnumEvidenceLevel
+from core.cloud_enum.schemas import (
+    CloudBucketProfile,
+    CloudBucketRecord,
+    CloudEnumEvidenceLevel,
+)
 from core.cloud_enum.analyzer import CloudEnumNormalizer, DuplicateDetector, EvidenceReviewer
 from core.cloud_enum.context import ContextEnricher, AdaptiveTestAdvisor
 

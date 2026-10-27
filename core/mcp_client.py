@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import shlex
+import shutil
 import time
 import uuid
 from dataclasses import dataclass, field

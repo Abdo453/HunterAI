@@ -19,6 +19,7 @@ from typing import List, Dict, Any, Optional
 from enum import Enum
 
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
+from tools.tool_manager import ToolManager
 
 log = logging.getLogger("hunter_ai.multi_agent")
 

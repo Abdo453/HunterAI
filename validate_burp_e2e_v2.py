@@ -37,6 +37,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi.testclient import TestClient
 
+
+class SecurityError(AssertionError):
+    """Raised when a security invariant is violated during E2E validation."""
+
+
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

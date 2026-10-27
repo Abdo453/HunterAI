@@ -43,7 +43,9 @@ data/*.db
 data/engagements/
 data/traffic.db*
 data/*.log
-data/*.sqlite*
+data/**/*.sqlite*
+data/readiness/readiness_report.json
+data/evidence_store/tool_execution.jsonl
 data/cert_browser_test/
 data/scans/
 data/replays/
@@ -76,3 +78,6 @@ data/*_sched_state.json
 # OS generated
 .DS_Store
 Thumbs.db
+
+# Local scratch artifacts
+.tmp_*

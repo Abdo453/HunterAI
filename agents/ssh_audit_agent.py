@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from agents.base_agent import BaseAgent, AgentTask, AgentResult
 from tools.tool_manager import ToolManager
 from tools.ssh_audit_tools import SSHAuditTools
-from core.ssh_audit.schemas import SSHAssetRecord, SSHAuditEvidenceLevel
+from core.ssh_audit.schemas import SSHAssetRecord, SSHAuditEvidenceLevel, SSHSecurityProfile
 from core.ssh_audit.analyzer import SSHAuditNormalizer, DuplicateDetector, EvidenceReviewer
 from core.ssh_audit.context import ContextEnricher, AdaptiveTestAdvisor
 
@@ -108,7 +108,7 @@ class SSHAuditAgent(BaseAgent):
                 key_algorithms_count=len(rec.server_host_key_algorithms),
                 encryption_count=len(rec.encryption_algorithms),
                 mac_count=len(rec.mac_algorithms),
-                issues_count=len(record.issues),
+                issues_count=len(rec.issues),
                 critical_issues=review["critical_issues"],
                 high_issues=review["high_issues"],
                 medium_issues=review["medium_issues"],
