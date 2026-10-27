@@ -157,9 +157,25 @@ previous record's hash, so deleting or editing an entry breaks `AuditLog.verify(
 | `cidr` | IP membership in the network |
 | `url` | scheme + host + port + path prefix |
 
+## Execution gate
+
+Attach the engine to the tool registry and every `call_tool` is evaluated
+before the executor runs:
+
+```python
+from core.tool_registry import ToolRegistry
+
+registry = ToolRegistry(policy_engine=engine)
+await registry.call_tool("nuclei.scan", {"target": "https://api.example.com"}, ctx)
+```
+
+A denied action raises `ToolError(category="POLICY_DENIED")` and the tool is
+never invoked. Out-of-scope targets, destructive payloads and backdoor patterns
+are stopped at this gate. Omitting `policy_engine` keeps the previous behaviour.
+
 ## Tests
 
 ```powershell
-python -m pytest tests/test_red_team_policy.py -q
-# 30 passed
+python -m pytest tests/test_red_team_policy.py tests/test_policy_gate_integration.py -q
+# 40 passed
 ```

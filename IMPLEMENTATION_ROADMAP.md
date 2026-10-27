@@ -21,7 +21,7 @@
 
 | Phase | Name | Priority | Status | Evidence |
 |---|---|---|---|---|
-| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,301 passed, 1 skipped, 0 failed; remaining P0 items listed below |
+| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,311 passed, 1 skipped, 0 failed; remaining P0 items listed below |
 | P1 | Vulnerability data model + store | P1 | ✅ | `core/vuln_intel/{models,db}.py`; vuln_intel suite: 214 tests green |
 | P2 | Historical ingestion (NVD first) | P1 | ✅ | `sources/nvd.py`, `sync.py`, `cli.py`; live one-day NVD check: 68 records, 0 errors |
 | P2b | OSV/GHSA query connector | P1 | ✅ | `sources/osv.py`; live package query: 8 advisories, 0 errors; GHSA→CVE alias merge |
@@ -30,6 +30,7 @@
 | P5 | Project-aware triage | P2 | ✅ | `triage.py`; five-level applicability; fixed-version and unknown-version tests |
 | P6 | Tool capability registry + selection | P2 | ✅ | `tool_capabilities.py`, `tool_selection.py`, `vuln_classes.py`; authorization/risk/availability/ecosystem gates; plan only |
 | P6b | Authorized red-team policy engine | P1 | ✅ | `core/policy/red_team.py`; signed grants, `red_team` profile (no prompts, critical risk), hard invariants, hash-chained audit; 30 tests |
+| P6c | Policy gate wired into tool execution | P1 | ✅ | `ToolRegistry.call_tool` evaluates the grant before execution (fail closed); 10 integration tests |
 | P7 | Safe lab + detectors | P3 | ⬜ | — |
 | P8 | Continuous monitoring scheduler | P3 | ⬜ | — |
 | P9 | AI analysis with citations | P3 | ⬜ | — |
@@ -55,7 +56,7 @@
 3. **Hermetic orchestrator tests** — `tests/test_hunter_master_pipeline.py` now mocks `execute_artifact` (previously invoked real crt.sh/subfinder).
 4. **Live test separation** — `tests/integration/test_artifact_based_recon_e2e.py` holds the live orchestrator test; CI already ignores `tests/integration`.
 5. **ToolManager timeout reaping** — the timeout path now uses `kill_process_tree` and awaits the transport; regression test asserts the reaper is invoked.
-6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 437, Group 3 = 569, Group 4 = 504 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,301 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
+6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 447, Group 3 = 569, Group 4 = 504 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,311 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
 7. **Test-hang diagnosis** — Group 3's stall was unmocked `execute_artifact` (real crt.sh/subfinder), not the secret sanitizer; the test now mocks the boundary.
 
 ### Remaining
@@ -421,6 +422,54 @@ the boundaries that make testing legal and safe.
 
 ---
 
+## P6c — Policy gate wired into tool execution
+
+**Status:** ✅ implemented (`core/tool_registry.py`; 10 integration tests).
+
+### Why
+
+A policy engine that is not on the execution path is documentation, not a
+control. The gate makes the signed grant the single choke point for every tool
+call.
+
+### Delivered
+
+- `ToolRegistry(..., policy_engine=...)`: optional, backward compatible. When
+  omitted, behaviour is unchanged.
+- `_enforce_policy()` runs after the tool's own `authorize()` and before
+  execution:
+  - extracts the target (`target`, `url`, `host`, `domain`, `endpoint`,
+    `base_url`) and evaluates it against the grant;
+  - maps tool risk to an action class (`low` → read-only, `medium` → active
+    test, `high`/`critical`/`approval_required` → exploit proof);
+  - includes the serialized arguments in the operation string so the hard
+    invariants catch destructive/backdoor/exfiltration payloads;
+  - denies out-of-scope targets and missing targets for scope-relevant tools;
+  - routes `requires_approval` through the existing approval handler.
+- Local-only tools (`scope_relevant=False`, no target) are not network-gated.
+- Denials raise `ToolError(category="POLICY_DENIED")` and are written to the
+  registry audit log with the policy audit ID.
+
+### Tests
+
+- In-scope high-risk tool executes under `red_team`.
+- Out-of-scope target blocked before execution (tool never called).
+- Destructive SQL and reverse-shell payloads blocked before execution.
+- `standard` profile raises `APPROVAL_REQUIRED`; approval allows execution;
+  rejection blocks it.
+- Scope-relevant tool without a target is denied.
+- Local tool without a target is not network-gated.
+- Registry without a policy engine keeps previous behaviour.
+- Target extraction rules.
+
+### Acceptance
+
+- No tool executes outside the signed scope when a policy engine is attached. ✅
+- The executor is never reached for a denied action. ✅
+- Existing callers are unaffected. ✅
+
+---
+
 ## P7 — Safe lab + detectors
 
 ### Deliverables
@@ -558,7 +607,7 @@ the boundaries that make testing legal and safe.
 | 13 | Update docs with actual results | ✅ counts and limits updated |
 | 14 | Commit | local only (pending final review) |
 
-All hermetic steps are complete: **2,301 passed, 1 skipped, 0 failed**. The
+All hermetic steps are complete: **2,311 passed, 1 skipped, 0 failed**. The
 integration directory remains opt-in/live; the orchestrator live test is not
 part of the hermetic count.
 

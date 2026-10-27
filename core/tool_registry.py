@@ -366,6 +366,22 @@ class CliTool(Tool):
 # السجل المركزي
 # ---------------------------------------------------------------------------
 
+_TARGET_KEYS = ("target", "url", "host", "domain", "endpoint", "base_url")
+
+
+def _extract_target(arguments: Dict[str, Any]) -> str:
+    """Best-effort extraction of the network target from tool arguments."""
+    for key in _TARGET_KEYS:
+        value = arguments.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                if isinstance(item, str) and item.strip():
+                    return item.strip()
+    return ""
+
+
 class ToolRegistry:
     """سجل أدوات مركب — مسجّل، أنظر، تحقّق، فوّض، نفّذ، اجلس."""
 
@@ -374,6 +390,7 @@ class ToolRegistry:
         capability_matrix: Optional[Any] = None,
         tool_manager: Optional[Any] = None,
         config_path: Optional[str] = None,
+        policy_engine: Optional[Any] = None,
     ):
         self._tools: Dict[str, Tool] = {}
         self._definitions: Dict[str, ToolDefinition] = {}
@@ -381,6 +398,9 @@ class ToolRegistry:
         self._tool_manager = tool_manager
         self.capability_matrix = capability_matrix
         self.config_path = config_path
+        # Optional signed-grant policy (core.policy.red_team).  When set, every
+        # call is evaluated before execution; when None, behaviour is unchanged.
+        self._policy_engine = policy_engine
         self._register_default_tools()
 
     # ── التسجيل والاستعلام ───────────────────────────────────────────────
@@ -491,6 +511,68 @@ class ToolRegistry:
         return bool(d and d.enabled)
 
     # ── التحقق والتفويض والتنفيذ (التسلسل الإلزامي) ─────────────────────
+    def _enforce_policy(
+        self,
+        tool_id: str,
+        definition: ToolDefinition,
+        arguments: Dict[str, Any],
+        audit: Callable[[str, Dict[str, Any]], None],
+    ) -> None:
+        """Evaluate the signed-grant policy before execution (fail closed).
+
+        Only applies when a policy engine was supplied.  Local-only tools
+        (``scope_relevant=False`` and no network target) are not gated by the
+        grant's network scope.
+        """
+        engine = self._policy_engine
+        if engine is None:
+            return
+
+        from core.policy.red_team import ActionClass, ActionRequest
+
+        target = _extract_target(arguments)
+        if not target:
+            if not definition.scope_relevant:
+                return
+            raise ToolError(
+                f"policy: no target supplied for scope-relevant tool {tool_id}",
+                category="POLICY_DENIED",
+                tool_id=tool_id,
+            )
+
+        if definition.approval_required or definition.risk_level in {
+            RiskLevel.HIGH,
+            RiskLevel.CRITICAL,
+        }:
+            action_class = ActionClass.EXPLOIT_PROOF
+        elif definition.risk_level == RiskLevel.MEDIUM:
+            action_class = ActionClass.ACTIVE_TEST
+        else:
+            action_class = ActionClass.READ_ONLY
+
+        operation = f"{definition.tool_id} {definition.name} " + json.dumps(
+            arguments, sort_keys=True, default=str
+        )
+        decision = engine.evaluate(
+            ActionRequest(
+                target=target,
+                action_class=action_class,
+                tool_id=tool_id,
+                risk_level=definition.risk_level,
+                operation=operation[:4000],
+            )
+        )
+        if decision.requires_approval:
+            audit("policy_approval_required", {"policy_audit_id": decision.audit_id})
+            raise ApprovalRequired(tool_id, definition.name)
+        if not decision.allowed:
+            audit(
+                "policy_denied",
+                {"reason": decision.reason, "policy_audit_id": decision.audit_id},
+            )
+            raise ToolError(decision.reason, category="POLICY_DENIED", tool_id=tool_id)
+        audit("policy_allowed", {"policy_audit_id": decision.audit_id})
+
     async def call_tool(self, tool_id: str, arguments: Dict[str, Any],
                         ctx: AuthContext,
                         approval_handler: Optional[Callable[[str, str],
@@ -533,6 +615,8 @@ class ToolRegistry:
         # 5. تفويض العامل + نطاق + سياسة مخاطرة
         try:
             tool.authorize(ctx, arguments)
+            # 5b. سياسة التفويض الموقّع (تُطبّق فقط عند تمرير policy_engine)
+            self._enforce_policy(tool_id, definition, arguments, audit)
         except ApprovalRequired as exc:
             # 7. طلب موافقة بشرية قبل التنفيذ
             if approval_handler is None:
