@@ -23,6 +23,7 @@ from __future__ import annotations
 import html
 import json
 import threading
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List
 from urllib.parse import parse_qsl, urlparse
@@ -67,6 +68,13 @@ class _Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(payload)
 
+    def _send_redirect(self, status: int, location: str) -> None:
+        self.send_response(status)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("X-Lab", "hunterai-fake-target")
+        self.end_headers()
+
     def _not_allowed(self) -> None:
         self._record()
         self._send(405, "method not allowed", "text/plain; charset=utf-8")
@@ -106,6 +114,39 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/echo/safe":
             name = html.escape(query.get("name", ""), quote=True)
             self._send(200, f"<html><body>Hello, {name}</body></html>")
+            return
+
+        if path in {"/fetch", "/fetch/safe"}:
+            if path == "/fetch/safe":
+                self._send(400, "url not allowed", "text/plain; charset=utf-8")
+                return
+            target_url = query.get("url", "")
+            parsed_target = urlparse(target_url)
+            if parsed_target.hostname not in {"127.0.0.1", "localhost"}:
+                self._send(
+                    400,
+                    "lab only allows loopback callbacks",
+                    "text/plain; charset=utf-8",
+                )
+                return
+            try:
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(target_url, timeout=2) as response:
+                    body = response.read(4096).decode("utf-8", errors="replace")
+                self._send(200, body or "fetched", "text/plain; charset=utf-8")
+            except Exception as exc:
+                self._send(502, f"fetch failed: {exc}", "text/plain; charset=utf-8")
+            return
+
+        if path in {"/redirect", "/redirect/safe"}:
+            next_url = query.get("next", "/home")
+            if path == "/redirect/safe":
+                if next_url.startswith("/") and not next_url.startswith("//"):
+                    self._send_redirect(302, next_url)
+                else:
+                    self._send(400, "external redirect blocked", "text/plain; charset=utf-8")
+                return
+            self._send_redirect(302, next_url)
             return
 
         if path in {"/profile", "/profile/safe"}:

@@ -73,6 +73,8 @@ Each boundary requires: input validation, least privilege, logging, and a fail-c
 | T-AZ-6 | Destructive action | `DELETE /account` | Data loss | Excluded paths/commands | `allow_destructive` default false; explicit approval | policy test |
 | T-AZ-7 | Scope expansion from discovered host | Crawler finds `api.other.com` and tests it | Out-of-scope | None guaranteed | Never auto-expand; require explicit addition | planner test |
 | T-AZ-8 | Port/protocol bypass | Allowed host, disallowed port | Unauthorized service access | Port checks | Revalidate port at connect time | port test |
+| T-AZ-9 | SSRF detector becomes a pivot | The detector asks the target to fetch an arbitrary internal URL | Internal access via the target | Loopback canary only; no arbitrary destination | Egress filtering; operator-owned OOB endpoint for production | canary test |
+| T-AZ-10 | Open-redirect detector contacts the external host | The detector follows the 3xx | Unauthorized external traffic | Transport never follows redirects | Inspect `Location` only; never fetch the external host | redirect test |
 
 ### 4.2 Untrusted content and prompt injection
 
@@ -122,6 +124,8 @@ Each boundary requires: input validation, least privilege, logging, and a fail-c
 | T-E-5 | Tool supply chain | Malicious binary | RCE | None | Pinned versions, checksums, license review, no auto-install | registry test |
 | T-E-6 | Unbounded output | 10 GB response | Disk/memory | Size caps partial | Enforce max bytes in HTTP and tool output | size test |
 | T-E-7 | Credential reuse | Tool uses operator creds | Lateral movement | None | Isolated credentials; least privilege | design review |
+| T-E-8 | Evidence-chain tampering | Edit a recorded exchange after the fact | False proof | Hash-linked `EvidenceChain.verify()` | Persist chain off-box; sign the head hash | tamper test |
+| T-E-9 | Gate evidence inflation | Set `deterministic_proof` without an artifact | False `PROVEN` verdict | `build_gate_evidence` derives keys from recorded exchanges | Only confirmed detections; hashes required; review gate inputs | pipeline test |
 
 ### 4.6 Availability and reliability
 

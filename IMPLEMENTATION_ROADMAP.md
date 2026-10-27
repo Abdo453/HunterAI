@@ -21,7 +21,7 @@
 
 | Phase | Name | Priority | Status | Evidence |
 |---|---|---|---|---|
-| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,325 passed, 1 skipped, 0 failed; remaining P0 items listed below |
+| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,336 passed, 1 skipped, 0 failed; remaining P0 items listed below |
 | P1 | Vulnerability data model + store | P1 | ✅ | `core/vuln_intel/{models,db}.py`; vuln_intel suite: 214 tests green |
 | P2 | Historical ingestion (NVD first) | P1 | ✅ | `sources/nvd.py`, `sync.py`, `cli.py`; live one-day NVD check: 68 records, 0 errors |
 | P2b | OSV/GHSA query connector | P1 | ✅ | `sources/osv.py`; live package query: 8 advisories, 0 errors; GHSA→CVE alias merge |
@@ -31,7 +31,9 @@
 | P6 | Tool capability registry + selection | P2 | ✅ | `tool_capabilities.py`, `tool_selection.py`, `vuln_classes.py`; authorization/risk/availability/ecosystem gates; plan only |
 | P6b | Authorized red-team policy engine | P1 | ✅ | `core/policy/red_team.py`; signed grants, `red_team` profile (no prompts, critical risk), hard invariants, hash-chained audit; 30 tests |
 | P6c | Policy gate wired into tool execution | P1 | ✅ | `ToolRegistry.call_tool` evaluates the grant before execution (fail closed); 10 integration tests |
-| P7 | Safe lab + detectors | P3 | 🟡 | Loopback fake target, SQLi/XSS/IDOR detectors, evidence chain (14 tests); Docker lab cases + validation registry open |
+| P7 | Safe lab + detectors | P3 | 🟡 | Loopback fake target, SQLi/XSS/IDOR/SSRF/open-redirect detectors, evidence chain (25 tests); Docker lab cases + validation registry open |
+| P7b | SSRF + open-redirect detectors | P2 | ✅ | `ssrf.py` + loopback canary; `open_redirect.py` + un-followed `Location`; vulnerable/safe fixtures; 6 tests |
+| P7c | Hypothesis → detector → chain → gate | P1 | ✅ | `pipeline.py` + `validation.py`; 5 vuln types; `PROVEN`/`CONFIRMED` only with differential evidence; 7 tests |
 | P8 | Continuous monitoring scheduler | P3 | ⬜ | — |
 | P9 | AI analysis with citations | P3 | ⬜ | — |
 | P10 | Controlled self-improvement | P4 | ⬜ | — |
@@ -56,7 +58,7 @@
 3. **Hermetic orchestrator tests** — `tests/test_hunter_master_pipeline.py` now mocks `execute_artifact` (previously invoked real crt.sh/subfinder).
 4. **Live test separation** — `tests/integration/test_artifact_based_recon_e2e.py` holds the live orchestrator test; CI already ignores `tests/integration`.
 5. **ToolManager timeout reaping** — the timeout path now uses `kill_process_tree` and awaits the transport; regression test asserts the reaper is invoked.
-6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 461, Group 3 = 569, Group 4 = 504 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,325 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
+6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 472, Group 3 = 569, Group 4 = 504 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,336 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
 7. **Test-hang diagnosis** — Group 3's stall was unmocked `execute_artifact` (real crt.sh/subfinder), not the secret sanitizer; the test now mocks the boundary.
 
 ### Remaining
@@ -474,7 +476,7 @@ call.
 
 ### Delivered (P7a) — loopback detector lab
 
-**Status:** ✅ implemented (`core/detectors/`; 14 tests).
+**Status:** ✅ implemented (`core/detectors/`; 25 tests in the detector suite).
 
 - `HttpTransport`: read-only (GET/HEAD only), proxy-free, no redirects,
   request budget, response cap, optional signed-grant policy check.
@@ -488,6 +490,44 @@ call.
 - `python -m core.detectors.cli scan`: scan one endpoint, optionally under a
   signed grant, and write the evidence chain.
 - Docs: `SAFE_DETECTORS.md`.
+
+### Delivered (P7b) — SSRF and open-redirect detectors
+
+**Status:** ✅ implemented (`core/detectors/ssrf.py`,
+`core/detectors/open_redirect.py`, `core/detectors/canary.py`).
+
+- `LoopbackCanary`: a `127.0.0.1:0` listener that records callbacks; the
+  detector never contacts an external host.
+- `SSRFDetector`: the target fetches a unique loopback URL; confirmation
+  requires a canary callback whose path contains the nonce.
+- `OpenRedirectDetector`: confirmation requires a 3xx and an absolute
+  `Location` whose host is the external canary host; redirects are never
+  followed.
+- Vulnerable and safe fake-target routes: `/fetch`, `/fetch/safe`,
+  `/redirect`, `/redirect/safe`.
+- CLI: `--class ssrf` and `--class open_redirect`.
+
+### Delivered (P7c) — hypothesis → detector → chain → gate
+
+**Status:** ✅ implemented (`core/detectors/pipeline.py`,
+`core/detectors/validation.py`).
+
+- `HypothesisPipeline`: maps `vuln_type` (`SQL_INJECTION`, `XSS`, `IDOR`,
+  `SSRF`, `OPEN_REDIRECT`) to a detector, runs it through the policy-gated
+  transport, appends every exchange to the chain, and builds the evidence
+  dictionary consumed by the 7-Question Gate.
+- `build_gate_evidence`: derives `poc`, `nonce`, `differential_response`,
+  `deterministic_proof`, `real_exploit_path`, `impact`, `severity`,
+  `request_hash`, and `response_hash` from the recorded exchanges.
+- `LabValidationGate`: reuses every production gate question and only relaxes
+  the scope check for an explicit loopback allowlist; the production
+  `ValidationGate` still blocks loopback.
+- Hypothesis lifecycle: `TESTING` before the detector, then `CONFIRMED` only
+  when the gate returns `PROVEN`; safe endpoints become `REJECTED` without
+  calling the gate.
+- CLI: `python -m core.detectors.cli pipeline ... --validate`.
+- Hypothesis engine: added deterministic `XSS` and `SSRF` patterns and a
+  public `register()` method for externally constructed hypotheses.
 
 Remaining for a full P7: Docker/compose lab cases with a patched variant,
 network-disabled runner defaults, and a detector validation registry
@@ -628,7 +668,7 @@ network-disabled runner defaults, and a detector validation registry
 | 13 | Update docs with actual results | ✅ counts and limits updated |
 | 14 | Commit | local only (pending final review) |
 
-All hermetic steps are complete: **2,325 passed, 1 skipped, 0 failed**. The
+All hermetic steps are complete: **2,336 passed, 1 skipped, 0 failed**. The
 integration directory remains opt-in/live; the orchestrator live test is not
 part of the hermetic count.
 

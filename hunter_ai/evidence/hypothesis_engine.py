@@ -99,6 +99,22 @@ class HypothesisEngine:
             "refutation":  "Responses are identical or return a generic error for both payloads",
         },
         {
+            "keywords":    ["xss", "script", "html", "reflected", "markup"],
+            "vuln_type":   "XSS",
+            "title":       "Parameter {param} may reflect unescaped markup",
+            "confidence":  0.55,
+            "experiment":  "Inject a unique nonce tag into {param} and check for unescaped reflection",
+            "refutation":  "The response entity-encodes or strips the tag",
+        },
+        {
+            "keywords":    ["fetch", "webhook", "callback", "proxy", "ssrf", "image_url"],
+            "vuln_type":   "SSRF",
+            "title":       "Parameter {param} may fetch a server-side URL",
+            "confidence":  0.60,
+            "experiment":  "Point {param} at an operator-owned loopback canary and wait for a callback",
+            "refutation":  "No callback is received, or the URL is rejected",
+        },
+        {
             "keywords":    ["redirect", "next", "return_to", "goto", "url", "location"],
             "vuln_type":   "OPEN_REDIRECT",
             "title":       "Redirect parameter {param} may accept external URLs",
@@ -173,6 +189,11 @@ class HypothesisEngine:
             generated.append(h)
 
         return generated
+
+    def register(self, hypothesis: Hypothesis) -> Hypothesis:
+        """Register an externally constructed hypothesis for lifecycle updates."""
+        self._hypotheses[hypothesis.hyp_id] = hypothesis
+        return hypothesis
 
     # ── Lifecycle updates ─────────────────────────────────────────────────────
 

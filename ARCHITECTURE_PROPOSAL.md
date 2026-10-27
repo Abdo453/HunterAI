@@ -279,7 +279,15 @@ Reuse the existing evidence model. A vulnerability report distinguishes:
 
 ---
 
-## 8. Safe lab architecture (later)
+## 8. Safe lab architecture
+
+**Delivered increment:** a loopback fake target, five read-only detectors
+(SQLi boolean, reflected XSS, IDOR, SSRF canary, open redirect), a hash-linked
+evidence chain, and a hypothesis → detector → chain → 7-Question Gate pipeline
+(`core/detectors/`). The transport is GET/HEAD only, proxy-free, does not follow
+redirects, and enforces an optional signed-grant policy check before the socket
+is opened. The production gate still blocks loopback; `LabValidationGate` only
+relaxes the scope check for an explicit loopback allowlist.
 
 - Each case is a directory with `case.yaml` (metadata), `docker-compose.yml` or Dockerfile, fixtures, expected observations, patched variant, cleanup.
 - Default: no network, non-root, read-only root FS where possible, CPU/memory limits, no host mounts, no privileged mode.

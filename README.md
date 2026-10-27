@@ -185,7 +185,7 @@ DEEPSEEK_API_KEY=your_key
 
 ## 🧪 Verification & Testing Suite
 
-HunterAI's hermetic suite currently passes 2,325 tests (1 skipped). The opt-in live NVD/OSV tests and the Pre-Kali Certification Gates are separate:
+HunterAI's hermetic suite currently passes 2,336 tests (1 skipped). The opt-in live NVD/OSV tests and the Pre-Kali Certification Gates are separate:
 
 ```bash
 # Run pytest unit test suites
@@ -207,15 +207,18 @@ exfiltration) are denied in every profile. See
 
 ### Safe Verification Lab
 
-Three precision-first detectors — boolean SQLi, reflected XSS and IDOR — with a
-read-only transport (GET/HEAD only, no proxies, no redirects) and a
-tamper-evident evidence chain. The hermetic demo runs against a loopback fake
-target and proves both directions: vulnerable endpoints are confirmed, safe
-endpoints are rejected.
+Five precision-first detectors — boolean SQLi, reflected XSS, IDOR, SSRF
+(loopback canary) and open redirect — with a read-only transport (GET/HEAD only,
+no proxies, no redirects) and a tamper-evident evidence chain. The same
+detectors are wired into a hypothesis → detector → chain → 7-Question Gate
+pipeline. The hermetic demo runs against a loopback fake target and proves both
+directions: vulnerable endpoints are confirmed, safe endpoints are rejected.
 
 ```bash
 python -m core.detectors.cli demo
 python -m core.detectors.cli scan --target https://staging.example.com --path /search --param q --class sqli
+python -m core.detectors.cli scan --target https://staging.example.com --path /fetch --param url --class ssrf
+python -m core.detectors.cli pipeline --target http://127.0.0.1:8080 --vuln-type SSRF --path /fetch --param url --validate
 ```
 
 See [`SAFE_DETECTORS.md`](SAFE_DETECTORS.md).

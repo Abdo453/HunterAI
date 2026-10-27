@@ -29,7 +29,12 @@ from core.detectors.evidence_chain import EvidenceChain
 from core.detectors.sqli_boolean import SQLiBooleanDetector
 from core.detectors.xss_reflected import XSSReflectedDetector
 from core.detectors.idor import IDORDetector
+from core.detectors.ssrf import SSRFDetector
+from core.detectors.open_redirect import OpenRedirectDetector
+from core.detectors.canary import LoopbackCanary
 from core.detectors.local_target import LocalFakeTarget
+from core.detectors.pipeline import HypothesisPipeline, PipelineResult
+from core.detectors.validation import LabValidationGate
 
 __all__ = [
     "Detection",
@@ -37,13 +42,19 @@ __all__ = [
     "Detector",
     "EvidenceChain",
     "HttpTransport",
+    "HypothesisPipeline",
     "IDORDetector",
+    "LabValidationGate",
     "LocalFakeTarget",
+    "LoopbackCanary",
+    "OpenRedirectDetector",
+    "PipelineResult",
     "PolicyViolation",
     "Probe",
     "ProbeExchange",
     "SQLiBooleanDetector",
     "SQLiDetector",
+    "SSRFDetector",
     "TransportConfig",
     "TransportError",
     "XSSDetector",
