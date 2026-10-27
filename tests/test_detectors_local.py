@@ -366,6 +366,10 @@ def test_lab_gate_only_relaxes_its_explicit_allowlist():
     lab = LabValidationGate({"127.0.0.1"})
     assert lab.validate(finding, target=target).status.value == "PROVEN"
 
+    external = dict(finding)
+    external["target"] = "https://example.com/"
+    assert lab.validate(external, target="https://example.com/").status.value == "REFUTED"
+
     from hunter_ai.validation_gate import ValidationGate
 
     production = ValidationGate()

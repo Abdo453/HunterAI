@@ -5,7 +5,7 @@
 behaviour for production, but the hermetic lab runs on loopback.  This adapter
 reuses every gate question and only overrides the scope check for an explicit
 lab allowlist; the neuro-symbolic safety loop is replaced with an ALLOWED
-result for those same hosts.
+result, while the scope question still enforces the allowlist.
 """
 from __future__ import annotations
 
@@ -55,4 +55,8 @@ class LabValidationGate(ValidationGate):
                 True,
                 f"{host} is in the lab allowlist",
             )
-        return super()._q2_in_scope(target)
+        return GateResult(
+            "Q2: In scope?",
+            False,
+            f"{host or target} is not in the lab allowlist",
+        )
