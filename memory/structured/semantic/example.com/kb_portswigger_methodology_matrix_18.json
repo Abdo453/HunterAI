@@ -1,0 +1,19 @@
+{
+  "entry_id": "f58c6d5a",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:18",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:18",
+    "title": "Business Logic & State Machine Subversion Methodology",
+    "content": "{\"id\": \"portswigger_business_logic\", \"item_type\": \"methodology\", \"topic\": \"business_logic\", \"category\": \"PortSwigger Web Security: Business Logic Vulnerabilities\", \"name\": \"Business Logic & State Machine Subversion Methodology\", \"cwe\": \"CWE-840\", \"owasp_category\": \"A04:2021 - Insecure Design\", \"signals\": [\"negative_numeric_quantities\", \"integer_overflow_wrapping\", \"multi_step_workflow_skipping\", \"reusable_one_time_coupon\", \"client_side_price_tampering\", \"inconsistent_unit_pricing\"], \"verification_strategy\": \"Analyze multi-step workflows (e.g. cart -> checkout -> payment -> confirmation) for step skipping. Test numerical boundary conditions including negative values, zero, fractional inputs, and large numbers susceptible to 32-bit integer truncation or rounding errors. Test concurrent coupon redemption.\", \"evidence_requirements\": [\"workflow_step_skipped_proof\", \"negative_total_transaction\", \"unauthorized_discount_calculation\"], \"tools\": [{\"tool\": \"TemporalLogicVerifier (HunterAI)\", \"cmd\": \"TemporalLogicVerifier.audit_workflow_transitions(trace)\", \"desc\": \"Applies Linear Temporal Logic (LTL) to verify required state machine steps\"}, {\"tool\": \"BurpAgent (Workflow Replay)\", \"cmd\": \"BurpAgent.tamper_workflow_params(step_data)\", \"desc\": \"Systematically tests parameter tampering across checkout workflows\"}], \"remediation\": \"Enforce all business logic rules strictly on the server side. Enforce monotonic progression through multi-step transactions using server-side session state. Validate numerical quantities for positive integer constraints.\", \"description\": \"PortSwigger Business Logic vulnerabilities cover excessive trust in client-side controls, negative quantity cart manipulation, bypassing authentication flow via status step skipping, integer truncation in high-value transactions, and infinite money logic.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3877382
+  },
+  "created_at": 1793141926.3877382,
+  "updated_at": 1793141926.3877382,
+  "access_count": 3,
+  "ttl_seconds": null
+}

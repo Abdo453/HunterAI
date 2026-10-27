@@ -1,4 +1,5 @@
 name: waf_detection
+class: WafDetectionSkill
 category: recon
 description: "Detect and fingerprint Web Application Firewalls (wafw00f + header/banner heuristic fallback)"
 version: "1.0"

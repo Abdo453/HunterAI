@@ -1,0 +1,23 @@
+name: param_discover
+class: ParamDiscoverSkill
+category: recon
+description: "اكتشاف معاملات HTTP مخفية باستخدام arjun/paramspider أو Wayback fallback"
+version: "1.0"
+input:
+  - target: str
+output:
+  - params_discovered.json
+depends_on: []
+next_skills:
+  - idor_tester
+  - ssrf_hunter
+  - sqli_hunter
+  - xss_hunter
+fallback_skills: []
+tools_required: []
+fallback_tools:
+  - arjun
+  - paramspider
+timeout_seconds: 90
+max_retries: 1
+enabled: true

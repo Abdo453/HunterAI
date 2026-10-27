@@ -1,4 +1,5 @@
 name: parameter_discovery
+class: ParameterDiscoverySkill
 category: web
 description: "Discover hidden GET/POST parameters using arjun or paramspider"
 version: "1.0"

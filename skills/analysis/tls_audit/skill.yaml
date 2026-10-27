@@ -1,4 +1,5 @@
 name: tls_audit
+class: TlsAuditSkill
 category: analysis
 description: "Audit TLS/SSL service configuration (protocol versions, weak ciphers, certificate) using testssl.sh, sslscan, or openssl"
 version: "1.0"

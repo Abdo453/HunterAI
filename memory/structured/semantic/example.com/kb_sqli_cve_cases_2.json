@@ -1,0 +1,19 @@
+{
+  "entry_id": "27880cbd",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_cve_cases:2",
+  "value": {
+    "item_id": "sqli_cve_cases:2",
+    "title": "item_2",
+    "content": "{\"cve_id\": \"CVE-2023-40028\", \"software\": \"Ghost CMS\", \"cvss\": 7.5, \"vulnerability_type\": \"SQL_INJECTION\", \"cwe\": \"CWE-89\", \"affected_versions\": \"Ghost < 5.59.1\", \"architecture_root_cause\": \"The NQL (Not Quite Lucene) filter parser in Ghost backend failed to sanitize nested filter clauses containing specific operators, leading to unescaped query parameter injection into the Knex.js query builder.\", \"detection_signals\": [\"ghost_api_posts_filter\", \"nql_query_parsing\", \"nested_filter_syntax\", \"knex_error_anomaly\"], \"verification_strategy\": \"Send differential NQL filter queries with balanced vs unbalanced delimiters and measure response differences.\", \"evidence_requirements\": [\"nql_boolean_differential\", \"ghost_api_response_divergence\"], \"remediation\": \"Upgrade Ghost to 5.59.1 or above; validate NQL AST before generating Knex queries; enforce strict property allowlists in filter parser.\"}",
+    "source": "sqli_cve_cases",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3532245
+  },
+  "created_at": 1793141926.3532245,
+  "updated_at": 1793141926.3532245,
+  "access_count": 3,
+  "ttl_seconds": null
+}

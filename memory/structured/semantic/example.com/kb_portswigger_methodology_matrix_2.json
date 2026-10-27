@@ -1,0 +1,19 @@
+{
+  "entry_id": "b8f5d0da",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:2",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:2",
+    "title": "Cross-Site Request Forgery Token & SameSite Validation Methodology",
+    "content": "{\"id\": \"portswigger_csrf\", \"item_type\": \"methodology\", \"topic\": \"csrf\", \"category\": \"PortSwigger Web Security: Cross-Site Request Forgery (CSRF)\", \"name\": \"Cross-Site Request Forgery Token & SameSite Validation Methodology\", \"cwe\": \"CWE-352\", \"owasp_category\": \"A01:2021 - Broken Access Control\", \"signals\": [\"missing_csrf_token\", \"static_predictable_token\", \"csrf_token_not_tied_to_session\", \"samesite_none_or_absent\", \"method_override_post_to_get\", \"referer_header_validation_flaw\"], \"verification_strategy\": \"Test state-changing requests (POST, PUT, DELETE) by omitting the anti-CSRF token, supplying an empty token, using a token from an alternate session, and testing HTTP method flipping (POST to GET). Inspect session cookie SameSite flags.\", \"evidence_requirements\": [\"successful_state_change_without_token\", \"cookie_samesite_flags\", \"csrf_poc_html_form\"], \"tools\": [{\"tool\": \"CSRFSkill\", \"cmd\": \"run_csrf_skill(url, param='csrf')\", \"desc\": \"Differential state-changing endpoint token omission checker\"}, {\"tool\": \"BurpAgent / CSRF PoC Generator\", \"cmd\": \"generate_csrf_poc(endpoint, post_body)\", \"desc\": \"Creates standard HTML PoC forms demonstrating unauthorized submission capability\"}], \"remediation\": \"Enforce cryptographically random anti-CSRF tokens tied uniquely to user sessions. Configure session cookies with SameSite=Lax or SameSite=Strict, and verify custom headers (e.g. X-Requested-With) for AJAX requests.\", \"description\": \"PortSwigger CSRF labs demonstrate vulnerabilities where applications fail to validate tokens, accept duplicate tokens from cookie to parameter, bypass token check when omitted, or rely on easily spoofed Referer headers.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3611698
+  },
+  "created_at": 1793141926.3611698,
+  "updated_at": 1793141926.3611698,
+  "access_count": 3,
+  "ttl_seconds": null
+}

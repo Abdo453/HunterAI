@@ -1,0 +1,19 @@
+name: bypass_403
+class: Bypass403Skill
+category: web
+description: "تجريب تقنيات تجاوز 403/401 خفيفة القراءة فقط (رؤوس وهمية، طرق HTTP بديلة)"
+version: "1.0"
+input:
+  - target: str
+  - urls: list
+output:
+  - bypass_403_candidates.json
+depends_on: []
+next_skills:
+  - validation_gate
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 60
+max_retries: 1
+enabled: true

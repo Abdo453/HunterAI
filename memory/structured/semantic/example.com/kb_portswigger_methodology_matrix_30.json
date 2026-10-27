@@ -1,0 +1,19 @@
+{
+  "entry_id": "143543b4",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:30",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:30",
+    "title": "PortSwigger Essential Skills: Request Interception, Macros & Recon Methodology",
+    "content": "{\"id\": \"portswigger_essential_skills\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"category\": \"PortSwigger Web Security: Essential Skills & Burp Suite Techniques\", \"name\": \"PortSwigger Essential Skills: Request Interception, Macros & Recon Methodology\", \"cwe\": \"CWE-699\", \"owasp_category\": \"A05:2021 - Security Misconfiguration\", \"signals\": [\"http_interception_flow\", \"macro_session_management\", \"dynamic_token_extraction\", \"content_discovery_fuzzing\", \"browser_devtools_profiling\"], \"verification_strategy\": \"Utilize Burp Suite Proxy and Repeater to dissect request structure, configure macros to maintain active sessions across anti-CSRF token rotations, and conduct structured content discovery across hidden directories and administrative interfaces.\", \"evidence_requirements\": [\"session_macro_trace\", \"http_transaction_log\", \"discovered_asset_inventory\"], \"tools\": [{\"tool\": \"BurpAgent\", \"cmd\": \"BurpAgent.intercept_and_inspect()\", \"desc\": \"Autonomous proxy interception and traffic analysis engine\"}, {\"tool\": \"ffuf\", \"cmd\": \"ffuf -u https://example.com/FUZZ -w /wordlists/raft-medium-directories.txt\", \"desc\": \"High-speed directory and file brute-force engine\"}, {\"tool\": \"BrowserAgent (Firefox)\", \"cmd\": \"BrowserAgent.run(target, mode='auto')\", \"desc\": \"Automated Firefox-esr browser exploration and session token extraction\"}], \"remediation\": \"Enforce defense-in-depth: strict input validation, principle of least privilege, centralized access control, and comprehensive audit logging across all application surfaces.\", \"description\": \"PortSwigger Essential Skills curriculum teaches mastering Burp Suite Proxy, Repeater, Intruder, Match and Replace rules, macro session management, and systematically profiling target web applications.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.407061
+  },
+  "created_at": 1793141926.407061,
+  "updated_at": 1793141926.407061,
+  "access_count": 3,
+  "ttl_seconds": null
+}

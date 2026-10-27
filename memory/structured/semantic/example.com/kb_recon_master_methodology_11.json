@@ -1,0 +1,19 @@
+{
+  "entry_id": "e6e8a438",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:11",
+  "value": {
+    "item_id": "recon_master_methodology:11",
+    "title": "CMS Architecture & WordPress Endpoint Auditing",
+    "content": "{\"id\": \"recon_meth_012\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"CMS Architecture & WordPress Endpoint Auditing\", \"prerequisites\": [\"cms_internals\", \"rest_api_principles\"], \"signals\": [\"wordpress_rest_api\", \"wp_json_users_endpoint\", \"author_sitemap_xml\", \"plugin_debug_log\"], \"verification_strategy\": \"Probe common Content Management System (CMS) interfaces for unauthenticated user enumeration routes (/wp-json/wp/v2/users, ?author=1), public debug logs, and outdated plugin components.\", \"evidence_requirements\": [\"enumerated_username_list\", \"debug_log_content_proof\"], \"remediation_pattern\": \"Disable public access to the WordPress REST API users endpoint for unauthenticated visitors, disable display of debug logs in production, and keep core/plugins updated.\", \"description\": \"Specialized reconnaissance methodology for identifying user enumerations, configuration leaks, and exposed debugging interfaces in popular CMS deployments.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4265761
+  },
+  "created_at": 1793141926.4265761,
+  "updated_at": 1793141926.4265761,
+  "access_count": 3,
+  "ttl_seconds": null
+}

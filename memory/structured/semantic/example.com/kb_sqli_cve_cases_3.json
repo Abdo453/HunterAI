@@ -1,0 +1,19 @@
+{
+  "entry_id": "19c6efca",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_cve_cases:3",
+  "value": {
+    "item_id": "sqli_cve_cases:3",
+    "title": "item_3",
+    "content": "{\"cve_id\": \"CVE-2022-44877\", \"software\": \"CentOS Web Panel (CWP)\", \"cvss\": 9.8, \"vulnerability_type\": \"SQL_INJECTION\", \"cwe\": \"CWE-89\", \"affected_versions\": \"CWP 7 prior to version 0.9.8.1147\", \"architecture_root_cause\": \"Unauthenticated access to administrative logging route accepted unescaped input that was concatenated into audit database queries before session validation.\", \"detection_signals\": [\"cwp_login_panel\", \"login_index_audit\", \"parameter_concatenation\"], \"verification_strategy\": \"Measure differential response codes when supplying valid vs malformed character sequences in authentication audit fields.\", \"evidence_requirements\": [\"audit_differential_response\", \"database_exception_signature\"], \"remediation\": \"Update CWP to the latest release; enforce authentication before database logging; use prepared statements across all administrative logging scripts.\"}",
+    "source": "sqli_cve_cases",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.355264
+  },
+  "created_at": 1793141926.355264,
+  "updated_at": 1793141926.355264,
+  "access_count": 3,
+  "ttl_seconds": null
+}

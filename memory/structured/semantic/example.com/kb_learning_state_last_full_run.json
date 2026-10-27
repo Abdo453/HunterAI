@@ -1,0 +1,19 @@
+{
+  "entry_id": "5796ff2a",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:learning_state:last_full_run",
+  "value": {
+    "item_id": "learning_state:last_full_run",
+    "title": "last_full_run",
+    "content": "2026-10-18T10:45:03.757553",
+    "source": "learning_state",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3287008
+  },
+  "created_at": 1793141926.3287008,
+  "updated_at": 1793141926.3287008,
+  "access_count": 3,
+  "ttl_seconds": null
+}

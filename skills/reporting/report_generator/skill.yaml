@@ -1,4 +1,5 @@
 name: report_generator
+class: ReportGeneratorSkill
 category: reporting
 description: "Consolidate all mission outputs and findings into a final markdown security audit report"
 version: "1.0"

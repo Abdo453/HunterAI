@@ -1,4 +1,5 @@
 name: perimeter_matrix
+class: PerimeterMatrixSkill
 category: analysis
 description: "Map and analyze enterprise perimeter, identity gateways (Okta, Entra), SSL-VPNs, and cloud metadata posture"
 version: "1.0"

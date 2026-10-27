@@ -1,4 +1,5 @@
 name: port_scan
+class: PortScanSkill
 category: recon
 description: "Port scanning using nmap, rustscan, or masscan with service/version detection"
 version: "1.0"

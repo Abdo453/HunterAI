@@ -1,0 +1,19 @@
+{
+  "entry_id": "01a30229",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:20",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:20",
+    "title": "OAuth 2.0 Authentication & Token Flow Vulnerability Methodology",
+    "content": "{\"id\": \"portswigger_oauth\", \"item_type\": \"methodology\", \"topic\": \"oauth\", \"category\": \"PortSwigger Web Security: OAuth 2.0 & OpenID Connect\", \"name\": \"OAuth 2.0 Authentication & Token Flow Vulnerability Methodology\", \"cwe\": \"CWE-287\", \"owasp_category\": \"A07:2021 - Identification and Authentication Failures\", \"signals\": [\"missing_state_parameter\", \"weak_redirect_uri_validation\", \"implicit_grant_token_leak\", \"authorization_code_reuse\", \"unverified_email_linking\"], \"verification_strategy\": \"Inspect OAuth authorization URLs for presence of the 'state' parameter. Test open redirection or domain bypasses on 'redirect_uri' (e.g. redirect_uri=https://example.com.attacker.com or path traversal). Test linking third-party OAuth accounts with pre-existing email accounts without verification.\", \"evidence_requirements\": [\"authorization_code_exfiltration\", \"state_parameter_omission_proof\", \"account_takeover_link_evidence\"], \"tools\": [{\"tool\": \"BrowserAgent (OAuth Flow)\", \"cmd\": \"BrowserAgent.audit_oauth_dance(url)\", \"desc\": \"Audits OAuth redirect_uri matching, state token presence, and authorization code lifecycle\"}, {\"tool\": \"BurpAgent (OAuth)\", \"cmd\": \"BurpAgent.replay_oauth_callback(code, state)\", \"desc\": \"Tests authorization code replay and cross-account code consumption\"}], \"remediation\": \"Enforce strict redirect_uri exact matching on the authorization server. Always require and cryptographically validate the state parameter to prevent CSRF in OAuth handshakes. Use PKCE (Proof Key for Code Exchange).\", \"description\": \"PortSwigger OAuth labs demonstrate stealing OAuth access tokens via open redirect in redirect_uri, OAuth CSRF through state parameter omission, and account hijacking via unverified email address linking.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3907385
+  },
+  "created_at": 1793141926.3907385,
+  "updated_at": 1793141926.3907385,
+  "access_count": 3,
+  "ttl_seconds": null
+}

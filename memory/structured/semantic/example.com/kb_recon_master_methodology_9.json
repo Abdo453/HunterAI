@@ -1,0 +1,19 @@
+{
+  "entry_id": "a4180742",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:9",
+  "value": {
+    "item_id": "recon_master_methodology:9",
+    "title": "Subdomain Takeover & Dangling DNS Record Verification",
+    "content": "{\"id\": \"recon_meth_010\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Subdomain Takeover & Dangling DNS Record Verification\", \"prerequisites\": [\"dns_cname_records\", \"cloud_hosting_providers\"], \"signals\": [\"dangling_cname\", \"subzy_unclaimed_provider\", \"404_provider_error_message\"], \"verification_strategy\": \"Analyze DNS CNAME chains of all discovered subdomains to identify pointers to third-party cloud services (AWS S3, GitHub Pages, Heroku, Surge, Azure) where the underlying cloud resource has been deleted but the DNS entry remains active.\", \"evidence_requirements\": [\"cname_target_resolution\", \"cloud_provider_unclaimed_signature\"], \"remediation_pattern\": \"Audit DNS zones regularly to delete orphaned CNAME records before releasing cloud services, and implement DNS verification guards provided by SaaS platforms.\", \"description\": \"Verification of dangling DNS pointers enabling attackers to claim abandoned cloud resources and gain unauthorized control of corporate subdomains.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4230666
+  },
+  "created_at": 1793141926.4230666,
+  "updated_at": 1793141926.4230666,
+  "access_count": 3,
+  "ttl_seconds": null
+}

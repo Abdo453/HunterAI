@@ -1,0 +1,16 @@
+{
+  "entry_id": "47453545",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "rl_outcome:direct:1793141928",
+  "value": {
+    "technique": "direct",
+    "success": true,
+    "evidence": {},
+    "timestamp": 1793141928.423466
+  },
+  "created_at": 1793141928.423466,
+  "updated_at": 1793141928.423466,
+  "access_count": 1,
+  "ttl_seconds": null
+}

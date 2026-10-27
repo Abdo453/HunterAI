@@ -1,0 +1,19 @@
+{
+  "entry_id": "bda21c37",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:6",
+  "value": {
+    "item_id": "recon_master_methodology:6",
+    "title": "Virtual Host (VHost) Enumeration & Origin IP Discovery",
+    "content": "{\"id\": \"recon_meth_007\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Virtual Host (VHost) Enumeration & Origin IP Discovery\", \"prerequisites\": [\"dns_resolution\", \"http_headers\"], \"signals\": [\"vhost_fuzzing\", \"host_header_injection\", \"origin_ip_leak\", \"ssl_certificate_san\"], \"verification_strategy\": \"Mutate the HTTP Host header against target web servers and analyze differential responses to discover private virtual hosts. Inspect SSL SAN certificates and historical DNS records to identify real origin IPs behind CDNs.\", \"evidence_requirements\": [\"host_header_differential_response\", \"origin_ip_ssl_cert_match\"], \"remediation_pattern\": \"Configure default virtual host catch-all blocks returning HTTP 444/403 for unrecognized Host headers. Restrict origin firewall rules to only accept traffic from designated CDN IP blocks.\", \"description\": \"Techniques for discovering hidden virtual host environments sharing physical infrastructure, and determining direct origin server addresses bypassing cloud protection layers.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4190738
+  },
+  "created_at": 1793141926.4190738,
+  "updated_at": 1793141926.4190738,
+  "access_count": 3,
+  "ttl_seconds": null
+}

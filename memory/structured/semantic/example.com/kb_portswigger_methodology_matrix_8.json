@@ -1,0 +1,19 @@
+{
+  "entry_id": "71ca5157",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:8",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:8",
+    "title": "HTTP Request Smuggling (CL.TE, TE.CL, TE.TE & HTTP/2) Methodology",
+    "content": "{\"id\": \"portswigger_http_smuggling\", \"item_type\": \"methodology\", \"topic\": \"http_request_smuggling\", \"category\": \"PortSwigger Web Security: HTTP Request Smuggling\", \"name\": \"HTTP Request Smuggling (CL.TE, TE.CL, TE.TE & HTTP/2) Methodology\", \"cwe\": \"CWE-444\", \"owasp_category\": \"A04:2021 - Insecure Design\", \"signals\": [\"front_end_reverse_proxy\", \"dual_content_length_transfer_encoding\", \"obfuscated_transfer_encoding\", \"http2_downgrade_to_http11\", \"backend_request_timeout\"], \"verification_strategy\": \"Transmit differential non-destructive HTTP requests with both Content-Length and Transfer-Encoding: chunked headers. Observe backend timeout delays (e.g. 5-10s) indicating parsing divergence between frontend proxy and backend server.\", \"evidence_requirements\": [\"differential_timeout_delay\", \"pipelined_prefix_response_mutation\", \"http_version_downgrade_log\"], \"tools\": [{\"tool\": \"smuggler\", \"cmd\": \"python3 smuggler.py -u https://example.com -m POST\", \"desc\": \"Audits CL.TE, TE.CL, and header obfuscation smuggling variations\"}, {\"tool\": \"httpx\", \"cmd\": \"httpx -u url -http2 -probe\", \"desc\": \"Verifies HTTP/2 protocol support and proxy downgrade characteristics\"}], \"remediation\": \"Prioritize end-to-end HTTP/2 without protocol downgrade. If HTTP/1.1 is required, configure frontend and backend servers to reject requests containing both Content-Length and Transfer-Encoding headers.\", \"description\": \"PortSwigger HTTP Request Smuggling curriculum explores CL.TE and TE.CL desynchronization vulnerabilities, obfuscating Transfer-Encoding headers (TE.TE), weaponizing smuggling for cache poisoning, credential theft, and HTTP/2 request tunneling.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3714025
+  },
+  "created_at": 1793141926.3714025,
+  "updated_at": 1793141926.3714025,
+  "access_count": 3,
+  "ttl_seconds": null
+}

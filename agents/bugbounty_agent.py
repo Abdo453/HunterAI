@@ -108,6 +108,63 @@ class BugBountyAgent(BaseAgent):
                 })
             await self.emit("tool_done", {"tool": "wafw00f"})
 
+        # ── 5. محاولة تجاوز WAF عبر سلم التجاوز (1-9) + wafryt + بنك الجينات ──
+        try:
+            from hunter_ai.tools.waf_bypass_ladder import WAFBypassLadder
+            from hunter_ai.tools.wafrift_integration import WafriftIntegration
+            from memory.waf_gene_bank import WAFGeneBank
+
+            mgr = self.mgr
+            bank = WAFGeneBank()
+            ladder = WAFBypassLadder(mgr, bank)
+
+            await self.emit("tool_start", {"tool": "waf_bypass_ladder"})
+
+            # بصمة WAF إن كانت wafryt متاحة
+            waf_type = "unknown"
+            waf = WafriftIntegration(mgr)
+            if waf.is_available():
+                detect = await waf.detect_waf(url)
+                waf_type = detect.waf_detected or "unknown"
+                await self.emit("log", {
+                    "message": f"   🔍 بصمة WAF: {waf_type} (الثقة: {detect.confidence:.0%})"
+                })
+
+            # تشغيل السلم البرمجي على نقطة النهاية المشبوهة (אם有 параметר)
+            test_payload = "<svg onload=alert(1)>"
+
+            # استخراج اسم المعلمة من أول endpoint يحتوي على "?"
+            param_name = "q"
+            target_for_ladder = url
+            if endpoints:
+                first_ep = endpoints[0]
+                if "?" in first_ep:
+                    qs = first_ep.split("?", 1)[1]
+                    param_name = qs.split("=")[0] if "=" in qs else "q"
+                    target_for_ladder = first_ep.split("?")[0]
+                else:
+                    target_for_ladder = first_ep
+
+            result = await ladder.run(
+                target=target_for_ladder,
+                param_name=param_name,
+                payload=test_payload,
+                waf_type=waf_type,
+            )
+
+            if result.success:
+                await self.emit("log", {
+                    "message": f"   🔥 [WAF BYPASS] نجح التجاوز عبر المستوى {result.best_level} ({result.best_technique})"
+                })
+            else:
+                await self.emit("log", {
+                    "message": f"   ❌ [WAF BYPASS] فشل التجاوز عبر جميع الدرجات ({len(result.attempts)} محاولة)"
+                })
+
+            await self.emit("tool_done", {"tool": "waf_bypass_ladder", "success": result.success})
+        except Exception as e:
+            await self.emit("log", {"message": f"   ⚠️  خطأ في تجاوز WAF: {e}"})
+
         # ── 5. فحص ثغرات ونقاط كشف WordPress الحساسة (WP Exposures) ──
         try:
             from core.playbooks.bug_bounty_methodology import BugBountyMethodology

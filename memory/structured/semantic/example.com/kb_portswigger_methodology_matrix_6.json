@@ -1,0 +1,19 @@
+{
+  "entry_id": "1926680b",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:6",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:6",
+    "title": "XML External Entity (XXE) Injection & Parser Hardening Methodology",
+    "content": "{\"id\": \"portswigger_xxe\", \"item_type\": \"methodology\", \"topic\": \"xxe\", \"category\": \"PortSwigger Web Security: XML External Entity (XXE) Injection\", \"name\": \"XML External Entity (XXE) Injection & Parser Hardening Methodology\", \"cwe\": \"CWE-611\", \"owasp_category\": \"A05:2021 - Security Misconfiguration\", \"signals\": [\"content_type_xml\", \"xml_in_post_body\", \"soap_endpoint\", \"svg_upload\", \"entity_resolution_error\", \"xinclude_feature_enabled\"], \"verification_strategy\": \"Transmit safe XML payloads declaring standard internal entities (e.g. <!ENTITY test 'probe'>) to confirm entity expansion without requesting external network resources. For blind XXE, check for parser exceptions or OOB DNS interaction through safe callback listeners.\", \"evidence_requirements\": [\"entity_expansion_reflection\", \"parser_doctype_error\", \"content_type_delta\"], \"tools\": [{\"tool\": \"WebTools (Safe XML Probe)\", \"cmd\": \"WebTools.probe_xml_entity(url, body)\", \"desc\": \"Constructs benign XML entity declarations testing parser resolution\"}, {\"tool\": \"nuclei (XXE Templates)\", \"cmd\": \"nuclei -u url -t /nuclei-templates/http/vulnerabilities/generic/xxe-probe.yaml\", \"desc\": \"Differential XML parsing detection without external exfiltration\"}], \"remediation\": \"Completely disable external entity resolution (DTD processing) in XML parsers (e.g. setFeature('http://apache.org/xml/features/disallow-doctype-decl', True)). Use modern data formats like JSON wherever feasible.\", \"description\": \"PortSwigger XXE labs cover retrieving system files via file://, exploiting SSRF via XXE, blind XXE using out-of-band techniques, repurposing local DTD files to trigger error messages, and abusing XML parsers in image (SVG) uploads.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3683999
+  },
+  "created_at": 1793141926.3683999,
+  "updated_at": 1793141926.3683999,
+  "access_count": 3,
+  "ttl_seconds": null
+}

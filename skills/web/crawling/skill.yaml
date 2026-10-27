@@ -1,4 +1,5 @@
 name: crawling
+class: CrawlingSkill
 category: web
 description: "Crawl all URLs using katana, gospider, and gau"
 version: "1.0"

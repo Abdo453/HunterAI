@@ -1,0 +1,19 @@
+{
+  "entry_id": "3c6753fa",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:12",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:12",
+    "title": "Broken Access Control & Insecure Direct Object Reference (IDOR) Methodology",
+    "content": "{\"id\": \"portswigger_access_control\", \"item_type\": \"methodology\", \"topic\": \"access_control\", \"category\": \"PortSwigger Web Security: Broken Access Control & IDOR\", \"name\": \"Broken Access Control & Insecure Direct Object Reference (IDOR) Methodology\", \"cwe\": \"CWE-639\", \"owasp_category\": \"A01:2021 - Broken Access Control\", \"signals\": [\"horizontal_privilege_escalation\", \"vertical_privilege_escalation\", \"unprotected_admin_panel\", \"role_header_tampering\", \"insecure_direct_object_reference\", \"verb_tampering\"], \"verification_strategy\": \"Perform dual-session differential testing: request protected resource of User A using session token of User B (horizontal escalation), and request administrative functionality using unauthenticated or low-privilege tokens (vertical escalation). Test HTTP verb tampering (GET vs POST vs PUT).\", \"evidence_requirements\": [\"cross_tenant_data_disclosure\", \"unauthorized_admin_access_proof\", \"status_200_under_low_privilege\"], \"tools\": [{\"tool\": \"IDORSkill\", \"cmd\": \"IDORSkill.run(url, param='user_id')\", \"desc\": \"Cross-tenant identity permutation and matrix differential evaluator\"}, {\"tool\": \"BurpAgent (AuthMatrix / Autorize)\", \"cmd\": \"Autorize.audit_endpoint(request, session_b)\", \"desc\": \"Automated dual-context HTTP request replaying and response comparison\"}], \"remediation\": \"Adopt a 'deny by default' access control policy. Enforce object-level access control checks on every server request verifying that the authenticated user owns or has explicit permission for the requested entity.\", \"description\": \"PortSwigger Access Control labs analyze unlinked admin URLs, header-based role overrides (X-Original-URL, X-Rewrite-URL), insecure IDOR parameters in profile endpoints, and multi-step workflow authorization flaws.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.376405
+  },
+  "created_at": 1793141926.376405,
+  "updated_at": 1793141926.376405,
+  "access_count": 3,
+  "ttl_seconds": null
+}

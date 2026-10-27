@@ -1,0 +1,19 @@
+{
+  "entry_id": "3dba3f08",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:5",
+  "value": {
+    "item_id": "recon_master_methodology:5",
+    "title": "Hidden Parameter Discovery & Attack Surface Expansion",
+    "content": "{\"id\": \"recon_meth_006\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Hidden Parameter Discovery & Attack Surface Expansion\", \"prerequisites\": [\"differential_behavior\", \"parameter_fuzzing\"], \"signals\": [\"query_parameters\", \"body_parameters\", \"hidden_input_fields\", \"json_body_keys\"], \"verification_strategy\": \"Fuzz candidate GET/POST parameter names against responsive endpoints using differential response analysis (detecting variations in content length, status code, or execution timing).\", \"evidence_requirements\": [\"differential_response_on_param\", \"parameter_reflection_proof\", \"behavioral_change_evidence\"], \"remediation_pattern\": \"Enforce strict schema validation and parameter whitelisting on all incoming requests. Ignore or reject unmodeled parameter keys.\", \"description\": \"Uncovers unlinked and undocumented parameters that control backend business logic, debug flags, or legacy database filter clauses.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4170668
+  },
+  "created_at": 1793141926.4170668,
+  "updated_at": 1793141926.4170668,
+  "access_count": 3,
+  "ttl_seconds": null
+}

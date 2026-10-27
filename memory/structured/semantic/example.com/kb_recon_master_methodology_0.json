@@ -1,0 +1,19 @@
+{
+  "entry_id": "abcc4489",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:0",
+  "value": {
+    "item_id": "recon_master_methodology:0",
+    "title": "Passive & Active Subdomain Enumeration Pipeline",
+    "content": "{\"id\": \"recon_meth_001\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Passive & Active Subdomain Enumeration Pipeline\", \"prerequisites\": [\"dns_architecture\", \"osint_fundamentals\"], \"signals\": [\"domain_name\", \"wildcard_dns\", \"certificate_transparency\", \"apex_domain\", \"cidr_range\"], \"verification_strategy\": \"Orchestrate multi-source passive discovery (Certificate Transparency logs, DNS aggregators, ASN/CIDR mapping), deduplicate using canonical set comparison, and validate active resolution through trusted resolvers.\", \"evidence_requirements\": [\"unique_subdomain_list\", \"dns_a_record_verification\", \"cname_chain_mapping\"], \"remediation_pattern\": \"Maintain an updated central asset inventory. Deprecate stale DNS records to prevent subdomain takeover risks, and restrict internal DNS zone transfers.\", \"description\": \"Comprehensive attack surface discovery methodology: Combines passive OSINT (crt.sh, SecurityTrails, AlienVault) and active permutation/bruteforce. Enforces strict deduplication to isolate unique responsive fully qualified domain names (FQDNs).\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4080663
+  },
+  "created_at": 1793141926.4080663,
+  "updated_at": 1793141926.4080663,
+  "access_count": 3,
+  "ttl_seconds": null
+}

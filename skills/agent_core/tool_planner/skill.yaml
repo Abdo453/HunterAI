@@ -1,0 +1,22 @@
+name: agent_tool_planner
+class: ToolPlannerSkill
+category: agent_core
+description: "Plans which tool to use per phase/risk/scope with primary + fallback. Answers 'how to use tools'."
+version: "1.0"
+input:
+  - target: str
+  - phase: str
+  - max_risk: str   # low | medium | high
+  - scope_authorized: bool
+output:
+  - tool_plan.json
+  - next_tool.json
+depends_on: []
+next_skills:
+  - agent_reasoning_loop
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 30
+max_retries: 1
+enabled: true

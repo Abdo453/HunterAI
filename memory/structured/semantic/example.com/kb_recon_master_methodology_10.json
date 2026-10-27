@@ -1,0 +1,19 @@
+{
+  "entry_id": "3b4d514c",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:10",
+  "value": {
+    "item_id": "recon_master_methodology:10",
+    "title": "Access Control Header Mutation & 403 Response Differential",
+    "content": "{\"id\": \"recon_meth_011\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Access Control Header Mutation & 403 Response Differential\", \"prerequisites\": [\"reverse_proxy_mechanics\", \"http_headers\"], \"signals\": [\"forbidden_403_status\", \"x_forwarded_for_bypass\", \"x_original_url_rewrite\", \"path_normalization_traversal\"], \"verification_strategy\": \"Test restricted endpoints (HTTP 403) by mutating proxy forwarding headers (X-Forwarded-For: 127.0.0.1, X-Original-URL, X-Rewrite-URL) and applying path normalization tricks (e.g. /admin/./ or /admin%20) to evaluate whether frontend reverse proxy rules desynchronize from backend access logic.\", \"evidence_requirements\": [\"status_differential_403_to_200\", \"authorized_response_body_hash\"], \"remediation_pattern\": \"Enforce authorization logic at the application controller level rather than relying solely on reverse proxy URL filtering rules. Strip untrusted client-supplied forwarding headers at the edge proxy.\", \"description\": \"Evaluating discrepancies between reverse proxies and application backends where header manipulation or path normalization allows unauthorized access to restricted interfaces.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4245713
+  },
+  "created_at": 1793141926.4245713,
+  "updated_at": 1793141926.4245713,
+  "access_count": 3,
+  "ttl_seconds": null
+}

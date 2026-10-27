@@ -1,0 +1,19 @@
+name: hunt_memory
+class: HuntMemorySkill
+category: agent_core
+description: "ذاكرة الصيد: /remember لتسجيل الملاحظات و /memory-gc لتدوير الملفات"
+version: "1.0"
+input:
+  - target: str
+  - action: str   # remember | gc | list
+  - note: str
+output:
+  - memory.jsonl
+depends_on: []
+next_skills: []
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 30
+max_retries: 1
+enabled: true

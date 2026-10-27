@@ -1,0 +1,16 @@
+{
+  "entry_id": "11a55ff7",
+  "memory_type": "failure_episodic",
+  "target": "example.com",
+  "key": "fail:sqli",
+  "value": {
+    "technique": "sqli",
+    "reason": "Lead killed by user or validation gate",
+    "evidence": {},
+    "recorded_at": 1793141929.4303255
+  },
+  "created_at": 1793141929.4303255,
+  "updated_at": 1793141929.4303255,
+  "access_count": 1,
+  "ttl_seconds": null
+}

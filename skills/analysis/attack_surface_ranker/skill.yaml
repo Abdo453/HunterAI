@@ -1,0 +1,25 @@
+name: attack_surface_ranker
+class: AttackSurfaceRankerSkill
+category: analysis
+description: "Ranks discovered assets by exploitability and value (surface ranking)."
+version: "1.0"
+input:
+  - target: str
+  - subdomains: list
+  - live_hosts: list
+  - tech: dict
+  - ports: dict
+  - waf: dict
+  - findings: list
+output:
+  - surface_ranking.json
+depends_on: []
+next_skills:
+  - agent_tool_planner
+  - agent_reasoning_loop
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 40
+max_retries: 1
+enabled: true

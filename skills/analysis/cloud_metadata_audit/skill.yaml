@@ -1,4 +1,5 @@
 name: cloud_metadata_audit
+class: CloudMetadataAuditSkill
 category: analysis
 description: "Audit target for multi-cloud metadata endpoints (AWS, GCP, Azure, DO, Alibaba) and SSRF risks"
 version: "1.0"

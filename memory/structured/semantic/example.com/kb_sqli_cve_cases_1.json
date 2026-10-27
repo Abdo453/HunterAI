@@ -1,0 +1,19 @@
+{
+  "entry_id": "4e5ce75f",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_cve_cases:1",
+  "value": {
+    "item_id": "sqli_cve_cases:1",
+    "title": "item_1",
+    "content": "{\"cve_id\": \"CVE-2024-27956\", \"software\": \"WordPress Automatic Plugin\", \"cvss\": 9.8, \"vulnerability_type\": \"SQL_INJECTION\", \"cwe\": \"CWE-89\", \"affected_versions\": \"Versions before 3.92.1\", \"architecture_root_cause\": \"The plugin exposed an unauthenticated endpoint at /wp-content/plugins/wp-automatic/inc/csv.php that accepted a query parameter 'q' which was passed directly into $wpdb->query() without escaping or using prepared statements.\", \"detection_signals\": [\"wp_automatic_csv_endpoint\", \"unauthenticated_direct_php_file\", \"q_parameter\", \"direct_wpdb_query\"], \"verification_strategy\": \"Test whether providing a harmless SQL boolean expression in the 'q' parameter yields differential CSV output or an empty result versus a syntax exception.\", \"evidence_requirements\": [\"csv_differential_content\", \"unauthenticated_200_with_query_dependency\"], \"remediation\": \"Update to version 3.92.1 or newer; restrict unauthenticated direct access to script files; utilize $wpdb->prepare() for all database interactions.\"}",
+    "source": "sqli_cve_cases",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3522265
+  },
+  "created_at": 1793141926.3522265,
+  "updated_at": 1793141926.3522265,
+  "access_count": 3,
+  "ttl_seconds": null
+}

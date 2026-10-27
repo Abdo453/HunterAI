@@ -1,0 +1,19 @@
+{
+  "entry_id": "d197d4ed",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_master_intelligence:4",
+  "value": {
+    "item_id": "sqli_master_intelligence:4",
+    "title": "SecByte Architectural Core: Prepared Statements, Stored Procedures & ORM Security",
+    "content": "{\"id\": \"intel_secbyte_interview_architecture\", \"topic\": \"sqli\", \"title\": \"SecByte Architectural Core: Prepared Statements, Stored Procedures & ORM Security\", \"source_url\": \"https://learn.secbyte.org/blog/as2ilat-sql-muqabalat-shughl\", \"prerequisites\": [\"rdbms_architecture\", \"orm_internals\"], \"signals\": [\"prepared_statement_binding\", \"dynamic_stored_procedure\", \"orm_raw_query\", \"order_by_clause\"], \"verification_strategy\": \"Assess architectural implementation: Verify if ORM uses parameter binding or exposes raw query methods (e.g. Django .extra() or raw SQL). Check if dynamic ORDER BY clauses are validated against a strict property allowlist, as ORDER BY cannot be parameterized using standard prepared statement placeholders.\", \"evidence_requirements\": [\"dynamic_order_by_divergence\", \"orm_raw_fragment_exception\"], \"remediation\": \"Validate dynamic sorting/ordering parameters against a strict whitelist of known column names. Use parameterized prepared statements for all filter values. Avoid dynamic SQL concatenation inside stored procedures.\", \"description\": \"Comprehensive engineering analysis of SQL mechanics: Stored procedures do NOT inherently prevent SQL injection if dynamic SQL (e.g. EXECUTE IMMEDIATE or sp_executesql) is concatenated inside them. Prepared statements compile the query AST first and treat user inputs strictly as literal values. Critical architectural limitation: Prepared statements cannot parameterize table names or column identifiers in ORDER BY clauses, requiring strict allowlist validation.\"}",
+    "source": "sqli_master_intelligence",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4350884
+  },
+  "created_at": 1793141926.4350884,
+  "updated_at": 1793141926.4350884,
+  "access_count": 3,
+  "ttl_seconds": null
+}

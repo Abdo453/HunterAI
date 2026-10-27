@@ -1,0 +1,19 @@
+{
+  "entry_id": "28ada28c",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:scheduler_state:payloads",
+  "value": {
+    "item_id": "scheduler_state:payloads",
+    "title": "payloads",
+    "content": "{\"last_run\": 1792320303.760808}",
+    "source": "scheduler_state",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.346224
+  },
+  "created_at": 1793141926.346224,
+  "updated_at": 1793141926.346224,
+  "access_count": 3,
+  "ttl_seconds": null
+}

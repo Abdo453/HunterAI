@@ -1,0 +1,19 @@
+{
+  "entry_id": "da26765f",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_master_intelligence:0",
+  "value": {
+    "item_id": "sqli_master_intelligence:0",
+    "title": "PortSwigger UNION Attack: NULL Column Count & Data Type Enumeration",
+    "content": "{\"id\": \"intel_portswigger_union_null\", \"topic\": \"sqli\", \"title\": \"PortSwigger UNION Attack: NULL Column Count & Data Type Enumeration\", \"source_url\": \"https://portswigger.net/web-security/learning-paths/sql-injection\", \"prerequisites\": [\"sql_syntax\", \"union_operator_rules\"], \"signals\": [\"union_based_surface\", \"tabular_response\", \"column_count_probe\", \"order_by_boundary\"], \"verification_strategy\": \"Determine the exact number of projected columns by systematically appending NULLs (' UNION SELECT NULL, NULL -- -) until the RDBMS executes without a column count mismatch exception (e.g. ORA-01789 or PostgreSQL 42601). Next, test each column position with a benign string probe ('a', NULL) to identify data type compatibility.\", \"evidence_requirements\": [\"column_boundary_match\", \"successful_union_reflection\", \"data_type_compatibility_proof\"], \"remediation\": \"Enforce parameterized prepared statements across all search and listing endpoints. Never interpolate user-supplied order or filter clauses directly into query strings.\", \"description\": \"PortSwigger curriculum standard for UNION-based SQL injection. Two mandatory conditions for UNION injection: (1) The injected query must return the exact same number of columns as the original query. (2) The data types in corresponding columns must be compatible between original and injected SELECT statements. Using NULL satisfies almost all data types across Oracle, MySQL, PostgreSQL, and SQLite without type casting errors.\"}",
+    "source": "sqli_master_intelligence",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.42808
+  },
+  "created_at": 1793141926.42808,
+  "updated_at": 1793141926.42808,
+  "access_count": 3,
+  "ttl_seconds": null
+}

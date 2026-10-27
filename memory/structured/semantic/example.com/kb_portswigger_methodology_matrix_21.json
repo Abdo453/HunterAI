@@ -1,0 +1,19 @@
+{
+  "entry_id": "4a59e7a7",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:21",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:21",
+    "title": "File Upload Restrictions & Execution Resistance Methodology",
+    "content": "{\"id\": \"portswigger_file_upload\", \"item_type\": \"methodology\", \"topic\": \"file_upload\", \"category\": \"PortSwigger Web Security: File Upload Vulnerabilities\", \"name\": \"File Upload Restrictions & Execution Resistance Methodology\", \"cwe\": \"CWE-434\", \"owasp_category\": \"A03:2021 - Injection\", \"signals\": [\"unrestricted_file_extension\", \"client_side_validation_only\", \"mime_type_spoofing_accepted\", \"path_traversal_in_filename\", \"polyglot_file_accepted\", \"uploaded_file_directly_executable\"], \"verification_strategy\": \"Upload benign non-executable test files with varied extensions (.php5, .phtml, .shtml, .jpg.php), test Content-Type header spoofing (e.g. Content-Type: image/jpeg for text file), and test path traversal in the filename attribute (filename='../../test.txt'). Check if files are served from an isolated domain with execution disabled.\", \"evidence_requirements\": [\"uploaded_file_url_resolution\", \"mime_type_override_acceptance\", \"executable_handler_trigger\"], \"tools\": [{\"tool\": \"AutonomousBrain (Upload Probe)\", \"cmd\": \"AutonomousBrain.probe_upload_endpoint(url, file_field)\", \"desc\": \"Safely assesses MIME-type, extension blacklists, and path sanitization without webshells\"}, {\"tool\": \"ffuf (Upload Fuzzing)\", \"cmd\": \"ffuf -u url -F 'file=@test.FUZZ' -w extensions.txt\", \"desc\": \"Fuzzes acceptable file extension policies on upload endpoints\"}], \"remediation\": \"Validate file extensions against a strict allowlist. Store uploaded files in an isolated object store or dedicated non-executable domain (e.g. AWS S3). Re-encode uploaded images to strip metadata and prevent polyglots.\", \"description\": \"PortSwigger File Upload labs explore basic remote code execution via webshell upload, bypassing Content-Type checks, bypassing extension blacklists via secondary extensions or null bytes, and path traversal to place scripts in web roots.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3927383
+  },
+  "created_at": 1793141926.3927383,
+  "updated_at": 1793141926.3927383,
+  "access_count": 3,
+  "ttl_seconds": null
+}

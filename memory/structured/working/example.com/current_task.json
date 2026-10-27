@@ -1,0 +1,11 @@
+{
+  "entry_id": "6b8d659f",
+  "memory_type": "working",
+  "target": "example.com",
+  "key": "current_task",
+  "value": "recon phase",
+  "created_at": 1793133899.6862547,
+  "updated_at": 1793133899.6862547,
+  "access_count": 1,
+  "ttl_seconds": null
+}

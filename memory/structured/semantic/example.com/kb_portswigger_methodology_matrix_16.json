@@ -1,0 +1,19 @@
+{
+  "entry_id": "69c87dde",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:16",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:16",
+    "title": "Object Deserialization & Gadget Chain Inspection Methodology",
+    "content": "{\"id\": \"portswigger_insecure_deserialization\", \"item_type\": \"methodology\", \"topic\": \"insecure_deserialization\", \"category\": \"PortSwigger Web Security: Insecure Deserialization\", \"name\": \"Object Deserialization & Gadget Chain Inspection Methodology\", \"cwe\": \"CWE-502\", \"owasp_category\": \"A08:2021 - Software and Data Integrity Failures\", \"signals\": [\"base64_serialized_java_object\", \"magic_bytes_ac_ed_00_05\", \"php_serialize_format_o_colon\", \"python_pickle_markers\", \"net_binary_formatter_stream\", \"ruby_marshal_format\"], \"verification_strategy\": \"Inspect cookies and session parameters for serialized object signatures: Java serialization magic bytes (0xAC ED / rO0), PHP serialize format ('O:4:\\\"User\\\":2:...'), Python pickle opcodes. Test safe differential object state tampering (e.g. flipping boolean isAdmin: true) before testing gadget chains.\", \"evidence_requirements\": [\"serialized_object_signature_match\", \"tampered_attribute_state_change\", \"deserialization_error_snippet\"], \"tools\": [{\"tool\": \"AutonomousBrain (Deserialization Analyzer)\", \"cmd\": \"AutonomousBrain.inspect_serialized_token(cookie)\", \"desc\": \"Identifies serialization language format and decodes object graphs\"}, {\"tool\": \"ysoserial (audit guidance)\", \"cmd\": \"ysoserial -g URLDNS -a 'http://callback.host'\", \"desc\": \"Safe out-of-band DNS verification of Java gadget execution without command execution\"}], \"remediation\": \"Do not accept serialized objects from untrusted sources. Use standard structured data formats like JSON or Protocol Buffers. If deserialization is unavoidable, implement cryptographic integrity signing (HMAC) and strict type allowlists.\", \"description\": \"PortSwigger Insecure Deserialization covers modifying serialized objects in cookies, modifying object data types, using gadget chains (Java ysoserial, PHP POP chains), and injecting arbitrary object attributes to subvert logic.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3847375
+  },
+  "created_at": 1793141926.3847375,
+  "updated_at": 1793141926.3847375,
+  "access_count": 3,
+  "ttl_seconds": null
+}

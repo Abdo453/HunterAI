@@ -1,0 +1,19 @@
+{
+  "entry_id": "2e46fc79",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:9",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:9",
+    "title": "OS Command Injection & Safe Time-Delay Verification Methodology",
+    "content": "{\"id\": \"portswigger_cmd_injection\", \"item_type\": \"methodology\", \"topic\": \"os_command_injection\", \"category\": \"PortSwigger Web Security: OS Command Injection\", \"name\": \"OS Command Injection & Safe Time-Delay Verification Methodology\", \"cwe\": \"CWE-78\", \"owasp_category\": \"A03:2021 - Injection\", \"signals\": [\"ip_ping_parameter\", \"system_tool_wrapper\", \"file_conversion_endpoint\", \"shell_metacharacter_echo\", \"time_delay_execution\"], \"verification_strategy\": \"Inject benign shell command delimiters (;, |, &, `) paired with safe time-delay instructions (e.g., sleep 5, ping -c 5 127.0.0.1) across suspected parameters. Compare response execution duration against baseline latency.\", \"evidence_requirements\": [\"differential_time_delay_metric\", \"baseline_vs_probe_duration\", \"shell_execution_proof\"], \"tools\": [{\"tool\": \"CmdInjectionSkill\", \"cmd\": \"CmdInjectionSkill.run(url, param)\", \"desc\": \"Differential latency auditor using non-destructive time delays and benign echoes\"}, {\"tool\": \"commix (safe mode)\", \"cmd\": \"commix -u 'https://example.com/status?host=127.0.0.1' --batch --time-sec=5\", \"desc\": \"Automated command injection auditor validating execution pathways\"}], \"remediation\": \"Avoid invoking operating system shell commands via system(), exec(), or Runtime.getRuntime().exec(). Utilize native language APIs (e.g., standard file and network libraries) or apply strict alphanumeric parameter allowlists.\", \"description\": \"PortSwigger OS Command Injection covers simple injections returning command output, blind command injection with time delays, out-of-band data redirection, and output redirection to web-accessible directories.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.372399
+  },
+  "created_at": 1793141926.372399,
+  "updated_at": 1793141926.372399,
+  "access_count": 3,
+  "ttl_seconds": null
+}

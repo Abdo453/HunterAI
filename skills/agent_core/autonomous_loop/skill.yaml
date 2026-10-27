@@ -1,0 +1,23 @@
+name: autonomous_loop
+class: AutonomousLoopSkill
+category: agent_core
+description: "حلقة استكشاف مستقلة: خطة -> أداة -> تحقق -> سلسلة -> تقرير -> ذاكرة"
+version: "1.0"
+input:
+  - target: str
+  - phases: list   # recon | scan | analyze | exploit | validate | report
+  - max_risk: str  # low | medium | high
+  - scope_authorized: bool
+output:
+  - autonomous_hunt.json
+depends_on:
+  - validation_gate
+  - report_generator
+next_skills:
+  - report_generator
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 300
+max_retries: 1
+enabled: true

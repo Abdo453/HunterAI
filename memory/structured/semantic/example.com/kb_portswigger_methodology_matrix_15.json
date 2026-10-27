@@ -1,0 +1,19 @@
+{
+  "entry_id": "6ea44384",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:15",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:15",
+    "title": "Web Cache Poisoning via Unkeyed Inputs & Headers Methodology",
+    "content": "{\"id\": \"portswigger_cache_poisoning\", \"item_type\": \"methodology\", \"topic\": \"web_cache_poisoning\", \"category\": \"PortSwigger Web Security: Web Cache Poisoning\", \"name\": \"Web Cache Poisoning via Unkeyed Inputs & Headers Methodology\", \"cwe\": \"CWE-444\", \"owasp_category\": \"A05:2021 - Security Misconfiguration\", \"signals\": [\"x_cache_hit_miss_header\", \"age_header_incrementing\", \"unkeyed_header_reflection\", \"x_forwarded_host_reflection\", \"fat_get_parameter_handling\", \"normalized_cache_key\"], \"verification_strategy\": \"Identify cache keys and caching status via headers (X-Cache: HIT/MISS, CF-Cache-Status). Inject non-standard headers (X-Forwarded-Host, X-Forwarded-Scheme, X-Original-URL) with benign markers to verify if the server reflects them and caches the resulting response for subsequent standard requests.\", \"evidence_requirements\": [\"cached_response_with_injected_header\", \"x_cache_hit_confirmation\", \"unkeyed_input_identification\"], \"tools\": [{\"tool\": \"Param Miner\", \"cmd\": \"param_miner.guess_headers(target_url)\", \"desc\": \"Automated unkeyed header and unkeyed cookie discovery engine\"}, {\"tool\": \"httpx\", \"cmd\": \"httpx -u url -probe-headers 'X-Cache,CF-Cache-Status,Age'\", \"desc\": \"Monitors cache header states across repeated requests\"}], \"remediation\": \"Do not incorporate unkeyed inputs into HTTP responses without encoding. Include necessary request headers in the cache key or disable caching for dynamically generated or personalized pages.\", \"description\": \"PortSwigger Web Cache Poisoning labs explore unkeyed header exploitation (X-Forwarded-Host), unkeyed cookies, DOM-based cache poisoning, multiple header coordination, and fat GET requests poisoning resource paths.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3817394
+  },
+  "created_at": 1793141926.3817394,
+  "updated_at": 1793141926.3817394,
+  "access_count": 3,
+  "ttl_seconds": null
+}

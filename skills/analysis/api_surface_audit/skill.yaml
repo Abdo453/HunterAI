@@ -1,4 +1,5 @@
 name: api_surface_audit
+class: ApiSurfaceAuditSkill
 category: analysis
 description: "Audit REST, GraphQL, and Swagger/OpenAPI endpoints for introspection and mass assignment risks"
 version: "1.0"

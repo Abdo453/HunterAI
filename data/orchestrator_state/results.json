@@ -1,0 +1,28 @@
+[
+  {
+    "task_id": "8f88b90b",
+    "agent_name": "ReconAgent",
+    "role": "context_intensive_executor",
+    "status": "completed",
+    "output": {
+      "output": "test"
+    },
+    "evidence": {},
+    "findings": [],
+    "error": null,
+    "timestamp": 1793141850.1176217
+  },
+  {
+    "task_id": "200daf16",
+    "agent_name": "ReconAgent",
+    "role": "context_intensive_executor",
+    "status": "completed",
+    "output": {
+      "output": "test"
+    },
+    "evidence": {},
+    "findings": [],
+    "error": null,
+    "timestamp": 1793141928.3743846
+  }
+]

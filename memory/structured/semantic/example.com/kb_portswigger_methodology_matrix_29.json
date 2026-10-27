@@ -1,0 +1,19 @@
+{
+  "entry_id": "e6b5d65b",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:29",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:29",
+    "title": "Web Cache Deception via Path & Delimiter Confusion Methodology",
+    "content": "{\"id\": \"portswigger_cache_deception\", \"item_type\": \"methodology\", \"topic\": \"web_cache_deception\", \"category\": \"PortSwigger Web Security: Web Cache Deception\", \"name\": \"Web Cache Deception via Path & Delimiter Confusion Methodology\", \"cwe\": \"CWE-444\", \"owasp_category\": \"A05:2021 - Security Misconfiguration\", \"signals\": [\"path_confusion_static_extension\", \"delimiter_discrepancy_semicolon\", \"cdn_caching_authenticated_page\", \"differing_path_normalization\", \"cache_control_private_missing\"], \"verification_strategy\": \"Append static asset extensions to dynamic authenticated endpoints (e.g. /my-account/profile.css, /my-account/profile;test.js, /my-account/profile%23test.png). Check if the origin web server serves private user data while intermediate caches (CDNs) store the response as a public static asset.\", \"evidence_requirements\": [\"unauthenticated_cache_hit_of_private_data\", \"cache_header_hit_proof\", \"delimiter_normalization_log\"], \"tools\": [{\"tool\": \"httpx\", \"cmd\": \"httpx -u 'https://example.com/account/settings.css' -probe-headers 'X-Cache,CF-Cache-Status'\", \"desc\": \"Evaluates CDN caching behavior on dynamic routes with static extensions\"}, {\"tool\": \"BurpAgent (Cache Deception Probe)\", \"cmd\": \"BurpAgent.audit_cache_deception(url)\", \"desc\": \"Tests delimiter variations (; # ? / %00) on authenticated endpoints\"}], \"remediation\": \"Explicitly set Cache-Control: no-store, private on all authenticated dynamic responses. Ensure the web server and CDN use consistent path normalization rules and do not cache based solely on file extension.\", \"description\": \"PortSwigger Web Cache Deception labs explore path confusion where reverse proxies cache responses based on .js or .css extensions appended to user profile URLs, exposing private account information and API tokens to anonymous users.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.405059
+  },
+  "created_at": 1793141926.405059,
+  "updated_at": 1793141926.405059,
+  "access_count": 3,
+  "ttl_seconds": null
+}

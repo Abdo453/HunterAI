@@ -1,0 +1,19 @@
+{
+  "entry_id": "8ada31a0",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:13",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:13",
+    "title": "Authentication Mechanics, Username Enumeration & MFA Bypass Methodology",
+    "content": "{\"id\": \"portswigger_authentication\", \"item_type\": \"methodology\", \"topic\": \"authentication\", \"category\": \"PortSwigger Web Security: Authentication Vulnerabilities\", \"name\": \"Authentication Mechanics, Username Enumeration & MFA Bypass Methodology\", \"cwe\": \"CWE-287\", \"owasp_category\": \"A07:2021 - Identification and Authentication Failures\", \"signals\": [\"username_enumeration_via_subtle_errors\", \"response_time_discrepancy\", \"missing_rate_limiting\", \"password_reset_poisoning\", \"2fa_flawed_logic\", \"remember_me_cookie_flaw\"], \"verification_strategy\": \"Analyze login endpoint error responses for subtle text discrepancies ('Invalid username' vs 'Incorrect password') or response time variations. Evaluate 2FA workflows for step skipping, brute-force limits on OTP tokens, and predictable password reset tokens.\", \"evidence_requirements\": [\"error_message_divergence\", \"time_differential_distribution\", \"mfa_step_bypass_proof\"], \"tools\": [{\"tool\": \"ffuf (Enum)\", \"cmd\": \"ffuf -u 'https://example.com/login' -d 'user=FUZZ&pass=test' -w users.txt -mr 'Invalid password'\", \"desc\": \"Audits username enumeration via differential response matching\"}, {\"tool\": \"AutonomousBrain (Auth Auditor)\", \"cmd\": \"AutonomousBrain.audit_auth_flow(login_url)\", \"desc\": \"Assesses lockout thresholds, rate limiting, and password reset logic\"}], \"remediation\": \"Return generic error messages for all authentication failures (e.g. 'Invalid username or password'). Enforce rate limiting, account lockouts, and robust time-constant cryptographic comparison for password verification.\", \"description\": \"PortSwigger Authentication vulnerabilities encompass username enumeration via different responses, password brute-forcing bypassing IP checks via X-Forwarded-For, 2FA bypass via broken logic, and remember-me cookie tampering.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3774045
+  },
+  "created_at": 1793141926.3774045,
+  "updated_at": 1793141926.3774045,
+  "access_count": 3,
+  "ttl_seconds": null
+}

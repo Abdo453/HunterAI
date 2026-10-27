@@ -1,0 +1,19 @@
+{
+  "entry_id": "9269dc1d",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:27",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:27",
+    "title": "API Testing, OpenAPI Schema Inconsistencies & Mass Assignment Methodology",
+    "content": "{\"id\": \"portswigger_api_testing\", \"item_type\": \"methodology\", \"topic\": \"api_testing\", \"category\": \"PortSwigger Web Security: API Testing & Mass Assignment\", \"name\": \"API Testing, OpenAPI Schema Inconsistencies & Mass Assignment Methodology\", \"cwe\": \"CWE-915\", \"owasp_category\": \"A01:2021 - Broken Access Control\", \"signals\": [\"openapi_swagger_json_exposed\", \"hidden_api_parameters\", \"mass_assignment_object_binding\", \"http_method_override_accepted\", \"unsupported_media_type_bypass\"], \"verification_strategy\": \"Discover undocumented endpoints and schema definitions (/swagger.json, /openapi.json, /api/v1/docs). Fuzz for hidden administrative parameters (e.g. isAdmin, role, approved) using mass assignment in PUT/PATCH requests. Test HTTP verb overriding (X-HTTP-Method-Override: PUT) to bypass access filters.\", \"evidence_requirements\": [\"swagger_schema_definition\", \"mass_assignment_privilege_mutation\", \"method_override_response_delta\"], \"tools\": [{\"tool\": \"kiterunner\", \"cmd\": \"kr scan https://api.example.com -A=apiroutes-260227:10000 -x 8\", \"desc\": \"Fast API routing & hidden endpoint brute-force based on asset wordlists\"}, {\"tool\": \"arjun\", \"cmd\": \"arjun -u 'https://api.example.com/users/update' -m JSON\", \"desc\": \"Discovers hidden HTTP request parameters across REST APIs\"}], \"remediation\": \"Do not bind HTTP request bodies directly to internal database domain models (mass assignment). Use explicit Data Transfer Objects (DTOs) defining allowed fields. Require authorization on all API routes.\", \"description\": \"PortSwigger API Testing curriculum addresses discovering hidden API documentation, identifying unpublished endpoints, exploiting mass assignment to grant administrative privileges, and bypassing server-side input filters.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.402059
+  },
+  "created_at": 1793141926.402059,
+  "updated_at": 1793141926.402059,
+  "access_count": 3,
+  "ttl_seconds": null
+}

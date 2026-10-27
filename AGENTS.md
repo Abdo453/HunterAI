@@ -47,6 +47,27 @@ python pentest.py report target.com "finding" --platform hackerone
 | `/sniper <target> [--mode recon|full|web|vuln]` | Automated reconnaissance |
 | `/poc-bundle <target> <class> <req.json> [resp.json]` | PoC evidence bundle |
 | `/verify <bundle-dir>` | Independent re-verification |
+| `/waf-padding <target> <payload>` | WAF Payload Padding (inspection blind spot) |
+| `/waf-parser-bug <target> --bug-id <id> <payload>` | WAF Parser Bug exploitation |
+| `/waf-semantic <target> <waf-product> <payload>` | WAF Semantic Pollution (LLM-based WAF) |
+| `/waf-protocol <target> <websocket|grpc> <payload>` | WAF Protocol Bypass |
+| `/waf-fingerprint <target> [profile]` | WAF Fingerprint Spoofing |
+| `/waf-bypass-ladder <target> <payload>` | WAF Bypass Ladder (progressive levels) |
+| `/waf-autowafuzzer <target> <payload> [--rounds N]` | Multi-Agent WAF Fuzzing |
+| `/waf-rl-train <target>` | Train RL Policy Offline |
+| `/waf-rag-status` | RAG Sources Status |
+| `/waf-rag-add <source> <file>` | Add Local RAG Source |
+| `/plan-difficulty <target> <technique>` | TDA — Difficulty-Aware Planning |
+| `/mitre-tree [--technique <id>] [--tactic <name>]` | MITRE ATT&CK Task Tree |
+| `/safety-check <command> <target>` | Neuro-Symbolic Safety Check |
+| `/memory-write <type> <target> <key> <value>` | Write to Structured Memory |
+| `/memory-read <type> <target> <key>` | Read from Structured Memory |
+| `/memory-stats` | Structured Memory Stats |
+| `/rag-retrieve <query>` | RAG Knowledge Retrieval |
+| `/orchestrator-create <target> <role> <desc> <technique>` | Create Orchestration Task |
+| `/orchestrator-next [--role]` | Next Pending Task |
+| `/orchestrator-stats` | Orchestrator Stats |
+| `/orchestrator-export` | Export Orchestrator State |
 
 ## Agents (9 specialists)
 

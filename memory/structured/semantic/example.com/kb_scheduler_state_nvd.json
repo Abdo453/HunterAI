@@ -1,0 +1,19 @@
+{
+  "entry_id": "4feef606",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:scheduler_state:nvd",
+  "value": {
+    "item_id": "scheduler_state:nvd",
+    "title": "nvd",
+    "content": "{\"last_run\": 1792320303.7595592}",
+    "source": "scheduler_state",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3346999
+  },
+  "created_at": 1793141926.3346999,
+  "updated_at": 1793141926.3346999,
+  "access_count": 3,
+  "ttl_seconds": null
+}

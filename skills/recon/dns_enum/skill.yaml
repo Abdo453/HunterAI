@@ -1,4 +1,5 @@
 name: dns_enum
+class: DnsEnumSkill
 category: recon
 description: "DNS enumeration — A, AAAA, MX, NS, TXT, CNAME records via dig and dnsx"
 version: "1.0"

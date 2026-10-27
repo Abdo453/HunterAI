@@ -39,6 +39,8 @@ from agents.security_intelligence.provenance import ProvenanceTracker
 from agents.security_intelligence.research_cache import ResearchCache
 from agents.security_intelligence.learning_profile import LearningProfile
 from agents.security_intelligence.memory_manager import MemoryManager
+from agents.security_intelligence.failure_episodic_memory import FailureEpisodicMemory, FailureRecord
+from agents.security_intelligence.task_clue_cache import TaskClueCache, ClueEntry, TaskExecutionState
 
 __all__ = [
     "SecurityIntelligence",
@@ -74,5 +76,10 @@ __all__ = [
     "ProvenanceTracker",
     "ResearchCache",
     "LearningProfile",
-    "MemoryManager"
+    "MemoryManager",
+    "FailureEpisodicMemory",
+    "FailureRecord",
+    "TaskClueCache",
+    "ClueEntry",
+    "TaskExecutionState",
 ]

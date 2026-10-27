@@ -1,0 +1,19 @@
+{
+  "entry_id": "f8f2b572",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:25",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:25",
+    "title": "Race Conditions & Concurrent Request State Subversion Methodology",
+    "content": "{\"id\": \"portswigger_race_conditions\", \"item_type\": \"methodology\", \"topic\": \"race_conditions\", \"category\": \"PortSwigger Web Security: Race Conditions & Concurrency\", \"name\": \"Race Conditions & Concurrent Request State Subversion Methodology\", \"cwe\": \"CWE-362\", \"owasp_category\": \"A04:2021 - Insecure Design\", \"signals\": [\"limit_overrun_vulnerability\", \"multi_endpoint_race_window\", \"time_of_check_time_of_use_toctou\", \"single_use_token_reuse_under_load\", \"partial_state_subversion\"], \"verification_strategy\": \"Synchronize a burst of identical state-changing requests (e.g. 20-30 requests) using HTTP/2 single-packet multiplexing or TCP packet alignment. Measure if the application processes multiple transactions concurrently before the database commit or balance check finalizes.\", \"evidence_requirements\": [\"concurrent_status_200_cluster\", \"balance_deficit_proof\", \"multiple_redemption_evidence\"], \"tools\": [{\"tool\": \"Turbo Intruder\", \"cmd\": \"turbo_intruder.race_single_packet_engine(request, count=30)\", \"desc\": \"High-speed concurrent request engine sending requests within a single TCP packet\"}, {\"tool\": \"AutonomousBrain (Concurrency)\", \"cmd\": \"AutonomousBrain.probe_race_window(url, post_data)\", \"desc\": \"Audits atomic locking mechanisms on sensitive transaction endpoints\"}], \"remediation\": \"Use atomic database operations (e.g. UPDATE ... WHERE balance >= amount) or apply row-level locking (SELECT ... FOR UPDATE). Enforce distributed locks (e.g. Redis Redlock) during critical transaction sections.\", \"description\": \"PortSwigger Race Conditions labs cover limit overrun vulnerabilities (redeeming gift cards multiple times), multi-endpoint race conditions subverting email verification flows, and time-of-check time-of-use (TOCTOU) file race conditions.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3990583
+  },
+  "created_at": 1793141926.3990583,
+  "updated_at": 1793141926.3990583,
+  "access_count": 3,
+  "ttl_seconds": null
+}

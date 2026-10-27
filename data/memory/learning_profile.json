@@ -1,13 +1,13 @@
 {
   "user_id": "default_student",
   "mastery_scores": {
-    "Object-Level Access Control": 0.0
+    "Object-Level Access Control": 0.2
   },
   "recurring_mistakes": {
-    "Object-Level Access Control": 69
+    "Object-Level Access Control": 71
   },
   "preferred_level": "simple",
-  "total_quizzes_taken": 132,
-  "total_correct_quizzes": 63,
-  "last_active": 1793132177.4756842
+  "total_quizzes_taken": 136,
+  "total_correct_quizzes": 65,
+  "last_active": 1793141503.4820619
 }

@@ -1,0 +1,23 @@
+name: agent_reasoning_loop
+class: ReasoningLoopSkill
+category: agent_core
+description: "ReAct thinking loop: observe → think → act → reflect. Decides next tool/skill. Answers 'how the agent thinks'."
+version: "1.0"
+input:
+  - target: str
+  - phase: str
+  - findings_so_far: list
+  - goal: str
+output:
+  - thinking_trace.json
+  - next_action.json
+depends_on: []
+next_skills:
+  - agent_tool_planner
+  - live_host_detection
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 60
+max_retries: 1
+enabled: true

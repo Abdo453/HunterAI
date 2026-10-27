@@ -1,4 +1,5 @@
 name: subdomain_enum
+class: SubdomainEnumSkill
 category: recon
 description: "Enumerate subdomains using subfinder, assetfinder, findomain, and crt.sh"
 version: "1.0"

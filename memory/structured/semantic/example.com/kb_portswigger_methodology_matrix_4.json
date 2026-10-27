@@ -1,0 +1,19 @@
+{
+  "entry_id": "f47c35e3",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:4",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:4",
+    "title": "DOM-Based Sinks, Sources & DOM Clobbering Methodology",
+    "content": "{\"id\": \"portswigger_dom_vulns\", \"item_type\": \"methodology\", \"topic\": \"dom_vulnerabilities\", \"category\": \"PortSwigger Web Security: DOM-Based Vulnerabilities & DOM Clobbering\", \"name\": \"DOM-Based Sinks, Sources & DOM Clobbering Methodology\", \"cwe\": \"CWE-79\", \"owasp_category\": \"A03:2021 - Injection\", \"signals\": [\"window_location_source\", \"document_referrer_source\", \"innerhtml_sink\", \"eval_function_sink\", \"web_message_listener\", \"dom_clobbering_named_elements\"], \"verification_strategy\": \"Audit client-side JavaScript execution paths tracing data flows from tainted DOM sources (location.search, location.hash, postMessage) into execution sinks (innerHTML, eval, document.write, location.href). Test DOM clobbering using named HTML tags (id / name attributes on form, img, a tags).\", \"evidence_requirements\": [\"source_to_sink_trace\", \"clobbered_variable_name\", \"browser_js_callstack\"], \"tools\": [{\"tool\": \"BrowserAgent (DOM Inspector)\", \"cmd\": \"BrowserAgent.trace_dom_dataflow(url)\", \"desc\": \"Hooks DOM execution sinks and monitors taint propagation from URL parameters\"}, {\"tool\": \"katana\", \"cmd\": \"katana -u url -jc -kf all -headless\", \"desc\": \"Headless JS endpoint and script extraction engine\"}], \"remediation\": \"Avoid dangerous sinks like innerHTML and eval(). Use textContent, document.createElement, and safe DOM APIs. For postMessage listeners, strictly validate event.origin and event.source.\", \"description\": \"PortSwigger DOM vulnerability curriculum analyzes DOM XSS, DOM open redirection, DOM cookie manipulation, DOM clobbering overriding JavaScript global objects, and insecure Web Message (postMessage) handling.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3643966
+  },
+  "created_at": 1793141926.3643966,
+  "updated_at": 1793141926.3643966,
+  "access_count": 3,
+  "ttl_seconds": null
+}

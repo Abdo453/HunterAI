@@ -1,0 +1,19 @@
+{
+  "entry_id": "4cf8fa7e",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_master_intelligence:5",
+  "value": {
+    "item_id": "sqli_master_intelligence:5",
+    "title": "Bug Bounty Attack Surface: GraphQL, JSON APIs & WAF Filter Evasion",
+    "content": "{\"id\": \"intel_bugbounty_attack_surface\", \"topic\": \"sqli\", \"title\": \"Bug Bounty Attack Surface: GraphQL, JSON APIs & WAF Filter Evasion\", \"source_url\": \"https://bugbounty.info/Attack-Surface/Web/Injection/SQLi/\", \"prerequisites\": [\"graphql_queries\", \"waf_evasion\", \"parameter_pollution\"], \"signals\": [\"graphql_variable_injection\", \"comment_inline_bypass\", \"case_manipulation\", \"double_url_encoding\", \"whitespace_alternatives\"], \"verification_strategy\": \"When standard spaces or comments trigger WAF blocks (HTTP 403), substitute alternative whitespace characters (inline comments /**/, tabs %09, line feeds %0A) or test HTTP Parameter Pollution (HPP) across duplicate query parameters. In GraphQL endpoints, inject within variables rather than query strings.\", \"evidence_requirements\": [\"waf_bypass_status_200\", \"differential_behavior_with_encoded_probe\"], \"remediation\": \"Never rely solely on Web Application Firewalls (WAFs) for security. Implement parameterized queries at the application tier as the primary defense.\", \"description\": \"Bug bounty writeups and field research emphasize that modern web targets are protected by WAFs. Identifying SQLi requires understanding WAF normalization quirks: comment insertion (/*test*/), alternate whitespace (%09, %0a, %0d), case alteration (uNiOn SeLeCt), and HPP parameter splitting. GraphQL variables and REST JSON bodies frequently bypass perimeter regex rules.\"}",
+    "source": "sqli_master_intelligence",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.439085
+  },
+  "created_at": 1793141926.439085,
+  "updated_at": 1793141926.439085,
+  "access_count": 3,
+  "ttl_seconds": null
+}

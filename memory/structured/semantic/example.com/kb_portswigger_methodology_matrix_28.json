@@ -1,0 +1,19 @@
+{
+  "entry_id": "32ee5c43",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:28",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:28",
+    "title": "Web LLM & AI Agent Prompt Injection & Agency Audit Methodology",
+    "content": "{\"id\": \"portswigger_web_llm\", \"item_type\": \"methodology\", \"topic\": \"web_llm_attacks\", \"category\": \"PortSwigger Web Security: Web LLM Attacks\", \"name\": \"Web LLM & AI Agent Prompt Injection & Agency Audit Methodology\", \"cwe\": \"CWE-1426\", \"owasp_category\": \"LLM01:2025 - Prompt Injection\", \"signals\": [\"llm_agent_with_tool_calling\", \"direct_prompt_injection\", \"indirect_prompt_injection\", \"excessive_agency_in_tools\", \"insecure_output_handling_xss\"], \"verification_strategy\": \"Audit AI chat and automated agent workflows for prompt injection vulnerabilities: test direct injection overriding system prompts, and test indirect injection where untrusted external content (e.g. user profile, reviews, email) instructs the LLM to invoke tool functions unexpectedly.\", \"evidence_requirements\": [\"unauthorized_tool_execution_trace\", \"system_prompt_disclosure_snippet\", \"output_handling_xss_proof\"], \"tools\": [{\"tool\": \"AutonomousBrain (LLM Agency Auditor)\", \"cmd\": \"AutonomousBrain.audit_llm_flow(endpoint)\", \"desc\": \"Probes LLM tool-calling boundaries and evaluates input/output sanitization\"}, {\"tool\": \"garak\", \"cmd\": \"python3 -m garak --model_type rest --endpoint https://example.com/api/chat\", \"desc\": \"Automated LLM vulnerability scanner assessing prompt injection and hallucination bounds\"}], \"remediation\": \"Treat all LLM inputs and retrieved context as untrusted. Restrict LLM tool agency (e.g. requiring explicit human-in-the-loop authorization for sensitive actions). Sanitize and contextually encode LLM outputs before rendering in web views.\", \"description\": \"PortSwigger Web LLM attacks cover direct prompt injection manipulating assistant behavior, indirect prompt injection hiding instructions in web pages to trigger tool actions, and exploiting excessive agency where LLMs execute SQL or shell commands.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4040592
+  },
+  "created_at": 1793141926.4040592,
+  "updated_at": 1793141926.4040592,
+  "access_count": 3,
+  "ttl_seconds": null
+}

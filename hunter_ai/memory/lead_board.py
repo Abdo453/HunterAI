@@ -45,6 +45,15 @@ class LeadBoard:
     def __init__(self, memory_dir: str = "memory/leads"):
         self.memory_dir = Path(memory_dir)
         self.memory_dir.mkdir(parents=True, exist_ok=True)
+        # Lazy import to avoid circular dependency
+        self._structured: Any = None
+
+    @property
+    def structured(self):
+        if self._structured is None:
+            from hunter_ai.memory.structured_memory import StructuredMemory, MemoryType
+            self._structured = StructuredMemory()
+        return self._structured
 
     def _path(self, target: str) -> Path:
         safe = "".join(c if c.isalnum() or c in "-._" else "_" for c in target)
@@ -150,6 +159,7 @@ class LeadBoard:
         if not path.exists():
             return False
         updated = False
+        lead_record = None
         lines = []
         with open(path, "r", encoding="utf-8") as f:
             for line in f:
@@ -157,12 +167,22 @@ class LeadBoard:
                 if record["lead_id"] == lead_id:
                     record["status"] = status.value
                     record["updated_at"] = time.time()
+                    lead_record = record
                     updated = True
                 lines.append(json.dumps(record, ensure_ascii=False))
         if updated:
             with open(path, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
-            print(f"[Lead Board] Lead {lead_id} → {status.value}")
+            print(f"[Lead Board] Lead {lead_id} -> {status.value}")
+
+            # If killed, record failure in structured memory
+            if status == LeadStatus.KILLED and lead_record:
+                self.structured.record_failure(
+                    target=target,
+                    technique=lead_record.get("signal_type", "unknown"),
+                    reason="Lead killed by user or validation gate",
+                    evidence=lead_record.get("evidence", {}),
+                )
         return updated
 
     def remember(self, target: str, note: str) -> None:
@@ -179,7 +199,27 @@ class LeadBoard:
             evidence={"note": note},
         )
         self._append(target, lead)
+        # Also persist to semantic memory
+        from hunter_ai.memory.structured_memory import MemoryType
+        self.structured.write(
+            MemoryType.SEMANTIC,
+            target,
+            f"note:{lead.lead_id}",
+            {"note": note, "signal_type": "remember"},
+            ttl_seconds=None,
+        )
         print(f"[Lead Board] Remembered: {note[:80]}")
+
+
+    def get_failures(self, target: str) -> List[Dict[str, Any]]:
+        """Retrieve failure-episodic memory entries for a target."""
+        from hunter_ai.memory.structured_memory import MemoryType
+        entries = self.structured.get_failures(target)
+        return [e.value for e in entries]
+
+    def has_failure(self, target: str, technique: str) -> bool:
+        """Check if a technique has previously failed for this target."""
+        return self.structured.has_failure(target, technique)
 
 
 def main():

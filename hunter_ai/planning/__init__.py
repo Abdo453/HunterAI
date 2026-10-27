@@ -1,0 +1,1 @@
+"""HunterAI Planning modules — Difficulty-Aware Planning & MITRE ATT&CK tree."""

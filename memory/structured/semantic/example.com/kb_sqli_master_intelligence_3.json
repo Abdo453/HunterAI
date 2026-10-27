@@ -1,0 +1,19 @@
+{
+  "entry_id": "c5f6574b",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_master_intelligence:3",
+  "value": {
+    "item_id": "sqli_master_intelligence:3",
+    "title": "TryHackMe SQLi Fundamentals: In-Band, Inferential & Out-of-Band Mechanics",
+    "content": "{\"id\": \"intel_tryhackme_fundamentals\", \"topic\": \"sqli\", \"title\": \"TryHackMe SQLi Fundamentals: In-Band, Inferential & Out-of-Band Mechanics\", \"source_url\": \"https://tryhackme.com/room/sqlinjectionlm\", \"prerequisites\": [\"sql_basics\", \"network_protocols\"], \"signals\": [\"in_band_union\", \"blind_boolean_differential\", \"time_delay_pg_sleep\", \"out_of_band_dns_lookup\"], \"verification_strategy\": \"Classify injection surface into three distinct tiers: (1) In-band (direct reflection/error in response), (2) Inferential / Blind (boolean content differential or statistical time delay), (3) Out-of-band / OAST (triggering external DNS/HTTP lookups via database built-ins like utl_http or xp_dirtree).\", \"evidence_requirements\": [\"injection_tier_classification\", \"reproducible_inferential_delta\", \"dns_interaction_id\"], \"remediation\": \"Apply defense-in-depth: Parameterized queries, restrictive database user permissions, and egress network filtering to block database servers from initiating outbound DNS/HTTP requests.\", \"description\": \"TryHackMe educational taxonomy divides SQL Injection into In-Band, Blind/Inferential, and Out-of-Band (OAST). Provides foundational methodology for selecting the appropriate experiment based on observable response characteristics.\"}",
+    "source": "sqli_master_intelligence",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4340897
+  },
+  "created_at": 1793141926.4340897,
+  "updated_at": 1793141926.4340897,
+  "access_count": 3,
+  "ttl_seconds": null
+}

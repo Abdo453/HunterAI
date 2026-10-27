@@ -1,4 +1,5 @@
 name: tech_detection
+class: TechDetectionSkill
 category: recon
 description: "Detect web technologies, frameworks, CMS, and WAF using whatweb and httpx"
 version: "1.0"

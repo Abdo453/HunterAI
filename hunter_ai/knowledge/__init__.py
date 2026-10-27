@@ -1,0 +1,1 @@
+"""HunterAI Knowledge Base — RAG engine for semantic retrieval."""

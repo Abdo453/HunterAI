@@ -1,0 +1,19 @@
+{
+  "entry_id": "e8959cf1",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:4",
+  "value": {
+    "item_id": "recon_master_methodology:4",
+    "title": "Sensitive Content Discovery & Backup Artifact Auditing",
+    "content": "{\"id\": \"recon_meth_005\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Sensitive Content Discovery & Backup Artifact Auditing\", \"prerequisites\": [\"http_status_codes\", \"differential_analysis\"], \"signals\": [\"sensitive_file_extension\", \"backup_artifacts\", \"dot_files\", \"admin_portal\", \"git_exposure\"], \"verification_strategy\": \"Conduct dictionary-based probing for high-risk configuration artifacts (.env, .git, .bak, .sql, .dump). Validate true findings using content-length and content-type differentiation to eliminate soft-404 false positives.\", \"evidence_requirements\": [\"artifact_status_200_proof\", \"magic_bytes_or_content_hash\", \"non_default_response_body\"], \"remediation_pattern\": \"Block public access to hidden dot-files and backup file extensions at the web server / reverse proxy layer (e.g., Nginx deny rules).\", \"description\": \"Identification of exposed backup archives, database dumps, environment variable files, and source code control repositories accidentally placed in web roots.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4150667
+  },
+  "created_at": 1793141926.4150667,
+  "updated_at": 1793141926.4150667,
+  "access_count": 3,
+  "ttl_seconds": null
+}

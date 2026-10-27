@@ -1,0 +1,19 @@
+{
+  "entry_id": "a27a25b3",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:7",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:7",
+    "title": "Server-Side Request Forgery (SSRF) & Cloud Metadata Defense Methodology",
+    "content": "{\"id\": \"portswigger_ssrf\", \"item_type\": \"methodology\", \"topic\": \"ssrf\", \"category\": \"PortSwigger Web Security: Server-Side Request Forgery (SSRF)\", \"name\": \"Server-Side Request Forgery (SSRF) & Cloud Metadata Defense Methodology\", \"cwe\": \"CWE-918\", \"owasp_category\": \"A10:2021 - Server-Side Request Forgery\", \"signals\": [\"url_parameter_input\", \"webhook_creation_endpoint\", \"image_fetch_from_url\", \"pdf_generator_url_parameter\", \"proxy_forwarding_parameter\"], \"verification_strategy\": \"Test input parameters accepting URLs against loopback variations (127.0.0.1, 2130706433, [::1], 127.1), cloud metadata representations (169.254.169.254, 0xA9FEA9FE), and alternative URI schemes. Validate if the server follows redirects to internal network addresses.\", \"evidence_requirements\": [\"internal_service_response_banner\", \"response_timing_differential\", \"cloud_metadata_token_signature\"], \"tools\": [{\"tool\": \"SSRFSkill\", \"cmd\": \"SSRFSkill.run(url, param)\", \"desc\": \"Multi-tier IP encoding & cloud metadata matrix probe\"}, {\"tool\": \"SSRFFilterBypasser\", \"cmd\": \"SSRFFilterBypasser.get_all_bypasses('http://127.0.0.1/admin')\", \"desc\": \"Generates 15+ canonical IP representations (decimal, octal, hex, DNS rebinding)\"}], \"remediation\": \"Enforce strict allowlists of permissible target domains and IP ranges. Explicitly drop connections to RFC 1918 private subnets and link-local 169.254.169.254. Disable following redirects, and resolve DNS once before connecting (preventing DNS rebinding).\", \"description\": \"PortSwigger SSRF labs investigate basic SSRF against local administrative interfaces, SSRF bypassing blacklist filters using alternative IP encodings, whitelist filter bypasses using URL credentials (@), and SSRF via Open Redirection.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3693998
+  },
+  "created_at": 1793141926.3693998,
+  "updated_at": 1793141926.3693998,
+  "access_count": 3,
+  "ttl_seconds": null
+}

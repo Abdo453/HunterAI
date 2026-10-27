@@ -1,0 +1,19 @@
+name: token_scan
+class: TokenScanSkill
+category: web3
+description: "فحص التوكنات للأنماط المشبوهة (Rug Pull heuristics)"
+version: "1.0"
+input:
+  - target: str
+  - address: str
+  - source: str  # كود Solidity (اختياري)
+output:
+  - token_scan.json
+depends_on: []
+next_skills: []
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 40
+max_retries: 1
+enabled: true

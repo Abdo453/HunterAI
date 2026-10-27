@@ -1,0 +1,19 @@
+{
+  "entry_id": "360c8bf8",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:learning_state:last_run",
+  "value": {
+    "item_id": "learning_state:last_run",
+    "title": "last_run",
+    "content": "{\"cisa_kev\": \"2026-10-18T10:44:40.140173\", \"nvd\": \"2026-10-18T10:44:43.371694\", \"medium\": \"2026-10-18T10:44:49.835622\", \"payloads\": \"2026-10-18T10:44:56.261067\", \"portswigger\": \"2026-10-18T10:44:58.897811\", \"exploit_db\": \"2026-10-18T10:45:01.722885\"}",
+    "source": "learning_state",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3266978
+  },
+  "created_at": 1793141926.3266978,
+  "updated_at": 1793141926.3266978,
+  "access_count": 3,
+  "ttl_seconds": null
+}

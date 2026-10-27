@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 # Root of skills directory
 SKILLS_ROOT = Path(__file__).parent.parent / "skills"
 
+# مجلدات ليست مهارات قابلة للتنفيذ (نفسها بنية السجل).
+# تُستثنى من الاكتشاف حتى لا تُدرج كـ skill وتراها غير قابلة للإنشاء.
+_EXCLUDED_SKILL_DIRS = {
+    (Path("agent_core") / "skill_registry").as_posix(),
+}
+
 
 class SkillMeta:
     """Metadata لكل Skill محمّلة من skill.yaml"""
@@ -52,7 +58,22 @@ class SkillMeta:
             return None
 
         try:
-            module_name = f"skills.{self.category}.{self.name}"
+            # مسار الوحدة الحقيقي (skills.<cat>.<name>.skill) — نفسه الذي
+            # يستخدمه skills/agent_core/skill_registry.
+            #
+            # مهم: استخدام "skills.<cat>.<name>" كان يسجّل *محتوى skill.py*
+            # في sys.modules تحت مفتاح الحزمة، فيستبدل الحزمة بوحدة ويكسر
+            # أي استيراد لاحق لـ skills.<cat>.<name>.skill.
+            rel_pkg = self.skill_file.parent.relative_to(SKILLS_ROOT).as_posix().replace("/", ".")
+            pkg_name = f"skills.{rel_pkg}"
+            module_name = f"{pkg_name}.skill"
+
+            # نضمن وجود الحزمة الأصل في sys.modules قبل تحميل child
+            try:
+                importlib.import_module(pkg_name)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(f"[SkillRegistry] parent package {pkg_name} not importable: {exc}")
+
             spec = importlib.util.spec_from_file_location(module_name, skill_py)
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
@@ -138,6 +159,10 @@ class SkillRegistry:
 
         for yaml_file in sorted(self.root.rglob("skill.yaml")):
             try:
+                rel_dir = yaml_file.parent.relative_to(self.root).as_posix()
+                if rel_dir in _EXCLUDED_SKILL_DIRS:
+                    continue
+
                 with open(yaml_file, "r", encoding="utf-8") as fh:
                     data = yaml.safe_load(fh)
 

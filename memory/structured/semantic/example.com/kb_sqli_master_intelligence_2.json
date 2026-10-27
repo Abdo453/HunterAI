@@ -1,0 +1,19 @@
+{
+  "entry_id": "2ea515f3",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_master_intelligence:2",
+  "value": {
+    "item_id": "sqli_master_intelligence:2",
+    "title": "Cypher Graph Database Injection (Neo4j / GraphDB)",
+    "content": "{\"id\": \"intel_cypher_graph_injection\", \"topic\": \"sqli\", \"title\": \"Cypher Graph Database Injection (Neo4j / GraphDB)\", \"source_url\": \"https://pentester.land/blog/cypher-injection-cheatsheet/#what-is-cypher\", \"prerequisites\": [\"graph_databases\", \"cypher_query_syntax\", \"nosql_injection\"], \"signals\": [\"neo4j_backend\", \"graph_traversal\", \"cypher_syntax_error\", \"match_clause\"], \"verification_strategy\": \"Inject Cypher boolean escape sequences (e.g. ' OR 1=1 OR ''=') or quote delimiters into graph search queries. Look for Cypher-specific syntax errors (SyntaxException, Invalid input) or full node collection disclosure via RETURN clause manipulation.\", \"evidence_requirements\": [\"cypher_syntax_error_signature\", \"graph_node_differential_count\", \"unauthorized_node_property_leak\"], \"remediation\": \"Utilize parameterized Cypher queries through official Neo4j drivers ($param syntax). Never concatenate untrusted strings into MATCH, WHERE, or CALL clauses.\", \"description\": \"Cypher is the declarative graph query language used by Neo4j. Similar to SQL injection, Cypher injection occurs when untrusted user input is directly concatenated into Cypher query strings. Attackers can alter graph traversals, bypass authentication nodes, or extract sensitive graph database properties using clauses like ' OR 1=1 RETURN u-- or UNION MATCH.\"}",
+    "source": "sqli_master_intelligence",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.432091
+  },
+  "created_at": 1793141926.432091,
+  "updated_at": 1793141926.432091,
+  "access_count": 3,
+  "ttl_seconds": null
+}

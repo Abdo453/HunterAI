@@ -1,4 +1,5 @@
 name: smb_enum
+class: SmbEnumSkill
 category: recon
 description: "Enumerate SMB/NetBIOS/AD surface (signing, SMBv1, null sessions, shares, users, domain) using netexec, enum4linux-ng, or smbclient"
 version: "1.0"

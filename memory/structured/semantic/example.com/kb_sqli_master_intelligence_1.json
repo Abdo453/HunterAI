@@ -1,0 +1,19 @@
+{
+  "entry_id": "65b0302f",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_master_intelligence:1",
+  "value": {
+    "item_id": "sqli_master_intelligence:1",
+    "title": "HackerOne Disclosed Top SQLi: Header-Based & Second-Order Injection Vectors",
+    "content": "{\"id\": \"intel_hackerone_top_sqli\", \"topic\": \"sqli\", \"title\": \"HackerOne Disclosed Top SQLi: Header-Based & Second-Order Injection Vectors\", \"source_url\": \"https://github.com/reddelexc/hackerone-reports/blob/master/docs/tops_by_bug_type/TOPSQLI.md\", \"prerequisites\": [\"http_headers\", \"sql_concatenation\", \"second_order_execution\"], \"signals\": [\"x_forwarded_for\", \"user_agent_logging\", \"client_ip_header\", \"json_extract_operator\", \"second_order_deferred_execution\"], \"verification_strategy\": \"Probe non-standard HTTP request headers (X-Forwarded-For, Client-IP, User-Agent) utilized in audit logging scripts with non-destructive boolean expressions or sleep probes. For second-order vectors, submit stored profile data and monitor subsequent administrative reporting endpoints.\", \"evidence_requirements\": [\"header_dependent_differential\", \"audit_log_sql_syntax_error\", \"deferred_execution_divergence\"], \"remediation\": \"Treat all HTTP request headers as untrusted user input. Bind client IP, User-Agent, and session telemetry using parameterized queries before inserting into security audit logs.\", \"description\": \"Analysis of high-bounty HackerOne disclosed reports reveals that SQLi frequently exists outside ordinary GET/POST query parameters. Common enterprise vectors include background analytics logging headers, JSON operators in PostgreSQL (->>) or MySQL (JSON_EXTRACT) concatenated without sanitization, and second-order injections where data stored during registration triggers an injection when batch administrative jobs run.\"}",
+    "source": "sqli_master_intelligence",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4300883
+  },
+  "created_at": 1793141926.4310884,
+  "updated_at": 1793141926.4310884,
+  "access_count": 3,
+  "ttl_seconds": null
+}

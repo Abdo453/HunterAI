@@ -1,4 +1,5 @@
 name: triage_gate
+class: TriageGateSkill
 category: analysis
 description: "Run the 7-Question Gate and VRT / CWE taxonomy validation on all mission findings"
 version: "1.0"

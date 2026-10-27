@@ -1,4 +1,5 @@
 name: network_intelligence
+class: NetworkIntelligenceSkill
 category: browser
 description: "Intercept live browser XHR, Fetch, and background API requests to build dynamic API surface maps"
 version: "1.0"

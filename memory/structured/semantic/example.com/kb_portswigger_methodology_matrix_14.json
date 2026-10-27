@@ -1,0 +1,19 @@
+{
+  "entry_id": "3d6d7ca6",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:14",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:14",
+    "title": "Cross-Site WebSocket Hijacking (CSWSH) & Message Tampering Methodology",
+    "content": "{\"id\": \"portswigger_websockets\", \"item_type\": \"methodology\", \"topic\": \"websockets\", \"category\": \"PortSwigger Web Security: WebSockets Security\", \"name\": \"Cross-Site WebSocket Hijacking (CSWSH) & Message Tampering Methodology\", \"cwe\": \"CWE-1385\", \"owasp_category\": \"A01:2021 - Broken Access Control\", \"signals\": [\"ws_upgrade_without_csrf_protection\", \"origin_header_not_validated_in_ws\", \"unencrypted_ws_protocol\", \"unsanitized_ws_message_rendering\", \"ws_sql_or_xss_injection\"], \"verification_strategy\": \"Inspect WebSocket handshake requests (GET /chat with Upgrade: websocket). Verify whether the handshake checks the Origin header or includes anti-CSRF tokens. Audit bidirectional frames for SQL injection, XSS, or unauthorized message manipulation.\", \"evidence_requirements\": [\"cross_origin_handshake_acceptance\", \"origin_reflection_in_ws\", \"tainted_ws_frame_trace\"], \"tools\": [{\"tool\": \"BrowserAgent (WebSocket Audit)\", \"cmd\": \"BrowserAgent.monitor_websockets(url)\", \"desc\": \"Interprets client-side WebSocket messages and evaluates origin validation\"}, {\"tool\": \"wscat\", \"cmd\": \"wscat -c 'wss://example.com/chat' -H 'Origin: https://attacker.com'\", \"desc\": \"Tests cross-origin WebSocket handshake acceptance\"}], \"remediation\": \"Validate the Origin header strictly during the WebSocket upgrade handshake. Implement anti-CSRF tokens in the initial handshake request or require unique authentication tokens per session.\", \"description\": \"PortSwigger WebSockets labs cover intercepting and modifying WebSocket messages, Cross-Site WebSocket Hijacking (CSWSH) to exfiltrate private conversation history, and exploiting XSS via WebSocket message rendering.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.379728
+  },
+  "created_at": 1793141926.379728,
+  "updated_at": 1793141926.379728,
+  "access_count": 3,
+  "ttl_seconds": null
+}

@@ -1,4 +1,5 @@
 name: form_intelligence
+class: FormIntelligenceSkill
 category: browser
 description: "Map all web application forms (Login, Register, Reset, Search, Upload) and input fields into an interactive Action Matrix"
 version: "1.0"

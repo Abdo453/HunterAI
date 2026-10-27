@@ -1,0 +1,19 @@
+{
+  "entry_id": "2a853c97",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:8",
+  "value": {
+    "item_id": "recon_master_methodology:8",
+    "title": "Public Repository OSINT & Secret Auditing (GitHub Dorking)",
+    "content": "{\"id\": \"recon_meth_009\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Public Repository OSINT & Secret Auditing (GitHub Dorking)\", \"prerequisites\": [\"git_architecture\", \"secret_scanning\"], \"signals\": [\"github_code_search\", \"hardcoded_credentials\", \"api_key_regex\", \"trufflehog_verified\"], \"verification_strategy\": \"Search public code hosting platforms (GitHub, GitLab) for company domains paired with high-entropy credential keywords (API_KEY, Credentials, secret, password) using automated tools and tokenized queries.\", \"evidence_requirements\": [\"repository_commit_url\", \"verified_api_token_entropy\", \"active_secret_verification\"], \"remediation_pattern\": \"Integrate pre-commit git hooks (git-secrets, detect-secrets, TruffleHog) in developer pipelines, rotate leaked credentials immediately, and enforce cloud secret managers.\", \"description\": \"Detection of hardcoded secrets, private cryptographic keys, and backend API credentials accidentally published to public version control repositories by developers.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4220667
+  },
+  "created_at": 1793141926.4220667,
+  "updated_at": 1793141926.4220667,
+  "access_count": 3,
+  "ttl_seconds": null
+}

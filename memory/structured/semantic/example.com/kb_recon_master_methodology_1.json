@@ -1,0 +1,19 @@
+{
+  "entry_id": "30803acc",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:1",
+  "value": {
+    "item_id": "recon_master_methodology:1",
+    "title": "Alive Host Verification & Web Server Fingerprinting",
+    "content": "{\"id\": \"recon_meth_002\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Alive Host Verification & Web Server Fingerprinting\", \"prerequisites\": [\"http_protocols\", \"recon_meth_001\"], \"signals\": [\"alive_hosts\", \"http_status_codes\", \"content_length_delta\", \"title_tag_extraction\", \"server_header\"], \"verification_strategy\": \"Probe discovered subdomains across HTTP/HTTPS ports (80, 443, 8080, 8443), record response status codes (200, 301, 401, 403, 404), extract page titles and technology fingerprints, and cluster responsive targets.\", \"evidence_requirements\": [\"status_code_matrix\", \"web_server_fingerprint\", \"redirection_chain_log\"], \"remediation_pattern\": \"Remove default server signature headers (Server, X-Powered-By) and decommission unmaintained development or testing web servers.\", \"description\": \"Transforms raw domain lists into verified web applications. Differentiates between live endpoints, redirection hops, access-restricted zones (401/403), and decommissioned assets.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.410077
+  },
+  "created_at": 1793141926.410077,
+  "updated_at": 1793141926.410077,
+  "access_count": 3,
+  "ttl_seconds": null
+}

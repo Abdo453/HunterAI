@@ -1,0 +1,11 @@
+{
+  "entry_id": "68335e20",
+  "memory_type": "working",
+  "target": "example.com",
+  "key": "task",
+  "value": "recon",
+  "created_at": 1793141926.0717754,
+  "updated_at": 1793141926.0717754,
+  "access_count": 1,
+  "ttl_seconds": null
+}

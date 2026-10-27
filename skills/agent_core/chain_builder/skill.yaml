@@ -1,0 +1,21 @@
+name: agent_chain_builder
+class: ChainBuilderSkill
+category: agent_core
+description: "Builds A→B→C exploit chains from confirmed findings (impact-first chaining)."
+version: "1.0"
+input:
+  - target: str
+  - findings: list
+output:
+  - exploit_chains.json
+depends_on:
+  - validation_gate
+next_skills:
+  - validation_gate
+  - report_generator
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 40
+max_retries: 1
+enabled: true

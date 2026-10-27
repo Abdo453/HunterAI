@@ -1,0 +1,19 @@
+{
+  "entry_id": "091954a5",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:24",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:24",
+    "title": "GraphQL API Introspection, Batching & Authorization Methodology",
+    "content": "{\"id\": \"portswigger_graphql\", \"item_type\": \"methodology\", \"topic\": \"graphql\", \"category\": \"PortSwigger Web Security: GraphQL API Vulnerabilities\", \"name\": \"GraphQL API Introspection, Batching & Authorization Methodology\", \"cwe\": \"CWE-200\", \"owasp_category\": \"A01:2021 - Broken Access Control\", \"signals\": [\"graphql_endpoint_exposed\", \"schema_introspection_enabled\", \"batching_query_supported\", \"circular_relation_dos\", \"missing_field_level_authorization\", \"alias_overload\"], \"verification_strategy\": \"Send a standard introspection query ({__schema{types{name}}}) to map available queries, mutations, and hidden fields. Test query batching (sending multiple operations in a single request array) to test for rate-limit bypasses on authentication mutations. Test object-level authorization on exposed mutations.\", \"evidence_requirements\": [\"introspection_schema_dump\", \"batch_execution_response\", \"unauthorized_field_disclosure\"], \"tools\": [{\"tool\": \"clairvoyance\", \"cmd\": \"clairvoyance -o schema.json https://example.com/graphql\", \"desc\": \"Recovers GraphQL API schemas even when introspection is partially restricted\"}, {\"tool\": \"httpx\", \"cmd\": \"httpx -u url/graphql -probe -d '{\\\"query\\\":\\\"{__typename}\\\"}'\", \"desc\": \"Detects active GraphQL endpoints and schema reflection\"}], \"remediation\": \"Disable schema introspection in production environments. Enforce query depth and complexity limits to prevent resource exhaustion. Apply rigorous object-level access control checks within resolver functions.\", \"description\": \"PortSwigger GraphQL labs explore uncovering hidden GraphQL endpoints, dumping schema documentation via introspection, bypassing brute-force defenses using query batching, and exploiting CSRF over GraphQL.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3970597
+  },
+  "created_at": 1793141926.3970597,
+  "updated_at": 1793141926.3970597,
+  "access_count": 3,
+  "ttl_seconds": null
+}

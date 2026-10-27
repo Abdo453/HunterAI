@@ -1,0 +1,19 @@
+{
+  "entry_id": "05f492ee",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:11",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:11",
+    "title": "Directory Traversal & Local File Inclusion (LFI) Methodology",
+    "content": "{\"id\": \"portswigger_path_traversal\", \"item_type\": \"methodology\", \"topic\": \"path_traversal\", \"category\": \"PortSwigger Web Security: Directory Traversal & LFI\", \"name\": \"Directory Traversal & Local File Inclusion (LFI) Methodology\", \"cwe\": \"CWE-22\", \"owasp_category\": \"A01:2021 - Broken Access Control\", \"signals\": [\"filename_parameter\", \"filepath_parameter\", \"image_load_handler\", \"dot_dot_slash_filtering\", \"null_byte_processing\", \"absolute_path_retrieval\"], \"verification_strategy\": \"Probe file loading parameters with traversal sequences (../../../../etc/passwd or C:\\\\Windows\\\\win.ini), URL-encoded variants (%2e%2e%2f, %252e%252e%252f), nested traversal (....//....//), and absolute path references. Look for known standard system markers (e.g. root:x:0:0 or [fonts]).\", \"evidence_requirements\": [\"known_system_marker_reflection\", \"status_200_with_file_length\", \"path_normalization_evidence\"], \"tools\": [{\"tool\": \"LFISkill\", \"cmd\": \"LFISkill.run(url, param)\", \"desc\": \"Deterministic path traversal validator testing canonical and encoded sequences\"}, {\"tool\": \"dotdotpwn\", \"cmd\": \"dotdotpwn -m http -h example.com -k 'root:'\", \"desc\": \"Traversal fuzzer assessing operating system path traversal sanitization\"}], \"remediation\": \"Avoid passing user input directly to filesystem APIs. Resolve canonical paths using functions like realpath() or Path.toRealPath() and assert that the resulting path begins with the designated base storage directory.\", \"description\": \"PortSwigger Directory Traversal labs explore simple traversals, traversals blocked by absolute path requirements, stripped traversal sequences, URL encoding bypasses, expected prefix validation, and null byte truncation.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3754122
+  },
+  "created_at": 1793141926.3754122,
+  "updated_at": 1793141926.3754122,
+  "access_count": 3,
+  "ttl_seconds": null
+}

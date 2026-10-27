@@ -1,0 +1,18 @@
+name: cloud_recon
+class: CloudReconSkill
+category: analysis
+description: "اكتشاف حاويات سحابة عامة مكشوفة (S3، Azure Blob، GCS)"
+version: "1.0"
+input:
+  - target: str
+output:
+  - cloud_recon.json
+depends_on: []
+next_skills:
+  - validation_gate
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 60
+max_retries: 1
+enabled: true

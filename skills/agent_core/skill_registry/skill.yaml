@@ -1,0 +1,18 @@
+name: skill_registry
+class: SkillRegistry
+category: agent_core
+description: "سجل مهارات ديناميكي يكتشف المهارات من skill.yaml وينفّذها بالاسم"
+version: "1.0"
+input:
+  - name: str
+  - ctx: SkillContext
+output:
+  - skill_result
+depends_on: []
+next_skills: []
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 30
+max_retries: 1
+enabled: true

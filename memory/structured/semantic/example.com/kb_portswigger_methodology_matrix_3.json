@@ -1,0 +1,19 @@
+{
+  "entry_id": "91ac80a0",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:3",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:3",
+    "title": "Clickjacking & Frame Framing Resistance Audit Methodology",
+    "content": "{\"id\": \"portswigger_clickjacking\", \"item_type\": \"methodology\", \"topic\": \"clickjacking\", \"category\": \"PortSwigger Web Security: Clickjacking (UI Redressing)\", \"name\": \"Clickjacking & Frame Framing Resistance Audit Methodology\", \"cwe\": \"CWE-1021\", \"owasp_category\": \"A05:2021 - Security Misconfiguration\", \"signals\": [\"missing_x_frame_options\", \"missing_frame_ancestors_csp\", \"frame_options_allow_all\", \"frame_bust_script_bypassable\", \"sensitive_action_prefilled\"], \"verification_strategy\": \"Audit HTTP response headers of authenticated endpoints for X-Frame-Options (DENY/SAMEORIGIN) and Content-Security-Policy (frame-ancestors 'none'/'self'). Construct a benign framing iframe in Firefox to verify whether rendering is blocked.\", \"evidence_requirements\": [\"header_inspection_log\", \"iframe_render_proof\", \"dom_element_position_map\"], \"tools\": [{\"tool\": \"BrowserAgent (Firefox)\", \"cmd\": \"BrowserAgent.check_frameable(url)\", \"desc\": \"Loads URL within cross-origin iframe inside Firefox-esr to verify framing denial\"}, {\"tool\": \"httpx\", \"cmd\": \"httpx -u 'https://example.com/account' -probe-headers 'X-Frame-Options,Content-Security-Policy'\", \"desc\": \"Checks presence of defensive framing control headers\"}], \"remediation\": \"Configure Content-Security-Policy: frame-ancestors 'self'; or X-Frame-Options: DENY. Protect sensitive workflows with re-authentication or multi-factor confirmation.\", \"description\": \"PortSwigger Clickjacking labs explore basic iframe UI overlays, clickjacking with prefilled form inputs, frame-busting script bypasses via sandbox attributes, and multi-step clickjacking exploiting drag-and-drop mechanics.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.363388
+  },
+  "created_at": 1793141926.363388,
+  "updated_at": 1793141926.363388,
+  "access_count": 3,
+  "ttl_seconds": null
+}

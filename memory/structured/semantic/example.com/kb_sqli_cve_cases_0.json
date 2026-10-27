@@ -1,0 +1,19 @@
+{
+  "entry_id": "e42d29b3",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:sqli_cve_cases:0",
+  "value": {
+    "item_id": "sqli_cve_cases:0",
+    "title": "item_0",
+    "content": "{\"cve_id\": \"CVE-2023-34362\", \"software\": \"Progress MOVEit Transfer\", \"cvss\": 9.8, \"vulnerability_type\": \"SQL_INJECTION\", \"cwe\": \"CWE-89\", \"affected_versions\": \"Before 2021.0.6, 2021.1.4, 2022.0.4, 2022.1.5, 2023.0.1\", \"architecture_root_cause\": \"The web application improperly handled database queries in human.aspx via user-controlled HTTP request headers (specifically the X-siLock-Session-Info header or guestaccess.aspx parameters) which were directly concatenated into dynamic SQL queries without parameterized binding.\", \"detection_signals\": [\"moveit_transfer_login\", \"human.aspx\", \"guestaccess.aspx\", \"custom_header_processing\", \"database_query_header_leak\"], \"verification_strategy\": \"Send controlled, non-destructive probe verifying whether custom session header values alter database lookup behavior or generate differential response timing.\", \"evidence_requirements\": [\"header_influence_differential\", \"unauthenticated_response_anomaly_hash\"], \"remediation\": \"Apply vendor security patch; replace dynamic string interpolation in session handling with strongly-typed parameterized prepared statements; enforce strict header sanitization.\"}",
+    "source": "sqli_cve_cases",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3502257
+  },
+  "created_at": 1793141926.3502257,
+  "updated_at": 1793141926.3502257,
+  "access_count": 3,
+  "ttl_seconds": null
+}

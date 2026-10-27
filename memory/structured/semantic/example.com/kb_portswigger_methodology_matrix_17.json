@@ -1,0 +1,19 @@
+{
+  "entry_id": "ba8fff14",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:17",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:17",
+    "title": "Information Disclosure, Debug Endpoints & Repository Exposure Methodology",
+    "content": "{\"id\": \"portswigger_information_disclosure\", \"item_type\": \"methodology\", \"topic\": \"information_disclosure\", \"category\": \"PortSwigger Web Security: Information Disclosure\", \"name\": \"Information Disclosure, Debug Endpoints & Repository Exposure Methodology\", \"cwe\": \"CWE-200\", \"owasp_category\": \"A05:2021 - Security Misconfiguration\", \"signals\": [\"stack_trace_in_500_response\", \"exposed_git_directory\", \"debug_page_accessible\", \"backup_file_extensions\", \"phpinfo_accessible\", \"verbose_error_messages\"], \"verification_strategy\": \"Fuzz common sensitive files (.git/HEAD, .env, server-status, phpinfo.php, backup.sql, .DS_Store). Induce intentional 400/500 errors via malformed HTTP methods or parameters to inspect whether verbose error traces leak framework versions, source code, or internal database schemas.\", \"evidence_requirements\": [\"exposed_file_content_signature\", \"stack_trace_file_paths\", \"internal_ip_or_version_leak\"], \"tools\": [{\"tool\": \"gobuster (Sensitive files)\", \"cmd\": \"gobuster dir -u url -w /wordlists/sensitive_files.txt -x env,git,bak,sql\", \"desc\": \"Fuzzes sensitive administrative and source artifact paths\"}, {\"tool\": \"nuclei (Exposures)\", \"cmd\": \"nuclei -u url -t /nuclei-templates/http/exposures/ -silent\", \"desc\": \"Automated detection of exposed configuration files, private keys, and git repos\"}], \"remediation\": \"Disable detailed error messages and debug mode in production environments. Configure web servers to block access to hidden files and directories (e.g. .git, .env) and enforce custom generic error pages.\", \"description\": \"PortSwigger Information Disclosure explores source code leaks in backup files, verbose error messages revealing database table structures, debug pages exposing API keys, and exploiting exposed Git directories to rebuild source trees.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.385738
+  },
+  "created_at": 1793141926.385738,
+  "updated_at": 1793141926.385738,
+  "access_count": 3,
+  "ttl_seconds": null
+}

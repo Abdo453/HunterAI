@@ -1,0 +1,19 @@
+{
+  "entry_id": "c2850da0",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:23",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:23",
+    "title": "Client-Side & Server-Side Prototype Pollution Methodology",
+    "content": "{\"id\": \"portswigger_prototype_pollution\", \"item_type\": \"methodology\", \"topic\": \"prototype_pollution\", \"category\": \"PortSwigger Web Security: Prototype Pollution\", \"name\": \"Client-Side & Server-Side Prototype Pollution Methodology\", \"cwe\": \"CWE-1321\", \"owasp_category\": \"A03:2021 - Injection\", \"signals\": [\"proto_property_in_json\", \"constructor_prototype_in_query\", \"recursive_object_merge\", \"client_side_prototype_pollution_sink\", \"server_side_nodejs_child_process\"], \"verification_strategy\": \"Inject benign property mutations (__proto__[canary]=true or constructor[prototype][canary]=true) into query strings, hash fragments, or JSON POST bodies. In client-side testing, evaluate if Object.prototype.canary evaluates to true in the console. In server-side Node.js testing, observe differential response or status.\", \"evidence_requirements\": [\"polluted_property_reflection\", \"object_prototype_canary_proof\", \"dom_gadget_trigger_trace\"], \"tools\": [{\"tool\": \"BrowserAgent (Prototype Pollution)\", \"cmd\": \"BrowserAgent.probe_prototype_pollution(url)\", \"desc\": \"Fuzzes query parameters for prototype injection and audits Object.prototype for new properties\"}, {\"tool\": \"DOM Invader (Burp Suite)\", \"cmd\": \"DOMInvader.scan_prototype_pollution(target)\", \"desc\": \"Discovers client-side prototype pollution sources and gadget flows in DOM\"}], \"remediation\": \"Use Object.create(null) for dictionary objects without prototypes. Freeze Object.prototype using Object.freeze(). Validate and sanitize user keys to block '__proto__', 'constructor', and 'prototype'.\", \"description\": \"PortSwigger Prototype Pollution curriculum covers client-side pollution leading to DOM XSS, prototype pollution gadgets in third-party libraries, and server-side prototype pollution in Node.js applications triggering remote code execution.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.39605
+  },
+  "created_at": 1793141926.39605,
+  "updated_at": 1793141926.39605,
+  "access_count": 3,
+  "ttl_seconds": null
+}

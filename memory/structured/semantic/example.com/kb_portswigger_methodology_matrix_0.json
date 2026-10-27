@@ -1,0 +1,19 @@
+{
+  "entry_id": "6b8a9bad",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:0",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:0",
+    "title": "SQL Injection Detection & Differential Verification Methodology",
+    "content": "{\"id\": \"portswigger_sqli\", \"item_type\": \"methodology\", \"topic\": \"sqli\", \"category\": \"PortSwigger Web Security: SQL Injection (SQLi)\", \"name\": \"SQL Injection Detection & Differential Verification Methodology\", \"cwe\": \"CWE-89\", \"owasp_category\": \"A03:2021 - Injection\", \"signals\": [\"sql_syntax_error\", \"database_error_reflection\", \"numeric_parameter_variation\", \"boolean_differential_response\", \"time_delay_execution\", \"order_by_boundary\"], \"verification_strategy\": \"Conduct safe boolean differential probing (e.g. AND 1=1 vs AND 1=2), test ORDER BY column position boundaries to determine column projection size without extracting user data, and verify UNION NULL column compatibility safely.\", \"evidence_requirements\": [\"response_delta_length\", \"status_code_invariance\", \"syntax_error_snippet\", \"null_column_count_proof\"], \"tools\": [{\"tool\": \"SQLiSkill\", \"cmd\": \"run_sqli_skill(url, param, objective='version')\", \"desc\": \"Autonomous state machine: DETECT -> CLASSIFY -> COUNT_COLS -> VERIFY\"}, {\"tool\": \"sqlmap (safe audit)\", \"cmd\": \"sqlmap -u 'https://example.com/item?id=1' --batch --banner --level=2 --risk=1\", \"desc\": \"Differential SQLi audit engine verifying injection points\"}, {\"tool\": \"SmartPoC (SQLi)\", \"cmd\": \"SmartPoC.execute_and_verify(target, param, vuln_type='sqli')\", \"desc\": \"Zero-weaponized boolean & error reflection validator\"}], \"remediation\": \"Mandate parameterized queries and prepared statements (e.g., PreparedStatement in Java, PDO with emulation turned off in PHP). Never concatenate untrusted parameters into SQL queries.\", \"description\": \"PortSwigger curriculum for SQL Injection covers in-band UNION attacks, error-based exploitation, blind boolean inference, blind time delays, and out-of-band application interactions (DNS/HTTP via Collaborator).\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3577776
+  },
+  "created_at": 1793141926.3577776,
+  "updated_at": 1793141926.3577776,
+  "access_count": 3,
+  "ttl_seconds": null
+}

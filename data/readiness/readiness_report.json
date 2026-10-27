@@ -1,18 +1,58 @@
 {
   "target": "local-env",
-  "session_id": "hunter_1793132186",
-  "started_at": 1793132196.5537307,
-  "duration_sec": 6.96,
+  "session_id": "test_auth_sess",
+  "started_at": 1793141937.1954608,
+  "duration_sec": 6.49,
   "strict": false,
-  "strict_ready": true,
+  "strict_ready": false,
   "safe_check": "Local probes only (--version/--help, TCP connect, file existence). لامس أي هدف.",
   "counts": {
-    "READY": 18,
-    "MISSING": 42,
+    "READY": 15,
+    "MISSING": 45,
     "UNHEALTHY": 0,
     "SKIPPED": 0
   },
-  "blocked": [],
+  "blocked": [
+    {
+      "component": "ollama_model",
+      "name": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
+      "status": "MISSING",
+      "required": true,
+      "detail": "model NOT PULLED",
+      "probe": "GET http://127.0.0.1:11434/api/tags",
+      "evidence": {
+        "configured_host": "http://127.0.0.1:11434",
+        "probed_host": "http://127.0.0.1:11434"
+      },
+      "checked_at": 1793141943.6817899
+    },
+    {
+      "component": "ollama_model",
+      "name": "xploiter/pentester:latest",
+      "status": "MISSING",
+      "required": true,
+      "detail": "model NOT PULLED",
+      "probe": "GET http://127.0.0.1:11434/api/tags",
+      "evidence": {
+        "configured_host": "http://127.0.0.1:11434",
+        "probed_host": "http://127.0.0.1:11434"
+      },
+      "checked_at": 1793141943.6817899
+    },
+    {
+      "component": "ollama_model",
+      "name": "qwen2.5-coder:14b",
+      "status": "MISSING",
+      "required": true,
+      "detail": "model NOT PULLED",
+      "probe": "GET http://127.0.0.1:11434/api/tags",
+      "evidence": {
+        "configured_host": "http://127.0.0.1:11434",
+        "probed_host": "http://127.0.0.1:11434"
+      },
+      "checked_at": 1793141943.6817899
+    }
+  ],
   "results": [
     {
       "component": "kali_tool",
@@ -25,7 +65,7 @@
         "binary": "C:\\Program Files (x86)\\Nmap\\nmap.EXE",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132196.6718428
+      "checked_at": 1793141937.337911
     },
     {
       "component": "kali_tool",
@@ -38,7 +78,7 @@
         "binary": "C:\\Tools\\HunterAI\\masscan.BAT",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132196.873966
+      "checked_at": 1793141937.521648
     },
     {
       "component": "kali_tool",
@@ -51,7 +91,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132196.927216
+      "checked_at": 1793141937.5607595
     },
     {
       "component": "kali_tool",
@@ -64,7 +104,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132196.9827085
+      "checked_at": 1793141937.5992787
     },
     {
       "component": "kali_tool",
@@ -77,7 +117,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132197.036094
+      "checked_at": 1793141937.638135
     },
     {
       "component": "kali_tool",
@@ -90,7 +130,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132197.0926867
+      "checked_at": 1793141937.6756616
     },
     {
       "component": "kali_tool",
@@ -103,7 +143,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132197.1475186
+      "checked_at": 1793141937.7142112
     },
     {
       "component": "kali_tool",
@@ -116,7 +156,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132197.1926157
+      "checked_at": 1793141937.7543225
     },
     {
       "component": "kali_tool",
@@ -129,7 +169,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132197.2425904
+      "checked_at": 1793141937.7926183
     },
     {
       "component": "kali_tool",
@@ -142,7 +182,7 @@
         "binary": "C:\\Tools\\HunterAI\\gobuster.BAT",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132197.4226487
+      "checked_at": 1793141937.9532793
     },
     {
       "component": "kali_tool",
@@ -155,7 +195,7 @@
         "binary": "C:\\Tools\\HunterAI\\ffuf.EXE",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132197.527947
+      "checked_at": 1793141938.0349574
     },
     {
       "component": "kali_tool",
@@ -168,7 +208,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132197.5903366
+      "checked_at": 1793141938.077281
     },
     {
       "component": "kali_tool",
@@ -181,7 +221,7 @@
         "binary": "C:\\Tools\\HunterAI\\nuclei.EXE",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132198.0335457
+      "checked_at": 1793141938.4378412
     },
     {
       "component": "kali_tool",
@@ -194,7 +234,7 @@
         "binary": "C:\\Tools\\HunterAI\\sqlmap.BAT",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132199.776578
+      "checked_at": 1793141940.3070412
     },
     {
       "component": "kali_tool",
@@ -207,7 +247,7 @@
         "binary": "C:\\Tools\\HunterAI\\nikto.BAT",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132199.9510782
+      "checked_at": 1793141940.4937081
     },
     {
       "component": "kali_tool",
@@ -220,7 +260,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132199.9886076
+      "checked_at": 1793141940.538827
     },
     {
       "component": "kali_tool",
@@ -233,7 +273,7 @@
         "binary": "C:\\Tools\\HunterAI\\wpscan.BAT",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.1634626
+      "checked_at": 1793141940.7008169
     },
     {
       "component": "kali_tool",
@@ -246,7 +286,7 @@
         "binary": "C:\\Tools\\HunterAI\\httpx.EXE",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.364193
+      "checked_at": 1793141940.9456873
     },
     {
       "component": "kali_tool",
@@ -259,7 +299,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.4277873
+      "checked_at": 1793141940.9919658
     },
     {
       "component": "kali_tool",
@@ -272,7 +312,7 @@
         "binary": "C:\\Tools\\HunterAI\\katana.EXE",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.618957
+      "checked_at": 1793141941.1739118
     },
     {
       "component": "kali_tool",
@@ -285,7 +325,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.6731167
+      "checked_at": 1793141941.21782
     },
     {
       "component": "kali_tool",
@@ -298,7 +338,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.7218325
+      "checked_at": 1793141941.2701874
     },
     {
       "component": "kali_tool",
@@ -311,7 +351,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.7699056
+      "checked_at": 1793141941.3246727
     },
     {
       "component": "kali_tool",
@@ -324,7 +364,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.816591
+      "checked_at": 1793141941.366534
     },
     {
       "component": "kali_tool",
@@ -337,7 +377,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.8691986
+      "checked_at": 1793141941.4114945
     },
     {
       "component": "kali_tool",
@@ -350,7 +390,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132200.9122846
+      "checked_at": 1793141941.4525678
     },
     {
       "component": "kali_tool",
@@ -363,7 +403,7 @@
         "binary": "C:\\Tools\\HunterAI\\subfinder.EXE",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.1363215
+      "checked_at": 1793141941.6508489
     },
     {
       "component": "kali_tool",
@@ -376,7 +416,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.1794693
+      "checked_at": 1793141941.695391
     },
     {
       "component": "kali_tool",
@@ -389,7 +429,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.2337422
+      "checked_at": 1793141941.736914
     },
     {
       "component": "kali_tool",
@@ -402,7 +442,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.276083
+      "checked_at": 1793141941.7821236
     },
     {
       "component": "kali_tool",
@@ -415,7 +455,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.3155944
+      "checked_at": 1793141941.8267908
     },
     {
       "component": "kali_tool",
@@ -428,7 +468,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.3710074
+      "checked_at": 1793141941.8671758
     },
     {
       "component": "kali_tool",
@@ -441,7 +481,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.4153347
+      "checked_at": 1793141941.9106977
     },
     {
       "component": "kali_tool",
@@ -454,7 +494,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.4676661
+      "checked_at": 1793141941.9557018
     },
     {
       "component": "kali_tool",
@@ -467,7 +507,7 @@
         "binary": "C:\\Tools\\HunterAI\\hydra.BAT",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.6510417
+      "checked_at": 1793141942.1123042
     },
     {
       "component": "kali_tool",
@@ -480,7 +520,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.7024112
+      "checked_at": 1793141942.1543107
     },
     {
       "component": "kali_tool",
@@ -493,7 +533,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.7528212
+      "checked_at": 1793141942.1928418
     },
     {
       "component": "kali_tool",
@@ -506,7 +546,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132201.802333
+      "checked_at": 1793141942.236539
     },
     {
       "component": "kali_tool",
@@ -519,7 +559,7 @@
         "binary": "C:\\Strawberry\\c\\bin\\gdb.EXE",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.0258486
+      "checked_at": 1793141942.4261155
     },
     {
       "component": "kali_tool",
@@ -532,7 +572,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.07391
+      "checked_at": 1793141942.4681215
     },
     {
       "component": "kali_tool",
@@ -545,7 +585,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.1227422
+      "checked_at": 1793141942.51764
     },
     {
       "component": "kali_tool",
@@ -558,7 +598,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.1686387
+      "checked_at": 1793141942.567647
     },
     {
       "component": "kali_tool",
@@ -571,7 +611,7 @@
         "binary": "C:\\Strawberry\\c\\bin\\strings.EXE",
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.2559197
+      "checked_at": 1793141942.6329782
     },
     {
       "component": "kali_tool",
@@ -584,7 +624,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.3064053
+      "checked_at": 1793141942.6895227
     },
     {
       "component": "kali_tool",
@@ -597,7 +637,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.3559635
+      "checked_at": 1793141942.7414691
     },
     {
       "component": "kali_tool",
@@ -610,7 +650,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.4128919
+      "checked_at": 1793141942.7910137
     },
     {
       "component": "kali_tool",
@@ -623,7 +663,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.4694784
+      "checked_at": 1793141942.834379
     },
     {
       "component": "kali_tool",
@@ -636,7 +676,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.5245094
+      "checked_at": 1793141942.8755183
     },
     {
       "component": "kali_tool",
@@ -649,7 +689,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.5786104
+      "checked_at": 1793141942.9167945
     },
     {
       "component": "kali_tool",
@@ -662,7 +702,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.631285
+      "checked_at": 1793141942.960806
     },
     {
       "component": "kali_tool",
@@ -675,7 +715,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.6840756
+      "checked_at": 1793141943.0013366
     },
     {
       "component": "kali_tool",
@@ -688,7 +728,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.7359068
+      "checked_at": 1793141943.0433388
     },
     {
       "component": "kali_tool",
@@ -701,7 +741,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.7891681
+      "checked_at": 1793141943.0846024
     },
     {
       "component": "kali_tool",
@@ -714,7 +754,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.8457184
+      "checked_at": 1793141943.1275945
     },
     {
       "component": "kali_tool",
@@ -727,7 +767,7 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.9005713
+      "checked_at": 1793141943.1685975
     },
     {
       "component": "kali_tool",
@@ -740,60 +780,60 @@
         "binary": null,
         "platform_root": "E:\\Agant\\PentestAI-Unified"
       },
-      "checked_at": 1793132202.9536855
+      "checked_at": 1793141943.2133493
     },
     {
       "component": "ollama",
       "name": "ollama_server",
       "status": "READY",
       "required": true,
-      "detail": "Ollama reachable at http://127.0.0.1:11434, 5 model(s) present",
+      "detail": "Ollama reachable at http://127.0.0.1:11434, 0 model(s) present",
       "probe": "GET http://127.0.0.1:11434/api/tags",
       "evidence": {
-        "configured_host": "0.0.0.0:11434",
+        "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434",
-        "models_seen": 5
+        "models_seen": 0
       },
-      "checked_at": 1793132203.5127308
+      "checked_at": 1793141943.6817899
     },
     {
       "component": "ollama_model",
       "name": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
-      "status": "READY",
+      "status": "MISSING",
       "required": true,
-      "detail": "model available",
+      "detail": "model NOT PULLED",
       "probe": "GET http://127.0.0.1:11434/api/tags",
       "evidence": {
-        "configured_host": "0.0.0.0:11434",
+        "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793132203.5127308
+      "checked_at": 1793141943.6817899
     },
     {
       "component": "ollama_model",
       "name": "xploiter/pentester:latest",
-      "status": "READY",
+      "status": "MISSING",
       "required": true,
-      "detail": "model available",
+      "detail": "model NOT PULLED",
       "probe": "GET http://127.0.0.1:11434/api/tags",
       "evidence": {
-        "configured_host": "0.0.0.0:11434",
+        "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793132203.5127308
+      "checked_at": 1793141943.6817899
     },
     {
       "component": "ollama_model",
       "name": "qwen2.5-coder:14b",
-      "status": "READY",
+      "status": "MISSING",
       "required": true,
-      "detail": "model available",
+      "detail": "model NOT PULLED",
       "probe": "GET http://127.0.0.1:11434/api/tags",
       "evidence": {
-        "configured_host": "0.0.0.0:11434",
+        "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793132203.5127308
+      "checked_at": 1793141943.6817899
     }
   ]
 }

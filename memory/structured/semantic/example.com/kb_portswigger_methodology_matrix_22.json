@@ -1,0 +1,19 @@
+{
+  "entry_id": "2c753390",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:22",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:22",
+    "title": "JSON Web Token (JWT) Cryptographic & Header Flaws Methodology",
+    "content": "{\"id\": \"portswigger_jwt\", \"item_type\": \"methodology\", \"topic\": \"jwt\", \"category\": \"PortSwigger Web Security: JSON Web Token (JWT) Attacks\", \"name\": \"JSON Web Token (JWT) Cryptographic & Header Flaws Methodology\", \"cwe\": \"CWE-1270\", \"owasp_category\": \"A07:2021 - Identification and Authentication Failures\", \"signals\": [\"none_algorithm_accepted\", \"weak_hmac_secret\", \"jwk_header_injection\", \"jku_header_injection\", \"kid_path_traversal_or_sqli\", \"algorithm_confusion_rs256_to_hs256\"], \"verification_strategy\": \"Decode JWT header and payload. Test changing alg to 'none' and stripping signature. Test embedding an attacker-controlled public key using the JWK header. Test algorithm confusion by signing the token using the server's public key with HMAC-SHA256 (HS256). Audit the 'kid' (Key ID) header for path traversal.\", \"evidence_requirements\": [\"none_alg_acceptance_proof\", \"tampered_claims_accepted\", \"jwt_cracked_secret_evidence\"], \"tools\": [{\"tool\": \"jwt_tool\", \"cmd\": \"python3 jwt_tool.py <TOKEN> -X a\", \"desc\": \"Comprehensive JWT vulnerability auditor testing alg:none, JWK injection, and key confusion\"}, {\"tool\": \"AutonomousBrain (JWT Auditor)\", \"cmd\": \"AutonomousBrain.audit_jwt(token)\", \"desc\": \"Decodes tokens and audits header parameters (kid, jku, jwk, alg) for insecure defaults\"}], \"remediation\": \"Do not trust the 'alg' header provided by the client. Explicitly enforce the expected signature algorithm on the server. Reject tokens with alg='none' and use strong, unpredictable signing keys.\", \"description\": \"PortSwigger JWT labs cover bypassing signature verification via alg:none, cracking weak HMAC secrets, header parameter injections (JWK, JKU, KID), and algorithm confusion attacks converting RS256 to HS256.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3943996
+  },
+  "created_at": 1793141926.3943996,
+  "updated_at": 1793141926.3943996,
+  "access_count": 3,
+  "ttl_seconds": null
+}

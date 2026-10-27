@@ -1,0 +1,16 @@
+{
+  "entry_id": "308e21c9",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "rl_outcome:url_encode:1793141928",
+  "value": {
+    "technique": "url_encode",
+    "success": false,
+    "evidence": {},
+    "timestamp": 1793141928.4255774
+  },
+  "created_at": 1793141928.4255774,
+  "updated_at": 1793141928.4255774,
+  "access_count": 1,
+  "ttl_seconds": null
+}

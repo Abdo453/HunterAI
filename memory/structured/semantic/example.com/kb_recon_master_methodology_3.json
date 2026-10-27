@@ -1,0 +1,19 @@
+{
+  "entry_id": "67363869",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:3",
+  "value": {
+    "item_id": "recon_master_methodology:3",
+    "title": "JavaScript Bundle Analysis & Client-Side Secret Detection",
+    "content": "{\"id\": \"recon_meth_004\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"JavaScript Bundle Analysis & Client-Side Secret Detection\", \"prerequisites\": [\"javascript_parsing\", \"regex_pattern_matching\"], \"signals\": [\"javascript_bundles\", \"source_maps\", \"hardcoded_api_keys\", \"developer_comments\", \"internal_api_routes\"], \"verification_strategy\": \"Inspect publicly served JavaScript assets and unpack available source maps. Apply entropy scanning and regex patterns for hardcoded credentials, cloud access tokens, and private API routing tables.\", \"evidence_requirements\": [\"identified_secret_signature\", \"js_file_line_reference\", \"exposed_endpoint_path\"], \"remediation_pattern\": \"Never store secrets, private API tokens, or internal credentials in client-side code. Route sensitive operations through backend proxies and disable source map publishing in production.\", \"description\": \"Static analysis of client-side application scripts. Recovers hidden REST/GraphQL endpoints, undocumented parameters, and accidentally committed credentials.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4130754
+  },
+  "created_at": 1793141926.4130754,
+  "updated_at": 1793141926.4130754,
+  "access_count": 3,
+  "ttl_seconds": null
+}

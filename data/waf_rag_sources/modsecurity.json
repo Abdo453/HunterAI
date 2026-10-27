@@ -1,0 +1,26 @@
+[
+  {
+    "source": "local",
+    "technique": "encoding",
+    "confidence": 0.7,
+    "notes": "ModSecurity مع OWASP CRS Paranoia Level 1 يمنع عادةً double encoding و unicode %u. يُفضل استخدام mixed case و HTML entities."
+  },
+  {
+    "source": "local",
+    "technique": "tags",
+    "confidence": 0.6,
+    "notes": "وسوم <svg> و <details> تُجاوز CRS PL1 في كثير من الحالات إذا لم تُفعَّل قواعد XSS الصارمة."
+  },
+  {
+    "source": "local",
+    "technique": "hpp",
+    "confidence": 0.8,
+    "notes": "PHP يقرأ القيمة الأخيرة من المعلمة المكررة. يمكن وضع قيمة نظيفة أولاً لـ WAF وقيمة خبيثة للتطبيق."
+  },
+  {
+    "source": "local",
+    "technique": "parser_differentials",
+    "confidence": 0.7,
+    "notes": "تغيير Content-Type إلى application/json قد يتخطى فحوصات ModSecurity التي تفترض form-urlencoded."
+  }
+]

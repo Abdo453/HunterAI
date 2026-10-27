@@ -1,4 +1,5 @@
 name: browser_recon
+class: BrowserReconSkill
 category: browser
 description: "Deep headless browser inspection of live DOM, links, forms, scripts, cookies, storage, and visual screenshot"
 version: "1.0"

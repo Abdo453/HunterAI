@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  # ModSecurity + OWASP CRS كـ WAF أمامي على البورت 8080
+  modsecurity:
+    image: owasp/modsecurity-crs:nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./modsecurity-lab:/etc/modsecurity.d/owasp-crs:ro
+    environment:
+      - PARANOIA_LEVEL=1
+      - ANOMALY_INBOUND=5
+    restart: unless-stopped
+
+  # تطبيق ضحية بسيط على البورت 8081 (يُستهدف عبر ModSecurity)
+  victim-app:
+    image: python:3.11-slim
+    ports:
+      - "8081:8081"
+    working_dir: /app
+    command: >
+      sh -c "pip install flask -q && python app.py"
+    volumes:
+      - ./victim-app:/app
+    restart: unless-stopped

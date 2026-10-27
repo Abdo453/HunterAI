@@ -1,4 +1,5 @@
 name: endpoint_discovery
+class: EndpointDiscoverySkill
 category: web
 description: "Discover hidden endpoints and directories using ffuf, gobuster, or dirsearch"
 version: "1.0"

@@ -1,0 +1,17 @@
+[
+  {
+    "target": "http://target.local",
+    "waf_type": "Cloudflare",
+    "waf_version": null,
+    "technique_level": 2,
+    "technique_name": "tags",
+    "payload": "<svg>",
+    "headers": {},
+    "status_code": 200,
+    "success": true,
+    "failure_reason": null,
+    "timestamp": "2026-10-27T22:24:21.948919+00:00",
+    "attempts": 1,
+    "success_rate": 1.0
+  }
+]

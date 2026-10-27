@@ -1,0 +1,19 @@
+{
+  "entry_id": "9a76358b",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:7",
+  "value": {
+    "item_id": "recon_master_methodology:7",
+    "title": "Search Engine Intelligence & GHDB (Google Hacking Database) Dorking",
+    "content": "{\"id\": \"recon_meth_008\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Search Engine Intelligence & GHDB (Google Hacking Database) Dorking\", \"prerequisites\": [\"osint_fundamentals\", \"search_engine_syntax\"], \"signals\": [\"ghdb_dork\", \"google_sheets_leak\", \"filetype_operator\", \"inurl_operator\", \"intext_operator\"], \"verification_strategy\": \"Construct targeted search engine queries using advanced boolean operators (site:, inurl:, intext:, filetype:) to detect exposed configuration spreadsheets, unprotected admin portals, and indexed credentials.\", \"evidence_requirements\": [\"search_engine_indexed_url\", \"exposed_sensitive_document_proof\"], \"remediation_pattern\": \"Deploy restrictive robots.txt with 'Disallow: /' on private paths, enforce 'X-Robots-Tag: noindex, nofollow' HTTP headers, and remove sensitive internal documents from public cloud sharing.\", \"description\": \"Passive search engine intelligence leveraging Google, Bing, and DuckDuckGo syntax to identify accidentally indexed corporate documents, database backups, and exposed spreadsheets.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.4200666
+  },
+  "created_at": 1793141926.4210718,
+  "updated_at": 1793141926.4210718,
+  "access_count": 3,
+  "ttl_seconds": null
+}

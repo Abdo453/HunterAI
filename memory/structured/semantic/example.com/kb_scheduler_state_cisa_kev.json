@@ -1,0 +1,19 @@
+{
+  "entry_id": "950ec5f1",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:scheduler_state:cisa_kev",
+  "value": {
+    "item_id": "scheduler_state:cisa_kev",
+    "title": "cisa_kev",
+    "content": "{\"last_run\": 1792320303.7595592}",
+    "source": "scheduler_state",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3306994
+  },
+  "created_at": 1793141926.3306994,
+  "updated_at": 1793141926.3306994,
+  "access_count": 3,
+  "ttl_seconds": null
+}

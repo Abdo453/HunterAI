@@ -54,6 +54,7 @@ class ValidationResult:
     rationale: str = ""
     timestamp: float = field(default_factory=time.time)
     never_submit: bool = False
+    safety_check: Optional[dict[str, Any]] = None  # Neuro-symbolic safety result
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -67,6 +68,7 @@ class ValidationResult:
             "rationale": self.rationale,
             "never_submit": self.never_submit,
             "timestamp": self.timestamp,
+            "safety_check": self.safety_check,
         }
 
 
@@ -89,12 +91,24 @@ class ValidationGate:
 
     def __init__(self, min_confidence: float = 0.85):
         self.min_confidence = min_confidence
+        self._safety_loop = None
+
+    @property
+    def safety_loop(self):
+        if self._safety_loop is None:
+            from hunter_ai.safety.neuro_symbolic_loop import (
+                NeuroSymbolicSafetyLoop,
+                KnowledgeGraph,
+            )
+            self._safety_loop = NeuroSymbolicSafetyLoop(KnowledgeGraph())
+        return self._safety_loop
 
     def validate(
         self,
         finding: dict[str, Any] | str,
         target: str = "",
         evidence: Optional[dict[str, Any]] = None,
+        run_safety_check: bool = True,
     ) -> ValidationResult:
         """
         Run the 7-Question Gate on a finding.
@@ -114,6 +128,20 @@ class ValidationGate:
             target=target,
             evidence=evidence or {},
         )
+
+        # ══════════════════════════════════════════════════════════════════════════
+        # Neuro-Symbolic Safety Check — runs BEFORE the 7 questions
+        # ══════════════════════════════════════════════════════════════════════════
+        safety_result = self.safety_loop.check_command(
+            command=f"validate-finding:{title}",
+            target=target,
+            require_proof=True,
+        )
+        result.safety_check = safety_result.to_dict()
+        if safety_result.verdict.value == "BLOCKED":
+            result.status = GateVerdict.REFUTED
+            result.rationale = f"Blocked by safety loop: {safety_result.reason}"
+            return result
 
         # Question 1: Reproducible RIGHT NOW?
         q1 = self._q1_reproducible(evidence)

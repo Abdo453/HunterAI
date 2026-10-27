@@ -1,4 +1,5 @@
 name: behavior_analysis
+class: BehaviorAnalysisSkill
 category: browser
 description: "Simulate real user behavior (clicking tabs, load more, pagination) to discover dynamic client-side state transitions and unlinked endpoints"
 version: "1.0"

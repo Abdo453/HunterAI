@@ -1,0 +1,19 @@
+{
+  "entry_id": "37a52d21",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:1",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:1",
+    "title": "Cross-Site Scripting (Reflected, Stored, DOM) Methodology",
+    "content": "{\"id\": \"portswigger_xss\", \"item_type\": \"methodology\", \"topic\": \"xss\", \"category\": \"PortSwigger Web Security: Cross-Site Scripting (XSS)\", \"name\": \"Cross-Site Scripting (Reflected, Stored, DOM) Methodology\", \"cwe\": \"CWE-79\", \"owasp_category\": \"A03:2021 - Injection\", \"signals\": [\"unescaped_input_reflection\", \"html_attribute_reflection\", \"script_context_reflection\", \"dom_sink_flow\", \"csp_header_missing\", \"content_type_text_html\"], \"verification_strategy\": \"Submit unique alphanumeric canary tokens (e.g. z9x8w7v6) across query parameters and form fields, evaluate reflection contexts (HTML text, HTML attribute, JS string), and verify character encoding for <, >, \\\", ', and backticks.\", \"evidence_requirements\": [\"canary_reflection_context\", \"raw_response_snippet\", \"csp_policy_analysis\"], \"tools\": [{\"tool\": \"XSSSkill\", \"cmd\": \"run_xss_skill(url, param)\", \"desc\": \"Context-aware AST reflection & breakout analyzer\"}, {\"tool\": \"dalfox\", \"cmd\": \"dalfox url 'https://example.com/search?q=test' --skip-bavl --mining-dict\", \"desc\": \"High-performance parameter analysis and DOM XSS scanner\"}, {\"tool\": \"BrowserAgent (Firefox)\", \"cmd\": \"BrowserAgent.run(target, mode='xss_dom_check')\", \"desc\": \"Headless/GUI browser execution auditing DOM sinks (eval, innerHTML)\"}], \"remediation\": \"Apply context-sensitive output encoding before rendering user input into HTML, attributes, or JavaScript contexts. Deploy a rigorous Content Security Policy (CSP) with nonce-based or hash-based script execution.\", \"description\": \"PortSwigger XSS covers Reflected XSS into HTML contexts, attribute contexts, JavaScript templates, Stored XSS, and DOM-based XSS traversing execution sinks like location.href, innerHTML, document.write, and jQuery selectors.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3600128
+  },
+  "created_at": 1793141926.3600128,
+  "updated_at": 1793141926.3600128,
+  "access_count": 3,
+  "ttl_seconds": null
+}

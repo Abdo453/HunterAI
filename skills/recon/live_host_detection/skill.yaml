@@ -1,4 +1,5 @@
 name: live_host_detection
+class: LiveHostDetectionSkill
 category: recon
 description: "Probe which subdomains/hosts are alive using httpx or httprobe"
 version: "1.0"

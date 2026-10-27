@@ -1,4 +1,5 @@
 name: js_analysis
+class: JsAnalysisSkill
 category: web
 description: "Extract secrets, endpoints, and tokens from JavaScript files"
 version: "1.0"

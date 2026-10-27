@@ -1,0 +1,19 @@
+{
+  "entry_id": "f2e0da8f",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:10",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:10",
+    "title": "Server-Side Template Injection (SSTI) Engine Fingerprinting Methodology",
+    "content": "{\"id\": \"portswigger_ssti\", \"item_type\": \"methodology\", \"topic\": \"ssti\", \"category\": \"PortSwigger Web Security: Server-Side Template Injection (SSTI)\", \"name\": \"Server-Side Template Injection (SSTI) Engine Fingerprinting Methodology\", \"cwe\": \"CWE-1336\", \"owasp_category\": \"A03:2021 - Injection\", \"signals\": [\"template_expression_reflection\", \"curly_brace_processing\", \"math_expression_evaluation\", \"freemarker_syntax_error\", \"jinja2_twig_syntax_error\"], \"verification_strategy\": \"Inject deterministic benign arithmetic expressions inside template markers: e.g. {{7*7}}, ${7*7}, <%= 7*7 %>, #{7*7}. If the rendered output evaluates to '49' instead of literal text, follow the template decision tree (Jinja2, Twig, Freemarker, Velocity, Smarty, Pebble).\", \"evidence_requirements\": [\"arithmetic_evaluation_reflection\", \"template_engine_fingerprint\", \"syntax_error_callstack\"], \"tools\": [{\"tool\": \"tplmap\", \"cmd\": \"python3 tplmap.py -u 'https://example.com/profile?name=john'\", \"desc\": \"Automated SSTI detector and template engine identifier\"}, {\"tool\": \"SmartPoC (SSTI)\", \"cmd\": \"SmartPoC.execute_and_verify(url, param, vuln_type='ssti')\", \"desc\": \"Verifies arithmetic expression evaluation (49 reflection) without payload execution\"}], \"remediation\": \"Do not interpolate user-controlled input directly into template source code before compilation. Pass user input strictly as data model parameters into templates. Utilize sandboxed template engines.\", \"description\": \"PortSwigger SSTI covers identifying template syntax across popular frameworks, distinguishing between client and server rendering, sandbox escapes in Jinja2 and Twig, and leveraging Java reflection in Freemarker to demonstrate code execution.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3734033
+  },
+  "created_at": 1793141926.3734033,
+  "updated_at": 1793141926.3734033,
+  "access_count": 3,
+  "ttl_seconds": null
+}

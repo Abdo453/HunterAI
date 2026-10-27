@@ -1,0 +1,19 @@
+{
+  "entry_id": "c676f2d7",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:recon_master_methodology:2",
+  "value": {
+    "item_id": "recon_master_methodology:2",
+    "title": "Historical URL Mining & Web Crawling Architecture",
+    "content": "{\"id\": \"recon_meth_003\", \"item_type\": \"methodology\", \"topic\": \"recon\", \"name\": \"Historical URL Mining & Web Crawling Architecture\", \"prerequisites\": [\"http_methods\", \"recon_meth_002\"], \"signals\": [\"historical_endpoints\", \"archive_urls\", \"sitemap_discovery\", \"robots_txt\", \"crawled_links\"], \"verification_strategy\": \"Aggregate historical URL indices (Wayback Machine CDX, CommonCrawl) and blend with dynamic headless crawler output (katana, gospider). Normalize query parameters and filter by asset categories.\", \"evidence_requirements\": [\"deduplicated_url_catalog\", \"parameter_bearing_endpoints\", \"sitemap_endpoint_inventory\"], \"remediation_pattern\": \"Decommission abandoned legacy endpoints. Ensure staging or internal administrative endpoints are not linked in public client-side scripts or indexed in sitemaps.\", \"description\": \"Discovers deeply nested application routes, deprecated API versions, and forgotten interfaces by merging historical archive data with real-time DOM spidering.\"}",
+    "source": "recon_master_methodology",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.411076
+  },
+  "created_at": 1793141926.412075,
+  "updated_at": 1793141926.412075,
+  "access_count": 3,
+  "ttl_seconds": null
+}

@@ -31,6 +31,8 @@ class SecurityIntelligenceConfig:
     TARGET_MEMORY_PATH = "data/memory/target_memory.json"
     FALSE_POSITIVE_MEMORY_PATH = "data/memory/false_positive_memory.json"
     LEARNING_MEMORY_PATH = "data/memory/learning_memory.json"
+    FAILURE_MEMORY_PATH = "data/memory/failure_episodic_memory.json"
+    TASK_CLUE_CACHE_PATH = "data/memory/task_clue_cache.json"
     KNOWLEDGE_BASE_DIR = "knowledge"
 
     # Model Routing Settings

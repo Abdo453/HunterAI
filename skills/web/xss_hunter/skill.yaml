@@ -1,0 +1,19 @@
+name: xss_hunter
+class: XSSHunterSkill
+category: web
+description: "كشف XSS انعكاسي عبر حقن علامة فريدة والتحقق من ظهورها خامًا في الاستجابة"
+version: "1.0"
+input:
+  - target: str
+  - urls: list
+output:
+  - xss_candidates.json
+depends_on: []
+next_skills:
+  - validation_gate
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 90
+max_retries: 1
+enabled: true

@@ -1,4 +1,5 @@
 name: ssh_audit
+class: SshAuditSkill
 category: analysis
 description: "Audit SSH server configuration (KEX, ciphers, MACs, host keys) for weak/deprecated algorithms using ssh-audit"
 version: "1.0"

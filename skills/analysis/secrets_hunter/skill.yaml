@@ -1,0 +1,22 @@
+name: secrets_hunter
+class: SecretsHunterSkill
+category: analysis
+description: "بحث عن أسرار ومفاتيح مسربة باستخدام أنماط أو trufflehog/gileaks"
+version: "1.0"
+input:
+  - target: str
+  - paths: list
+  - contents: dict  # file_path -> text content
+output:
+  - secrets_candidates.json
+depends_on: []
+next_skills:
+  - validation_gate
+fallback_skills: []
+tools_required: []
+fallback_tools:
+  - trufflehog
+  - gitleaks
+timeout_seconds: 90
+max_retries: 1
+enabled: true

@@ -107,6 +107,7 @@ class ToolManager:
         "arjun": "pip install arjun",
         "dirsearch": "pip install dirsearch",
         "wafw00f": "pip install wafw00f",
+        "wafryt": "pip install wafryt",
         "nmap": "sudo apt update && sudo apt install -y nmap",
         "sqlmap": "sudo apt update && sudo apt install -y sqlmap",
         "masscan": "sudo apt update && sudo apt install -y masscan",

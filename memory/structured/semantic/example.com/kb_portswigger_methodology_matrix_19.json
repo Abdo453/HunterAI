@@ -1,0 +1,19 @@
+{
+  "entry_id": "038d2599",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:19",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:19",
+    "title": "HTTP Host Header Injection & Password Reset Poisoning Methodology",
+    "content": "{\"id\": \"portswigger_host_header\", \"item_type\": \"methodology\", \"topic\": \"host_header_attacks\", \"category\": \"PortSwigger Web Security: HTTP Host Header Attacks\", \"name\": \"HTTP Host Header Injection & Password Reset Poisoning Methodology\", \"cwe\": \"CWE-601\", \"owasp_category\": \"A01:2021 - Broken Access Control\", \"signals\": [\"host_header_reflection_in_links\", \"x_forwarded_host_reflection\", \"duplicate_host_headers\", \"password_reset_url_poisoning\", \"host_header_ssrf\", \"port_injection_in_host\"], \"verification_strategy\": \"Inject modified Host headers (Host: attacker.com, Host: target.com:attacker.com, duplicate Host headers) and proxy headers (X-Forwarded-Host: attacker.com). Observe if the server reflects the untrusted Host value into generated absolute links (such as password reset links or script imports).\", \"evidence_requirements\": [\"injected_host_reflection_in_dom\", \"poisoned_password_reset_token\", \"virtual_host_routing_delta\"], \"tools\": [{\"tool\": \"httpx\", \"cmd\": \"httpx -u url -H 'Host: canary.host.com' -probe-headers 'Location'\", \"desc\": \"Audits server redirect behavior when supplied an alternative Host header\"}, {\"tool\": \"ffuf (VHost)\", \"cmd\": \"ffuf -u url -w wordlist.txt -H 'Host: FUZZ.target.com'\", \"desc\": \"Fuzzes internal virtual hosts routed through Host header handling\"}], \"remediation\": \"Configure web servers to reject requests with unrecognized Host headers. Utilize server-side configuration settings (e.g. SERVER_NAME) rather than the HTTP Host header to construct absolute links and password reset URLs.\", \"description\": \"PortSwigger Host Header attacks investigate basic password reset poisoning, web cache poisoning via Host header, routing-based SSRF via Host header, and bypassing connection state defenses via duplicate Host headers.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.3887377
+  },
+  "created_at": 1793141926.3887377,
+  "updated_at": 1793141926.3887377,
+  "access_count": 3,
+  "ttl_seconds": null
+}

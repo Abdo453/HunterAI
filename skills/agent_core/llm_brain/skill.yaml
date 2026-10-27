@@ -1,0 +1,22 @@
+name: agent_llm_brain
+class: LLMBrainSkill
+category: agent_core
+description: "مساعد نموذج لغوي يثري اتخاذ قرارات الوكيل (مع резерف heuristics بدون اتصال)"
+version: "1.0"
+input:
+  - target: str
+  - phase: str
+  - signals: list
+  - tools: list
+  - goal: str
+  - llm: object (اختياري)
+output:
+  - llm_decision.json
+depends_on: []
+next_skills: []
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 45
+max_retries: 1
+enabled: true

@@ -1,0 +1,19 @@
+{
+  "entry_id": "c8230347",
+  "memory_type": "semantic",
+  "target": "example.com",
+  "key": "kb:portswigger_methodology_matrix:26",
+  "value": {
+    "item_id": "portswigger_methodology_matrix:26",
+    "title": "NoSQL Injection (MongoDB, Document Stores) Methodology",
+    "content": "{\"id\": \"portswigger_nosql_injection\", \"item_type\": \"methodology\", \"topic\": \"nosql_injection\", \"category\": \"PortSwigger Web Security: NoSQL Injection\", \"name\": \"NoSQL Injection (MongoDB, Document Stores) Methodology\", \"cwe\": \"CWE-943\", \"owasp_category\": \"A03:2021 - Injection\", \"signals\": [\"mongodb_query_operator_injection\", \"json_request_body\", \"boolean_nosql_differential\", \"regex_search_operator\", \"where_javascript_clause_execution\"], \"verification_strategy\": \"In JSON requests, inject MongoDB query operators: {\\\"user\\\": {\\\"$ne\\\": \\\"\\\"}, \\\"pass\\\": {\\\"$ne\\\": \\\"\\\"}} or {\\\"username\\\": {\\\"$regex\\\": \\\"^admin\\\"}}. In URL parameters, test PHP/Node array syntax: user[$ne]=invalid. Compare response authentication status against standard probes.\", \"evidence_requirements\": [\"authentication_bypass_without_password\", \"regex_differential_leak\", \"nosql_syntax_error\"], \"tools\": [{\"tool\": \"nosqlmap\", \"cmd\": \"nosqlmap -u 'https://example.com/api/login' --attack 1\", \"desc\": \"Automated NoSQL database injection and authentication bypass tester\"}, {\"tool\": \"AutonomousBrain (NoSQL Probe)\", \"cmd\": \"AutonomousBrain.probe_nosql_operators(url, params)\", \"desc\": \"Tests $ne, $gt, $regex operator injection across JSON and query string fields\"}], \"remediation\": \"Do not pass user-supplied JSON or object keys directly into NoSQL query methods. Use strict type validation (ensuring parameters are primitive strings, not objects) and use parameterized query builders or ODMs with schema validation.\", \"description\": \"PortSwigger NoSQL Injection labs cover bypassing authentication using $ne and $regex operators, extracting data character-by-character via conditional regex evaluations, and exploiting MongoDB $where clauses executing JavaScript.\"}",
+    "source": "portswigger_methodology_matrix",
+    "tags": [],
+    "metadata": {},
+    "stored_at": 1793141926.401064
+  },
+  "created_at": 1793141926.401064,
+  "updated_at": 1793141926.401064,
+  "access_count": 3,
+  "ttl_seconds": null
+}
