@@ -527,6 +527,13 @@
       "impact": "LOW",
       "recommended_mitigation": "Run targeted UDP probe on DNS (53) and SNMP (161) if authorized.",
       "detected_at": 1792108865.0401382
+    },
+    {
+      "category": "NetworkTransport",
+      "description": "UDP services not probed for target.com due to scan time constraints.",
+      "impact": "LOW",
+      "recommended_mitigation": "Run targeted UDP probe on DNS (53) and SNMP (161) if authorized.",
+      "detected_at": 1793132141.006107
     }
   ]
 }
