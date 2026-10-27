@@ -16,6 +16,7 @@ from core.vuln_intel.models import (
     VulnerabilityRecord,
 )
 from core.vuln_intel.sources.base import Cursor, Page, SourceConnector, SourceMetadata
+from core.vuln_intel.sources.osv import normalize_osv_record
 
 
 class CliFakeConnector(SourceConnector):
@@ -77,6 +78,9 @@ def test_init_and_sources_json(store, capsys):
     sources = _json_out(capsys)
     assert sources[0]["source_id"] == "nvd"
     assert sources[0]["allowed_hosts"] == ["services.nvd.nist.gov"]
+    assert sources[1]["source_id"] == "osv"
+    assert sources[1]["allowed_hosts"] == ["api.osv.dev"]
+    assert sources[1]["supports_incremental"] is False
 
 
 def test_search_show_and_classify_php(store, make_record, composer_package, capsys):
@@ -341,3 +345,223 @@ def test_cli_show_does_not_execute_advisory_text(
     row = _json_out(capsys)
     assert row["description"] == payload
     assert called == []
+
+
+class CliFakeOsvConnector:
+    """Fake OSV connector: the CLI must work without touching the network."""
+
+    def __init__(self, records: List[dict]):
+        self.records = records
+        self.queries: List[tuple] = []
+
+    async def query_package(self, name, ecosystem="Packagist", version=None):
+        self.queries.append((name, ecosystem, version))
+        return list(self.records)
+
+    async def get_vuln(self, vuln_id):
+        for raw in self.records:
+            if raw["id"] == vuln_id:
+                return raw
+        raise KeyError(vuln_id)
+
+    def normalize(self, raw):
+        return normalize_osv_record(raw)
+
+
+def _osv_payload():
+    return {
+        "id": "GHSA-abcd-1234-5678",
+        "aliases": ["CVE-2024-12345"],
+        "summary": "SQL injection in example/package",
+        "details": "A SQL injection vulnerability affects example/package before 1.2.3.",
+        "database_specific": {"severity": "HIGH", "cwe_ids": ["CWE-89"]},
+        "affected": [
+            {
+                "package": {"ecosystem": "Packagist", "name": "example/package"},
+                "ranges": [
+                    {
+                        "type": "ECOSYSTEM",
+                        "events": [{"introduced": "0"}, {"fixed": "1.2.3"}],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_osv_query_command_stores_records(store, capsys):
+    connector = CliFakeOsvConnector([_osv_payload()])
+    code = main(
+        [
+            "osv-query",
+            "--package",
+            "example/package",
+            "--ecosystem",
+            "Packagist",
+            "--db",
+            str(store.db_path),
+            "--json",
+        ],
+        connector=connector,
+    )
+    assert code == 0
+    payload = _json_out(capsys)
+    assert payload["source_id"] == "osv"
+    assert payload["count"] == 1
+    assert payload["records"][0]["canonical_id"] == "CVE-2024-12345"
+    assert payload["stored"][0]["status"] == "inserted"
+    assert connector.queries == [("example/package", "Packagist", None)]
+    assert store.count("osv") == 1
+
+
+def test_osv_get_command_fetches_one_advisory(store, capsys):
+    connector = CliFakeOsvConnector([_osv_payload()])
+    code = main(
+        [
+            "osv-get",
+            "--id",
+            "GHSA-abcd-1234-5678",
+            "--db",
+            str(store.db_path),
+            "--json",
+        ],
+        connector=connector,
+    )
+    assert code == 0
+    payload = _json_out(capsys)
+    assert payload["count"] == 1
+    assert payload["records"][0]["source_record_id"] == "GHSA-abcd-1234-5678"
+    assert store.count("osv") == 1
+
+
+def test_osv_query_command_without_a_database_does_not_store(store, capsys):
+    connector = CliFakeOsvConnector([_osv_payload()])
+    code = main(
+        ["osv-query", "--package", "example/package", "--json"],
+        connector=connector,
+    )
+    assert code == 0
+    payload = _json_out(capsys)
+    assert payload["stored"] == []
+    assert store.count() == 0
+
+
+def test_select_tools_command_plans_without_executing(store, make_record, capsys):
+    record = make_record(
+        cwes=["CWE-89"],
+        description="A SQL injection vulnerability in the query builder",
+    )
+    store.upsert_vulnerability(record)
+
+    code = main(
+        [
+            "select-tools",
+            "--db",
+            str(store.db_path),
+            "--vuln",
+            "CVE-2024-0001",
+            "--authorized",
+            "--max-risk",
+            "high",
+            "--assume-available",
+            "sqlmap",
+            "--json",
+        ]
+    )
+    assert code == 0
+    payload = _json_out(capsys)
+    assert payload["status"] == "selected"
+    assert payload["vuln_classes"] == ["sqli"]
+    assert "sqlmap" in [item["tool_id"] for item in payload["selected"]]
+    assert any("no tool was executed" in note for note in payload["notes"])
+
+
+def test_select_tools_command_without_authorization_only_plans_passive_tools(
+    store, make_record, capsys
+):
+    record = make_record(
+        cwes=["CWE-89"],
+        description="A SQL injection vulnerability in the query builder",
+    )
+    store.upsert_vulnerability(record)
+
+    code = main(
+        [
+            "select-tools",
+            "--db",
+            str(store.db_path),
+            "--vuln",
+            "CVE-2024-0001",
+            "--assume-available",
+            "sqlmap",
+            "--allow-unavailable",
+            "--json",
+        ]
+    )
+    assert code == 0
+    payload = _json_out(capsys)
+    assert payload["authorized"] is False
+    assert "sqlmap" not in [item["tool_id"] for item in payload["selected"]]
+    reasons = {item["tool_id"]: item["reason"] for item in payload["rejected"]}
+    assert "authorization" in reasons["sqlmap"]
+
+
+def test_select_tools_command_reports_an_unknown_advisory(store, capsys):
+    code = main(
+        [
+            "select-tools",
+            "--db",
+            str(store.db_path),
+            "--vuln",
+            "CVE-9999-9999",
+            "--json",
+        ]
+    )
+    assert code == 1
+    assert "not found" in capsys.readouterr().err
+
+
+def test_select_tools_command_uses_a_custom_capability_catalog(
+    store, make_record, tmp_path, capsys
+):
+    record = make_record(
+        cwes=["CWE-89"],
+        description="A SQL injection vulnerability in the query builder",
+    )
+    store.upsert_vulnerability(record)
+
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(
+        json.dumps(
+            [
+                {
+                    "tool_id": "demo-sqli",
+                    "name": "Demo",
+                    "vuln_classes": ["sqli"],
+                    "input_types": ["url"],
+                    "risk_level": "low",
+                    "availability": "installed",
+                    "active": False,
+                    "limitations": ["demo only"],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    code = main(
+        [
+            "select-tools",
+            "--db",
+            str(store.db_path),
+            "--vuln",
+            "CVE-2024-0001",
+            "--capabilities",
+            str(catalog),
+            "--json",
+        ]
+    )
+    assert code == 0
+    payload = _json_out(capsys)
+    assert [item["tool_id"] for item in payload["selected"]] == ["demo-sqli"]
+    assert payload["selected"][0]["availability"] == "installed"

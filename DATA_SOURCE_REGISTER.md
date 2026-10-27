@@ -26,7 +26,7 @@
 | SRC-NVD | NIST National Vulnerability Database | U.S. NIST; authoritative CVE enrichment | `https://services.nvd.nist.gov/rest/json/cves/2.0` | JSON | Optional `apiKey` | 5 req/30s anonymous; 50 req/30s keyed (per NVD docs) | Mostly 2002→present; sparse earlier | Continuous | NVD site terms; CVE content may carry MITRE terms ⚠️ | Normalized + hash by default; raw only if permitted | 🟡 (this increment) |
 | SRC-CVE | CVE Program (MITRE) | Authoritative CVE IDs/descriptions | `https://cveawg.mitre.org/api/` (CVE Services) | JSON | Optional/reserved | Per CVE Services policy ⚠️ | 1999→present | Continuous | CVE Terms of Use ⚠️ | Normalized + provenance | ⬜ |
 | SRC-GHSA | GitHub Security Advisories | Curated advisory DB + ecosystem mappings | GraphQL `securityAdvisories`; repo `github/advisory-database` | JSON/GraphQL | `GITHUB_TOKEN` recommended | GitHub API limits (higher authenticated) | ~2017→present (varies) | Continuous | Advisory DB license (commonly CC BY 4.0) ⚠️ verify | Normalized + provenance | ⬜ |
-| SRC-OSV | OSV.dev | Aggregates ecosystem advisories (PyPI, npm, Go, Maven, crates, Composer, etc.) | `https://api.osv.dev/v1/query`, `https://api.osv.dev/v1/vulns/{id}`, GCS export | JSON | None | Public API; be polite ⚠️ | Ecosystem-dependent; many 2017→present, some older | Continuous | Per-record source licenses vary; OSV project Apache-2.0 ⚠️ | Normalized; raw per source license | ⬜ |
+| SRC-OSV | OSV.dev | Aggregates ecosystem advisories (PyPI, npm, Go, Maven, crates, Composer, etc.) | `https://api.osv.dev/v1/query`, `https://api.osv.dev/v1/vulns/{id}`, GCS export | JSON | None | Public API; be polite ⚠️ | Ecosystem-dependent; many 2017→present, some older | Continuous | Per-record source licenses vary; OSV project Apache-2.0 ⚠️ | Normalized; raw per source license | ✅ (query-based; live check 2026-10-27) |
 | SRC-PHP | PHP.net security & release notes | Official PHP runtime/extension advisories | `https://www.php.net/security/`, release changelogs, PHP releases API/feeds where available | HTML/JSON/RSS | None | Respect robots/terms; low frequency | PHP 4/5/7/8 era → present, but not every issue has an advisory | Per release | PHP.net terms ⚠️ | Normalized + link; avoid full-page scraping if feed exists | ⬜ |
 | SRC-COMPOSER | Composer / Packagist security advisories | Composer ecosystem | `https://packagist.org/api/security-advisories/`, `composer audit` | JSON | None | Public API; polite | Package-dependent, mostly recent | Continuous | Packagist terms ⚠️ | Normalized | ⬜ |
 | SRC-LARAVEL | Laravel security releases/advisories | Framework maintainer | Laravel release notes, GitHub advisories, Laravel security page | HTML/JSON | None | Low frequency | Laravel 4→present (varies) | Per release | Laravel terms / repo license ⚠️ | Normalized + link | ⬜ |
@@ -106,7 +106,7 @@ GET https://services.nvd.nist.gov/rest/json/cves/2.0
 - GraphQL `securityAdvisories` supports ecosystem/severity/date filters and `identifier` lookup.
 - The `github/advisory-database` repository provides OSV-format JSON; cloning is heavy and must be rate-limited.
 - `GITHUB_TOKEN` is optional but strongly recommended; use the narrowest read-only scope.
-- **Status:** planned. No write operations.
+- **Status:** reachable today **through OSV** (GitHub advisories are mirrored in OSV; GHSA ids, CVE aliases, ranges and severity are available). A direct GitHub GraphQL connector is still planned. No write operations.
 
 ---
 
@@ -116,7 +116,9 @@ GET https://services.nvd.nist.gov/rest/json/cves/2.0
 - `GET https://api.osv.dev/v1/vulns/{id}` for a single record.
 - Bulk export via GCS (`gs://osv-vulnerabilities/...`) is available but requires `gsutil`/GCS access; do not assume it in CI.
 - OSV aggregates sources with different licenses; preserve per-record source and license metadata.
-- **Status:** planned. First use case: Composer/PHP package advisories and project triage.
+- OSV has **no date-range pagination API**; it is query-based and is not part of `SyncEngine`.
+- **Status:** ✅ implemented in `core/vuln_intel/sources/osv.py` (`osv-query`, `osv-get`). Live check 2026-10-27: `symfony/http-kernel` (Packagist) → 8 advisories stored, 0 errors. See `LIVE_OSV_VERIFICATION.md`.
+- **Known limit:** an empty query result is not proof that no advisory exists; it only means OSV has no mirrored advisory for that package/version.
 
 ---
 
@@ -275,5 +277,8 @@ Every connector must implement:
 | 2026-10-26 | NVD | Connector implemented + mocked tests | 134 new hermetic tests green | `tests/vuln_intel/` |
 | 2026-10-26 | NVD | Live probe (`RUN_LIVE_NVD=1`) | 1 passed; real NVD 2.0 response normalized | `tests/integration/test_vuln_intel_nvd_live.py` |
 | 2026-10-26 | NVD | Manual bounded sync | 2024-01-15: 1 page, 68 retrieved/inserted, 0 errors; coverage `complete=false` | `LIVE_NVD_VERIFICATION.md` |
+| 2026-10-27 | OSV | Connector implemented + hermetic tests | `tests/vuln_intel/` → 214 passed (whole package) | `tests/vuln_intel/` |
+| 2026-10-27 | OSV/GHSA | Live probe (`RUN_LIVE_OSV=1`) | 2 passed; real OSV responses normalized | `tests/integration/test_vuln_intel_osv_live.py` |
+| 2026-10-27 | OSV/GHSA | Manual package query | `symfony/http-kernel` (Packagist): 8 advisories stored, 0 errors; GHSA→CVE alias merge verified | `LIVE_OSV_VERIFICATION.md` |
 
 > When a live sync is performed, append the exact command, HTTP status, record count, date range, and elapsed time. Do not write "success" without these details.

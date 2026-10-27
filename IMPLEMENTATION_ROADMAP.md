@@ -21,13 +21,14 @@
 
 | Phase | Name | Priority | Status | Evidence |
 |---|---|---|---|---|
-| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,191 passed, 1 skipped, 0 failed; remaining P0 items listed below |
-| P1 | Vulnerability data model + store | P1 | ✅ | `core/vuln_intel/{models,db}.py`; 134 new tests green |
+| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,271 passed, 1 skipped, 0 failed; remaining P0 items listed below |
+| P1 | Vulnerability data model + store | P1 | ✅ | `core/vuln_intel/{models,db}.py`; vuln_intel suite: 214 tests green |
 | P2 | Historical ingestion (NVD first) | P1 | ✅ | `sources/nvd.py`, `sync.py`, `cli.py`; live one-day NVD check: 68 records, 0 errors |
+| P2b | OSV/GHSA query connector | P1 | ✅ | `sources/osv.py`; live package query: 8 advisories, 0 errors; GHSA→CVE alias merge |
 | P3 | Incremental sync + coverage | P1 | ✅ | `coverage.py`; measured gaps/limitations; `complete=false` by default |
 | P4 | PHP intelligence | P2 | ✅ | `php.py`; evidence + confidence; plugin/theme and `php-fpm` tests |
 | P5 | Project-aware triage | P2 | ✅ | `triage.py`; five-level applicability; fixed-version and unknown-version tests |
-| P6 | Tool capability registry + selection | P2 | ⬜ | — |
+| P6 | Tool capability registry + selection | P2 | ✅ | `tool_capabilities.py`, `tool_selection.py`, `vuln_classes.py`; authorization/risk/availability/ecosystem gates; plan only |
 | P7 | Safe lab + detectors | P3 | ⬜ | — |
 | P8 | Continuous monitoring scheduler | P3 | ⬜ | — |
 | P9 | AI analysis with citations | P3 | ⬜ | — |
@@ -53,7 +54,7 @@
 3. **Hermetic orchestrator tests** — `tests/test_hunter_master_pipeline.py` now mocks `execute_artifact` (previously invoked real crt.sh/subfinder).
 4. **Live test separation** — `tests/integration/test_artifact_based_recon_e2e.py` holds the live orchestrator test; CI already ignores `tests/integration`.
 5. **ToolManager timeout reaping** — the timeout path now uses `kill_process_tree` and awaits the transport; regression test asserts the reaper is invoked.
-6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 437, Group 3 = 569, Group 4 = 474 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (134); **2,191 passed, 1 skipped, 0 failed**. The opt-in live NVD test passed separately with `RUN_LIVE_NVD=1`.
+6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 437, Group 3 = 569, Group 4 = 474 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,271 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
 7. **Test-hang diagnosis** — Group 3's stall was unmocked `execute_artifact` (real crt.sh/subfinder), not the secret sanitizer; the test now mocks the boundary.
 
 ### Remaining
@@ -169,6 +170,67 @@
 
 ---
 
+## P2b — OSV/GHSA query connector
+
+**Status:** ✅ implemented and tested. Live package query: 8 advisories, 0 errors;
+see `LIVE_OSV_VERIFICATION.md`.
+
+### Why a separate path
+
+OSV has **no date-range pagination API**. Forcing it into `SyncEngine` would mean
+inventing a window the API does not support. The connector is therefore
+query-based (`POST /v1/query`, `GET /v1/vulns/{id}`) and is deliberately excluded
+from the date-window sync flow (`fetch_page()` refuses with a clear error).
+
+GHSA is reachable through OSV: GitHub advisories are mirrored in OSV, so a GHSA
+id, its CVE alias, affected packages, ranges, and severity are all available. A
+direct GitHub GraphQL connector remains future work.
+
+### Deliverables
+
+- `core/vuln_intel/sources/base.py`: `HttpClient.post_json()` sharing the same
+  retry / redirect-allowlist / size-cap envelope as `get_json()`.
+- `core/vuln_intel/sources/osv.py`:
+  - `OSV_METADATA` (`source_id="osv"`, `supports_incremental=False`,
+    `max_window_days=0`, host allowlist `api.osv.dev`);
+  - `OSVConnector.query_package(name, ecosystem, version=None)` and `get_vuln(id)`;
+  - `normalize_osv_record()`:
+    - CVE alias becomes the canonical id, the OSV/GHSA id stays an alias, so an
+      OSV record merges with the same CVE from NVD instead of duplicating it;
+    - `ranges` (`introduced` / `fixed` / `last_affected` / `limit`) → version
+      ranges; `"0"` means "all versions"; `fixed` also populates `fixed_version`;
+    - exact `versions[]` used only when no usable range exists;
+    - `GIT` ranges are **never** turned into version ranges (kept in metadata);
+    - CWEs read from `database_specific` and `ecosystem_specific` (top-level and
+      per-affected);
+    - CVSS v3 vectors are scored locally by `core/vuln_intel/cvss.py` (CVSS v4
+      vectors are stored but not scored);
+    - `withdrawn` → `WITHDRAWN`.
+- `core/vuln_intel/cvss.py`: CVSS v3.0/v3.1 base score (spec Appendix A) with
+  known-vector tests; never guesses.
+- CLI: `osv-query`, `osv-get` (optional `--db`, `--store-raw`, `--json`).
+- `sources` now lists both NVD and OSV.
+
+### Tests
+
+- GHSA→CVE canonical/alias merge and dedupe against an NVD record.
+- Range parsing (`introduced`/`fixed`/`last_affected`/open-ended/`"0"`).
+- Exact-version fallback; GIT ranges ignored as version ranges.
+- CWE extraction from `database_specific` + `ecosystem_specific`.
+- CVSS v3 scoring (known vectors) and v4 non-scoring.
+- Withdrawn records; missing id; non-object payloads.
+- Mocked POST body/URL; `fetch_page()` refusal.
+- CLI `osv-query` / `osv-get` with an injected fake connector (no network).
+
+### Live verification (optional)
+
+- `tests/integration/test_vuln_intel_osv_live.py`, skipped unless `RUN_LIVE_OSV=1`.
+- Result on 2026-10-27: `RUN_LIVE_OSV=1` → 2 passed. Manual package query
+  (`symfony/http-kernel`, Packagist) → 8 advisories stored, 0 errors; triage and
+  tool selection exercised on the stored records. See `LIVE_OSV_VERIFICATION.md`.
+
+---
+
 ## P3 — Incremental sync + coverage
 
 **Status:** ✅ implemented and tested in this increment.
@@ -266,30 +328,50 @@
 
 ## P6 — Tool capability registry + selection
 
-### Deliverables
+**Status:** implemented (`core/vuln_intel/tool_capabilities.py`, `tool_selection.py`, `vuln_classes.py`).
 
-- Extend `core/tool_registry.ToolDefinition` with capability metadata (languages, vuln categories, input/output, install requirements, version, license, constraints, limitations, risk, permissions, test coverage, last validated).
-- `select_tools(vuln, target_profile, scope)` with deterministic scoring:
-  - capability match (must-have)
-  - language/ecosystem match
-  - availability/installation status
-  - risk vs authorization
-  - reliability/maintenance/coverage
-  - cost/time
-- Explicit rejection reasons.
+### Delivered
+
+- `ToolCapability` metadata model: languages, ecosystems, vulnerability classes, input/output types, risk level, availability (`installed` / `not_installed` / `unknown`), authorization requirement, active/passive flag, reliability, test coverage, permissions, constraints, limitations, license, last validated.
+- Built-in catalog of 9 tools with **honest** metadata: every entry ships `availability=unknown` and `last_validated=None`, because this repository never verified the binaries.
+- `select_tools(record, project, scope, capabilities)` — deterministic scoring with explicit rejection reasons:
+  - vulnerability class from CWE (primary) + explicit advisory phrases (supporting) via `classify_vuln_classes`;
+  - authorization gate: active tools are rejected unless the scope is explicitly authorized;
+  - risk ceiling gate (`low` / `medium` / `high` / `critical`);
+  - availability gate: an unverified binary is rejected unless the caller relaxes it;
+  - ecosystem match (agnostic tools are not blocked);
+  - input-type match;
+  - reliability / test-coverage bonus;
+  - stable tie-break by `tool_id`.
+- `NOT_APPLICABLE` triage results block selection entirely (no theoretical hunting).
+- CLI: `select-tools` (plan only, never executes).
+- No automatic installation; no tool execution anywhere in the selection path (enforced by a test that monkeypatches `subprocess`).
+
+### Deliberate deviation
+
+`core/tool_registry.ToolDefinition` was **not** modified. The working tree already
+contains in-flight changes to that module, and capability metadata is a
+vulnerability-intelligence concern. `capability_from_tool_definition()` adapts the
+existing registry instead, so the two layers can converge later without a merge
+conflict.
 
 ### Tests
 
-- No tool selected for unsupported category.
+- No tool selected for an unsupported category (`insufficient_evidence`).
 - Active tool not selected without authorization.
-- Missing binary → not selected, with reason.
-- Popularity alone does not win.
-- Deterministic ordering.
+- Missing/unverified binary → not selected, with reason.
+- Risk above the granted ceiling → rejected.
+- Ecosystem mismatch → rejected.
+- Allowlist enforcement.
+- `NOT_APPLICABLE` advisory → nothing selected.
+- Deterministic ordering, including ties.
+- Popularity alone cannot win (no popularity input exists).
+- Selection never executes a tool.
 
 ### Acceptance
 
-- Every selection has a documented reason and evidence.
-- No automatic installation.
+- Every selection has a documented reason and evidence. ✅
+- No automatic installation. ✅
 
 ---
 
@@ -430,7 +512,7 @@
 | 13 | Update docs with actual results | ✅ counts and limits updated |
 | 14 | Commit | local only (pending final review) |
 
-All hermetic steps are complete: **2,191 passed, 1 skipped, 0 failed**. The
+All hermetic steps are complete: **2,271 passed, 1 skipped, 0 failed**. The
 integration directory remains opt-in/live; the orchestrator live test is not
 part of the hermetic count.
 

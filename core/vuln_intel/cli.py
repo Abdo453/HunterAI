@@ -25,6 +25,15 @@ Classify a record and triage it against a project inventory::
     python -m core.vuln_intel.cli classify-php --id CVE-2024-1234
     python -m core.vuln_intel.cli triage --project project.json --all
 
+Query OSV.dev (which also exposes GHSA advisories)::
+
+    python -m core.vuln_intel.cli osv-query --package symfony/http-kernel
+    python -m core.vuln_intel.cli osv-get --id GHSA-xxxx-xxxx-xxxx
+
+Rank the tools that may test an advisory (a plan, never an execution)::
+
+    python -m core.vuln_intel.cli select-tools --vuln CVE-2024-1234 --authorized
+
 All output is data.  Advisory text is never executed or interpreted as an
 instruction.
 """
@@ -53,7 +62,14 @@ from .models import (
 from .php import classify_php
 from .sources.base import SourceMetadata
 from .sources.nvd import NVD_METADATA, NVDConnector
+from .sources.osv import OSV_METADATA, OSVConnector, normalize_osv_record
 from .sync import SyncEngine
+from .tool_capabilities import (
+    DEFAULT_CAPABILITIES,
+    ToolAvailability,
+    load_capability_catalog,
+)
+from .tool_selection import SelectionScope, select_tools
 from .triage import triage_many, triage_project
 
 DEFAULT_DB = "data/vuln_intel/vuln_intel.sqlite3"
@@ -196,6 +212,50 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--out", default=None)
     export.add_argument("--json", action="store_true")
 
+    osv_query = sub.add_parser(
+        "osv-query", help="query OSV.dev for a package (network, read-only)"
+    )
+    osv_query.add_argument("--package", required=True)
+    osv_query.add_argument("--ecosystem", default="Packagist")
+    osv_query.add_argument("--version", default=None)
+    osv_query.add_argument("--db", default=None, help="optional: store the results")
+    osv_query.add_argument("--store-raw", action="store_true")
+    osv_query.add_argument("--json", action="store_true")
+
+    osv_get = sub.add_parser(
+        "osv-get", help="fetch one OSV advisory by id (network, read-only)"
+    )
+    osv_get.add_argument("--id", required=True)
+    osv_get.add_argument("--db", default=None, help="optional: store the result")
+    osv_get.add_argument("--store-raw", action="store_true")
+    osv_get.add_argument("--json", action="store_true")
+
+    select = sub.add_parser(
+        "select-tools", help="rank tools for an advisory (plan only, never executes)"
+    )
+    select.add_argument("--db", default=DEFAULT_DB)
+    select.add_argument("--vuln", required=True)
+    select.add_argument("--project", default=None)
+    select.add_argument("--authorized", action="store_true")
+    select.add_argument(
+        "--max-risk",
+        default="low",
+        choices=["low", "medium", "high", "critical"],
+    )
+    select.add_argument(
+        "--allow-unavailable",
+        action="store_true",
+        help="do not require the tool to be verified as installed",
+    )
+    select.add_argument(
+        "--assume-available",
+        action="append",
+        default=None,
+        help="mark a tool as installed for this run (repeatable)",
+    )
+    select.add_argument("--capabilities", default=None, help="JSON capability catalog")
+    select.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -216,14 +276,19 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_sources(args: argparse.Namespace) -> int:
-    payload = [asdict(NVD_METADATA)]
+    payload = [asdict(NVD_METADATA), asdict(OSV_METADATA)]
     if args.json:
         safe_print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         for item in payload:
+            window = (
+                f"window={item['max_window_days']}d"
+                if item["max_window_days"]
+                else "query-based"
+            )
             safe_print(
                 f"{item['source_id']}: {item['name']} "
-                f"(start={item['historical_start']}, window={item['max_window_days']}d, "
+                f"(start={item['historical_start']}, {window}, "
                 f"rate={item['rate_limit_requests']}/{item['rate_limit_period_seconds']}s)"
             )
     return 0
@@ -306,11 +371,19 @@ def _cmd_coverage(args: argparse.Namespace) -> int:
 
 
 def _record_summary(data: Dict[str, Any]) -> str:
-    title = (data.get("title") or data.get("description") or "").strip().replace("\n", " ")
+    identifier = (
+        data.get("record_id")
+        or data.get("canonical_id")
+        or data.get("source_record_id")
+        or "unknown"
+    )
+    title = (
+        data.get("title") or data.get("summary") or data.get("description") or ""
+    ).strip().replace("\n", " ")
     if len(title) > 100:
         title = title[:97] + "..."
     return (
-        f"{data.get('record_id')} | {data.get('published_at') or 'unknown'} | "
+        f"{identifier} | {data.get('published_at') or 'unknown'} | "
         f"{data.get('severity') or 'unknown'} | {title}"
     )
 
@@ -455,6 +528,159 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _osv_query_async(args: argparse.Namespace, connector: Any) -> List[Dict[str, Any]]:
+    if connector is not None:
+        return await connector.query_package(args.package, args.ecosystem, args.version)
+    active = OSVConnector()
+    try:
+        return await active.query_package(args.package, args.ecosystem, args.version)
+    finally:
+        await active.aclose()
+
+
+async def _osv_get_async(args: argparse.Namespace, connector: Any) -> Dict[str, Any]:
+    if connector is not None:
+        return await connector.get_vuln(args.id)
+    active = OSVConnector()
+    try:
+        return await active.get_vuln(args.id)
+    finally:
+        await active.aclose()
+
+
+def _store_osv_records(
+    records: Sequence[VulnerabilityRecord],
+    raws: Sequence[Dict[str, Any]],
+    db: Optional[str],
+    store_raw: bool,
+) -> List[Dict[str, Any]]:
+    stored: List[Dict[str, Any]] = []
+    if not db:
+        return stored
+    store = VulnerabilityStore(db, store_raw=bool(store_raw))
+    for raw, record in zip(raws, records):
+        result = store.upsert_vulnerability(
+            record,
+            raw_payload=raw if store_raw else None,
+            source_url=f"https://osv.dev/vulnerability/{record.source_record_id}",
+        )
+        stored.append(result.model_dump(mode="json"))
+    return stored
+
+
+def _print_osv_payload(payload: Dict[str, Any]) -> None:
+    safe_print(
+        f"source={payload['source_id']} count={payload['count']} "
+        f"stored={len(payload.get('stored') or [])}"
+    )
+    for record in payload.get("records") or []:
+        safe_print(_record_summary(record))
+    for item in payload.get("stored") or []:
+        safe_print(f"stored {item['record_id']} status={item['status']}")
+
+
+def _cmd_osv_query(args: argparse.Namespace, connector: Any = None) -> int:
+    raws = asyncio.run(_osv_query_async(args, connector))
+    if connector is not None:
+        records = [connector.normalize(raw) for raw in raws]
+    else:
+        records = [normalize_osv_record(raw) for raw in raws]
+    stored = _store_osv_records(
+        records, raws, getattr(args, "db", None), bool(getattr(args, "store_raw", False))
+    )
+    payload = {
+        "source_id": "osv",
+        "query": {
+            "package": args.package,
+            "ecosystem": args.ecosystem,
+            "version": args.version,
+        },
+        "count": len(records),
+        "records": [record.model_dump(mode="json") for record in records],
+        "stored": stored,
+    }
+    if args.json:
+        safe_print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    else:
+        _print_osv_payload(payload)
+    return 0
+
+
+def _cmd_osv_get(args: argparse.Namespace, connector: Any = None) -> int:
+    raw = asyncio.run(_osv_get_async(args, connector))
+    record = connector.normalize(raw) if connector is not None else normalize_osv_record(raw)
+    stored = _store_osv_records(
+        [record], [raw], getattr(args, "db", None), bool(getattr(args, "store_raw", False))
+    )
+    payload = {
+        "source_id": "osv",
+        "query": {"id": args.id},
+        "count": 1,
+        "records": [record.model_dump(mode="json")],
+        "stored": stored,
+    }
+    if args.json:
+        safe_print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    else:
+        _print_osv_payload(payload)
+    return 0
+
+
+def _cmd_select_tools(args: argparse.Namespace) -> int:
+    store = VulnerabilityStore(args.db)
+    record = store.get_record(args.vuln)
+    if record is None:
+        safe_print(f"not found: {args.vuln}", file=sys.stderr)
+        return 1
+
+    project = _load_project(args.project) if args.project else None
+    if args.capabilities:
+        capabilities = load_capability_catalog(args.capabilities)
+    else:
+        capabilities = [item.model_copy(deep=True) for item in DEFAULT_CAPABILITIES]
+
+    assumed = {
+        str(item).strip()
+        for item in (getattr(args, "assume_available", None) or [])
+        if str(item).strip()
+    }
+    if assumed:
+        capabilities = [
+            item.model_copy(update={"availability": ToolAvailability.INSTALLED})
+            if item.tool_id in assumed
+            else item
+            for item in capabilities
+        ]
+
+    scope = SelectionScope(
+        authorized=bool(getattr(args, "authorized", False)),
+        max_risk=getattr(args, "max_risk", "low"),
+        require_installed=not bool(getattr(args, "allow_unavailable", False)),
+    )
+    result = select_tools(record, project, scope, capabilities)
+    payload = result.to_dict()
+    if args.json:
+        safe_print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    else:
+        safe_print(
+            f"vuln={result.vuln_id} status={result.status} "
+            f"classes={', '.join(result.vuln_classes) or 'none'} "
+            f"authorized={result.authorized}"
+        )
+        for item in result.selected:
+            safe_print(
+                f"selected {item.tool_id} score={item.score} "
+                f"risk={item.risk_level} availability={item.availability}"
+            )
+            for reason in item.reasons:
+                safe_print("  reason: " + reason)
+        for item in result.rejected:
+            safe_print(f"rejected {item.tool_id}: {item.reason}")
+        for note in result.notes:
+            safe_print("note: " + note)
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None, connector: Any = None) -> int:
     configure_stdio()
     parser = build_parser()
@@ -477,6 +703,12 @@ def main(argv: Optional[Sequence[str]] = None, connector: Any = None) -> int:
         return _cmd_triage(args)
     if args.command == "export":
         return _cmd_export(args)
+    if args.command == "osv-query":
+        return _cmd_osv_query(args, connector=connector)
+    if args.command == "osv-get":
+        return _cmd_osv_get(args, connector=connector)
+    if args.command == "select-tools":
+        return _cmd_select_tools(args)
     parser.error(f"unknown command {args.command!r}")
     return 2
 

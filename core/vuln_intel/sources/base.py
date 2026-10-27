@@ -214,6 +214,31 @@ class HttpClient:
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> Any:
+        return await self._request("GET", url, params=params, headers=headers)
+
+    async def post_json(
+        self,
+        url: str,
+        payload: Any,
+        *,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        """POST a JSON body and return the parsed JSON response.
+
+        The same safety envelope as :meth:`get_json` applies: retries, the
+        redirect allowlist, and the response-size cap.
+        """
+        return await self._request("POST", url, json_body=payload, headers=headers)
+
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: Optional[Dict[str, Any]] = None,
+        json_body: Any = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
         if self._client is None:
             await self.__aenter__()
         assert self._client is not None
@@ -222,7 +247,13 @@ class HttpClient:
         for attempt in range(1, self.retry_policy.max_attempts + 1):
             await self.rate_limiter.acquire()
             try:
-                response = await self._client.get(url, params=params, headers=headers)
+                response = await self._client.request(
+                    method,
+                    url,
+                    params=params,
+                    json=json_body,
+                    headers=headers,
+                )
             except httpx.RequestError as exc:
                 last_error = exc
                 if attempt >= self.retry_policy.max_attempts:

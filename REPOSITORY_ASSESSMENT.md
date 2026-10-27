@@ -19,7 +19,7 @@ The strongest existing assets are:
 2. **An evidence-first finding model** (Evidence Court / Proof-of-Execution) that already distinguishes observation from confirmed vulnerability.
 3. **A working multi-stage hunt pipeline** (`hunter_ai/pipeline/pipeline_orchestrator.py`) with artifact-based stages and reports.
 4. **A sandboxed command layer** (`core/tool_registry.py`, `core/sandbox.py`) with risk levels and allowlists.
-5. **A real test suite** (2,191 passed + 1 skipped in the hermetic run; see §Test baseline).
+5. **A real test suite** (2,271 passed + 1 skipped in the hermetic run; see §Test baseline).
 
 The weakest area relative to the new mission is **vulnerability intelligence**. What exists today is mostly retrieval, not intelligence:
 
@@ -172,7 +172,7 @@ No evidence was found of a centralized provider abstraction with per-provider po
 
 `docs/` contains `architecture-audit.md`, `design.md`, `implementation-plan.md`, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_LEDGER.md`, `IMPLEMENTATION_STATUS.md`, `security.md`, `security_audit.md`, `OPERATIONAL_GUIDE.md`, `usage.md`, `burp-setup.md`, `mcp-setup.md`, `AGENT_SYSTEMS.md`, `CLAUDE_THINKING_ARCHITECTURE.md`, `end_to_end_test_results.md`, and more. Root-level `ARCHITECTURE.md`, `THREAT_MODEL.md`, `WORKFLOW.md`, `TEST_BASELINE.md`, `BLIND_SPOTS.md`, `PRE_KALI_CERTIFICATION.md`.
 
-**Gap:** documents overlap and disagree; the README badge claims "42/42" tests while the hermetic suite is 2,191 passing tests (1 skipped). There is no single authoritative status document.
+**Gap:** documents overlap and disagree; the README badge claims "42/42" tests while the hermetic suite is 2,271 passing tests (1 skipped). There is no single authoritative status document.
 
 ---
 
@@ -195,7 +195,7 @@ No evidence was found of a centralized provider abstraction with per-provider po
 | Console encoding safety | `core/console.py`; regression tests pass |
 | Process-tree cleanup | `core/process_utils.py`; regression tests pass |
 | Readiness gate | `core/readiness.py`; CI smoke step |
-| Test suite | 2,191 passed + 1 skipped in the hermetic run (four groups: 524 + 437 + 569 + 474; `tests/v27` + console safety: 53; `tests/vuln_intel`: 134). Opt-in live NVD test: 1 passed when enabled. |
+| Test suite | 2,271 passed + 1 skipped in the hermetic run (four groups: 524 + 437 + 569 + 474; `tests/v27` + console safety: 53; `tests/vuln_intel`: 214). Opt-in live tests: NVD 1 passed, OSV 2 passed when enabled. |
 
 ### C.2 Missing (required by the new mission)
 
@@ -203,13 +203,13 @@ No evidence was found of a centralized provider abstraction with per-provider po
 |---|---|---|---|
 | Normalized vulnerability schema | JSON blob with 3 records | `core/vuln_intel` SQLite schema with migrations, aliases, CWEs, references, affected packages | Legacy JSON remains separate; no migration of old data |
 | Historical backfill 2000–2026 | None | Bounded NVD proof: 68 records for 2024-01-15, 0 errors | Full 2000–2026 corpus not ingested; no completeness claim |
-| Incremental sync + checkpoints | None | Resumable NVD sync with per-page checkpoints and overlap | OSV/GHSA/vendor sources still missing |
-| Source connectors | CIRCL lookup + raw fetcher only | NVD 2.0 connector (rate limit, retries, size cap, pagination) | OSV, GHSA, PHP/Composer, and vendor feeds planned |
+| Incremental sync + checkpoints | None | Resumable NVD sync with per-page checkpoints and overlap | Vendor feeds still missing |
+| Source connectors | CIRCL lookup + raw fetcher only | NVD 2.0 connector (rate limit, retries, size cap, pagination) + OSV.dev query connector (GHSA/CVE aliases, ranges, CVSS v3 scoring) | PHP/Composer and vendor feeds planned |
 | Provenance and confidence model | Not modeled per record | Source ID, timestamps, content hash, confidence labels, raw payload opt-in | AI-cited evidence still future work |
 | Version-range applicability | None | Deterministic version comparator and five-level triage | Not a full Composer/npm semver implementation |
 | PHP-specific classification | None | Evidence-based runtime/extension/framework/package/application/config classifier | Text-only ambiguity remains; confidence is explicit |
 | Project inventory and triage | None | JSON `ProjectProfile` + `triage` CLI with reasons and matched packages | Inventory import from manifests is future work |
-| Capability registry for tools | Five partial registries, no capability metadata | Unchanged | Tool selection is popularity/name-driven |
+| Capability registry for tools | Five partial registries, no capability metadata | `core/vuln_intel/tool_capabilities.py` + `tool_selection.py`: capability metadata, CWE→class extraction, deterministic scoring, authorization/risk/availability/ecosystem gates, explicit rejection reasons | Selection is a plan only; availability is not auto-detected; catalog is curated, not exhaustive |
 | Safe lab cases | No structured lab corpus | Unchanged | Cannot validate detectors reproducibly |
 | Continuous scheduler | No durable scheduler/retry queue | Unchanged | No continuous monitoring yet |
 | Structured audit logs/metrics | Partial logs only | Sync runs, checkpoints, and error rows persisted | No metrics/alerting yet |
@@ -387,6 +387,11 @@ core/vuln_intel/db.py              # SQLite store, migrations, dedupe, search, e
 core/vuln_intel/sources/__init__.py
 core/vuln_intel/sources/base.py    # connector ABC, rate limiter, retry/backoff, cursor
 core/vuln_intel/sources/nvd.py     # NVD 2.0 connector + normalizer
+core/vuln_intel/sources/osv.py     # OSV.dev query connector + normalizer (GHSA reachable)
+core/vuln_intel/cvss.py            # CVSS v3.0/v3.1 base-score calculation
+core/vuln_intel/vuln_classes.py    # CWE/text -> canonical vulnerability classes
+core/vuln_intel/tool_capabilities.py  # tool capability metadata + catalog
+core/vuln_intel/tool_selection.py  # deterministic, authorization-aware selection (plan only)
 core/vuln_intel/sync.py            # SyncEngine + SyncReport
 core/vuln_intel/coverage.py        # coverage/gap computation
 core/vuln_intel/php.py             # PHP classification
@@ -466,21 +471,32 @@ Hermetic suite, run locally on 2026-10-26:
 | Group 3 | **569 passed**, 0 failed |
 | Group 4 | **474 passed**, 1 skipped, 0 failed |
 | `tests/v27` + `tests/test_console_safety.py` | **53 passed**, 0 failed |
-| `tests/vuln_intel` (new) | **134 passed**, 0 failed |
+| `tests/vuln_intel` (new) | **214 passed**, 0 failed |
 
-**Total: 2,191 passed, 1 skipped, 0 failed.** (The skip is an existing opt-in/integration guard, not a failure.)
+**Total: 2,271 passed, 1 skipped, 0 failed.** (The skip is an existing opt-in/integration guard, not a failure.)
 
-The live/opt-in NVD test is outside the hermetic count:
+One test (`tests/test_enterprise_casm.py::test_orchestrator_passive_profile_and_diff`)
+requires a local Ollama server; when the AI preflight gate cannot reach
+`127.0.0.1:11434`, the orchestrator aborts by design and that test fails for
+environmental reasons. It passed in the recorded run with Ollama running.
+
+The live/opt-in tests are outside the hermetic count:
 
 ```powershell
 $env:RUN_LIVE_NVD = "1"
 python -m pytest tests/integration/test_vuln_intel_nvd_live.py -q
 # 1 passed
+
+$env:RUN_LIVE_OSV = "1"
+python -m pytest tests/integration/test_vuln_intel_osv_live.py -q
+# 2 passed
 ```
 
 A bounded manual live NVD sync (2024-01-15, 68 records, 0 errors) is recorded in
-`LIVE_NVD_VERIFICATION.md`. It is not a 2000–2026 backfill and does not support a
-completeness claim.
+`LIVE_NVD_VERIFICATION.md`. A bounded live OSV/GHSA query
+(`symfony/http-kernel`, 8 advisories, 0 errors) is recorded in
+`LIVE_OSV_VERIFICATION.md`. Neither is a full historical backfill and neither
+supports a completeness claim.
 
 Baseline fixes made during this assessment:
 

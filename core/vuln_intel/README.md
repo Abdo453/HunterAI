@@ -10,11 +10,16 @@ Any active action must go through the existing authorization/sandbox layers.
 - Stores them in a separate SQLite database with versioned migrations.
 - Syncs from NVD 2.0 with rate limiting, retries, date-window splitting,
   per-page checkpoints, and resumable runs.
+- Queries OSV.dev on demand for a package/version or a single advisory; OSV also
+  exposes GitHub (GHSA) advisories and their CVE aliases.
+- Computes CVSS v3.0/v3.1 base scores from vectors instead of trusting labels.
 - Measures coverage month by month instead of claiming a complete corpus.
 - Classifies the PHP component of an advisory (runtime, extension, framework,
   Composer package, application, server configuration) with evidence.
 - Triages an advisory against a project inventory with deterministic version
   comparison and five applicability levels.
+- Selects tools deterministically for an advisory, inside an explicit
+  authorization/risk scope. **Selection is a plan; nothing is executed.**
 - Exports JSON/CSV and exposes a CLI.
 
 ## Quick start
@@ -41,6 +46,13 @@ python -m core.vuln_intel.cli classify-php --id CVE-2024-1234
 
 # Project-aware triage
 python -m core.vuln_intel.cli triage --project project.json --all
+
+# OSV.dev / GHSA (query-based; network)
+python -m core.vuln_intel.cli osv-query --package symfony/http-kernel --ecosystem Packagist
+python -m core.vuln_intel.cli osv-get --id GHSA-h7vf-5wrv-9fhv
+
+# Tool selection (a plan; never executes anything)
+python -m core.vuln_intel.cli select-tools --vuln CVE-2022-24894 --authorized --max-risk high
 ```
 
 A project inventory is a JSON object:
@@ -106,12 +118,40 @@ manually on 2026-10-26: one day (2024-01-15), 68 records, 0 errors. It is not a
 2000–2026 backfill and does not support a completeness claim. Full details and
 the exact commands are in [`LIVE_NVD_VERIFICATION.md`](../../LIVE_NVD_VERIFICATION.md).
 
-The automated live test is opt-in:
+A bounded live OSV check was performed on 2026-10-27: `symfony/http-kernel`
+(Packagist) → 8 advisories stored, 0 errors, GHSA→CVE alias merge verified.
+Details: [`LIVE_OSV_VERIFICATION.md`](../../LIVE_OSV_VERIFICATION.md).
+
+The automated live tests are opt-in:
 
 ```powershell
 $env:RUN_LIVE_NVD = "1"
 python -m pytest tests/integration/test_vuln_intel_nvd_live.py -q
+
+$env:RUN_LIVE_OSV = "1"
+python -m pytest tests/integration/test_vuln_intel_osv_live.py -q
 ```
+
+## Tool selection (P6)
+
+`select-tools` answers: *given this advisory, this project, and this
+authorization scope, which tools may test it?*
+
+- Vulnerability class comes from CWEs (primary) plus explicit advisory phrases
+  (supporting). A bare word is never enough. No class evidence →
+  `insufficient_evidence`, nothing selected.
+- Active tools are rejected unless `--authorized` is passed.
+- Risk above `--max-risk` is rejected.
+- A tool whose availability is `unknown` is rejected unless the caller relaxes
+  it (`--allow-unavailable`) or marks it for this run (`--assume-available`).
+- Ecosystem and input-type mismatches are rejected.
+- `NOT_APPLICABLE` triage results block selection entirely.
+- Every decision has a reason; ordering is deterministic (`score`, then
+  `tool_id`).
+- The built-in catalog ships **every** tool as `availability=unknown` and
+  `last_validated=None`: this repository does not verify installed binaries.
+- No tool is installed or executed by this package. A test monkeypatches
+  `subprocess` to prove the selection path never spawns a process.
 
 ## Safety properties
 
@@ -139,23 +179,33 @@ cache. It does not claim that the legacy cache is a historical corpus.
 
 ```bash
 python -m pytest tests/vuln_intel -q
-# 134 passed
+# 214 passed
 ```
 
 The suite covers models, version comparison, store idempotency and SQL-injection
 safety, NVD normalization/pagination, resumable sync, coverage gaps, PHP
 classification, triage boundaries, CLI JSON contracts, prompt-injection
-handling, HTTP retry/redirect/size limits, and an opt-in live NVD smoke test.
+handling, HTTP retry/redirect/size limits, OSV/GHSA normalization and alias
+merging, CVSS v3 scoring, vulnerability-class extraction, deterministic tool
+selection and its authorization/risk/availability gates, plus opt-in live NVD
+and OSV smoke tests.
 
 ## Known limitations
 
-- Only NVD 2.0 is implemented in this slice. OSV/GHSA, vendor advisories, and
-  exploit intelligence are not yet connected.
+- NVD 2.0 and OSV.dev are implemented. Vendor advisories (PHP.net, Laravel,
+  Symfony, Packagist) and exploit intelligence are not yet connected; GHSA is
+  reachable through OSV, but a direct GitHub GraphQL connector is future work.
+- OSV is query-based and has no date-range pagination; it is not part of
+  `SyncEngine`, and an empty OSV result is not proof that no advisory exists.
+- CVSS v4 vectors are stored but not scored (only v3.x base scores are computed).
 - The version comparator is not a full Composer/npm semver implementation; it
   handles numeric cores and common suffixes and returns "unknown" rather than
   guessing.
 - NVD's CPE data is not a complete package inventory. A CPE match is a lead, not
   proof that a specific deployment is vulnerable.
 - Coverage measures stored records, not the universe of all vulnerabilities.
+- Tool selection only plans; it does not verify a tool is installed and does not
+  execute it. The built-in capability catalog is a curated starting point, not a
+  guarantee of tool behavior.
 - The CLI is intentionally small; it is not a replacement for the existing
   orchestrator or reporting pipeline.

@@ -16,10 +16,16 @@ from .base import (  # noqa: F401
     SourceParseError,
     SourceUnavailableError,
 )
+from .nvd import NVD_METADATA, NVDConnector  # noqa: F401
+from .osv import OSV_METADATA, OSVConnector, normalize_osv_record  # noqa: F401
 
 __all__ = [
     "Cursor",
     "HttpClient",
+    "NVDConnector",
+    "NVD_METADATA",
+    "OSVConnector",
+    "OSV_METADATA",
     "Page",
     "RateLimiter",
     "ResponseTooLargeError",
@@ -31,4 +37,5 @@ __all__ = [
     "SourceMetadata",
     "SourceParseError",
     "SourceUnavailableError",
+    "normalize_osv_record",
 ]
