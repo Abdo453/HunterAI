@@ -185,7 +185,7 @@ DEEPSEEK_API_KEY=your_key
 
 ## 🧪 Verification & Testing Suite
 
-HunterAI's hermetic suite currently passes 2,336 tests (1 skipped). The opt-in live NVD/OSV tests and the Pre-Kali Certification Gates are separate:
+HunterAI's hermetic suite currently passes 2,337 tests (1 skipped). The opt-in live NVD/OSV tests and the Pre-Kali Certification Gates are separate:
 
 ```bash
 # Run pytest unit test suites

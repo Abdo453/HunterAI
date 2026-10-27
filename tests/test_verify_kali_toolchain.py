@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import yaml
 
+import scripts.verify_kali_toolchain as vkt
 from scripts.verify_kali_toolchain import probe, check_ollama_models, load_env_host, main
 
 
@@ -55,11 +56,19 @@ def test_ollama_model_missing():
     assert "NOT PULLED" in results[0]["detail"]
 
 
-def test_load_env_host_default(monkeypatch):
+def test_load_env_host_default(tmp_path, monkeypatch):
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
-    # .env.example exists; ensure default fallback works when no .env override.
+    # Isolate from the developer's real .env so the fallback is actually tested.
+    monkeypatch.setattr(vkt, "ENV_PATH", tmp_path / ".env")
     host = load_env_host()
     assert host == "http://localhost:11434"
+
+
+def test_load_env_host_reads_env_file(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("OLLAMA_HOST=http://127.0.0.1:11434\n", encoding="utf-8")
+    monkeypatch.setattr(vkt, "ENV_PATH", env_file)
+    assert load_env_host() == "http://127.0.0.1:11434"
 
 
 def test_main_strict_exits_zero_when_all_ready(tmp_path, monkeypatch):
