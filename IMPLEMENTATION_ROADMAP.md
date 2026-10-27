@@ -21,7 +21,7 @@
 
 | Phase | Name | Priority | Status | Evidence |
 |---|---|---|---|---|
-| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,271 passed, 1 skipped, 0 failed; remaining P0 items listed below |
+| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,301 passed, 1 skipped, 0 failed; remaining P0 items listed below |
 | P1 | Vulnerability data model + store | P1 | ✅ | `core/vuln_intel/{models,db}.py`; vuln_intel suite: 214 tests green |
 | P2 | Historical ingestion (NVD first) | P1 | ✅ | `sources/nvd.py`, `sync.py`, `cli.py`; live one-day NVD check: 68 records, 0 errors |
 | P2b | OSV/GHSA query connector | P1 | ✅ | `sources/osv.py`; live package query: 8 advisories, 0 errors; GHSA→CVE alias merge |
@@ -29,6 +29,7 @@
 | P4 | PHP intelligence | P2 | ✅ | `php.py`; evidence + confidence; plugin/theme and `php-fpm` tests |
 | P5 | Project-aware triage | P2 | ✅ | `triage.py`; five-level applicability; fixed-version and unknown-version tests |
 | P6 | Tool capability registry + selection | P2 | ✅ | `tool_capabilities.py`, `tool_selection.py`, `vuln_classes.py`; authorization/risk/availability/ecosystem gates; plan only |
+| P6b | Authorized red-team policy engine | P1 | ✅ | `core/policy/red_team.py`; signed grants, `red_team` profile (no prompts, critical risk), hard invariants, hash-chained audit; 30 tests |
 | P7 | Safe lab + detectors | P3 | ⬜ | — |
 | P8 | Continuous monitoring scheduler | P3 | ⬜ | — |
 | P9 | AI analysis with citations | P3 | ⬜ | — |
@@ -54,7 +55,7 @@
 3. **Hermetic orchestrator tests** — `tests/test_hunter_master_pipeline.py` now mocks `execute_artifact` (previously invoked real crt.sh/subfinder).
 4. **Live test separation** — `tests/integration/test_artifact_based_recon_e2e.py` holds the live orchestrator test; CI already ignores `tests/integration`.
 5. **ToolManager timeout reaping** — the timeout path now uses `kill_process_tree` and awaits the transport; regression test asserts the reaper is invoked.
-6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 437, Group 3 = 569, Group 4 = 474 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,271 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
+6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 437, Group 3 = 569, Group 4 = 504 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,301 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
 7. **Test-hang diagnosis** — Group 3's stall was unmocked `execute_artifact` (real crt.sh/subfinder), not the secret sanitizer; the test now mocks the boundary.
 
 ### Remaining
@@ -375,6 +376,51 @@ conflict.
 
 ---
 
+## P6b — Authorized red-team policy engine
+
+**Status:** ✅ implemented (`core/policy/red_team.py`; 30 tests).
+
+### Why
+
+An authorized engagement should not require an approval prompt for every
+request. The engine provides a zero-friction `red_team` profile while keeping
+the boundaries that make testing legal and safe.
+
+### Delivered
+
+- `AuthorizationGrant`: HMAC-SHA256-signed JSON envelope (scope, validity
+  window, allowed profiles, authorizing party). Any edit invalidates the
+  signature.
+- `ScopeTarget` matcher: `domain` (exact or subdomain, never a look-alike),
+  `host`, `cidr`, `url` (scheme + host + port + path prefix).
+- Profiles: `safe` (read-only), `standard` (active testing; exploit proof
+  needs approval), `red_team` (no approval prompts, `critical` risk ceiling).
+- Hard invariants denied in every profile: backdoor/persistence, C2/reverse
+  shell, lateral movement, destructive writes, evasion, exfiltration,
+  credential dumping. A signed grant cannot override them.
+- `AuditLog`: append-only JSONL hash chain; tampering breaks `verify()`.
+- Per-engine rate limit and a small CLI (`grant`, `check`).
+- Docs: `AUTHORIZED_RED_TEAM_MODE.md`.
+
+### Tests
+
+- `red_team` allows `exploit_proof` at `critical` risk without approval.
+- Every `ForbiddenAction` denied even with a valid `red_team` grant.
+- Destructive SQL/shell patterns denied; persistence/reverse-shell patterns
+  denied; exfiltration/evasion denied.
+- Out-of-scope, expired grant, tampered grant, profile not in grant.
+- Scope matching (subdomain vs look-alike, CIDR, URL prefix).
+- Audit chain verification and tamper detection.
+- Grant round-trip through JSON.
+
+### Acceptance
+
+- Zero prompts for `red_team` inside the signed scope. ✅
+- No grant can authorize malware behaviour. ✅
+- Every decision is attributable and tamper-evident. ✅
+
+---
+
 ## P7 — Safe lab + detectors
 
 ### Deliverables
@@ -512,7 +558,7 @@ conflict.
 | 13 | Update docs with actual results | ✅ counts and limits updated |
 | 14 | Commit | local only (pending final review) |
 
-All hermetic steps are complete: **2,271 passed, 1 skipped, 0 failed**. The
+All hermetic steps are complete: **2,301 passed, 1 skipped, 0 failed**. The
 integration directory remains opt-in/live; the orchestrator live test is not
 part of the hermetic count.
 

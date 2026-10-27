@@ -1,6 +1,6 @@
 # HunterAI Pre-Kali Test Baseline
 
-> **Current status (2026-10-27):** the hermetic suite is **2,271 passed, 1 skipped, 0 failed**; the opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately. One test (`tests/test_enterprise_casm.py::test_orchestrator_passive_profile_and_diff`) requires a local Ollama server to be running — it aborts with `status=aborted` when the AI preflight gate cannot reach `127.0.0.1:11434`. See `REPOSITORY_ASSESSMENT.md` §Test baseline. The dated baseline below is kept as historical evidence and is not the current count.
+> **Current status (2026-10-27):** the hermetic suite is **2,301 passed, 1 skipped, 0 failed**; the opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately. One test (`tests/test_enterprise_casm.py::test_orchestrator_passive_profile_and_diff`) requires a local Ollama server to be running — it aborts with `status=aborted` when the AI preflight gate cannot reach `127.0.0.1:11434`. See `REPOSITORY_ASSESSMENT.md` §Test baseline. The dated baseline below is kept as historical evidence and is not the current count.
 
 - **Date:** 2026-09-12
 - **Environment:** Windows Host / Python 3.11.9

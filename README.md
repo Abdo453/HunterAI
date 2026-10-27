@@ -3,7 +3,7 @@
 <div align="center">
 
 [![Certification](https://img.shields.io/badge/Pre--Kali%20Certification-16%2F16%20Gates%20Passed%20(100%25)-brightgreen?style=for-the-badge&logo=shield)](PRE_KALI_CERTIFICATION.md)
-[![Tests](https://img.shields.io/badge/Hermetic%20Tests-2%2C271%20Passing-success?style=for-the-badge&logo=pytest)](tests/)
+[![Tests](https://img.shields.io/badge/Hermetic%20Tests-2%2C301%20Passing-success?style=for-the-badge&logo=pytest)](tests/)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)](https://python.org)
 [![Architecture](https://img.shields.io/badge/Engine-Evidence%20Court%20%2B%20Code%20Intel-orange?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/License-MIT-purple?style=for-the-badge)](LICENSE)
@@ -185,7 +185,7 @@ DEEPSEEK_API_KEY=your_key
 
 ## 🧪 Verification & Testing Suite
 
-HunterAI's hermetic suite currently passes 2,271 tests (1 skipped). The opt-in live NVD/OSV tests and the Pre-Kali Certification Gates are separate:
+HunterAI's hermetic suite currently passes 2,301 tests (1 skipped). The opt-in live NVD/OSV tests and the Pre-Kali Certification Gates are separate:
 
 ```bash
 # Run pytest unit test suites
@@ -194,6 +194,16 @@ python -m pytest tests/test_enterprise_features.py tests/test_code_intelligence.
 # Run Pre-Kali Certification
 python certify.py
 ```
+
+### Authorized Red-Team Mode
+
+For engagements with signed authorization, `core/policy/red_team.py` provides a
+zero-friction `red_team` profile: no per-action approval prompts, `critical` risk
+ceiling, all catalog tools eligible. Scope, time window and profiles are bound
+to an HMAC-signed grant, and every decision is written to a hash-chained audit
+log. Hard invariants (backdoors/persistence, C2, destructive writes, evasion,
+exfiltration) are denied in every profile. See
+[`AUTHORIZED_RED_TEAM_MODE.md`](AUTHORIZED_RED_TEAM_MODE.md).
 
 ---
 
