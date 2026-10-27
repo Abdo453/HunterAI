@@ -21,7 +21,7 @@
 
 | Phase | Name | Priority | Status | Evidence |
 |---|---|---|---|---|
-| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,311 passed, 1 skipped, 0 failed; remaining P0 items listed below |
+| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,325 passed, 1 skipped, 0 failed; remaining P0 items listed below |
 | P1 | Vulnerability data model + store | P1 | ✅ | `core/vuln_intel/{models,db}.py`; vuln_intel suite: 214 tests green |
 | P2 | Historical ingestion (NVD first) | P1 | ✅ | `sources/nvd.py`, `sync.py`, `cli.py`; live one-day NVD check: 68 records, 0 errors |
 | P2b | OSV/GHSA query connector | P1 | ✅ | `sources/osv.py`; live package query: 8 advisories, 0 errors; GHSA→CVE alias merge |
@@ -31,7 +31,7 @@
 | P6 | Tool capability registry + selection | P2 | ✅ | `tool_capabilities.py`, `tool_selection.py`, `vuln_classes.py`; authorization/risk/availability/ecosystem gates; plan only |
 | P6b | Authorized red-team policy engine | P1 | ✅ | `core/policy/red_team.py`; signed grants, `red_team` profile (no prompts, critical risk), hard invariants, hash-chained audit; 30 tests |
 | P6c | Policy gate wired into tool execution | P1 | ✅ | `ToolRegistry.call_tool` evaluates the grant before execution (fail closed); 10 integration tests |
-| P7 | Safe lab + detectors | P3 | ⬜ | — |
+| P7 | Safe lab + detectors | P3 | 🟡 | Loopback fake target, SQLi/XSS/IDOR detectors, evidence chain (14 tests); Docker lab cases + validation registry open |
 | P8 | Continuous monitoring scheduler | P3 | ⬜ | — |
 | P9 | AI analysis with citations | P3 | ⬜ | — |
 | P10 | Controlled self-improvement | P4 | ⬜ | — |
@@ -56,7 +56,7 @@
 3. **Hermetic orchestrator tests** — `tests/test_hunter_master_pipeline.py` now mocks `execute_artifact` (previously invoked real crt.sh/subfinder).
 4. **Live test separation** — `tests/integration/test_artifact_based_recon_e2e.py` holds the live orchestrator test; CI already ignores `tests/integration`.
 5. **ToolManager timeout reaping** — the timeout path now uses `kill_process_tree` and awaits the transport; regression test asserts the reaper is invoked.
-6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 447, Group 3 = 569, Group 4 = 504 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,311 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
+6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 461, Group 3 = 569, Group 4 = 504 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,325 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
 7. **Test-hang diagnosis** — Group 3's stall was unmocked `execute_artifact` (real crt.sh/subfinder), not the secret sanitizer; the test now mocks the boundary.
 
 ### Remaining
@@ -472,6 +472,27 @@ call.
 
 ## P7 — Safe lab + detectors
 
+### Delivered (P7a) — loopback detector lab
+
+**Status:** ✅ implemented (`core/detectors/`; 14 tests).
+
+- `HttpTransport`: read-only (GET/HEAD only), proxy-free, no redirects,
+  request budget, response cap, optional signed-grant policy check.
+- `SQLiBooleanDetector`: two independent TRUE/FALSE pairs plus a control pair;
+  rejects reflected-input confounds.
+- `XSSReflectedDetector`: unique nonce breakout with an HTML-encoding control.
+- `IDORDetector`: two-identity differential with an owner-only canary.
+- `EvidenceChain`: hash-linked JSONL records; tamper detection and round-trip.
+- `LocalFakeTarget`: loopback vulnerable/safe endpoints for hermetic tests and
+  the `python -m core.detectors.cli demo` proof.
+- `python -m core.detectors.cli scan`: scan one endpoint, optionally under a
+  signed grant, and write the evidence chain.
+- Docs: `SAFE_DETECTORS.md`.
+
+Remaining for a full P7: Docker/compose lab cases with a patched variant,
+network-disabled runner defaults, and a detector validation registry
+(`EXPERIMENTAL` → `VALIDATED`).
+
 ### Deliverables
 
 - `lab/cases/<case>/case.yaml`, compose/Dockerfile, fixtures, expected observations, patched variant, cleanup.
@@ -607,7 +628,7 @@ call.
 | 13 | Update docs with actual results | ✅ counts and limits updated |
 | 14 | Commit | local only (pending final review) |
 
-All hermetic steps are complete: **2,311 passed, 1 skipped, 0 failed**. The
+All hermetic steps are complete: **2,325 passed, 1 skipped, 0 failed**. The
 integration directory remains opt-in/live; the orchestrator live test is not
 part of the hermetic count.
 

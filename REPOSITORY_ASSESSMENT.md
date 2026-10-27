@@ -19,7 +19,7 @@ The strongest existing assets are:
 2. **An evidence-first finding model** (Evidence Court / Proof-of-Execution) that already distinguishes observation from confirmed vulnerability.
 3. **A working multi-stage hunt pipeline** (`hunter_ai/pipeline/pipeline_orchestrator.py`) with artifact-based stages and reports.
 4. **A sandboxed command layer** (`core/tool_registry.py`, `core/sandbox.py`) with risk levels and allowlists.
-5. **A real test suite** (2,311 passed + 1 skipped in the hermetic run; see §Test baseline).
+5. **A real test suite** (2,325 passed + 1 skipped in the hermetic run; see §Test baseline).
 
 The weakest area relative to the new mission is **vulnerability intelligence**. What exists today is mostly retrieval, not intelligence:
 
@@ -172,7 +172,7 @@ No evidence was found of a centralized provider abstraction with per-provider po
 
 `docs/` contains `architecture-audit.md`, `design.md`, `implementation-plan.md`, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_LEDGER.md`, `IMPLEMENTATION_STATUS.md`, `security.md`, `security_audit.md`, `OPERATIONAL_GUIDE.md`, `usage.md`, `burp-setup.md`, `mcp-setup.md`, `AGENT_SYSTEMS.md`, `CLAUDE_THINKING_ARCHITECTURE.md`, `end_to_end_test_results.md`, and more. Root-level `ARCHITECTURE.md`, `THREAT_MODEL.md`, `WORKFLOW.md`, `TEST_BASELINE.md`, `BLIND_SPOTS.md`, `PRE_KALI_CERTIFICATION.md`.
 
-**Gap:** documents overlap and disagree; the README badge claims "42/42" tests while the hermetic suite is 2,311 passing tests (1 skipped). There is no single authoritative status document.
+**Gap:** documents overlap and disagree; the README badge claims "42/42" tests while the hermetic suite is 2,325 passing tests (1 skipped). There is no single authoritative status document.
 
 ---
 
@@ -195,7 +195,7 @@ No evidence was found of a centralized provider abstraction with per-provider po
 | Console encoding safety | `core/console.py`; regression tests pass |
 | Process-tree cleanup | `core/process_utils.py`; regression tests pass |
 | Readiness gate | `core/readiness.py`; CI smoke step |
-| Test suite | 2,311 passed + 1 skipped in the hermetic run (four groups: 524 + 447 + 569 + 504; `tests/v27` + console safety: 53; `tests/vuln_intel`: 214). Opt-in live tests: NVD 1 passed, OSV 2 passed when enabled. |
+| Test suite | 2,325 passed + 1 skipped in the hermetic run (four groups: 524 + 461 + 569 + 504; `tests/v27` + console safety: 53; `tests/vuln_intel`: 214). Opt-in live tests: NVD 1 passed, OSV 2 passed when enabled. |
 
 ### C.2 Missing (required by the new mission)
 
@@ -467,13 +467,13 @@ Hermetic suite, run locally on 2026-10-26:
 | Group | Result |
 |---|---|
 | Group 1 | **524 passed**, 0 failed |
-| Group 2 | **447 passed**, 0 failed |
+| Group 2 | **461 passed**, 0 failed |
 | Group 3 | **569 passed**, 0 failed |
 | Group 4 | **504 passed**, 1 skipped, 0 failed |
 | `tests/v27` + `tests/test_console_safety.py` | **53 passed**, 0 failed |
 | `tests/vuln_intel` (new) | **214 passed**, 0 failed |
 
-**Total: 2,311 passed, 1 skipped, 0 failed.** (The skip is an existing opt-in/integration guard, not a failure.)
+**Total: 2,325 passed, 1 skipped, 0 failed.** (The skip is an existing opt-in/integration guard, not a failure.)
 
 One test (`tests/test_enterprise_casm.py::test_orchestrator_passive_profile_and_diff`)
 requires a local Ollama server; when the AI preflight gate cannot reach
