@@ -69,9 +69,10 @@ python pentest.py report target.com "finding" --platform hackerone
 | `/orchestrator-stats` | Orchestrator Stats |
 | `/orchestrator-export` | Export Orchestrator State |
 
-## Agents (9 specialists)
+## Agents (10 specialists)
 
 - `recon-agent` — subdomain enum + live host discovery
+- `recon-methodology` — full operator recon playbook: passive/active subdomains, URLs, JS/params, secrets, ports (plan/dry-run/run)
 - `report-writer` — submission-ready reports
 - `validator` — 7-Question Gate validation
 - `web3-auditor` — smart contract audit

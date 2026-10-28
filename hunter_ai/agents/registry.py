@@ -4,6 +4,7 @@ Tracks all active agents, their capabilities, sessions, and permissions:
 - WebAgent (web_analysis, http_analysis, vulnerability_analysis, javascript_analysis)
 - BurpAgent (traffic_analysis, request_correlation, session_audit)
 - ReconAgent (reconnaissance, asset_discovery, dns_analysis, osint_analysis)
+- ReconMethodologyAgent (reconnaissance, asset_discovery, dns_analysis, osint_analysis, api_analysis, secret_detection)
 - MobileAgent, CloudAgent, etc.
 """
 from __future__ import annotations
@@ -67,6 +68,18 @@ class AgentRegistry:
                 AgentCapability.ASSET_DISCOVERY,
                 AgentCapability.DNS_ANALYSIS,
                 AgentCapability.OSINT_ANALYSIS
+            }
+        )
+        self.register_agent(
+            "ReconMethodologyAgent",
+            {
+                AgentCapability.RECONNAISSANCE,
+                AgentCapability.ASSET_DISCOVERY,
+                AgentCapability.DNS_ANALYSIS,
+                AgentCapability.OSINT_ANALYSIS,
+                AgentCapability.API_ANALYSIS,
+                AgentCapability.SECRET_DETECTION,
+                AgentCapability.WEB_ANALYSIS
             }
         )
         self.register_agent(

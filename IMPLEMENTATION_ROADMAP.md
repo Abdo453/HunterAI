@@ -21,7 +21,7 @@
 
 | Phase | Name | Priority | Status | Evidence |
 |---|---|---|---|---|
-| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,337 passed, 1 skipped, 0 failed; remaining P0 items listed below |
+| P0 | Baseline quality & trust | P0 | 🟡 | Hermetic suite: 2,349 passed, 1 skipped, 0 failed; remaining P0 items listed below |
 | P1 | Vulnerability data model + store | P1 | ✅ | `core/vuln_intel/{models,db}.py`; vuln_intel suite: 214 tests green |
 | P2 | Historical ingestion (NVD first) | P1 | ✅ | `sources/nvd.py`, `sync.py`, `cli.py`; live one-day NVD check: 68 records, 0 errors |
 | P2b | OSV/GHSA query connector | P1 | ✅ | `sources/osv.py`; live package query: 8 advisories, 0 errors; GHSA→CVE alias merge |
@@ -58,7 +58,7 @@
 3. **Hermetic orchestrator tests** — `tests/test_hunter_master_pipeline.py` now mocks `execute_artifact` (previously invoked real crt.sh/subfinder).
 4. **Live test separation** — `tests/integration/test_artifact_based_recon_e2e.py` holds the live orchestrator test; CI already ignores `tests/integration`.
 5. **ToolManager timeout reaping** — the timeout path now uses `kill_process_tree` and awaits the transport; regression test asserts the reaper is invoked.
-6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 472, Group 3 = 569, Group 4 = 505 passed + 1 skipped; plus `tests/v27` + console safety (53) and `tests/vuln_intel` (214); **2,337 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
+6. **Test grouping** — four groups of ~63 files; Group 1 = 524, Group 2 = 472, Group 3 = 569, Group 4 = 505 passed + 1 skipped; plus `tests/v27` + console safety (53), `tests/vuln_intel` (214), and recon-methodology agent (12); **2,349 passed, 1 skipped, 0 failed**. The opt-in live NVD test (1 passed) and OSV test (2 passed) ran separately with `RUN_LIVE_NVD=1` / `RUN_LIVE_OSV=1`.
 7. **Test-hang diagnosis** — Group 3's stall was unmocked `execute_artifact` (real crt.sh/subfinder), not the secret sanitizer; the test now mocks the boundary.
 
 ### Remaining
@@ -668,7 +668,7 @@ network-disabled runner defaults, and a detector validation registry
 | 13 | Update docs with actual results | ✅ counts and limits updated |
 | 14 | Commit | local only (pending final review) |
 
-All hermetic steps are complete: **2,337 passed, 1 skipped, 0 failed**. The
+All hermetic steps are complete: **2,349 passed, 1 skipped, 0 failed**. The
 integration directory remains opt-in/live; the orchestrator live test is not
 part of the hermetic count.
 

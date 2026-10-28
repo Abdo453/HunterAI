@@ -15,7 +15,15 @@ class ReconAgent(BaseAgent):
         self.web = WebTools(mgr)
         self.osint = OSINTTools(mgr)
 
+    async def run_methodology(self, task: AgentTask) -> AgentResult:
+        """Delegate to the full methodology playbook agent."""
+        from agents.recon_methodology_agent import ReconMethodologyAgent
+        return await ReconMethodologyAgent(self.mgr, self.cb).run(task)
+
     async def run(self, task: AgentTask) -> AgentResult:
+        if task.mode in ("methodology", "playbook") or (task.extra or {}).get("methodology"):
+            return await self.run_methodology(task)
+
         target = task.target
         r = AgentResult(agent_name=self.name, target=target)
         await self.emit("start", {"message": f"Recon on {target}"})
