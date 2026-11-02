@@ -261,6 +261,6 @@
     "permissions": ["recon", "scan", "active_testing"],
     "purpose": "Modbus TCP client for OT/ICS register read/write testing",
     "requires_authorization": true,
-    "command_template": "modbus-cli read-holding-registers -a {target} -u {unit_id}"
+    "command_template": "modbus-cli read -u {target} -a 0 -i {unit_id}"
   }
 ]

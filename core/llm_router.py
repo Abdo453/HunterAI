@@ -14,7 +14,7 @@ Policies
 
 Catalog convention (consumed by the Web UI model picker)::
 
-    api:<provider>:<model>     e.g. "api:gemini:gemini-2.0-flash"
+    api:<provider>:<model>     e.g. "api:gemini:gemini-3.8-flash"
     local:<ollama-model>       e.g. "local:qwen2.5-coder:14b"
 
 This module reuses the existing provider adapters (``models/api/*``) and the
@@ -50,13 +50,19 @@ class ProviderSpec:
     models: Tuple[str, ...] = ()
 
 
-# Ordered by *owner preference*: Gemini first, then DeepSeek, Claude, OpenAI,
+# Ordered by *owner preference*: NVIDIA first, then Gemini, DeepSeek, Claude, OpenAI,
 # Groq, OpenRouter, Taskade. Availability is decided purely by the env key.
 CLOUD_PROVIDERS: Tuple[ProviderSpec, ...] = (
+    ProviderSpec("nvidia", "NVIDIA_API_KEY",
+                 "models.api.nvidia_provider:NVIDIAProvider",
+                 "nvidia/nemotron-3-ultra-550b-a55b", "NVIDIA NIM", 5,
+                 ("nvidia/nemotron-3-ultra-550b-a55b", "nvidia/nemotron-3-super-120b-a12b",
+                  "nvidia/nemotron-3-ultra-550b-a55b")),
     ProviderSpec("gemini", "GEMINI_API_KEY",
                  "models.api.gemini_provider:GeminiProvider",
                  "gemini-3.8-flash", "Google Gemini", 10,
-                 ("gemini-3.8-flash", "gemini-flash-latest")),
+                 ("gemini-3.8-flash", "gemini-3.5-flash-lite",
+                  "gemini-flash-lite-latest", "gemini-flash-latest")),
     ProviderSpec("deepseek", "DEEPSEEK_API_KEY",
                  "models.api.deepseek_provider:DeepSeekProvider",
                  "deepseek-chat", "DeepSeek", 20,
@@ -125,11 +131,18 @@ class LLMRouter:
             specs = [s for s in specs if os.getenv(s.env_key)]
         return specs
 
+    @staticmethod
+    def default_model_for(spec: ProviderSpec) -> str:
+        override = os.getenv(f"{spec.id.upper()}_MODEL", "").strip()
+        if override and (not spec.models or override in spec.models):
+            return override
+        return spec.default_model
+
     def _load_provider(self, spec: ProviderSpec, model: Optional[str] = None):
         module_name, _, cls_name = spec.target.partition(":")
         module = importlib.import_module(module_name)
         cls = getattr(module, cls_name)
-        return cls(model=model or spec.default_model)
+        return cls(model=model or self.default_model_for(spec))
 
     async def local_models(self) -> List[str]:
         try:
@@ -176,15 +189,18 @@ class LLMRouter:
     async def catalog(self) -> Dict[str, Any]:
         """A single unified catalog of every usable model."""
         local = await self.local_models()
-        cloud = [
-            {
+        cloud = []
+        for s in self.cloud_specs(only_available=True):
+            default_model = self.default_model_for(s)
+            models = list(s.models or (default_model,))
+            if default_model not in models:
+                models.insert(0, default_model)
+            cloud.append({
                 "provider": s.id,
                 "label": s.label,
-                "default_model": s.default_model,
-                "models": list(s.models or (s.default_model,)),
-            }
-            for s in self.cloud_specs(only_available=True)
-        ]
+                "default_model": default_model,
+                "models": models,
+            })
         return {
             "policy": self.policy,
             "ollama_host": self.ollama_host,
@@ -286,7 +302,7 @@ class LLMRouter:
                 return ModelResponse(content="", model_name=rest, role="api",
                                      error=f"unknown provider '{provider_id}'")
             try:
-                provider = self._load_provider(spec, model=model or spec.default_model)
+                provider = self._load_provider(spec, model=model or self.default_model_for(spec))
                 res = await provider.chat(msgs)
                 if res and res.content:
                     return res
@@ -420,7 +436,7 @@ class LLMRouter:
                 return ModelResponse(content="", model_name=rest, role="api",
                                      error=f"unknown provider '{provider_id}'")
             try:
-                provider = self._load_provider(spec, model=model or spec.default_model)
+                provider = self._load_provider(spec, model=model or self.default_model_for(spec))
                 res = await self._stream_provider(provider, msgs, on_token)
                 if res:
                     return res

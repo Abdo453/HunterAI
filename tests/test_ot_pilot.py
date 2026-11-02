@@ -107,7 +107,7 @@ def test_adaptive_advisor_suggests_modbus():
     rec = OTAssetRecord(ip="10.0.0.50", port=502, protocol=OTProtocol.MODBUS, unit_id=1)
     advice = AdaptiveTestAdvisor().advise(rec, {})
     assert any("modbus-discover" in s for s in advice)
-    assert any("read-holding-registers" in s for s in advice)
+    assert any("modbus-cli read" in s and "-u" in s and "-i" in s for s in advice)
     assert len(advice) <= 8
 
 

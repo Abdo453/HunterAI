@@ -330,7 +330,7 @@ class Orchestrator:
             self.sessions.add_finding(session, f)
 
         session = self.sessions.load(session.id)
-        reports = ReportEngine().generate_all(session)
+        reports = ReportEngine(target=target, scope=[target]).generate_all(session)
         self.sessions.complete(session)
 
         summary = {

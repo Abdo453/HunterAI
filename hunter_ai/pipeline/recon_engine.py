@@ -27,6 +27,10 @@ MAX_PROBE_HOSTS = int(os.getenv("RECON_MAX_PROBE_HOSTS", "5000"))
 MAX_URLS_PER_SOURCE = 2000
 
 
+def _log(message: str) -> None:
+    print(message, flush=True)
+
+
 def _domain_of(target: str) -> str:
     """يستخرج اسم النطاق الجذري من أي صيغة إدخال (URL / host / host:port)."""
     t = (target or "").strip().lower()
@@ -136,12 +140,19 @@ async def _run_tool(
     """
     spec = master.specs.get(tool)
     if spec is None:
+        _log(f"    [skip] {tool} not registered")
         return [], None, False
+    _log(f"    [..] {tool} running (timeout {spec.timeout}s)...")
+    started = time.time()
     try:
         parsed, log_file = await master.execute(tool, context)
-    except Exception:
+    except Exception as exc:
+        _log(f"    [warn] {tool} failed after {time.time() - started:.1f}s: {exc}")
         return [], None, False
     used_primary = master.is_available(tool) and bool(spec.command_template)
+    status = "ok" if used_primary else "warn"
+    _log(f"    [{status}] {tool} finished in {time.time() - started:.1f}s "
+         f"({len(parsed or [])} items)")
     return list(parsed or []), log_file, used_primary
 
 
@@ -162,7 +173,8 @@ async def run_recon(
             "provenance": {}, "tools_used": [], "tools_missing": [], "artifacts": {},
         }
 
-    print(f"[+] Starting recon for {target} (domain={domain})")
+    _log(f"[+] Starting recon for {target} (domain={domain})")
+    _log("[i] Passive stages can take 2-3 minutes (subfinder, gau, waybackurls); progress prints below.")
     started = time.time()
 
     from hunter_ai.pipeline.tool_specs import MasterToolRegistry
@@ -200,7 +212,7 @@ async def run_recon(
         tools_used.add("crtsh")
     except Exception as exc:
         tools_missing.add("crtsh")
-        print(f"    [warn] crtsh unavailable: {exc}")
+        _log(f"    [warn] crtsh unavailable: {exc}")
 
     # ── 2) Passive subdomain enumeration ─────────────────────────────────────
     passive_specs = [
@@ -213,7 +225,7 @@ async def run_recon(
     for tool, ctx in passive_specs:
         if not master.is_available(tool):
             tools_missing.add(tool)
-            print(f"    [skip] {tool} not in PATH")
+            _log(f"    [skip] {tool} not in PATH")
             continue
         items, log_file, primary = await _run_tool(master, tool, ctx)
         if log_file:
@@ -244,7 +256,7 @@ async def run_recon(
         _record("subdomains", domain, "root")
         subdomains = sorted(subdomain_pool.keys())
 
-    print(f"    [+] {len(subdomains)} subdomains discovered")
+    _log(f"    [+] {len(subdomains)} subdomains discovered")
 
     # ── 4) Live host discovery via httpx (batch mode: httpx -l <file>) ────────
     live_hosts: Dict[str, Set[str]] = {}
@@ -253,7 +265,7 @@ async def run_recon(
     ordered = sorted(subdomains, key=_probe_priority)
     probe_targets = ordered[:MAX_PROBE_HOSTS]
     if len(ordered) > MAX_PROBE_HOSTS:
-        print(f"    [warn] probing {MAX_PROBE_HOSTS} of {len(ordered)} hosts "
+        _log(f"    [warn] probing {MAX_PROBE_HOSTS} of {len(ordered)} hosts "
               f"(raise RECON_MAX_PROBE_HOSTS to cover all)")
 
     if master.is_available("httpx"):
@@ -271,12 +283,13 @@ async def run_recon(
                 f"httpx -l {tmp_path} -silent -json "
                 f"-status-code -title -tech-detect -content-length"
             )
+            _log(f"    [..] httpx probing {len(probe_targets)} hosts...")
             res = await master.tm.execute(cmd, timeout=600)
             if res.output_file:
                 artifacts["httpx"] = res.output_file
             if not res.success:
                 tools_missing.add("httpx")
-                print(f"    [warn] httpx batch probe failed: {res.error or res.stderr[:120]}")
+                _log(f"    [warn] httpx batch probe failed: {res.error or res.stderr[:120]}")
             else:
                 tools_used.add("httpx")
                 for line in (res.stdout or "").splitlines():
@@ -303,7 +316,7 @@ async def run_recon(
                     }
         except Exception as exc:
             tools_missing.add("httpx")
-            print(f"    [warn] httpx batch probe error: {exc}")
+            _log(f"    [warn] httpx batch probe error: {exc}")
         finally:
             if tmp_path:
                 try:
@@ -312,7 +325,7 @@ async def run_recon(
                     pass
     else:
         tools_missing.add("httpx")
-        print("    [skip] httpx not in PATH — live-host detection skipped")
+        _log("    [skip] httpx not in PATH — live-host detection skipped")
 
     # ── 5) URL collection (katana / gau / waybackurls) ───────────────────────
     crawl_roots = [f"https://{h}" for h in sorted(live_hosts)[:10]] or [f"https://{domain}"]
@@ -377,11 +390,11 @@ async def run_recon(
     )
     results["artifact_path"] = str(out_dir / "recon.json")
 
-    print(f"[+] Recon complete: {len(subdomains)} subdomains, "
+    _log(f"[+] Recon complete: {len(subdomains)} subdomains, "
           f"{len(results['live_hosts'])} live hosts, {len(results['urls'])} urls")
     if tools_missing:
-        print(f"    [i] tools missing (no data for them): {', '.join(sorted(tools_missing))}")
-    print(f"[+] Results saved to {out_dir / 'recon.json'}")
+        _log(f"    [i] tools missing (no data for them): {', '.join(sorted(tools_missing))}")
+    _log(f"[+] Results saved to {out_dir / 'recon.json'}")
     return results
 
 

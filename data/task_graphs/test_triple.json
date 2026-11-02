@@ -1,0 +1,130 @@
+{
+  "nodes": {
+    "orch-d60ed883": {
+      "task_id": "orch-d60ed883",
+      "name": "XSS scan on search endpoint",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142250.9582345,
+      "updated_at": 1793142250.9582345
+    },
+    "orch-30197203": {
+      "task_id": "orch-30197203",
+      "name": "Execute: XSS scan on search endpoint",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-d60ed883"
+      ],
+      "dependents": [],
+      "evidence": {
+        "status": "vulnerable",
+        "payload": "<script>alert(1)</script>",
+        "evidence": "reflected in response"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142250.9592292,
+      "updated_at": 1793142250.9617372
+    },
+    "orch-5f0b4ed1": {
+      "task_id": "orch-5f0b4ed1",
+      "name": "Review: XSS scan on search endpoint",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-30197203"
+      ],
+      "dependents": [],
+      "evidence": {
+        "review": "approved",
+        "bypass_method": null
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142250.9602287,
+      "updated_at": 1793142250.9637556
+    },
+    "orch-d2c1aee4": {
+      "task_id": "orch-d2c1aee4",
+      "name": "XSS test",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793143446.5904758,
+      "updated_at": 1793143446.5904758
+    },
+    "orch-7b587038": {
+      "task_id": "orch-7b587038",
+      "name": "Execute: XSS test",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-d2c1aee4"
+      ],
+      "dependents": [],
+      "evidence": {
+        "vuln": true
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793143446.5935478,
+      "updated_at": 1793143446.599527
+    },
+    "orch-37720538": {
+      "task_id": "orch-37720538",
+      "name": "Review: XSS test",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-7b587038"
+      ],
+      "dependents": [],
+      "evidence": {
+        "review": "approved",
+        "bypass_method": null
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793143446.596498,
+      "updated_at": 1793143446.604502
+    }
+  },
+  "edges": {
+    "orch-d60ed883": [
+      "orch-30197203"
+    ],
+    "orch-30197203": [
+      "orch-5f0b4ed1"
+    ],
+    "orch-5f0b4ed1": [],
+    "orch-d2c1aee4": [
+      "orch-7b587038"
+    ],
+    "orch-7b587038": [
+      "orch-37720538"
+    ],
+    "orch-37720538": []
+  }
+}

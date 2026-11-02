@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "7c972f72-5805-41eb-9162-99a1c43267df",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "/home/kali/Desktop/Agant/PentestAI-Unified/.archify/attack-path-sequence.json",
+  "output": "/home/kali/Desktop/Agant/PentestAI-Unified/reports/attack-path-diagram.html",
+  "specification": {
+    "sha256": "9b5c1e2f46b749a6e15eb5557fb30f032e3355c700e233fd6fb6320d99067190",
+    "bytes": 4112
+  },
+  "artifact": {
+    "sha256": "bf45bc63a3b1bfa843ac81dee7655cb59419e533172b15130232d4e8a45b3c62",
+    "bytes": 841836
+  }
+}

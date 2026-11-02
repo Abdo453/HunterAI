@@ -83,7 +83,7 @@ def check_cloud_ai_status() -> Dict[str, Any]:
         },
         "gemini": {
             "name": "Google Gemini Flash",
-            "model": "gemini-2.0-flash",
+            "model": os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
             "configured": bool(os.getenv("GEMINI_API_KEY")),
         },
         "taskade": {

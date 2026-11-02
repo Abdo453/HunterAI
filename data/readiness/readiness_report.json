@@ -1,14 +1,14 @@
 {
   "target": "local-env",
-  "session_id": "test_auth_sess",
-  "started_at": 1793141937.1954608,
-  "duration_sec": 6.49,
+  "session_id": "hunter_1793479458",
+  "started_at": 1793479460.7189116,
+  "duration_sec": 29.06,
   "strict": false,
   "strict_ready": false,
   "safe_check": "Local probes only (--version/--help, TCP connect, file existence). لامس أي هدف.",
   "counts": {
-    "READY": 15,
-    "MISSING": 45,
+    "READY": 59,
+    "MISSING": 3,
     "UNHEALTHY": 0,
     "SKIPPED": 0
   },
@@ -24,7 +24,7 @@
         "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793141943.6817899
+      "checked_at": 1793479489.7811744
     },
     {
       "component": "ollama_model",
@@ -37,7 +37,7 @@
         "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793141943.6817899
+      "checked_at": 1793479489.7811806
     },
     {
       "component": "ollama_model",
@@ -50,7 +50,7 @@
         "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793141943.6817899
+      "checked_at": 1793479489.7811842
     }
   ],
   "results": [
@@ -59,156 +59,156 @@
       "name": "nmap",
       "status": "READY",
       "required": true,
-      "detail": "Nmap version 7.98 ( https://nmap.org )",
+      "detail": "Nmap version 7.99 ( https://nmap.org )",
       "probe": "nmap --version/--help",
       "evidence": {
-        "binary": "C:\\Program Files (x86)\\Nmap\\nmap.EXE",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/nmap",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.337911
+      "checked_at": 1793479460.77628
     },
     {
       "component": "kali_tool",
       "name": "masscan",
       "status": "READY",
       "required": false,
-      "detail": "T\u0000h\u0000e\u0000r\u0000e\u0000 \u0000i\u0000s\u0000 \u0000n\u0000o\u0000 \u0000d\u0000i\u0000s\u0000t\u0000r\u0000i\u0000b\u0000u\u0000t\u0000i\u0000o\u0000n\u0000 \u0000w\u0000i\u0000t\u0000h\u0000 \u0000t\u0000h\u0000e\u0000 \u0000s\u0000u\u0000p\u0000p\u0000l\u0000i\u0000e\u0000d\u0000 \u0000n\u0000a\u0000m\u0000e\u0000.\u0000",
+      "detail": "Masscan version 1.3.2 ( https://github.com/robertdavidgraham/masscan )",
       "probe": "masscan --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\masscan.BAT",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/masscan",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.521648
+      "checked_at": 1793479460.780391
     },
     {
       "component": "kali_tool",
       "name": "rustscan",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "rustscan 2.3.0",
       "probe": "rustscan --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/rustscan",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.5607595
+      "checked_at": 1793479460.79689
     },
     {
       "component": "kali_tool",
       "name": "netexec",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "1.5.1 - Yippie-Ki-Yay - Kali Linux -",
       "probe": "netexec --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/netexec",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.5992787
+      "checked_at": 1793479462.9043665
     },
     {
       "component": "kali_tool",
       "name": "enum4linux",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "\u001b[92mENUM4LINUX - next generation (v1.3.10)\u001b[0m",
       "probe": "enum4linux-ng --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/enum4linux-ng",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.638135
+      "checked_at": 1793479464.4968953
     },
     {
       "component": "kali_tool",
       "name": "ssh-audit",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "\u001b[0;36m# ssh-audit v3.3.0, https://github.com/jtesta/ssh-audit",
       "probe": "ssh-audit --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/ssh-audit",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.6756616
+      "checked_at": 1793479464.6542573
     },
     {
       "component": "kali_tool",
       "name": "responder",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "You need to install python3-netifaces or run Responder with python3...",
       "probe": "responder --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/sbin/responder",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.7142112
+      "checked_at": 1793479464.826766
     },
     {
       "component": "kali_tool",
       "name": "nbtscan",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "NBTscan version 1.7.2.",
       "probe": "nbtscan --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/nbtscan",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.7543225
+      "checked_at": 1793479464.8303752
     },
     {
       "component": "kali_tool",
       "name": "snmpwalk",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "NET-SNMP version: 5.9.5.2",
       "probe": "snmpwalk --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/snmpwalk",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.7926183
+      "checked_at": 1793479464.838475
     },
     {
       "component": "kali_tool",
       "name": "gobuster",
       "status": "READY",
       "required": false,
-      "detail": "T\u0000h\u0000e\u0000r\u0000e\u0000 \u0000i\u0000s\u0000 \u0000n\u0000o\u0000 \u0000d\u0000i\u0000s\u0000t\u0000r\u0000i\u0000b\u0000u\u0000t\u0000i\u0000o\u0000n\u0000 \u0000w\u0000i\u0000t\u0000h\u0000 \u0000t\u0000h\u0000e\u0000 \u0000s\u0000u\u0000p\u0000p\u0000l\u0000i\u0000e\u0000d\u0000 \u0000n\u0000a\u0000m\u0000e\u0000.\u0000",
+      "detail": "gobuster version 3.8.2",
       "probe": "gobuster --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\gobuster.BAT",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/gobuster",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141937.9532793
+      "checked_at": 1793479464.8617122
     },
     {
       "component": "kali_tool",
       "name": "ffuf",
       "status": "READY",
       "required": true,
-      "detail": "Fuzz Faster U Fool - v2.3.0",
+      "detail": "Fuzz Faster U Fool - 2.1.0-dev",
       "probe": "ffuf --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\ffuf.EXE",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/ffuf",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141938.0349574
+      "checked_at": 1793479464.8917117
     },
     {
       "component": "kali_tool",
       "name": "feroxbuster",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "feroxbuster 2.13.1",
       "probe": "feroxbuster --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/feroxbuster",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141938.077281
+      "checked_at": 1793479464.9288273
     },
     {
       "component": "kali_tool",
@@ -218,88 +218,88 @@
       "detail": "[\u001b[34mINF\u001b[0m] Nuclei Engine Version: v3.11.1",
       "probe": "nuclei --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\nuclei.EXE",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/nuclei",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141938.4378412
+      "checked_at": 1793479465.2987642
     },
     {
       "component": "kali_tool",
       "name": "sqlmap",
       "status": "READY",
       "required": true,
-      "detail": "1.10.10.19#dev",
+      "detail": "1.10.8#stable",
       "probe": "sqlmap --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\sqlmap.BAT",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/sqlmap",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141940.3070412
+      "checked_at": 1793479466.8332386
     },
     {
       "component": "kali_tool",
       "name": "nikto",
       "status": "READY",
       "required": false,
-      "detail": "T\u0000h\u0000e\u0000r\u0000e\u0000 \u0000i\u0000s\u0000 \u0000n\u0000o\u0000 \u0000d\u0000i\u0000s\u0000t\u0000r\u0000i\u0000b\u0000u\u0000t\u0000i\u0000o\u0000n\u0000 \u0000w\u0000i\u0000t\u0000h\u0000 \u0000t\u0000h\u0000e\u0000 \u0000s\u0000u\u0000p\u0000p\u0000l\u0000i\u0000e\u0000d\u0000 \u0000n\u0000a\u0000m\u0000e\u0000.\u0000",
+      "detail": "Options:",
       "probe": "nikto --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\nikto.BAT",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/nikto",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141940.4937081
+      "checked_at": 1793479467.0538058
     },
     {
       "component": "kali_tool",
       "name": "dalfox",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "unknown flag: --version",
       "probe": "dalfox --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/dalfox",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141940.538827
+      "checked_at": 1793479467.1279614
     },
     {
       "component": "kali_tool",
       "name": "wpscan",
       "status": "READY",
       "required": true,
-      "detail": "T\u0000h\u0000e\u0000r\u0000e\u0000 \u0000i\u0000s\u0000 \u0000n\u0000o\u0000 \u0000d\u0000i\u0000s\u0000t\u0000r\u0000i\u0000b\u0000u\u0000t\u0000i\u0000o\u0000n\u0000 \u0000w\u0000i\u0000t\u0000h\u0000 \u0000t\u0000h\u0000e\u0000 \u0000s\u0000u\u0000p\u0000p\u0000l\u0000i\u0000e\u0000d\u0000 \u0000n\u0000a\u0000m\u0000e\u0000.\u0000",
+      "detail": "_______________________________________________________________",
       "probe": "wpscan --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\wpscan.BAT",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/wpscan",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141940.7008169
+      "checked_at": 1793479469.1448562
     },
     {
       "component": "kali_tool",
       "name": "httpx",
       "status": "READY",
       "required": true,
-      "detail": "__    __  __       _  __",
+      "detail": "Usage: httpx [OPTIONS] URL",
       "probe": "httpx --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\httpx.EXE",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/Desktop/Agant/PentestAI-Unified/venv/bin/httpx",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141940.9456873
+      "checked_at": 1793479469.4214592
     },
     {
       "component": "kali_tool",
       "name": "wafw00f",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "\u001b[1;97m______",
       "probe": "wafw00f --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/Desktop/Agant/PentestAI-Unified/venv/bin/wafw00f",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141940.9919658
+      "checked_at": 1793479469.930745
     },
     {
       "component": "kali_tool",
@@ -309,478 +309,478 @@
       "detail": "__        __                ",
       "probe": "katana --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\katana.EXE",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/katana",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.1739118
+      "checked_at": 1793479470.0099356
     },
     {
       "component": "kali_tool",
       "name": "gau",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "gau version: 2.2.4",
       "probe": "gau --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/gau",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.21782
+      "checked_at": 1793479470.0172274
     },
     {
       "component": "kali_tool",
       "name": "arjun",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "usage: arjun [-h] [-u URL] [-o JSON_FILE] [-oT TEXT_FILE] [-oB [BURP_PROXY]]",
       "probe": "arjun --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/Desktop/Agant/PentestAI-Unified/venv/bin/arjun",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.2701874
+      "checked_at": 1793479470.2783363
     },
     {
       "component": "kali_tool",
       "name": "paramspider",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "_    __       ",
       "probe": "paramspider --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/paramspider",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.3246727
+      "checked_at": 1793479470.6021962
     },
     {
       "component": "kali_tool",
       "name": "dirsearch",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "dirsearch v0.5.0",
       "probe": "dirsearch --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/Desktop/Agant/PentestAI-Unified/venv/bin/dirsearch",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.366534
+      "checked_at": 1793479470.9420342
     },
     {
       "component": "kali_tool",
       "name": "hakrawler",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "flag provided but not defined: -version",
       "probe": "hakrawler --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/hakrawler",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.4114945
+      "checked_at": 1793479470.96271
     },
     {
       "component": "kali_tool",
       "name": "waybackurls",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "flag provided but not defined: -version",
       "probe": "waybackurls --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/waybackurls",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.4525678
+      "checked_at": 1793479470.9688287
     },
     {
       "component": "kali_tool",
       "name": "subfinder",
       "status": "READY",
       "required": true,
-      "detail": "[\u001b[34mINF\u001b[0m] Current Version: v2.17.0",
+      "detail": "[\u001b[34mINF\u001b[0m] Current Version: v2.16.0",
       "probe": "subfinder --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\subfinder.EXE",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/subfinder",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.6508489
+      "checked_at": 1793479471.1004052
     },
     {
       "component": "kali_tool",
       "name": "amass",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "v5.1.1",
       "probe": "amass --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/amass",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.695391
+      "checked_at": 1793479471.2925005
     },
     {
       "component": "kali_tool",
       "name": "fierce",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Traceback (most recent call last):",
       "probe": "fierce --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/fierce",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.736914
+      "checked_at": 1793479471.9330637
     },
     {
       "component": "kali_tool",
       "name": "dnsenum",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "dnsenum VERSION:1.3.1",
       "probe": "dnsenum --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/dnsenum",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.7821236
+      "checked_at": 1793479472.4056995
     },
     {
       "component": "kali_tool",
       "name": "theharvester",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Read proxies.yaml from /etc/theHarvester/proxies.yaml",
       "probe": "theHarvester --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/theHarvester",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.8267908
+      "checked_at": 1793479473.4120789
     },
     {
       "component": "kali_tool",
       "name": "assetfinder",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "flag provided but not defined: -version",
       "probe": "assetfinder --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/go/bin/assetfinder",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.8671758
+      "checked_at": 1793479473.419541
     },
     {
       "component": "kali_tool",
       "name": "findomain",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "findomain 10.0.1",
       "probe": "findomain --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/findomain",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.9106977
+      "checked_at": 1793479473.4563515
     },
     {
       "component": "kali_tool",
       "name": "shodan",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Usage: shodan [OPTIONS] COMMAND [ARGS]...",
       "probe": "shodan --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/local/bin/shodan",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141941.9557018
+      "checked_at": 1793479475.0814326
     },
     {
       "component": "kali_tool",
       "name": "hydra",
       "status": "READY",
       "required": false,
-      "detail": "T\u0000h\u0000e\u0000r\u0000e\u0000 \u0000i\u0000s\u0000 \u0000n\u0000o\u0000 \u0000d\u0000i\u0000s\u0000t\u0000r\u0000i\u0000b\u0000u\u0000t\u0000i\u0000o\u0000n\u0000 \u0000w\u0000i\u0000t\u0000h\u0000 \u0000t\u0000h\u0000e\u0000 \u0000s\u0000u\u0000p\u0000p\u0000l\u0000i\u0000e\u0000d\u0000 \u0000n\u0000a\u0000m\u0000e\u0000.\u0000",
+      "detail": "Hydra v9.7 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** igno",
       "probe": "hydra --version/--help",
       "evidence": {
-        "binary": "C:\\Tools\\HunterAI\\hydra.BAT",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/hydra",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.1123042
+      "checked_at": 1793479475.5934293
     },
     {
       "component": "kali_tool",
       "name": "john",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Unknown option: \"--version\"",
       "probe": "john --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/sbin/john",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.1543107
+      "checked_at": 1793479475.6592448
     },
     {
       "component": "kali_tool",
       "name": "hashcat",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "v7.1.2",
       "probe": "hashcat --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/hashcat",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.1928418
+      "checked_at": 1793479475.666532
     },
     {
       "component": "kali_tool",
       "name": "medusa",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Medusa v2.3 [http://www.foofus.net] (C) JoMo-Kun / Foofus Networks <jmk@foofus.net>",
       "probe": "medusa --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/medusa",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.236539
+      "checked_at": 1793479475.6730764
     },
     {
       "component": "kali_tool",
       "name": "gdb",
       "status": "READY",
       "required": false,
-      "detail": "GNU gdb (GDB for MinGW-W64 x86_64, built by Brecht Sanders, r8) 14.2",
+      "detail": "GNU gdb (Debian 17.2-1+b1) 17.2",
       "probe": "gdb --version/--help",
       "evidence": {
-        "binary": "C:\\Strawberry\\c\\bin\\gdb.EXE",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/gdb",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.4261155
+      "checked_at": 1793479475.8940082
     },
     {
       "component": "kali_tool",
       "name": "radare2",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Usage: r2 [-ACdfjLMnNqStuvwzX] [-P patch] [-p prj] [-a arch] [-b bits] [-c cmd]",
       "probe": "r2 --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/r2",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.4681215
+      "checked_at": 1793479476.0298839
     },
     {
       "component": "kali_tool",
       "name": "binwalk",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "General Error: Cannot open file --version (CWD: /home/kali/Desktop/Agant/PentestAI-Unified) : [Errno 2] No such file or directory: '--version'",
       "probe": "binwalk --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/binwalk",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.51764
+      "checked_at": 1793479478.6336348
     },
     {
       "component": "kali_tool",
       "name": "checksec",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "checksec v2.6.0, Brian Davis, github.com/slimm609/checksec.sh, Dec 2015",
       "probe": "checksec --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/checksec",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.567647
+      "checked_at": 1793479478.698787
     },
     {
       "component": "kali_tool",
       "name": "strings",
       "status": "READY",
       "required": false,
-      "detail": "GNU strings (Binutils for MinGW-W64 x86_64, built by Brecht Sanders, r8) 2.42",
+      "detail": "GNU strings (GNU Binutils for Debian) 2.47",
       "probe": "strings --version/--help",
       "evidence": {
-        "binary": "C:\\Strawberry\\c\\bin\\strings.EXE",
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/strings",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.6329782
+      "checked_at": 1793479478.7084258
     },
     {
       "component": "kali_tool",
       "name": "file",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "file-5.47",
       "probe": "file --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/file",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.6895227
+      "checked_at": 1793479478.712395
     },
     {
       "component": "kali_tool",
       "name": "prowler",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "/home/kali/.local/share/pipx/venvs/prowler/lib/python3.14/site-packages/prowler/lib/check/compliance_models.py:8: UserWarning: Core Pydantic V1 functionality isn't compatible with ",
       "probe": "prowler --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/prowler",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.7414691
+      "checked_at": 1793479479.25378
     },
     {
       "component": "kali_tool",
       "name": "trivy",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Version: dev",
       "probe": "trivy --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/trivy",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.7910137
+      "checked_at": 1793479479.643664
     },
     {
       "component": "kali_tool",
       "name": "kube_hunter",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "usage: kube-hunter [-h] [--list] [--interface] [--pod] [--quick]",
       "probe": "kube-hunter --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/kube-hunter",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.834379
+      "checked_at": 1793479479.8159206
     },
     {
       "component": "kali_tool",
       "name": "checkov",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "3.3.30",
       "probe": "checkov --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/checkov",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.8755183
+      "checked_at": 1793479485.769798
     },
     {
       "component": "kali_tool",
       "name": "sherlock",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Sherlock v0.16.2",
       "probe": "sherlock --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/sherlock",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.9167945
+      "checked_at": 1793479487.0096264
     },
     {
       "component": "kali_tool",
       "name": "recon_ng",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "5.1.2",
       "probe": "recon-ng --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/recon-ng",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141942.960806
+      "checked_at": 1793479491.7651074
     },
     {
       "component": "kali_tool",
       "name": "spiderfoot",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Traceback (most recent call last):",
       "probe": "spiderfoot --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/spiderfoot",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141943.0013366
+      "checked_at": 1793479488.3649466
     },
     {
       "component": "kali_tool",
       "name": "volatility",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Volatility 3 Framework 2.28.2",
       "probe": "vol --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/vol",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141943.0433388
+      "checked_at": 1793479489.2262352
     },
     {
       "component": "kali_tool",
       "name": "exiftool",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "Syntax:  exiftool [OPTIONS] FILE",
       "probe": "exiftool --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/bin/exiftool",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141943.0846024
+      "checked_at": 1793479489.4208856
     },
     {
       "component": "kali_tool",
       "name": "zsteg",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "zsteg: version unknown",
       "probe": "zsteg --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/usr/local/bin/zsteg",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141943.1275945
+      "checked_at": 1793479489.7446654
     },
     {
       "component": "kali_tool",
       "name": "steghide",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "steghide version 0.6.0",
       "probe": "steghide --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/steghide",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141943.1685975
+      "checked_at": 1793479489.7613297
     },
     {
       "component": "kali_tool",
       "name": "foremost",
-      "status": "MISSING",
+      "status": "READY",
       "required": false,
-      "detail": "Not found on PATH",
+      "detail": "/home/kali/.local/opt/pentestai-debs/usr/bin/foremost: invalid option -- '-'",
       "probe": "foremost --version/--help",
       "evidence": {
-        "binary": null,
-        "platform_root": "E:\\Agant\\PentestAI-Unified"
+        "binary": "/home/kali/.local/bin/foremost",
+        "platform_root": "/home/kali/Desktop/Agant/PentestAI-Unified"
       },
-      "checked_at": 1793141943.2133493
+      "checked_at": 1793479489.7674737
     },
     {
       "component": "ollama",
@@ -794,7 +794,7 @@
         "probed_host": "http://127.0.0.1:11434",
         "models_seen": 0
       },
-      "checked_at": 1793141943.6817899
+      "checked_at": 1793479489.781163
     },
     {
       "component": "ollama_model",
@@ -807,7 +807,7 @@
         "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793141943.6817899
+      "checked_at": 1793479489.7811744
     },
     {
       "component": "ollama_model",
@@ -820,7 +820,7 @@
         "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793141943.6817899
+      "checked_at": 1793479489.7811806
     },
     {
       "component": "ollama_model",
@@ -833,7 +833,27 @@
         "configured_host": "http://127.0.0.1:11434",
         "probed_host": "http://127.0.0.1:11434"
       },
-      "checked_at": 1793141943.6817899
+      "checked_at": 1793479489.7811842
+    },
+    {
+      "component": "burp_proxy",
+      "name": "burp_proxy@127.0.0.1:8080",
+      "status": "READY",
+      "required": false,
+      "detail": "TCP accepted on 127.0.0.1:8080",
+      "probe": "TCP connect 127.0.0.1:8080",
+      "evidence": {},
+      "checked_at": 1793479489.7817514
+    },
+    {
+      "component": "burp_gateway",
+      "name": "gateway@127.0.0.1:8085",
+      "status": "READY",
+      "required": false,
+      "detail": "TCP accepted on 127.0.0.1:8085",
+      "probe": "TCP connect 127.0.0.1:8085",
+      "evidence": {},
+      "checked_at": 1793479489.7825701
     }
   ]
 }

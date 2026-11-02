@@ -17,6 +17,7 @@ from orchestrator.task_classifier import TaskClassifier
 from memory.task_memory import TaskMemory, TaskRecord
 from core.session_manager import SessionManager
 from core.report_engine import ReportEngine
+from core.global_skills import build_skills_preamble
 from tools.tool_manager import ToolManager
 
 log = logging.getLogger("smart_orchestrator")
@@ -70,6 +71,16 @@ class SmartOrchestrator:
         # تسجيل في الذاكرة
         self.memory.add_user_message(user_input)
         context = self.memory.get_context(max_messages=4)
+
+        # Inject the Markdown global skills (bug-hunting + WAF payloads) into
+        # every prompt, regardless of route (auto/local/api).
+        skills_preamble = build_skills_preamble()
+        if skills_preamble:
+            context = (
+                f"{skills_preamble}\n\n# Conversation Context\n{context}"
+                if context
+                else skills_preamble
+            )
 
         await self._emit("chat_start", {
             "input": user_input[:100],
@@ -474,7 +485,7 @@ class SmartOrchestrator:
 
         await self._emit("phase", {"phase": "reporting", "message": "Generating report..."})
         session = self.sessions.load(session.id)
-        reports = ReportEngine().generate_all(session)
+        reports = ReportEngine(target=target, scope=[target]).generate_all(session)
         self.sessions.complete(session)
 
         # Taskade export

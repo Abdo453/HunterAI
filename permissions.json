@@ -1,0 +1,139 @@
+{
+  "version": "1.0.0",
+  "model": "capability_names",
+  "capabilities": {
+    "recon": {
+      "description": "Passive and low-impact asset discovery: subdomains, DNS, HTTP probing, fingerprinting.",
+      "risk": "low",
+      "action_classes": ["read_only"]
+    },
+    "scan": {
+      "description": "Port and service enumeration against authorized hosts.",
+      "risk": "medium",
+      "action_classes": ["read_only", "active_test"]
+    },
+    "osint": {
+      "description": "Open-source intelligence correlation on the target organization and its assets.",
+      "risk": "low",
+      "action_classes": ["read_only"]
+    },
+    "active_testing": {
+      "description": "Send crafted probes to application endpoints: fuzzing, payload delivery, auth probing.",
+      "risk": "medium",
+      "action_classes": ["read_only", "active_test"]
+    },
+    "vuln_verification": {
+      "description": "Prove a suspected defect with a controlled, reversible proof.",
+      "risk": "high",
+      "action_classes": ["read_only", "active_test", "proof_write"]
+    },
+    "exploit_verify": {
+      "description": "Run the final exploit proof that demonstrates impact. No persistence, no destruction.",
+      "risk": "critical",
+      "action_classes": ["read_only", "active_test", "proof_write", "exploit_proof"]
+    },
+    "evidence_adjudication": {
+      "description": "Adjudicate findings against the 7-Question Gate.",
+      "risk": "low",
+      "action_classes": ["read_only"]
+    },
+    "reporting": {
+      "description": "Produce submission-ready platform reports.",
+      "risk": "low",
+      "action_classes": ["read_only"]
+    },
+    "lead_management": {
+      "description": "Maintain the shared lead board and keep the hunt moving.",
+      "risk": "low",
+      "action_classes": ["read_only"]
+    },
+    "cloud_audit": {
+      "description": "Audit cloud tenancy: IAM, storage exposure, metadata, container and Kubernetes RBAC.",
+      "risk": "medium",
+      "action_classes": ["read_only", "active_test"]
+    },
+    "mobile_audit": {
+      "description": "Audit mobile application surfaces and transport configuration.",
+      "risk": "medium",
+      "action_classes": ["read_only", "active_test"]
+    },
+    "web3_audit": {
+      "description": "Audit smart contract code and on-chain configuration.",
+      "risk": "medium",
+      "action_classes": ["read_only"]
+    },
+    "wireless_audit": {
+      "description": "Assess wireless networks and handshakes within the authorized estate.",
+      "risk": "high",
+      "action_classes": ["read_only", "active_test"]
+    },
+    "ot_audit": {
+      "description": "Assess OT and ICS protocol exposure and segmentation.",
+      "risk": "high",
+      "action_classes": ["read_only", "active_test"]
+    }
+  },
+  "action_class_requirements": {
+    "read_only": ["recon", "scan", "active_testing", "vuln_verification", "exploit_verify", "osint", "cloud_audit", "mobile_audit", "web3_audit", "wireless_audit", "ot_audit"],
+    "active_test": ["active_testing", "vuln_verification", "exploit_verify"],
+    "proof_write": ["vuln_verification", "exploit_verify"],
+    "exploit_proof": ["exploit_verify"]
+  },
+  "profiles": {
+    "safe": {
+      "action_classes": ["read_only"],
+      "max_risk": "low",
+      "approval_required": [],
+      "capabilities": ["recon", "osint", "reporting", "lead_management"]
+    },
+    "standard": {
+      "action_classes": ["read_only", "active_test", "proof_write", "exploit_proof"],
+      "max_risk": "high",
+      "approval_required": ["exploit_proof"],
+      "capabilities": ["recon", "scan", "active_testing", "vuln_verification", "evidence_adjudication", "reporting", "osint", "lead_management"]
+    },
+    "red_team": {
+      "action_classes": ["read_only", "active_test", "proof_write", "exploit_proof"],
+      "max_risk": "critical",
+      "approval_required": [],
+      "capabilities": ["recon", "scan", "active_testing", "vuln_verification", "exploit_verify", "evidence_adjudication", "reporting", "osint", "cloud_audit", "mobile_audit", "web3_audit", "wireless_audit", "ot_audit", "lead_management"]
+    }
+  },
+  "hard_invariants": {
+    "description": "Denied in every profile and every grant. Enforced by core.policy.red_team before the grant is consulted.",
+    "denied": [
+      "backdoor",
+      "persistence",
+      "c2",
+      "lateral_movement",
+      "destructive_write",
+      "evasion",
+      "data_exfiltration",
+      "credential_dump"
+    ],
+    "examples": {
+      "backdoor": "webshell, reverse shell, bind shell",
+      "persistence": "cron, systemd, registry Run key, SSH authorized_keys",
+      "c2": "beacon, meterpreter, bind shell",
+      "lateral_movement": "pivot to a host outside the grant scope",
+      "destructive_write": "SQL DELETE/UPDATE/DROP, rm -rf, disk format, shutdown",
+      "evasion": "log clearing, audit or EDR disablement, timestomping",
+      "data_exfiltration": "bulk copying of real user data",
+      "credential_dump": "mass dumping of password stores or hashes"
+    }
+  },
+  "proof_patterns": {
+    "sql_injection": "read-only boolean or time-based proof; never a write statement",
+    "rce": "id / whoami; never persistence, never a payload left on disk",
+    "ssrf": "operator-owned out-of-band listener",
+    "idor": "two-account differential test against canary data",
+    "auth_bypass": "contrast authenticated and unauthenticated responses against operator accounts"
+  },
+  "scope_matching": {
+    "domain": "exact host or any subdomain of it",
+    "host": "exact host, port ignored",
+    "cidr": "IP membership in the network",
+    "url": "scheme, host, port, and path prefix"
+  },
+  "fail_closed": true
+}

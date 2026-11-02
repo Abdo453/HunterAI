@@ -3,14 +3,20 @@
   Orchestrator — يخطط ويدير TDG
   Executor — ينفذ المهام عبر المستشعرات
   Reviewer — يراجع النتائج ويقرر النجاح/الفشل/التجاوز
+يدعم غير المتزامن (async)، السجلات، والتكامل مع جميع المكونات
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core.config.settings import config
+from core.exceptions import OrchestratorError, HunterAIError
+from core.logging.logger import logger
+from hunter_ai.evidence.evidence_court import EvidenceCourt, CourtVerdict
 from hunter_ai.orchestration.multi_agent_orchestrator import (
     MultiAgentOrchestrator,
     AgentRole,
@@ -41,7 +47,25 @@ class TripleAgentSystem:
     """
 
     def __init__(self, graph_id: str = "triple_default"):
+        self.graph_id = graph_id
         self.orchestrator = MultiAgentOrchestrator(graph_id=graph_id)
+        self.court = EvidenceCourt()
+        self._lock = asyncio.Lock()
+
+    async def plan_and_execute_async(
+        self,
+        target: str,
+        technique: str,
+        description: str,
+    ) -> Dict[str, Any]:
+        """
+        تخطيط وتنفيذ غير متزامن:
+        1. Orchestrator يخطط ويدرج المهمة في TDG
+        2. Executor ينفذ المهمة عبر المستشعرات
+        3. Reviewer يراجع النتيجة ويقرر
+        """
+        async with self._lock:
+            return self._plan_and_execute_sync(target, technique, description)
 
     def plan_and_execute(
         self,
@@ -49,11 +73,15 @@ class TripleAgentSystem:
         technique: str,
         description: str,
     ) -> Dict[str, Any]:
-        """
-        1. Orchestrator يخطط ويدرج المهمة في TDG
-        2. Executor ينفذ المهمة عبر المستشعرات (يتم الربط لاحقاً)
-        3. Reviewer يراجع النتيجة ويقرر
-        """
+        """نسخة متزامنة."""
+        return self._plan_and_execute_sync(target, technique, description)
+
+    def _plan_and_execute_sync(
+        self,
+        target: str,
+        technique: str,
+        description: str,
+    ) -> Dict[str, Any]:
         # المرحلة 1: التخطيط
         plan_task = self.orchestrator.create_task(
             target=target,
@@ -80,33 +108,49 @@ class TripleAgentSystem:
             dependencies=[exec_task.task_id],
         )
 
-        return {
+        result = {
             "orchestrator_task": plan_task.task_id,
             "executor_task": exec_task.task_id,
             "reviewer_task": review_task.task_id,
             "status": "planned",
             "target": target,
             "technique": technique,
+            "description": description,
+            "graph_id": self.graph_id,
         }
+        logger.info(
+            f"[Triple] خطة جديدة للهدف {target}: التقنية={technique}, "
+            f"المهام={plan_task.task_id}, {exec_task.task_id}, {review_task.task_id}"
+        )
+        return result
+
+    async def execute_task_async(
+        self,
+        task_id: str,
+        sensor_output: Optional[Dict[str, Any]] = None,
+    ) -> ExecutionResult:
+        """تنفيذ مهمة بشكل غير متزامن."""
+        async with self._lock:
+            return self._execute_task_sync(task_id, sensor_output)
 
     def execute_task(
         self,
         task_id: str,
         sensor_output: Optional[Dict[str, Any]] = None,
     ) -> ExecutionResult:
-        """
-        تنفيذ مهمة من قبل Executor مع ربط بمستشعرات HunterAI الحالية.
-        """
+        """نسخة متزامنة."""
+        return self._execute_task_sync(task_id, sensor_output)
+
+    def _execute_task_sync(
+        self,
+        task_id: str,
+        sensor_output: Optional[Dict[str, Any]] = None,
+    ) -> ExecutionResult:
         task = self.orchestrator._tasks.get(task_id)
         if not task:
-            return ExecutionResult(
-                task_id=task_id,
-                role=AgentRole.EXECUTOR,
-                status="error",
-                message=f"Task {task_id} not found",
-            )
+            raise OrchestratorError(f"المهمة '{task_id}' غير موجودة", agent_role=AgentRole.EXECUTOR.value)
 
-        # محاكاة التنفيذ (في الإنتاج، يتم الربط مع Burp Sensor، browser sensor، إلخ)
+        # تنفيذ المهمة (في الإنتاج، يتم الربط مع Burp Sensor، browser sensor، إلخ)
         if sensor_output:
             evidence = sensor_output
         else:
@@ -118,6 +162,7 @@ class TripleAgentSystem:
             }
 
         self.orchestrator.complete_task(task_id, evidence)
+        logger.info(f"[Triple] تنفيذ مهمة '{task_id}' بواسطة Executor: {task.status}")
         return ExecutionResult(
             task_id=task_id,
             role=AgentRole.EXECUTOR,
@@ -127,23 +172,34 @@ class TripleAgentSystem:
             message="Execution completed successfully",
         )
 
+    async def review_task_async(
+        self,
+        task_id: str,
+        court_verdict: Optional[str] = None,
+        bypass_method: Optional[str] = None,
+    ) -> ExecutionResult:
+        """مراجعة مهمة بشكل غير متزامن."""
+        async with self._lock:
+            return self._review_task_sync(task_id, court_verdict, bypass_method)
+
     def review_task(
         self,
         task_id: str,
         court_verdict: Optional[str] = None,
         bypass_method: Optional[str] = None,
     ) -> ExecutionResult:
-        """
-        مراجعة مهمة من قبل Reviewer باستخدام محكمة الأدلة.
-        """
+        """نسخة متزامنة."""
+        return self._review_task_sync(task_id, court_verdict, bypass_method)
+
+    def _review_task_sync(
+        self,
+        task_id: str,
+        court_verdict: Optional[str] = None,
+        bypass_method: Optional[str] = None,
+    ) -> ExecutionResult:
         task = self.orchestrator._tasks.get(task_id)
         if not task:
-            return ExecutionResult(
-                task_id=task_id,
-                role=AgentRole.REVIEWER,
-                status="error",
-                message=f"Task {task_id} not found",
-            )
+            raise OrchestratorError(f"المهمة '{task_id}' غير موجودة", agent_role=AgentRole.REVIEWER.value)
 
         # تحديد الحكم بناءً على قرار المحكمة أو الأدلة
         if court_verdict == "blocked":
@@ -163,6 +219,9 @@ class TripleAgentSystem:
             )
             message = "Finding approved by Evidence Court"
 
+        logger.info(
+            f"[Triple] مراجعة مهمة '{task_id}' بواسطة Reviewer: الحكم={verdict.value}, الرسالة={message}"
+        )
         return ExecutionResult(
             task_id=task_id,
             role=AgentRole.REVIEWER,

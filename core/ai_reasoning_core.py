@@ -24,7 +24,7 @@ class AIReasoningCore:
         if os.getenv("GEMINI_API_KEY"):
             try:
                 from models.api.gemini_provider import GeminiProvider
-                gm = GeminiProvider(model="gemini-2.0-flash")
+                gm = GeminiProvider(model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"))
                 resp = await gm.generate(prompt, system_prompt=system_prompt)
                 if resp and resp.content:
                     return resp.content

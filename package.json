@@ -1,0 +1,26 @@
+{
+  "name": "pentestai-unified",
+  "version": "1.0.0",
+  "description": "<div align=\"center\">",
+  "main": "cors_exploit.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Abdo453/HunterAI.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Abdo453/HunterAI/issues"
+  },
+  "homepage": "https://github.com/Abdo453/HunterAI#readme",
+  "dependencies": {
+    "@playwright/test": "^1.64.1"
+  }
+}

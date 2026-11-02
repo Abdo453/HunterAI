@@ -48,14 +48,14 @@ class OTTools:
         """يقرأ مسجلات Modbus (قراءة فقط — اختبار تأثير محدود)."""
         cmd_parts = [
             "modbus-cli",
-            "read-holding-registers",
-            "-a",
-            target,
+            "read",
             "-u",
-            str(unit_id),
-            "-r",
+            target,
+            "-a",
             str(address),
-            "-n",
+            "-i",
+            str(unit_id),
+            "-l",
             str(count),
         ]
         return await self.mgr.execute(" ".join(cmd_parts), timeout=timeout)

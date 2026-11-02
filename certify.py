@@ -56,6 +56,8 @@ CYAN = "\033[0;36m" if sys.platform != "win32" else ""
 BOLD = "\033[1m" if sys.platform != "win32" else ""
 RESET = "\033[0m" if sys.platform != "win32" else ""
 
+os.environ["HUNTER_UNRESTRICTED"] = "0"
+
 PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 

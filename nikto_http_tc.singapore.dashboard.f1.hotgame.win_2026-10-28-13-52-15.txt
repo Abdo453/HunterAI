@@ -1,0 +1,4 @@
+- Nikto v2.6.1/
++ Target Host: tc.singapore.dashboard.f1.hotgame.win
++ Target Port: 80
++ GET ERROR: Cannot resolve hostname 'tc.singapore.dashboard.f1.hotgame.win' because 'Name or service not known'.

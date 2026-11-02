@@ -267,7 +267,8 @@ class AICascadeFailover:
             try:
                 import httpx
                 async with httpx.AsyncClient(timeout=12.0) as client:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.gemini_key}"
+                    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={self.gemini_key}"
                     r = await client.post(
                         url,
                         json={"contents": [{"parts": [{"text": f"{system_prompt}\n\n{prompt}"}]}]}

@@ -1,0 +1,74 @@
+{
+  "nodes": {
+    "task-cd7a5745": {
+      "task_id": "task-cd7a5745",
+      "name": "recon",
+      "technique": "recon",
+      "target": "example.com",
+      "status": "completed",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {
+        "subdomains": 5
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142250.8867915,
+      "updated_at": 1793142250.8867915
+    },
+    "task-b3d6322e": {
+      "task_id": "task-b3d6322e",
+      "name": "scan",
+      "technique": "scan",
+      "target": "example.com",
+      "status": "completed",
+      "dependencies": [
+        "task-cd7a5745"
+      ],
+      "dependents": [],
+      "evidence": {
+        "open_ports": [
+          80,
+          443
+        ]
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142250.8867915,
+      "updated_at": 1793142250.8867915
+    },
+    "task-5a702293": {
+      "task_id": "task-5a702293",
+      "name": "exploit",
+      "technique": "exploit",
+      "target": "example.com",
+      "status": "completed",
+      "dependencies": [
+        "task-b3d6322e"
+      ],
+      "dependents": [],
+      "evidence": {
+        "findings": [
+          "xss",
+          "sqli"
+        ]
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142250.8867915,
+      "updated_at": 1793142250.8867915
+    }
+  },
+  "edges": {
+    "task-cd7a5745": [
+      "task-b3d6322e"
+    ],
+    "task-b3d6322e": [
+      "task-5a702293"
+    ],
+    "task-5a702293": []
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "dataflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/kali/Desktop/Agant/PentestAI-Unified/.archify/dataflow-waf-payload-to-vulnengine-20261031-105340/candidate.json",
+    "sha256": "4ba2c4e0dd001542a8560cee7fbb5ab18fbb26231fd0795cfc8111473f236ec8",
+    "bytes": 4927
+  },
+  "artifact": {
+    "path": "/home/kali/Desktop/Agant/PentestAI-Unified/.archify/dataflow-waf-payload-to-vulnengine-20261031-105340/waf-payload-flow.html",
+    "sha256": "ecb70631535459e730b773486857b6d08f3ea42809958c1bfe3cae86d1a6e94f",
+    "bytes": 839960
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/kali/Desktop/Agant/PentestAI-Unified/.archify/dataflow-waf-payload-to-vulnengine-20261031-105340/waf-payload-flow.finalize.json",
+    "summaryReceipt": "/home/kali/Desktop/Agant/PentestAI-Unified/.archify/dataflow-waf-payload-to-vulnengine-20261031-105340/waf-payload-flow.finalize-summary.json",
+    "browserCheckReceipt": "/home/kali/Desktop/Agant/PentestAI-Unified/.archify/dataflow-waf-payload-to-vulnengine-20261031-105340/waf-payload-flow.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-31T14:13:08.942Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 5039,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

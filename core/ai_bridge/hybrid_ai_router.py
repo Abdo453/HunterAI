@@ -48,7 +48,7 @@ class HybridAIRouter:
         self,
         prefer_online: bool = True,
         preferred_local_model: str = "qwen2.5-coder:14b",
-        preferred_online_model: str = "gemini-2.0-flash"
+        preferred_online_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
     ):
         self.prefer_online = prefer_online
         self.preferred_local_model = preferred_local_model

@@ -73,6 +73,41 @@ Every finding must pass 7 questions before reporting:
 
 Only **PROVEN** findings are reportable.
 
+## Root Controller
+
+`core/root_controller/` — a single root agent that owns a recursive hierarchy,
+one shared hash-chained memory, and a fail-closed permission gate in front of
+every tool call. Capabilities flow downward only: a child can never hold a
+capability its parent lacks, so widening is an explicit root grant that lands
+in the audit trail. The gate runs the repository's own signed-grant engine
+(`core/policy/red_team.py`) — no grant means no execution.
+
+```bash
+python pentest.py controller status
+python pentest.py controller tree
+python pentest.py controller spawn --role recon --objective "map api.example.com"
+python pentest.py controller delegate --parent recon --role endpoint_mapper --objective "..."
+python pentest.py controller grant --agent recon --capability active_testing --reason "..."
+python pentest.py controller run --agent recon --tool httpx --target https://api.example.com
+python pentest.py controller arsenal            # tool coverage vs. what is installed
+python pentest.py controller playbook --target api.example.com --stage passive_subdomains
+python pentest.py controller --grant authorization_grant.json playbook \
+    --target api.example.com --agent recon_methodology --execute
+python pentest.py controller --grant authorization_grant.json check \
+    --target https://api.example.com --action-class exploit_proof
+```
+
+The `recon_methodology` role carries the operator playbook from
+`core/playbooks/recon_methodology.py`. `controller playbook` renders every
+stage's command, marks each step ready or blocked against the installed
+arsenal, and — with `--execute` — runs only the steps the permission gate
+allows; unregistered tools come back as a rendered command for the operator
+rather than being shelled out.
+
+Config artifacts live at the repository root: `agent_config.json`,
+`hierarchy.json`, `permissions.json`, `tools_mcp.json`, `rules.txt`,
+`system_prompt.md`. Tests: `tests/test_root_controller.py`.
+
 ## Project Structure
 
 ```

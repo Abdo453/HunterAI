@@ -136,10 +136,10 @@ python certify.py
 ### 3. Run Autonomous Scan
 ```bash
 # Full evidence-driven scan with automatic SPA exploration & report generation
-python main.py --target https://target.com --mode full
+python main.py --target https://target.com --mode full --hunter --authorized
 
-# Run with interactive dashboard output
-python main.py --target https://target.com --mode full --output dashboard
+# Launch the interactive web dashboard (open http://127.0.0.1:7070)
+python main.py --web
 ```
 
 ### 4. Scan Modes

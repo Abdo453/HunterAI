@@ -24,7 +24,14 @@ class AIProvider:
 
 # Ordered list: free-first priority
 _PROVIDERS: List[AIProvider] = [
-    AIProvider("ollama", "100% free · local", "Full", "Fast", base_url="http://127.0.0.1:11434"),
+    AIProvider(
+        "ollama",
+        "100% free · local",
+        "Full",
+        "Fast",
+        model=os.getenv("HUNTER_AI_MODEL", "qwen2.5-coder:14b"),
+        base_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
+    ),
     AIProvider("groq", "Free tier", "Cloud", "Very fast"),
     AIProvider("deepseek", "Very cheap", "Cloud", "Fast"),
     AIProvider("claude", "Paid", "Cloud", "Fast"),
@@ -90,7 +97,7 @@ def _ask_ollama(question: str) -> str:
     import urllib.request
 
     host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-    model = os.getenv("HUNTER_AI_MODEL", "qwen2.5:14b")
+    model = os.getenv("HUNTER_AI_MODEL", "qwen2.5-coder:14b")
     payload = {
         "model": model,
         "prompt": question,

@@ -2767,7 +2767,13 @@ class AutonomousBrain:
                         http_diff_confirmed=bool(f.get("diff_confirmed", False)),
                         poe_token_verified=bool(f.get("poe_token_verified", False)),
                         waf_blocked=bool(f.get("waf_blocked", False)),
-                        is_reflection_only=bool(f.get("reflection_only", False))
+                        is_reflection_only=bool(f.get("reflection_only", False)),
+                        finding_type=str(
+                            f.get("vuln_type")
+                            or f.get("type")
+                            or f.get("title")
+                            or ""
+                        ),
                     )
                     agreement = ToolAgreementEngine.evaluate(signals)
                     f["tool_agreement"] = agreement

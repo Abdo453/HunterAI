@@ -28,7 +28,6 @@ class ReportAgent(BaseAgent):
             progress_callback=cb,
         )
         self.sessions = session_manager or SessionManager()
-        self.reporter = ReportEngine()
 
     async def run(self, task: AgentTask) -> AgentResult:
         result = AgentResult(agent_name=self.name, target=task.target)
@@ -41,6 +40,7 @@ class ReportAgent(BaseAgent):
             return result
 
         # توليد التقارير
+        self.reporter = ReportEngine(target=task.target, scope=[task.target])
         paths = self.reporter.generate_all(session)
         self.sessions.complete(session)
 

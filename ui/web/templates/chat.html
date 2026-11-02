@@ -32,6 +32,10 @@
           <span id="connText">connecting…</span>
         </div>
         <div class="policy" id="policyTag">policy: —</div>
+        <div id="globalSkillsBadge" title="Global skills loaded from ~/.agents/skills"
+             style="margin-top:8px;padding:4px 8px;border-radius:6px;background:rgba(0,200,83,.12);color:#00c853;font-size:11px;border:1px solid rgba(0,200,83,.35);line-height:1.35;">
+          Loaded Global Skills: …
+        </div>
       </div>
     </aside>
 
@@ -57,5 +61,22 @@
   </div>
 
   <script src="/static/chat.js"></script>
+  <script>
+    (function () {
+      var el = document.getElementById("globalSkillsBadge");
+      if (!el) return;
+      fetch("/api/global-skills").then(function (r) { return r.json(); }).then(function (d) {
+        if (d && Array.isArray(d.loaded) && d.loaded.length) {
+          el.textContent = d.badge;
+          el.title = d.loaded.join(", ") + "  ·  " + d.root;
+        } else {
+          el.textContent = "Loaded Global Skills: none";
+          el.style.color = "#ff5252";
+          el.style.borderColor = "rgba(255,82,82,.4)";
+          el.style.background = "rgba(255,82,82,.10)";
+        }
+      }).catch(function () {});
+    })();
+  </script>
 </body>
 </html>

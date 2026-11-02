@@ -6,10 +6,8 @@ import ast
 from pathlib import Path
 
 def test_burp_extension_ast():
-    ext_path = Path("e:/Agant/PentestAI-Unified/agents/burp_agent/integrations/burp_extension/hunter_burp_extension.py")
-    if not ext_path.exists():
-        # Fallback if file doesn't exist to pass test trivially but flag missing
-        return
+    ext_path = Path(__file__).resolve().parents[2] / "agents" / "burp_agent" / "integrations" / "burp_extension" / "hunter_burp_extension.py"
+    assert ext_path.exists(), f"Burp extension not found: {ext_path}"
         
     with open(ext_path, "r", encoding="utf-8") as f:
         tree = ast.parse(f.read())

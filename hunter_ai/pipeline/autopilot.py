@@ -98,6 +98,7 @@ async def run_autopilot(target: str) -> Dict[str, Any]:
     # ═══════════════════════════════════════════════════════════════════════════════
     print("[Autopilot] Phase 4.5: WAF Detection & Bypass")
     from hunter_ai.waf.fingerprint_spoofing import FingerprintSpoofer
+    from hunter_ai.waf.bypass_ladder import WAFBypassLadder
     spoofer = FingerprintSpoofer()
     fp_result = spoofer.test_spoofing(target, "chrome_win10")
     state["waf_fingerprint"] = fp_result

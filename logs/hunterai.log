@@ -1,0 +1,29 @@
+2026-10-28 02:23:03 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'test_tdg'
+2026-10-28 02:23:03 | [32mINFO[0m | hunterai | [TDG]任务 'task-6234cbc1' مكتملة: recon
+2026-10-28 02:23:03 | [32mINFO[0m | hunterai | [TDG]任务 'task-6b3b996a' مكتملة: scan
+2026-10-28 02:23:03 | [32mINFO[0m | hunterai | [TDG]任务 'task-5877494b' مكتملة: exploit
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'test_tdg'
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [TDG]任务 'task-d02d9e3f' مكتملة: recon
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [TDG]任务 'task-c4294812' مكتملة: scan
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [TDG]任务 'task-2989bf7d' مكتملة: exploit
+2026-10-28 02:24:06 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=example.com, التقنية=sqli, السبب=WAF blocked
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_triple' (3 مهمة)
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_triple
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=xss, المهام=orch-d2c1aee4, orch-7b587038, orch-37720538
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [TDG]任务 'orch-7b587038' مكتملة: Execute: XSS test
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-7b587038': xss
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-7b587038' بواسطة Executor: completed
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [TDG]任务 'orch-37720538' مكتملة: Review: XSS test
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-37720538': xss
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-37720538' بواسطة Reviewer: الحكم=allowed, الرسالة=Finding approved by Evidence Court
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [Court] حالة 'final_test_001': الحكم=proven_bypass, الثقة=0.60, التجاوز=True, directa=False
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [RAG] تم توليد 1 فرضية للهدف example.com على /search
+2026-10-28 02:24:06 | [32mINFO[0m | hunterai | [Test] اختبار السجلات المحسن
+2026-10-28 13:34:53 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'default'
+2026-10-28 13:34:53 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: default
+2026-10-28 13:38:35 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'default'
+2026-10-28 13:38:35 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: default
+2026-10-31 16:27:59 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'default'
+2026-10-31 16:27:59 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: default
+2026-10-31 16:44:18 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'default'
+2026-10-31 16:44:18 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: default

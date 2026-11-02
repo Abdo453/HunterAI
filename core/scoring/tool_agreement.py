@@ -21,10 +21,32 @@ class SensorSignals:
     poe_token_verified: bool = False
     waf_blocked: bool = False
     is_reflection_only: bool = False
+    finding_type: str = ""
 
 
 class ToolAgreementEngine:
     """Evaluates cross-sensor agreement and refutes unverified claims"""
+
+    DEFAULT_THRESHOLD = 0.6
+    OBSERVATIONAL_THRESHOLD = 0.33
+    OBSERVATIONAL_TYPES = (
+        "information disclosure",
+        "information_disclosure",
+        "info disclosure",
+        "info_disclosure",
+        "exposed path",
+        "exposed_path",
+        "path exposure",
+        "path_exposure",
+    )
+
+    @classmethod
+    def _is_observational_finding(cls, finding_type: str) -> bool:
+        normalized = (finding_type or "").strip().lower().replace("-", " ")
+        return any(
+            marker.replace("_", " ") in normalized.replace("_", " ")
+            for marker in cls.OBSERVATIONAL_TYPES
+        )
 
     @classmethod
     def evaluate(cls, signals: SensorSignals) -> Dict[str, Any]:
@@ -56,10 +78,22 @@ class ToolAgreementEngine:
                 "is_valid": False
             }
 
-        is_valid = agreement_ratio >= 0.6
+        observational = cls._is_observational_finding(signals.finding_type)
+        threshold = cls.OBSERVATIONAL_THRESHOLD if observational else cls.DEFAULT_THRESHOLD
+        is_valid = agreement_ratio >= threshold
+
+        if is_valid and observational and agreement_ratio < cls.DEFAULT_THRESHOLD:
+            reason = (
+                f"Observational {signals.finding_type} finding accepted with score "
+                f"{agreement_ratio:.2f}; direct observation does not require an "
+                "execution signal."
+            )
+        else:
+            reason = f"Tool agreement established with score {agreement_ratio:.2f}."
+
         return {
             "verdict": "CONFIRMED" if is_valid else "INSUFFICIENT_EVIDENCE",
-            "reason": f"Tool agreement established with score {agreement_ratio:.2f}.",
+            "reason": reason,
             "agreement_score": agreement_ratio,
             "is_valid": is_valid
         }

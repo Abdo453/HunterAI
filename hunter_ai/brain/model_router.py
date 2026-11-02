@@ -99,7 +99,7 @@ class AIModelRouter:
 
         elif preferred_tier == ModelTierPreference.CLOUD_FAST or intent == TaskIntent.LARGE_REASONING:
             return RoutedModelSelection(
-                model_name="gemini-2.0-flash",
+                model_name=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
                 tier=ModelTierPreference.CLOUD_FAST,
                 provider="gemini",
                 context_window=1048576,

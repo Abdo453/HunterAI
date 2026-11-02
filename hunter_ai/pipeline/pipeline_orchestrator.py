@@ -325,8 +325,12 @@ class HunterPipelineOrchestrator:
         burp_proxy_host = "127.0.0.1"
         burp_proxy_port = 8080
 
+        disable_auto_proxy = os.getenv("HUNTERAI_DISABLE_BURP_AUTO", "").strip().lower() in (
+            "1", "true", "yes", "on"
+        )
+
         # 1. Auto-detect Burp Proxy if self.proxy is not explicitly provided
-        if not self.proxy:
+        if not self.proxy and not disable_auto_proxy:
             try:
                 with socket.create_connection((burp_proxy_host, burp_proxy_port), timeout=0.3):
                     self.proxy = f"http://{burp_proxy_host}:{burp_proxy_port}"
@@ -335,6 +339,9 @@ class HunterPipelineOrchestrator:
                     print(f"\n[+] [BURP SUITE] Auto-detected active Burp Suite proxy on {self.proxy}")
             except (socket.timeout, ConnectionRefusedError, OSError):
                 pass
+        elif disable_auto_proxy:
+            logger.info("[BURP] Automatic proxy routing disabled by HUNTERAI_DISABLE_BURP_AUTO")
+            print("[+] [BURP SUITE] Automatic proxy routing disabled; direct egress enforced")
 
         # 2. Initialize BurpAgent, BurpController, and BurpResearchController
         try:
@@ -715,9 +722,10 @@ class HunterPipelineOrchestrator:
         try:
             from core.llm_router import get_llm_router
 
-            specs = get_llm_router().cloud_specs(only_available=True)
+            router = get_llm_router()
+            specs = router.cloud_specs(only_available=True)
             if specs:
-                return f"{specs[0].id}:{specs[0].default_model}"
+                return f"{specs[0].id}:{router.default_model_for(specs[0])}"
         except Exception as e:  # noqa: BLE001 - probe failures are non-fatal
             logger.debug(f"[preflight] cloud backend probe failed: {e}")
         return None

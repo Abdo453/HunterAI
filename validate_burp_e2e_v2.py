@@ -50,6 +50,7 @@ if sys.platform == "win32":
 
 PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
+os.environ.setdefault("HUNTER_UNRESTRICTED", "0")
 
 from core.burp_gateway.capture_store import CaptureStore, CapturedTransaction
 from core.burp_gateway.gateway import BurpGateway

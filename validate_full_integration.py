@@ -6,6 +6,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
+os.environ.setdefault("HUNTER_UNRESTRICTED", "0")
 
 from validate_burp_integration import BurpIntegrationValidatorV1
 from core.integration.golden_trace import GoldenTraceRunner

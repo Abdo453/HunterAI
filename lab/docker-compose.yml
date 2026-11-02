@@ -1,0 +1,98 @@
+services:
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: lab-nginx
+    ports:
+      - "8088:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - spring
+      - php
+      - springjava
+      - cointransfer
+    networks:
+      labnet:
+        ipv4_address: 172.28.0.5
+
+  spring:
+    build: ./spring
+    container_name: lab-spring
+    volumes:
+      - spring_logs:/var/log/app
+    networks:
+      labnet:
+        ipv4_address: 172.28.0.20
+      imdsnet:
+        ipv4_address: 169.254.169.5
+
+  springjava:
+    build: ./springjava
+    container_name: lab-springjava
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      labnet:
+        ipv4_address: 172.28.0.60
+
+  cointransfer:
+    build: ./cointransfer
+    container_name: lab-cointransfer
+    networks:
+      labnet:
+        ipv4_address: 172.28.0.70
+
+  imds:
+    build: ./imds
+    container_name: lab-imds
+    networks:
+      labnet:
+        ipv4_address: 172.28.0.10
+      imdsnet:
+        ipv4_address: 169.254.169.254
+
+  php:
+    build: ./php
+    container_name: lab-php
+    networks:
+      labnet:
+        ipv4_address: 172.28.0.30
+
+  redis:
+    image: redis:7-alpine
+    container_name: lab-redis
+    user: root
+    entrypoint:
+      - sh
+      - -c
+      - "mkdir -p /root/.ssh && exec redis-server --protected-mode no --enable-protected-configs yes --dir /root/.ssh --dbfilename authorized_keys"
+    ports:
+      - "16379:6379"
+    networks:
+      labnet:
+        ipv4_address: 172.28.0.40
+
+  mysql:
+    image: mysql:8.0
+    container_name: lab-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: labdb
+    ports:
+      - "13306:3306"
+    networks:
+      labnet:
+        ipv4_address: 172.28.0.50
+
+networks:
+  labnet:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+  imdsnet:
+    ipam:
+      config:
+        - subnet: 169.254.169.0/24
+
+volumes:
+  spring_logs:

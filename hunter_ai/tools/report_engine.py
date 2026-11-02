@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
@@ -128,6 +129,121 @@ class ReportEngine:
 
     def to_json(self, report: Dict[str, Any]) -> str:
         return json.dumps(report, indent=2, default=str)
+
+    @staticmethod
+    def _finding_to_dict(finding: Any, target: str) -> Dict[str, Any]:
+        def value(name: str, default: Any = None) -> Any:
+            if isinstance(finding, dict):
+                return finding.get(name, default)
+            return getattr(finding, name, default)
+
+        severity = str(value("severity", "Info")).upper()
+        tool = str(value("tool", ""))
+        return {
+            "finding_id": str(value("finding_id", value("id", ""))),
+            "title": str(value("title", "Untitled")),
+            "description": str(value("description", "")),
+            "severity": severity,
+            "cvss": value("cvss_score", value("cvss", 0.0)),
+            "cvss_score": value("cvss_score", value("cvss", 0.0)),
+            "tool": tool,
+            "evidence": str(value("evidence", "")),
+            "recommendation": str(value("recommendation", "")),
+            "endpoint": str(value("endpoint", target)),
+            "type": str(value("type", "Security Finding")),
+            "param_name": str(value("param_name", "")),
+            "cwe": str(value("cwe", "CWE-Unknown")),
+            "owasp_top10": str(value("owasp_top10", "OWASP Top 10")),
+            "confidence": float(value("confidence", 0.9)),
+            "payload_used": str(value("payload_used", "")),
+            "evidence_sources": value("evidence_sources", [tool] if tool else []),
+            "reproduction_steps": value("reproduction_steps", []),
+            "impact": str(value("impact", "")),
+        }
+
+    def generate_all(self, session: Any, output_dir: str = "data/reports") -> Dict[str, str]:
+        """Build and persist Markdown, JSON, SARIF, and HTML reports for a session."""
+        if session is None:
+            raise ValueError("session is required to generate reports")
+
+        if isinstance(session, dict):
+            sid = str(session.get("id") or "session")
+            target = str(session.get("target") or self.target)
+            raw_findings = session.get("findings") or []
+            tools_run = session.get("tools_run") or []
+            strategy = session.get("strategy")
+            mode = str(session.get("mode") or "")
+        else:
+            sid = str(getattr(session, "id", "session"))
+            target = str(getattr(session, "target", self.target))
+            raw_findings = getattr(session, "findings", None) or []
+            tools_run = getattr(session, "tools_run", None) or []
+            strategy = getattr(session, "strategy", None)
+            mode = str(getattr(session, "mode", ""))
+
+        findings = [self._finding_to_dict(f, target) for f in raw_findings]
+        attack_surface = dict(strategy) if isinstance(strategy, dict) else {}
+        attack_surface.setdefault("target", target)
+        attack_surface.setdefault("mode", mode)
+        attack_surface.setdefault("tools_run", len(tools_run))
+
+        report = self.build(
+            findings=findings,
+            attack_surface=attack_surface,
+            evidence_summary={"findings": len(findings), "tools_run": len(tools_run)},
+            request_summary={
+                "total_tools": len(tools_run),
+                "tools": [
+                    t.get("tool", "")
+                    for t in tools_run
+                    if isinstance(t, dict)
+                ],
+            },
+        )
+
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+
+        md_path = out / f"{sid}_report.md"
+        md_text = self.to_markdown(report)
+        md_path.write_text(md_text, encoding="utf-8")
+
+        json_path = out / f"{sid}_report.json"
+        json_path.write_text(self.to_json(report), encoding="utf-8")
+
+        sarif_path = out / f"{sid}_report.sarif"
+        sarif_path.write_text(
+            json.dumps(self.to_sarif(report), indent=2, default=str),
+            encoding="utf-8",
+        )
+
+        try:
+            from core.reporting.enterprise_html_report import EnterpriseReportGenerator
+            html_doc = EnterpriseReportGenerator.generate_html(
+                target_url=target,
+                findings=findings,
+                mission_id=sid,
+            )
+        except Exception:
+            import html as html_lib
+            html_doc = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                f"<title>HunterAI Security Assessment — {html_lib.escape(target)}</title>"
+                "</head><body><pre>"
+                f"{html_lib.escape(md_text)}"
+                "</pre></body></html>"
+            )
+
+        html_path = out / f"{sid}_report.html"
+        html_path.write_text(html_doc, encoding="utf-8")
+
+        return {
+            "markdown": str(md_path),
+            "md": str(md_path),
+            "json": str(json_path),
+            "sarif": str(sarif_path),
+            "html": str(html_path),
+        }
 
     def to_sarif(self, report: Dict[str, Any]) -> Dict[str, Any]:
         """Converts findings into standard SARIF 2.1.0 JSON format."""

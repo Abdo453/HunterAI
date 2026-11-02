@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "name": "hunterai-root-controller",
+  "description": "Single root controller owning the recursive HunterAI agent hierarchy for authorized engagements.",
+  "root_role": "root_controller",
+  "model": "qwen2.5-coder:14b-tools",
+  "hierarchy": {
+    "max_depth": 4,
+    "max_children": 6,
+    "inheritance": "downward_only",
+    "escalation": "explicit_root_grant",
+    "default_child_capabilities": [
+      "recon",
+      "scan",
+      "active_testing",
+      "vuln_verification",
+      "evidence_adjudication",
+      "reporting",
+      "lead_management"
+    ]
+  },
+  "memory": {
+    "path": "data/root_controller/memory.jsonl",
+    "max_context_entries": 40,
+    "namespaces": [
+      "lead",
+      "session",
+      "evidence",
+      "attack_path",
+      "credential_finding",
+      "access_path",
+      "note",
+      "event"
+    ],
+    "redact_secrets": true,
+    "hash_chain": true
+  },
+  "audit": {
+    "path": "data/root_controller/audit.jsonl",
+    "hash_chain": true
+  },
+  "policy": {
+    "engine": "core.policy.red_team.RedTeamPolicyEngine",
+    "grant_path": null,
+    "profile": "red_team",
+    "secret_env": "HUNTERAI_POLICY_SECRET",
+    "fail_closed": true,
+    "hard_invariants": [
+      "backdoor",
+      "persistence",
+      "c2",
+      "lateral_movement",
+      "destructive_write",
+      "evasion",
+      "data_exfiltration",
+      "credential_dump"
+    ]
+  },
+  "paths": {
+    "system_prompt": "system_prompt.md",
+    "rules": "rules.txt",
+    "hierarchy": "hierarchy.json",
+    "permissions": "permissions.json",
+    "tools": "tools_mcp.json"
+  },
+  "state": {
+    "hierarchy_state": "data/root_controller/hierarchy.json"
+  }
+}

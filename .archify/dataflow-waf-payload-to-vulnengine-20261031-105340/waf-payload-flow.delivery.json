@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "c92a6d0d-46d1-40e9-8f62-2a1aa3a7e1c8",
+  "status": "current",
+  "command": "deliver",
+  "type": "dataflow",
+  "input": "/home/kali/Desktop/Agant/PentestAI-Unified/.archify/dataflow-waf-payload-to-vulnengine-20261031-105340/candidate.json",
+  "output": "/home/kali/Desktop/Agant/PentestAI-Unified/.archify/dataflow-waf-payload-to-vulnengine-20261031-105340/waf-payload-flow.html",
+  "specification": {
+    "sha256": "4ba2c4e0dd001542a8560cee7fbb5ab18fbb26231fd0795cfc8111473f236ec8",
+    "bytes": 4927
+  },
+  "artifact": {
+    "sha256": "ecb70631535459e730b773486857b6d08f3ea42809958c1bfe3cae86d1a6e94f",
+    "bytes": 839960
+  }
+}

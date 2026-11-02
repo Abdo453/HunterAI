@@ -119,6 +119,13 @@ async def get_status():
     }
 
 
+@app.get("/api/global-skills")
+async def get_global_skills():
+    """Global Markdown skills loaded from ~/.agents/skills (for the UI badge)."""
+    from core.global_skills import global_skills_status
+    return global_skills_status()
+
+
 @app.get("/api/ai/diagnostics")
 async def get_ai_diagnostics():
     """تقرير تشخيصي حي لحالة الموديلات المحلية والسحابية"""
@@ -1026,6 +1033,33 @@ async def verify_vulnerability_live(req: Request):
     from core.smart_probe_engine import SmartPoCExecutor
     executor = SmartPoCExecutor()
     result = await executor.execute_and_verify(target_url, param_name, vuln_type, payload if payload else None)
+
+    # Cross-sensor ToolAgreementEngine gate. Optional sensor flags may be
+    # supplied by the caller (Burp/Browser); verified probe evidence counts as
+    # the proof-of-execution signal.
+    from core.scoring.tool_agreement import ToolAgreementEngine, SensorSignals
+
+    proof_reason = str(result.get("proof_reason", "")).lower()
+    verified = bool(result.get("verified"))
+    waf_info = result.get("waf_info") or {}
+    signals = SensorSignals(
+        burp_observed=bool(data.get("burp_observed", False)),
+        browser_dom_executed=bool(data.get("browser_dom_executed", False)),
+        http_diff_confirmed=verified,
+        poe_token_verified=verified,
+        waf_blocked=bool(waf_info.get("waf_detected")) and not verified,
+        is_reflection_only=("reflection" in proof_reason) and not verified,
+        finding_type=str(result.get("vuln_type") or vuln_type),
+    )
+    agreement = ToolAgreementEngine.evaluate(signals)
+    result["tool_agreement"] = agreement
+    if not agreement.get("is_valid", False):
+        result["verified"] = False
+        result["status"] = "REJECTED_BY_TOOL_AGREEMENT"
+        result["confidence_score"] = min(
+            float(result.get("confidence_score") or 0.0),
+            float(agreement.get("agreement_score") or 0.0),
+        )
     return result
 
 

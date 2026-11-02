@@ -409,7 +409,7 @@ class MasterToolRegistry:
             purpose="Discover hidden GET/POST parameters using FFUF",
             input_desc="Target URL with FUZZ keyword substituted into parameter position",
             output_desc="Valid parameter names that produce different HTTP responses",
-            command_template="ffuf -u {url}?FUZZ=testvalue -w {wordlist} -mc 200,302 -fs {content_size} -t 30 -s",
+            command_template="ffuf -u {url}?FUZZ=testvalue -w {wordlist} -mc 200,302 -fs {content_size} -t 20 -timeout 8 -rate 20 -s",
             prerequisites=["ffuf"],
             timeout=240,
             fallback_tool="python_param_extract",

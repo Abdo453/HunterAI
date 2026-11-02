@@ -403,7 +403,7 @@ Your mission is to strictly audit the 'Analyzer Findings' against the real 'Targ
 
         # 2. Local Ollama (WhiteRabbitNeo or Qwen Coder)
         try:
-            from core.ollama_manager import OllamaManager
+            from models.ollama_manager import OllamaManager
             host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             om = OllamaManager(host=host)
             local_models = await om.list_local_models()

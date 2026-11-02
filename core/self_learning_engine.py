@@ -392,7 +392,7 @@ Provide a concise, high-density structured Security Skill card (max 300 words).
 
         # 2. Local Ollama (WhiteRabbitNeo or Xploiter)
         try:
-            from core.ollama_manager import OllamaManager
+            from models.ollama_manager import OllamaManager
             host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             om = OllamaManager(host=host)
             models = await om.list_local_models()

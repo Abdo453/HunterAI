@@ -1,0 +1,16 @@
+{
+  "authorized_by": "Demo Signer (SOW #1)",
+  "grant_id": "ENG-8a7db649",
+  "not_after": 1793750064.2642415,
+  "not_before": 1793145264.2642415,
+  "profiles": [
+    "red_team"
+  ],
+  "scope": [
+    {
+      "kind": "domain",
+      "value": "example.com"
+    }
+  ],
+  "signature": "58859a078066fc2dfd324c4ec845008de2efecff43e885f5f2c60688ad8725c0"
+}

@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "WAF Bypass Payload Flow into VulnerabilityEngine",
+    "output": ".archify/dataflow-waf-payload-to-vulnengine-20261031-105340/waf-payload-flow.html",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    {
+      "label": "Payload Sources"
+    },
+    {
+      "label": "Load"
+    },
+    {
+      "label": "Bypass Ladder"
+    },
+    {
+      "label": "Engine"
+    },
+    {
+      "label": "Probe"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "md_payloads",
+      "type": "external",
+      "label": "WAF payload file",
+      "sublabel": "BugBountySkills .md",
+      "stage": 0,
+      "row": 0,
+      "tag": "markdown"
+    },
+    {
+      "id": "sqli_buckets",
+      "type": "backend",
+      "label": "SQLi WAF buckets",
+      "sublabel": "agents/skills/sqli_skill.py",
+      "stage": 0,
+      "row": 1,
+      "tag": "waf_*"
+    },
+    {
+      "id": "waf_detect",
+      "type": "security",
+      "label": "WAF Detection",
+      "sublabel": "skills/recon/waf_detection",
+      "stage": 0,
+      "row": 3,
+      "tag": "vendor"
+    },
+    {
+      "id": "payload_loader",
+      "type": "backend",
+      "label": "Payload Loader",
+      "sublabel": "markdown to LadderStep",
+      "stage": 1,
+      "row": 1,
+      "tag": "adapter"
+    },
+    {
+      "id": "bypass_ladder",
+      "type": "backend",
+      "label": "Bypass Ladder",
+      "sublabel": "WAFBypassLadder, 10 levels",
+      "stage": 2,
+      "row": 2,
+      "tag": "bypass"
+    },
+    {
+      "id": "vuln_engine",
+      "type": "backend",
+      "label": "Vuln Engine",
+      "sublabel": "core/vuln_engine.py",
+      "stage": 3,
+      "row": 1,
+      "tag": "dispatch"
+    },
+    {
+      "id": "http_probe",
+      "type": "cloud",
+      "label": "Target probe",
+      "sublabel": "HTTP request loop",
+      "stage": 4,
+      "row": 1,
+      "tag": "request"
+    },
+    {
+      "id": "evidence_court",
+      "type": "security",
+      "label": "Evidence Court",
+      "sublabel": "differential proof",
+      "stage": 4,
+      "row": 3,
+      "tag": "verify"
+    }
+  ],
+  "flows": [
+    {
+      "id": "md-to-loader",
+      "from": "md_payloads",
+      "to": "payload_loader",
+      "label": "markdown payloads",
+      "classification": "global skill input",
+      "variant": "default"
+    },
+    {
+      "id": "sqli-to-loader",
+      "from": "sqli_buckets",
+      "to": "payload_loader",
+      "label": "local waf_* variants",
+      "classification": "in-repo dict",
+      "variant": "default"
+    },
+    {
+      "id": "detect-to-ladder",
+      "from": "waf_detect",
+      "to": "bypass_ladder",
+      "label": "vendor + blocked pattern",
+      "classification": "WAF profile",
+      "variant": "security"
+    },
+    {
+      "id": "loader-to-ladder",
+      "from": "payload_loader",
+      "to": "bypass_ladder",
+      "label": "normalized payload set",
+      "classification": "ranked levels",
+      "variant": "default"
+    },
+    {
+      "id": "ladder-to-engine",
+      "from": "bypass_ladder",
+      "to": "vuln_engine",
+      "label": "level-encoded payload",
+      "classification": "bypass payload",
+      "variant": "emphasis"
+    },
+    {
+      "id": "engine-to-probe",
+      "from": "vuln_engine",
+      "to": "http_probe",
+      "label": "skill-dispatched probes",
+      "classification": "SQLi / XSS / LFI",
+      "variant": "emphasis"
+    },
+    {
+      "id": "probe-to-court",
+      "from": "http_probe",
+      "to": "evidence_court",
+      "label": "request/response hashes",
+      "classification": "evidence",
+      "variant": "default"
+    },
+    {
+      "id": "probe-to-ladder",
+      "from": "http_probe",
+      "to": "bypass_ladder",
+      "label": "403 hit -> next level",
+      "classification": "retry loop",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "orange",
+      "title": "Integration Gap",
+      "items": [
+        "No Python module currently loads the BugBountySkills Markdown file; grep finds only a test reference",
+        "The Payload Loader is the adapter to implement so the Markdown feeds WAFBypassLadder directly",
+        "The ladder and the sqli_skill waf_* buckets already exist and need no new payload copy"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Ladder Levels",
+      "items": [
+        "Direct, URL encoding, double URL encoding, HTML entity encoding",
+        "Case variation, comment insertion, parameter pollution, payload padding",
+        "Parser-bug exploitation, then semantic pollution for LLM-backed WAFs"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Engine Dispatch",
+      "items": [
+        "VulnerabilityEngine prioritizes skills per parameter before testing",
+        "SQLiSkill consumes the waf_no_space, waf_no_comma, waf_no_equal and waf_case buckets",
+        "EvidenceCourt promotes a finding only on reproducible differential evidence"
+      ]
+    }
+  ]
+}

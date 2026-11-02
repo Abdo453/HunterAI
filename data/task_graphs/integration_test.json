@@ -1,0 +1,68 @@
+{
+  "nodes": {
+    "orch-a9718b16": {
+      "task_id": "orch-a9718b16",
+      "name": "XSS scan on /search endpoint",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142653.3798628,
+      "updated_at": 1793142653.3798628
+    },
+    "orch-3c40d179": {
+      "task_id": "orch-3c40d179",
+      "name": "Execute: XSS scan on /search endpoint",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-a9718b16"
+      ],
+      "dependents": [],
+      "evidence": {
+        "status": "vulnerable",
+        "payload": "<script>alert(1)</script>",
+        "evidence": "reflected in response body"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142653.380861,
+      "updated_at": 1793142653.3829277
+    },
+    "orch-3e1e034c": {
+      "task_id": "orch-3e1e034c",
+      "name": "Review: XSS scan on /search endpoint",
+      "technique": "xss",
+      "target": "example.com",
+      "status": "bypassed",
+      "dependencies": [
+        "orch-3c40d179"
+      ],
+      "dependents": [],
+      "evidence": {
+        "bypass_method": "url_encoding"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1793142653.381929,
+      "updated_at": 1793142653.3829277
+    }
+  },
+  "edges": {
+    "orch-a9718b16": [
+      "orch-3c40d179"
+    ],
+    "orch-3c40d179": [
+      "orch-3e1e034c"
+    ],
+    "orch-3e1e034c": []
+  }
+}

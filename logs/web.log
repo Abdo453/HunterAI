@@ -1,0 +1,27 @@
+INFO:     Started server process [205730]
+INFO:     Waiting for application startup.
+
+======================================================================
+   [+] PentestAI Unified -- AI Engine Diagnostics & Verification
+======================================================================
+ [+] Local AI Engine (Ollama): [ ONLINE ] at http://192.168.1.3:11434
+     [OK]      WhiteRabbitNeo (8B)      -> READY [Offensive Security & Red Teaming]
+     [OK]      xploiter/pentester (2.8B) -> READY [Attack Strategy & Vectors]
+     [OK]      qwen2.5-coder (14B/7B)   -> READY [Exploit & PoC Generation]
+     [MISSING] sylink:8b                -> NOT INSTALLED (Cloud fallback active)
+     [GPU]     Hardware Acceleration: CUDA Active on Ollama Host
+
+ [+] Cloud AI Providers: [ ACTIVE ] (1 configured)
+     [CLOUD]   Google Gemini Flash      -> ENABLED (gemini-3.5-flash-lite)
+
+ [#] Framework AI Readiness: 100% OPERATIONAL & READY FOR SCANNING
+======================================================================
+
+
+[*] PentestAI Unified - Web UI Server Starting...
+    🟢 Dashboard URL -> http://localhost:7070
+    🟢 Remote Access -> http://127.0.0.1:7070
+    Taskade: disabled
+    👉 افتح المتصفح الآن على: http://localhost:7070
+    (الخادم شغال وينتظر طلبات المتصفح - اضغط Ctrl+C للإيقاف)
+

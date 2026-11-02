@@ -13,6 +13,7 @@ from core.arena.arena_evaluator import (
     ArenaScorecard,
     TargetEvaluationResult,
 )
+from core.arena.validation_arena import ValidationArena, ValidationArenaResult
 
 __all__ = [
     "ArenaTarget",
@@ -21,4 +22,6 @@ __all__ = [
     "ArenaEvaluator",
     "ArenaScorecard",
     "TargetEvaluationResult",
+    "ValidationArena",
+    "ValidationArenaResult",
 ]

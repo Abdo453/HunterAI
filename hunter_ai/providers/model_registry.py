@@ -6,6 +6,7 @@ with capabilities, context sizes, health status, and latency monitoring.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
@@ -61,7 +62,7 @@ class ModelRegistry:
         self.register_model(ModelProfile(
             model_id="cloud_reasoning",
             provider_type="cloud",
-            model_name="gemini-2.0-flash",
+            model_name=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
             capabilities={
                 AgentCapability.PLANNING,
                 AgentCapability.DEEP_REASONING,

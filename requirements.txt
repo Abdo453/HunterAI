@@ -39,6 +39,7 @@ lxml
 colorama
 tabulate
 fpdf2
+reportlab
 dnspython
 tldextract
 publicsuffix2

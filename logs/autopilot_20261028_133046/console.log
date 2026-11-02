@@ -1,0 +1,32 @@
+Script started on 2026-10-28 13:30:46-04:00 [COMMAND="python pentest.py autopilot https://dashboard.f1.hotgame.win" <not executed on terminal>]
+🤖 Autopilot hunt for https://dashboard.f1.hotgame.win
+[Autopilot] Starting full hunt loop for https://dashboard.f1.hotgame.win
+[Autopilot] Phase 1: Scope validation
+[Autopilot] Phase 2: Recon
+[+] Starting recon for https://dashboard.f1.hotgame.win (domain=dashboard.f1.hotgame.win)
+[i] Passive stages can take 2-3 minutes (subfinder, gau, waybackurls); progress prints below.
+    [..] subfinder running (timeout 90s)...
+    [ok] subfinder finished in 43.1s (59 items)
+    [..] assetfinder running (timeout 60s)...
+    [ok] assetfinder finished in 35.0s (1 items)
+    [..] theharvester running (timeout 120s)...
+    [ok] theharvester finished in 1.5s (18 items)
+    [+] 60 subdomains discovered
+    [..] httpx probing 60 hosts...
+    [..] katana running (timeout 120s)...
+    [ok] katana finished in 11.8s (3 items)
+    [..] gau running (timeout 90s)...
+    [ok] gau finished in 90.1s (0 items)
+    [..] waybackurls running (timeout 90s)...
+    [ok] waybackurls finished in 21.1s (0 items)
+[+] Recon complete: 60 subdomains, 1 live hosts, 3 urls
+[+] Results saved to data/engagements/dashboard.f1.hotgame.win/recon.json
+[Autopilot] Phase 3: Rank attack surface
+[Autopilot] Phase 4: Initialize TDA, Memory, RAG, Orchestrator
+2026-10-28 13:34:53 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'default'
+2026-10-28 13:34:53 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: default
+[Autopilot] Phase 4.5: WAF Detection & Bypass
+[Autopilot] WAF fingerprint spoofing ready: chrome_win10
+⚠️  name 'WAFBypassLadder' is not defined
+
+Script done on 2026-10-28 13:34:53-04:00 [COMMAND_EXIT_CODE="0"]

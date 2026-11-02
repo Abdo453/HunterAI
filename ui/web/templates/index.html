@@ -80,6 +80,7 @@
         <div class="card-hdr">
           <h2>🎯 مركز قيادة مهمات الـ Agent الذاتي (Autonomous Mission Deck)</h2>
           <div style="display:flex;gap:8px;align-items:center;">
+            <span id="global-skills-badge" class="header-badge" title="Global skills loaded from ~/.agents/skills" style="background:#00c853;color:#000;font-weight:bold;">Skills: …</span>
             <span id="agent-state-badge" class="header-badge" style="background:#00ff41;color:#000;font-weight:bold;">الـ Agent جاهز</span>
           </div>
         </div>
@@ -876,6 +877,21 @@
 </div>
 
 <script src="/static/app.js"></script>
+<script>
+  (function () {
+    var el = document.getElementById("global-skills-badge");
+    if (!el) return;
+    fetch("/api/global-skills").then(function (r) { return r.json(); }).then(function (d) {
+      if (d && Array.isArray(d.loaded) && d.loaded.length) {
+        el.textContent = "Skills: " + d.loaded.join(", ");
+        el.title = d.badge + "  ·  " + d.root;
+      } else {
+        el.textContent = "Skills: none";
+        el.style.background = "#ff5252";
+      }
+    }).catch(function () {});
+  })();
+</script>
 </body>
 </html>
 

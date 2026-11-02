@@ -102,7 +102,7 @@ class ArenaScorecard:
         return "\n".join(lines)
 
     def generate_markdown_report(self, filepath: Path):
-        md = f"""# HunterAI Validation Arena - Ground-Truth Benchmark Scorecard
+        md = rf"""# HunterAI Validation Arena - Ground-Truth Benchmark Scorecard
 
 **Execution Timestamp:** {time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}  
 **Overall Status:** {"✅ PASS — BENCHMARK PRODUCTION CERTIFIED" if self.false_positives == 0 and self.detection_rate_pct >= 85 else "❌ FAIL"}

@@ -1,0 +1,141 @@
+{
+  "exported_at": 1793145325.8910298,
+  "hierarchy": {
+    "root": "root",
+    "max_depth": 4,
+    "max_children": 6,
+    "nodes": {
+      "root": {
+        "agent_id": "root",
+        "role": "root_controller",
+        "objective": "Own the engagement: hold scope, plan the hunt, delegate to specialists, adjudicate evidence, ship reports.",
+        "parent_id": null,
+        "depth": 0,
+        "status": "active",
+        "capabilities": [
+          "active_testing",
+          "cloud_audit",
+          "evidence_adjudication",
+          "exploit_verify",
+          "lead_management",
+          "mobile_audit",
+          "osint",
+          "ot_audit",
+          "recon",
+          "reporting",
+          "scan",
+          "vuln_verification",
+          "web3_audit",
+          "wireless_audit"
+        ],
+        "tool_ids": [],
+        "model": "",
+        "children": [
+          "recon-f0231499"
+        ],
+        "created_at": 1793144828.2794652,
+        "updated_at": 1793144828.2890346,
+        "metadata": {}
+      },
+      "recon-f0231499": {
+        "agent_id": "recon-f0231499",
+        "role": "recon",
+        "objective": "map api.example.com estate",
+        "parent_id": "root",
+        "depth": 1,
+        "status": "active",
+        "capabilities": [
+          "active_testing",
+          "lead_management",
+          "osint",
+          "recon",
+          "scan"
+        ],
+        "tool_ids": [
+          "assetfinder",
+          "dnsx",
+          "gau",
+          "httpx",
+          "katana",
+          "masscan",
+          "naabu",
+          "nmap",
+          "subfinder",
+          "whatweb"
+        ],
+        "model": "qwen2.5-coder:14b-tools",
+        "children": [
+          "endpoint_mapper-5b5a7cdf"
+        ],
+        "created_at": 1793144828.2890346,
+        "updated_at": 1793145124.2229004,
+        "metadata": {
+          "granted_capabilities": [
+            "active_testing"
+          ]
+        }
+      },
+      "endpoint_mapper-5b5a7cdf": {
+        "agent_id": "endpoint_mapper-5b5a7cdf",
+        "role": "endpoint_mapper",
+        "objective": "enumerate parameters on api.example.com",
+        "parent_id": "recon-f0231499",
+        "depth": 2,
+        "status": "active",
+        "capabilities": [
+          "active_testing",
+          "lead_management",
+          "recon"
+        ],
+        "tool_ids": [
+          "browser",
+          "burp_scanner",
+          "ffuf",
+          "katana"
+        ],
+        "model": "qwen2.5-coder:14b-tools",
+        "children": [],
+        "created_at": 1793145124.2229004,
+        "updated_at": 1793145124.2229004,
+        "metadata": {}
+      }
+    }
+  },
+  "memory": {
+    "event": {
+      "agent_spawned": {
+        "agent_id": "endpoint_mapper-5b5a7cdf",
+        "capabilities": [
+          "active_testing",
+          "lead_management",
+          "recon"
+        ],
+        "depth": 2,
+        "objective": "enumerate parameters on api.example.com",
+        "parent_id": "recon-f0231499",
+        "role": "endpoint_mapper"
+      },
+      "capability_granted": {
+        "agent_id": "recon-f0231499",
+        "capabilities": [
+          "active_testing",
+          "lead_management",
+          "osint",
+          "recon",
+          "scan"
+        ],
+        "capability": "active_testing",
+        "granted_by": "root",
+        "reason": "operator instruction: endpoint mapping needs active probes"
+      }
+    },
+    "lead": {
+      "IDOR candidate on /api/invoice": {
+        "at": 1793145103.1419218,
+        "detail": "two-account differential pending",
+        "target": "https://api.example.com/api/invoice",
+        "title": "IDOR candidate on /api/invoice"
+      }
+    }
+  }
+}

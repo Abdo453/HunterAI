@@ -1,0 +1,130 @@
+{
+  "version": "1.0.0",
+  "description": "Tool and MCP surface available to the root controller tree. Every entry is bound by the policy engine before execution; nothing here runs without a signed grant and an in-scope target.",
+  "source_of_truth": {
+    "tools": "config/tools.json",
+    "tools_yaml": "config/tools.yaml",
+    "mcp_servers": "config/mcp.example.json",
+    "registry": "core.tool_registry.ToolRegistry"
+  },
+  "tiers": {
+    "recon": {
+      "risk": "low",
+      "requires_authorization": false,
+      "action_class": "read_only",
+      "tools": ["subfinder", "assetfinder", "dnsx", "httpx", "whatweb", "katana", "gau", "browser"]
+    },
+    "network_scan": {
+      "risk": "medium",
+      "requires_authorization": true,
+      "action_class": "active_test",
+      "tools": ["nmap", "naabu", "masscan", "enum4linux-ng", "netexec", "ssh-audit"]
+    },
+    "web_active": {
+      "risk": "medium",
+      "requires_authorization": true,
+      "action_class": "active_test",
+      "tools": ["ffuf", "arjun", "paramspider", "dalfox", "nikto", "wpscan", "wafw00f"]
+    },
+    "vuln_scanning": {
+      "risk": "high",
+      "requires_authorization": true,
+      "action_class": "active_test",
+      "tools": ["nuclei"]
+    },
+    "exploit_proof": {
+      "risk": "high",
+      "requires_authorization": true,
+      "action_class": "exploit_proof",
+      "tools": ["sqlmap"]
+    },
+    "tls": {
+      "risk": "medium",
+      "requires_authorization": true,
+      "action_class": "active_test",
+      "tools": ["testssl.sh", "sslscan"]
+    },
+    "proxy_orchestration": {
+      "risk": "medium",
+      "requires_authorization": true,
+      "action_class": "active_test",
+      "tools": ["burp_scanner"]
+    },
+    "wireless": {
+      "risk": "high",
+      "requires_authorization": true,
+      "action_class": "active_test",
+      "tools": ["kismet", "aircrack-ng", "wifite"]
+    },
+    "ot_iot": {
+      "risk": "high",
+      "requires_authorization": true,
+      "action_class": "active_test",
+      "tools": ["modbus-cli", "zigbee2mqtt"]
+    },
+    "credential_review": {
+      "risk": "high",
+      "requires_authorization": true,
+      "action_class": "active_test",
+      "tools": ["hydra", "medusa", "john", "hashcat"],
+      "constraints": [
+        "operator-provided wordlists only",
+        "operator-provided accounts only",
+        "rate limited, no spraying across unrelated hosts",
+        "credential_dump invariant still applies to password stores and hashes at scale"
+      ]
+    },
+    "reverse_engineering": {
+      "risk": "low",
+      "requires_authorization": false,
+      "action_class": "read_only",
+      "tools": ["radare2", "gdb", "binwalk", "checksec", "strings", "file"]
+    },
+    "cloud_posture": {
+      "risk": "medium",
+      "requires_authorization": true,
+      "action_class": "read_only",
+      "tools": ["prowler", "trivy", "kube_hunter", "checkov"]
+    },
+    "osint": {
+      "risk": "low",
+      "requires_authorization": false,
+      "action_class": "read_only",
+      "tools": ["sherlock", "recon-ng", "spiderfoot", "theharvester", "shodan"]
+    }
+  },
+  "mcp_servers": [
+    {
+      "server_id": "filesystem-local",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "<workspace>"],
+      "tools": [
+        {"tool_name": "read_file", "risk_level": "low", "requires_approval": false},
+        {"tool_name": "list_directory", "risk_level": "low", "requires_approval": false},
+        {"tool_name": "write_file", "risk_level": "high", "requires_approval": true}
+      ],
+      "constraints": ["root path pinned to the engagement workspace"]
+    },
+    {
+      "server_id": "github-mcp",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "auth_token_env": "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "tools": [
+        {"tool_name": "search_repositories", "risk_level": "low", "requires_approval": false},
+        {"tool_name": "create_issue", "risk_level": "medium", "requires_approval": true}
+      ],
+      "constraints": ["read-only tools run freely; writes require approval"]
+    }
+  ],
+  "invariants": [
+    "A tool is never invoked before the policy engine returns allowed=true.",
+    "An out-of-scope target is rejected before the process starts.",
+    "Command arguments are passed as an argv array, never as a shell string.",
+    "Executable paths are checked against an allowlist.",
+    "Output is size-capped and secret-redacted before it returns to an agent.",
+    "Every execution appends a hash-chained audit record."
+  ]
+}

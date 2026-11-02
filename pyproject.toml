@@ -35,6 +35,8 @@ dependencies = [
     "openai>=1.30",
     "anthropic>=0.30",
     "psutil>=5.9",
+    "reportlab>=4.0",
+    "fpdf2>=2.7",
 ]
 
 [project.optional-dependencies]

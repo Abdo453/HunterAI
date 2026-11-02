@@ -1,0 +1,191 @@
+{
+  "version": "1.0.0",
+  "root": {
+    "role": "root_controller",
+    "objective": "Own the engagement: hold scope, plan the hunt, delegate to specialists, adjudicate evidence, ship reports.",
+    "capabilities": [
+      "recon",
+      "scan",
+      "active_testing",
+      "vuln_verification",
+      "exploit_verify",
+      "evidence_adjudication",
+      "reporting",
+      "osint",
+      "cloud_audit",
+      "mobile_audit",
+      "web3_audit",
+      "wireless_audit",
+      "ot_audit",
+      "lead_management"
+    ],
+    "tools": [
+      "subfinder",
+      "assetfinder",
+      "dnsx",
+      "httpx",
+      "whatweb",
+      "nmap",
+      "naabu",
+      "masscan",
+      "katana",
+      "gau",
+      "ffuf",
+      "nuclei",
+      "sqlmap",
+      "testssl.sh",
+      "sslscan",
+      "kismet",
+      "aircrack-ng",
+      "wifite",
+      "zigbee2mqtt",
+      "modbus-cli",
+      "burp_scanner",
+      "browser"
+    ]
+  },
+  "rules": {
+    "max_depth": 4,
+    "max_children": 6,
+    "single_parent": true,
+    "capability_inheritance": "downward_only",
+    "capability_escalation": "root_grant_only",
+    "parent_may_retask": true,
+    "parent_may_terminate": true,
+    "parent_may_replace": true,
+    "child_may_delegate": true,
+    "shared_memory": "one_store_for_the_whole_tree"
+  },
+  "roles": [
+    {
+      "role": "recon_methodology",
+      "objective": "Run the operator recon methodology end to end: passive and active subdomains, URL and JS harvesting, parameter discovery, secret sweeps, port coverage.",
+      "capabilities": ["recon", "scan", "active_testing", "lead_management"],
+      "tools": [
+        "subfinder",
+        "assetfinder",
+        "amass",
+        "findomain",
+        "dnsx",
+        "ffuf",
+        "httpx",
+        "katana",
+        "gau",
+        "nmap",
+        "naabu",
+        "waybackurls",
+        "arjun",
+        "paramspider",
+        "hakrawler",
+        "whatweb"
+      ],
+      "playbook": {
+        "module": "core.playbooks.recon_methodology",
+        "stages": [
+          "passive_subdomains",
+          "active_subdomains",
+          "subdomain_fuzzing",
+          "infrastructure",
+          "merge",
+          "alive_hosts",
+          "url_discovery",
+          "merge_urls",
+          "parameter_mining",
+          "secret_mining",
+          "directory_discovery",
+          "hidden_parameters",
+          "ports",
+          "exposure_scan",
+          "takeover_origin",
+          "api_discovery"
+        ],
+        "execution": "controller playbook --target <target> --agent <agent> --execute"
+      },
+      "spawns": []
+    },
+    {
+      "role": "recon",
+      "objective": "Map the attack surface: subdomains, live hosts, ports, technology, exposed endpoints.",
+      "capabilities": ["recon", "scan", "osint", "lead_management"],
+      "tools": ["subfinder", "assetfinder", "dnsx", "httpx", "whatweb", "nmap", "naabu", "masscan", "katana", "gau"],
+      "spawns": ["endpoint_mapper"]
+    },
+    {
+      "role": "endpoint_mapper",
+      "objective": "Enumerate parameters, hidden routes, and JavaScript-exposed secrets on live hosts.",
+      "capabilities": ["recon", "active_testing", "lead_management"],
+      "tools": ["ffuf", "katana", "browser", "burp_scanner"],
+      "spawns": []
+    },
+    {
+      "role": "hunter",
+      "objective": "Hunt for exploitable defects: IDOR, auth bypass, SSRF, XSS, SQLi, business logic flaws.",
+      "capabilities": ["active_testing", "vuln_verification", "lead_management"],
+      "tools": ["sqlmap", "nuclei", "ffuf", "burp_scanner", "browser"],
+      "spawns": ["validator"]
+    },
+    {
+      "role": "validator",
+      "objective": "Run the 7-Question Gate: reproducible now, in scope, deterministic proof, real bug, clear impact, complete evidence, worth reporting.",
+      "capabilities": ["vuln_verification", "evidence_adjudication"],
+      "tools": ["browser", "burp_scanner"],
+      "spawns": []
+    },
+    {
+      "role": "chain_builder",
+      "objective": "Link confirmed weaknesses into ordered exploit chains A to B to C.",
+      "capabilities": ["vuln_verification", "evidence_adjudication"],
+      "tools": ["browser", "burp_scanner"],
+      "spawns": []
+    },
+    {
+      "role": "reporter",
+      "objective": "Write submission-ready reports for HackerOne, Bugcrowd, Intigriti, and Immunefi.",
+      "capabilities": ["reporting", "evidence_adjudication"],
+      "tools": [],
+      "spawns": []
+    },
+    {
+      "role": "cloud_auditor",
+      "objective": "Audit cloud posture: IAM, public storage, metadata exposure, container and Kubernetes RBAC.",
+      "capabilities": ["cloud_audit", "scan"],
+      "tools": [],
+      "spawns": []
+    },
+    {
+      "role": "mobile_auditor",
+      "objective": "Assess mobile application surfaces: transport security, local storage, exported components, pinning.",
+      "capabilities": ["mobile_audit", "scan"],
+      "tools": [],
+      "spawns": []
+    },
+    {
+      "role": "web3_auditor",
+      "objective": "Audit smart contracts for access control, arithmetic, and tokenomics defects.",
+      "capabilities": ["web3_audit", "vuln_verification"],
+      "tools": [],
+      "spawns": []
+    },
+    {
+      "role": "wireless_auditor",
+      "objective": "Assess wireless estate: capture, handshake analysis, and encryption posture.",
+      "capabilities": ["wireless_audit", "scan"],
+      "tools": ["kismet", "aircrack-ng", "wifite"],
+      "spawns": []
+    },
+    {
+      "role": "ot_auditor",
+      "objective": "Assess OT and ICS surfaces: exposed protocols, register access, and segmentation gaps.",
+      "capabilities": ["ot_audit", "scan"],
+      "tools": ["modbus-cli", "zigbee2mqtt"],
+      "spawns": []
+    },
+    {
+      "role": "osint_analyst",
+      "objective": "Correlate public exposure: leaked credentials, metadata, source repositories, certificate trails.",
+      "capabilities": ["osint", "recon"],
+      "tools": [],
+      "spawns": []
+    }
+  ]
+}

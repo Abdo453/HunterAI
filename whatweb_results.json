@@ -1,0 +1,21 @@
+[
+]
+[
+{"target":"http://47.91.74.230","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["CANADA"],"module":["CA"]},"HTML5":{},"HTTPServer":{"os":["Ubuntu Linux"],"string":["nginx/1.18.0 (Ubuntu)"]},"IP":{"string":["47.91.74.230"]},"nginx":{"version":["1.18.0"]},"Script":{},"X-UA-Compatible":{"string":["ie=edge"]}}}
+,
+{"target":"http://162.62.230.203","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["UNITED STATES"],"module":["US"]},"HTML5":{},"HTTPServer":{"os":["Ubuntu Linux"],"string":["nginx/1.18.0 (Ubuntu)"]},"IP":{"string":["162.62.230.203"]},"nginx":{"version":["1.18.0"]},"Script":{},"X-UA-Compatible":{"string":["ie=edge"]}}}
+,
+{"target":"http://43.156.55.142","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["JAPAN"],"module":["JP"]},"HTML5":{},"HTTPServer":{"os":["Ubuntu Linux"],"string":["nginx/1.18.0 (Ubuntu)"]},"IP":{"string":["43.156.55.142"]},"nginx":{"version":["1.18.0"]},"Script":{},"X-UA-Compatible":{"string":["ie=edge"]}}}
+,
+{"target":"https://47.91.74.230","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["CANADA"],"module":["CA"]},"HTML5":{},"HTTPServer":{"os":["Ubuntu Linux"],"string":["nginx/1.18.0 (Ubuntu)"]},"IP":{"string":["47.91.74.230"]},"nginx":{"version":["1.18.0"]},"Script":{},"X-UA-Compatible":{"string":["ie=edge"]}}}
+,
+{"target":"http://47.236.130.94","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["CANADA"],"module":["CA"]},"HTML5":{},"HTTPServer":{"os":["Ubuntu Linux"],"string":["nginx/1.18.0 (Ubuntu)"]},"IP":{"string":["47.236.130.94"]},"nginx":{"version":["1.18.0"]},"Script":{},"X-UA-Compatible":{"string":["ie=edge"]}}}
+,
+{"target":"http://47.84.60.162","http_status":404,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["CANADA"],"module":["CA"]},"HTTPServer":{"string":["istio-envoy"]},"IP":{"string":["47.84.60.162"]}}}
+,
+{"target":"https://162.62.230.203","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["UNITED STATES"],"module":["US"]},"HTML5":{},"HTTPServer":{"os":["Ubuntu Linux"],"string":["nginx/1.18.0 (Ubuntu)"]},"IP":{"string":["162.62.230.203"]},"nginx":{"version":["1.18.0"]},"Script":{},"X-UA-Compatible":{"string":["ie=edge"]}}}
+,
+{"target":"https://43.156.55.142","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["JAPAN"],"module":["JP"]},"HTML5":{},"HTTPServer":{"os":["Ubuntu Linux"],"string":["nginx/1.18.0 (Ubuntu)"]},"IP":{"string":["43.156.55.142"]},"nginx":{"version":["1.18.0"]},"Script":{},"X-UA-Compatible":{"string":["ie=edge"]}}}
+,
+{"target":"https://47.236.130.94","http_status":200,"request_config":{"headers":{"User-Agent":"WhatWeb/0.6.4"}},"plugins":{"Country":{"string":["CANADA"],"module":["CA"]},"HTML5":{},"HTTPServer":{"os":["Ubuntu Linux"],"string":["nginx/1.18.0 (Ubuntu)"]},"IP":{"string":["47.236.130.94"]},"nginx":{"version":["1.18.0"]},"Script":{},"X-UA-Compatible":{"string":["ie=edge"]}}}
+]

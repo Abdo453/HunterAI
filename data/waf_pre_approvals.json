@@ -1,0 +1,15 @@
+[
+  {
+    "id": "pre_approval_1",
+    "tool": "waf_bypass_ladder",
+    "operation": "execute",
+    "env": "authorized_target",
+    "user": "authorized_researcher",
+    "target": "http://127.0.0.1:9999/test",
+    "granted_at": 1793145553.9163556,
+    "expires_at": 1793149153.9163556,
+    "max_uses": null,
+    "used_count": 1,
+    "description": "موافقة على waf_bypass_ladder.execute في authorized_target"
+  }
+]

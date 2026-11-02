@@ -88,7 +88,7 @@ class GoldenTraceRunner:
         self._run_step("GT-003", "Proxy -> Burp", gt_003)
         
         def gt_004():
-            ext_path = Path("e:/Agant/PentestAI-Unified/agents/burp_agent/integrations/burp_extension/hunter_burp_extension.py")
+            ext_path = Path(__file__).resolve().parents[2] / "agents" / "burp_agent" / "integrations" / "burp_extension" / "hunter_burp_extension.py"
             if not ext_path.exists():
                 return False, "Extension file not found"
             tree = ast.parse(ext_path.read_text(encoding="utf-8"))

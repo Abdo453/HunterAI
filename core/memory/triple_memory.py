@@ -1,9 +1,11 @@
 """
 ذاكرة ثلاثية الوحدات لـ HunterAI
  Working + Semantic + Failure Episodic
+يدعم غير المتزامن (async)، السجلات، والتكوينات المركزية
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -11,6 +13,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from core.config.settings import config
+from core.exceptions import MemoryError, HunterAIError
+from core.logging.logger import logger
 
 
 class MemoryType(str, Enum):
@@ -64,15 +70,87 @@ class TripleMemory:
     3. Failure Episodic: تسجيل الفشلات وأسبابها لمنع التكرار
     """
 
-    def __init__(self, storage_path: str = "data/memory/triple"):
-        self.storage_path = Path(storage_path)
+    def __init__(self, storage_path: Optional[str] = None):
+        self.storage_path = Path(storage_path or config.memory.storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self._memory: Dict[str, MemoryEntry] = {}
         self._index: Dict[MemoryType, Dict[str, List[str]]] = {
             mt: {} for mt in MemoryType
         }
+        self._lock = asyncio.Lock()
+        self._load_state()
+
+    def _load_state(self) -> None:
+        """تحميل حالة الذاكرة من الملفات."""
+        for mt in MemoryType:
+            file_path = self.storage_path / f"{mt.value}.jsonl"
+            if file_path.exists():
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                data = json.loads(line)
+                                entry = MemoryEntry(
+                                    entry_id=data["entry_id"],
+                                    memory_type=MemoryType(data["memory_type"]),
+                                    target=data["target"],
+                                    key=data["key"],
+                                    value=data["value"],
+                                    ttl_seconds=data.get("ttl_seconds"),
+                                    created_at=data.get("created_at", time.time()),
+                                    accessed_at=data.get("accessed_at", time.time()),
+                                    access_count=data.get("access_count", 0),
+                                    tags=data.get("tags", []),
+                                )
+                                if not entry.is_expired():
+                                    self._memory[entry.entry_id] = entry
+                                    self._index[entry.memory_type].setdefault(entry.target, []).append(entry.entry_id)
+                            except Exception as e:
+                                logger.warning(f"[Memory] فشل تحميل إدخال: {e}")
+                    logger.info(f"[Memory] تم تحميل {mt.value} ({len(self._index[mt])} أهداف)")
+                except Exception as e:
+                    logger.warning(f"[Memory] فشل تحميل ملف {mt.value}: {e}")
+
+    async def _persist_async(self, entry: MemoryEntry) -> None:
+        """حفظ إدخال بشكل غير متزامن."""
+        file_path = self.storage_path / f"{entry.memory_type.value}_{entry.target}.jsonl"
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._append_jsonl, file_path, entry.to_dict())
+
+    def _append_jsonl(self, file_path: Path, data: Dict[str, Any]) -> None:
+        """إضافة سطر إلى ملف JSONL."""
+        with open(file_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(data, ensure_ascii=False) + "\n")
+
+    async def write_async(
+        self,
+        memory_type: MemoryType,
+        target: str,
+        key: str,
+        value: Any,
+        ttl_seconds: Optional[int] = None,
+        tags: Optional[List[str]] = None,
+    ) -> str:
+        """كتابة إدخال بشكل غير متزامن."""
+        async with self._lock:
+            return self._write_sync(memory_type, target, key, value, ttl_seconds, tags)
 
     def write(
+        self,
+        memory_type: MemoryType,
+        target: str,
+        key: str,
+        value: Any,
+        ttl_seconds: Optional[int] = None,
+        tags: Optional[List[str]] = None,
+    ) -> str:
+        """كتابة إدخال بشكل متزامن."""
+        return self._write_sync(memory_type, target, key, value, ttl_seconds, tags)
+
+    def _write_sync(
         self,
         memory_type: MemoryType,
         target: str,
@@ -93,10 +171,29 @@ class TripleMemory:
         )
         self._memory[entry_id] = entry
         self._index[memory_type].setdefault(target, []).append(entry_id)
-        self._persist(entry)
+        logger.debug(f"[Memory] كتب إدخال '{entry_id}' إلى {memory_type.value} للهدف {target}")
         return entry_id
 
+    async def read_async(
+        self,
+        memory_type: MemoryType,
+        target: str,
+        key: str,
+    ) -> Optional[MemoryEntry]:
+        """قراءة إدخال بشكل غير متزامن."""
+        async with self._lock:
+            return self._read_sync(memory_type, target, key)
+
     def read(
+        self,
+        memory_type: MemoryType,
+        target: str,
+        key: str,
+    ) -> Optional[MemoryEntry]:
+        """قراءة إدخال بشكل متزامن."""
+        return self._read_sync(memory_type, target, key)
+
+    def _read_sync(
         self,
         memory_type: MemoryType,
         target: str,
@@ -107,10 +204,28 @@ class TripleMemory:
             entry = self._memory.get(entry_id)
             if entry and entry.key == key and not entry.is_expired():
                 entry.touch()
+                logger.debug(f"[Memory] قرأ إدخال '{entry_id}' من {memory_type.value} للهدف {target}")
                 return entry
         return None
 
+    async def read_all_by_target_async(
+        self,
+        memory_type: MemoryType,
+        target: str,
+    ) -> List[MemoryEntry]:
+        """قراءة جميع entradas لنوع ذاكرة وهدف معين بشكل غير متزامن."""
+        async with self._lock:
+            return self._read_all_by_target_sync(memory_type, target)
+
     def read_all_by_target(
+        self,
+        memory_type: MemoryType,
+        target: str,
+    ) -> List[MemoryEntry]:
+        """قراءة جميع entradas لنوع ذاكرة وهدف معين بشكل متزامن."""
+        return self._read_all_by_target_sync(memory_type, target)
+
+    def _read_all_by_target_sync(
         self,
         memory_type: MemoryType,
         target: str,
@@ -137,14 +252,16 @@ class TripleMemory:
             "context": context or {},
             "timestamp": time.time(),
         }
-        return self.write(
+        entry_id = self.write(
             MemoryType.FAILURE_EPISODIC,
             target,
             f"failure-{technique}-{int(time.time())}",
             value,
-            ttl_seconds=86400 * 30,
+            ttl_seconds=config.memory.failure_ttl_seconds,
             tags=["failure", technique],
         )
+        logger.warning(f"[Memory] سجل فشل: الهدف={target}, التقنية={technique}, السبب={reason}")
+        return entry_id
 
     def has_recent_failure(
         self,
@@ -168,7 +285,7 @@ class TripleMemory:
         value: Any,
         tags: Optional[List[str]] = None,
     ) -> str:
-        """كتابة معرفة دلالية عامة (بدون TTL أو TTL طويل)."""
+        """كتابة معرفة دلالية عامة."""
         return self.write(
             MemoryType.SEMANTIC,
             target,
@@ -186,7 +303,7 @@ class TripleMemory:
         ttl_seconds: int = 600,
         tags: Optional[List[str]] = None,
     ) -> str:
-        """كتابة إلى الذاكرة العاملة (TTL قصير افتراضياً 10 دقائق)."""
+        """كتابة إلى الذاكرة العاملة."""
         return self.write(
             MemoryType.WORKING,
             target,
@@ -206,14 +323,11 @@ class TripleMemory:
             target_entries = self._index.get(entry.memory_type, {}).get(entry.target, [])
             if eid in target_entries:
                 target_entries.remove(eid)
+        logger.info(f"[Memory] تم تنظيف {len(expired)} إدخال منتهي الصلاحية")
         return len(expired)
 
-    def _persist(self, entry: MemoryEntry) -> None:
-        file_path = self.storage_path / f"{entry.memory_type.value}_{entry.target}.jsonl"
-        with open(file_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry.to_dict(), ensure_ascii=False) + "\n")
-
     def stats(self) -> Dict[str, Any]:
+        """إرجاع إحصائيات الذاكرة."""
         return {
             "total_entries": len(self._memory),
             "by_type": {

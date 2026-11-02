@@ -1,0 +1,1471 @@
+{
+  "scan_timestamp": "2026-11-01T15:15:04.099863",
+  "targets": {
+    "https://dashboard.f1.hotgame.win": {
+      "url": "https://dashboard.f1.hotgame.win",
+      "timestamp": "2026-11-01T15:13:56.103686",
+      "server_header": "nginx/1.18.0 (Ubuntu)",
+      "version": [
+        1,
+        18,
+        0
+      ],
+      "headers": {
+        "Server": "nginx/1.18.0 (Ubuntu)",
+        "Date": "Sun, 01 Nov 2026 20:13:56 GMT",
+        "Content-Type": "text/html",
+        "Content-Length": "376",
+        "Last-Modified": "Fri, 01 Aug 2025 08:53:29 GMT",
+        "Connection": "keep-alive",
+        "ETag": "\"688c8089-178\"",
+        "Accept-Ranges": "bytes"
+      },
+      "cve_findings": [
+        {
+          "cve": "CVE-2026-15176",
+          "description": "NGINX alias + rewrite path traversal",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 9.8,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "alias directive with trailing slash",
+            "rewrite directive in same location",
+            "URI with encoded path traversal"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-97205",
+          "description": "SSI (Server Side Includes) injection via shtml",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "ssi on; directive enabled",
+            ".shtml files served",
+            "User input reflected in shtml"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-93479",
+          "description": "HTTP/2 stream cancellation memory corruption",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 8.1,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "HTTP/2 enabled (listen ... http2)",
+            "Specific stream cancellation pattern"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-95101",
+          "description": "HTTP/3 QUIC stream handling DoS",
+          "status": "NOT_AFFECTED",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_ranges": [
+            "1.25.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is not in affected ranges: ['1.25.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "QUIC/HTTP/3 enabled (listen ... quic)",
+            "Alt-Svc header present"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        }
+      ],
+      "configuration_checks": {
+        "alias_rewrite_check": {
+          "tested": true,
+          "vulnerable": false,
+          "tested_paths": [
+            {
+              "path": "/static/../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/assets/../../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/media/../../../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/static/%2e%2e/%2e%2e/etc/passwd",
+              "status": 400,
+              "content_length": 166
+            }
+          ]
+        },
+        "ssi_check": {
+          "tested": true,
+          "ssi_enabled": false,
+          "tested_files": [
+            {
+              "path": "/index.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/test.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/ssi.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            }
+          ]
+        },
+        "http3_check": {
+          "alt_svc_header": "",
+          "http3_enabled": false,
+          "quic_enabled": false
+        },
+        "security_headers": {
+          "headers": {
+            "X-Frame-Options": "MISSING",
+            "X-Content-Type-Options": "MISSING",
+            "X-XSS-Protection": "MISSING",
+            "Strict-Transport-Security": "MISSING",
+            "Content-Security-Policy": "MISSING",
+            "Referrer-Policy": "MISSING",
+            "Permissions-Policy": "MISSING"
+          },
+          "missing_count": 7,
+          "missing_list": [
+            "X-Frame-Options",
+            "X-Content-Type-Options",
+            "X-XSS-Protection",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "Referrer-Policy",
+            "Permissions-Policy"
+          ]
+        }
+      },
+      "risk_level": "CRITICAL"
+    },
+    "https://dashboard.f2.hotgame.win": {
+      "url": "https://dashboard.f2.hotgame.win",
+      "timestamp": "2026-11-01T15:13:59.830255",
+      "server_header": "nginx/1.18.0 (Ubuntu)",
+      "version": [
+        1,
+        18,
+        0
+      ],
+      "headers": {
+        "Server": "nginx/1.18.0 (Ubuntu)",
+        "Date": "Sun, 01 Nov 2026 20:14:00 GMT",
+        "Content-Type": "text/html",
+        "Content-Length": "376",
+        "Last-Modified": "Fri, 01 Aug 2025 08:44:06 GMT",
+        "Connection": "keep-alive",
+        "ETag": "\"688c7e56-178\"",
+        "Accept-Ranges": "bytes"
+      },
+      "cve_findings": [
+        {
+          "cve": "CVE-2026-15176",
+          "description": "NGINX alias + rewrite path traversal",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 9.8,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "alias directive with trailing slash",
+            "rewrite directive in same location",
+            "URI with encoded path traversal"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-97205",
+          "description": "SSI (Server Side Includes) injection via shtml",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "ssi on; directive enabled",
+            ".shtml files served",
+            "User input reflected in shtml"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-93479",
+          "description": "HTTP/2 stream cancellation memory corruption",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 8.1,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "HTTP/2 enabled (listen ... http2)",
+            "Specific stream cancellation pattern"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-95101",
+          "description": "HTTP/3 QUIC stream handling DoS",
+          "status": "NOT_AFFECTED",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_ranges": [
+            "1.25.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is not in affected ranges: ['1.25.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "QUIC/HTTP/3 enabled (listen ... quic)",
+            "Alt-Svc header present"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        }
+      ],
+      "configuration_checks": {
+        "alias_rewrite_check": {
+          "tested": true,
+          "vulnerable": false,
+          "tested_paths": [
+            {
+              "path": "/static/../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/assets/../../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/media/../../../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/static/%2e%2e/%2e%2e/etc/passwd",
+              "status": 400,
+              "content_length": 166
+            }
+          ]
+        },
+        "ssi_check": {
+          "tested": true,
+          "ssi_enabled": false,
+          "tested_files": [
+            {
+              "path": "/index.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/test.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/ssi.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            }
+          ]
+        },
+        "http3_check": {
+          "alt_svc_header": "",
+          "http3_enabled": false,
+          "quic_enabled": false
+        },
+        "security_headers": {
+          "headers": {
+            "X-Frame-Options": "MISSING",
+            "X-Content-Type-Options": "MISSING",
+            "X-XSS-Protection": "MISSING",
+            "Strict-Transport-Security": "MISSING",
+            "Content-Security-Policy": "MISSING",
+            "Referrer-Policy": "MISSING",
+            "Permissions-Policy": "MISSING"
+          },
+          "missing_count": 7,
+          "missing_list": [
+            "X-Frame-Options",
+            "X-Content-Type-Options",
+            "X-XSS-Protection",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "Referrer-Policy",
+            "Permissions-Policy"
+          ]
+        }
+      },
+      "risk_level": "CRITICAL"
+    },
+    "https://dashboard.s1.hotgame.win": {
+      "url": "https://dashboard.s1.hotgame.win",
+      "timestamp": "2026-11-01T15:14:04.540617",
+      "server_header": "nginx/1.18.0 (Ubuntu)",
+      "version": [
+        1,
+        18,
+        0
+      ],
+      "headers": {
+        "Server": "nginx/1.18.0 (Ubuntu)",
+        "Date": "Sun, 01 Nov 2026 20:14:05 GMT",
+        "Content-Type": "text/html",
+        "Content-Length": "376",
+        "Last-Modified": "Fri, 01 Aug 2025 09:15:23 GMT",
+        "Connection": "keep-alive",
+        "ETag": "\"688c85ab-178\"",
+        "Accept-Ranges": "bytes"
+      },
+      "cve_findings": [
+        {
+          "cve": "CVE-2026-15176",
+          "description": "NGINX alias + rewrite path traversal",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 9.8,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "alias directive with trailing slash",
+            "rewrite directive in same location",
+            "URI with encoded path traversal"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-97205",
+          "description": "SSI (Server Side Includes) injection via shtml",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "ssi on; directive enabled",
+            ".shtml files served",
+            "User input reflected in shtml"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-93479",
+          "description": "HTTP/2 stream cancellation memory corruption",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 8.1,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "HTTP/2 enabled (listen ... http2)",
+            "Specific stream cancellation pattern"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-95101",
+          "description": "HTTP/3 QUIC stream handling DoS",
+          "status": "NOT_AFFECTED",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_ranges": [
+            "1.25.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is not in affected ranges: ['1.25.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "QUIC/HTTP/3 enabled (listen ... quic)",
+            "Alt-Svc header present"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        }
+      ],
+      "configuration_checks": {
+        "alias_rewrite_check": {
+          "tested": true,
+          "vulnerable": false,
+          "tested_paths": [
+            {
+              "path": "/static/../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/assets/../../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/media/../../../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/static/%2e%2e/%2e%2e/etc/passwd",
+              "status": 400,
+              "content_length": 166
+            }
+          ]
+        },
+        "ssi_check": {
+          "tested": true,
+          "ssi_enabled": false,
+          "tested_files": [
+            {
+              "path": "/index.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/test.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/ssi.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            }
+          ]
+        },
+        "http3_check": {
+          "alt_svc_header": "",
+          "http3_enabled": false,
+          "quic_enabled": false
+        },
+        "security_headers": {
+          "headers": {
+            "X-Frame-Options": "MISSING",
+            "X-Content-Type-Options": "MISSING",
+            "X-XSS-Protection": "MISSING",
+            "Strict-Transport-Security": "MISSING",
+            "Content-Security-Policy": "MISSING",
+            "Referrer-Policy": "MISSING",
+            "Permissions-Policy": "MISSING"
+          },
+          "missing_count": 7,
+          "missing_list": [
+            "X-Frame-Options",
+            "X-Content-Type-Options",
+            "X-XSS-Protection",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "Referrer-Policy",
+            "Permissions-Policy"
+          ]
+        }
+      },
+      "risk_level": "CRITICAL"
+    },
+    "https://dashboard.s2.hotgame.win": {
+      "url": "https://dashboard.s2.hotgame.win",
+      "timestamp": "2026-11-01T15:14:17.065479",
+      "server_header": "nginx/1.18.0 (Ubuntu)",
+      "version": [
+        1,
+        18,
+        0
+      ],
+      "headers": {
+        "Server": "nginx/1.18.0 (Ubuntu)",
+        "Date": "Sun, 01 Nov 2026 20:14:18 GMT",
+        "Content-Type": "text/html",
+        "Content-Length": "376",
+        "Last-Modified": "Fri, 25 Jul 2025 13:18:26 GMT",
+        "Connection": "keep-alive",
+        "ETag": "\"68838422-178\"",
+        "Accept-Ranges": "bytes"
+      },
+      "cve_findings": [
+        {
+          "cve": "CVE-2026-15176",
+          "description": "NGINX alias + rewrite path traversal",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 9.8,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "alias directive with trailing slash",
+            "rewrite directive in same location",
+            "URI with encoded path traversal"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-97205",
+          "description": "SSI (Server Side Includes) injection via shtml",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "ssi on; directive enabled",
+            ".shtml files served",
+            "User input reflected in shtml"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-93479",
+          "description": "HTTP/2 stream cancellation memory corruption",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 8.1,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "HTTP/2 enabled (listen ... http2)",
+            "Specific stream cancellation pattern"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-95101",
+          "description": "HTTP/3 QUIC stream handling DoS",
+          "status": "NOT_AFFECTED",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_ranges": [
+            "1.25.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is not in affected ranges: ['1.25.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "QUIC/HTTP/3 enabled (listen ... quic)",
+            "Alt-Svc header present"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        }
+      ],
+      "configuration_checks": {
+        "alias_rewrite_check": {
+          "tested": true,
+          "vulnerable": false,
+          "tested_paths": [
+            {
+              "path": "/static/../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/assets/../../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/media/../../../etc/passwd",
+              "status": 200,
+              "content_length": 376
+            },
+            {
+              "path": "/static/%2e%2e/%2e%2e/etc/passwd",
+              "status": 400,
+              "content_length": 166
+            }
+          ]
+        },
+        "ssi_check": {
+          "tested": true,
+          "ssi_enabled": false,
+          "tested_files": [
+            {
+              "path": "/index.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/test.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/ssi.shtml",
+              "status": 200,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            }
+          ]
+        },
+        "http3_check": {
+          "alt_svc_header": "",
+          "http3_enabled": false,
+          "quic_enabled": false
+        },
+        "security_headers": {
+          "headers": {
+            "X-Frame-Options": "MISSING",
+            "X-Content-Type-Options": "MISSING",
+            "X-XSS-Protection": "MISSING",
+            "Strict-Transport-Security": "MISSING",
+            "Content-Security-Policy": "MISSING",
+            "Referrer-Policy": "MISSING",
+            "Permissions-Policy": "MISSING"
+          },
+          "missing_count": 7,
+          "missing_list": [
+            "X-Frame-Options",
+            "X-Content-Type-Options",
+            "X-XSS-Protection",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "Referrer-Policy",
+            "Permissions-Policy"
+          ]
+        }
+      },
+      "risk_level": "CRITICAL"
+    },
+    "https://hg.hotgame.win": {
+      "url": "https://hg.hotgame.win",
+      "timestamp": "2026-11-01T15:14:26.429061",
+      "server_header": "nginx/1.18.0 (Ubuntu)",
+      "version": [
+        1,
+        18,
+        0
+      ],
+      "headers": {
+        "Server": "nginx/1.18.0 (Ubuntu)",
+        "Date": "Sun, 01 Nov 2026 20:14:27 GMT",
+        "Content-Type": "text/html",
+        "Content-Length": "5",
+        "Last-Modified": "Sat, 16 Dec 2023 08:47:57 GMT",
+        "Connection": "keep-alive",
+        "ETag": "\"657d643d-5\"",
+        "Accept-Ranges": "bytes"
+      },
+      "cve_findings": [
+        {
+          "cve": "CVE-2026-15176",
+          "description": "NGINX alias + rewrite path traversal",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 9.8,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "alias directive with trailing slash",
+            "rewrite directive in same location",
+            "URI with encoded path traversal"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-97205",
+          "description": "SSI (Server Side Includes) injection via shtml",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "ssi on; directive enabled",
+            ".shtml files served",
+            "User input reflected in shtml"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-93479",
+          "description": "HTTP/2 stream cancellation memory corruption",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 8.1,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "HTTP/2 enabled (listen ... http2)",
+            "Specific stream cancellation pattern"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-95101",
+          "description": "HTTP/3 QUIC stream handling DoS",
+          "status": "NOT_AFFECTED",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_ranges": [
+            "1.25.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is not in affected ranges: ['1.25.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "QUIC/HTTP/3 enabled (listen ... quic)",
+            "Alt-Svc header present"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        }
+      ],
+      "configuration_checks": {
+        "alias_rewrite_check": {
+          "tested": true,
+          "vulnerable": false,
+          "tested_paths": [
+            {
+              "path": "/static/../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/assets/../../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/media/../../../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/static/%2e%2e/%2e%2e/etc/passwd",
+              "status": 400,
+              "content_length": 166
+            }
+          ]
+        },
+        "ssi_check": {
+          "tested": true,
+          "ssi_enabled": false,
+          "tested_files": [
+            {
+              "path": "/index.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/test.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/ssi.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            }
+          ]
+        },
+        "http3_check": {
+          "alt_svc_header": "",
+          "http3_enabled": false,
+          "quic_enabled": false
+        },
+        "security_headers": {
+          "headers": {
+            "X-Frame-Options": "MISSING",
+            "X-Content-Type-Options": "MISSING",
+            "X-XSS-Protection": "MISSING",
+            "Strict-Transport-Security": "MISSING",
+            "Content-Security-Policy": "MISSING",
+            "Referrer-Policy": "MISSING",
+            "Permissions-Policy": "MISSING"
+          },
+          "missing_count": 7,
+          "missing_list": [
+            "X-Frame-Options",
+            "X-Content-Type-Options",
+            "X-XSS-Protection",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "Referrer-Policy",
+            "Permissions-Policy"
+          ]
+        }
+      },
+      "risk_level": "CRITICAL"
+    },
+    "https://cdn-web.hotgame.win": {
+      "url": "https://cdn-web.hotgame.win",
+      "timestamp": "2026-11-01T15:14:36.023996",
+      "server_header": "nginx/1.18.0 (Ubuntu)",
+      "version": [
+        1,
+        18,
+        0
+      ],
+      "headers": {
+        "Server": "nginx/1.18.0 (Ubuntu)",
+        "Content-Type": "text/html",
+        "Content-Length": "162",
+        "Expires": "Sun, 01 Nov 2026 20:14:36 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store",
+        "Pragma": "no-cache",
+        "Date": "Sun, 01 Nov 2026 20:14:36 GMT",
+        "Alt-Svc": "h3=\":443\"; ma=93600,h3-29=\":443\"; ma=93600",
+        "Connection": "keep-alive",
+        "Access-Control-Max-Age": "86400",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Expose-Headers": "Server,range,hdntl,hdnts,Akamai-Mon-Iucid-Ing,Akamai-Mon-Iucid-Del,Akamai-Request-BC",
+        "Access-Control-Allow-Headers": "origin,range,hdntl,hdnts,CMCD-Request,CMCD-Object,CMCD-Status,CMCD-Session",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Origin": "*"
+      },
+      "cve_findings": [
+        {
+          "cve": "CVE-2026-15176",
+          "description": "NGINX alias + rewrite path traversal",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 9.8,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "alias directive with trailing slash",
+            "rewrite directive in same location",
+            "URI with encoded path traversal"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-97205",
+          "description": "SSI (Server Side Includes) injection via shtml",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "ssi on; directive enabled",
+            ".shtml files served",
+            "User input reflected in shtml"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-93479",
+          "description": "HTTP/2 stream cancellation memory corruption",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 8.1,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "HTTP/2 enabled (listen ... http2)",
+            "Specific stream cancellation pattern"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-95101",
+          "description": "HTTP/3 QUIC stream handling DoS",
+          "status": "NOT_AFFECTED",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_ranges": [
+            "1.25.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is not in affected ranges: ['1.25.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "QUIC/HTTP/3 enabled (listen ... quic)",
+            "Alt-Svc header present"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        }
+      ],
+      "configuration_checks": {
+        "alias_rewrite_check": {
+          "tested": true,
+          "vulnerable": false,
+          "tested_paths": [
+            {
+              "path": "/static/../etc/passwd",
+              "status": 302,
+              "content_length": 0
+            },
+            {
+              "path": "/assets/../../etc/passwd",
+              "status": 302,
+              "content_length": 0
+            },
+            {
+              "path": "/media/../../../etc/passwd",
+              "status": 302,
+              "content_length": 0
+            },
+            {
+              "path": "/static/%2e%2e/%2e%2e/etc/passwd",
+              "status": 302,
+              "content_length": 0
+            }
+          ]
+        },
+        "ssi_check": {
+          "tested": true,
+          "ssi_enabled": false,
+          "tested_files": [
+            {
+              "path": "/index.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/test.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/ssi.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            }
+          ]
+        },
+        "http3_check": {
+          "alt_svc_header": "h3=\":443\"; ma=93600,h3-29=\":443\"; ma=93600",
+          "http3_enabled": true,
+          "quic_enabled": true
+        },
+        "security_headers": {
+          "headers": {
+            "X-Frame-Options": "MISSING",
+            "X-Content-Type-Options": "MISSING",
+            "X-XSS-Protection": "MISSING",
+            "Strict-Transport-Security": "MISSING",
+            "Content-Security-Policy": "MISSING",
+            "Referrer-Policy": "MISSING",
+            "Permissions-Policy": "MISSING"
+          },
+          "missing_count": 7,
+          "missing_list": [
+            "X-Frame-Options",
+            "X-Content-Type-Options",
+            "X-XSS-Protection",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "Referrer-Policy",
+            "Permissions-Policy"
+          ]
+        }
+      },
+      "risk_level": "CRITICAL"
+    },
+    "https://tc4.singapore.hotgame.win": {
+      "url": "https://tc4.singapore.hotgame.win",
+      "timestamp": "2026-11-01T15:14:41.849111",
+      "server_header": "nginx/1.18.0 (Ubuntu)",
+      "version": [
+        1,
+        18,
+        0
+      ],
+      "headers": {
+        "Server": "nginx/1.18.0 (Ubuntu)",
+        "Date": "Sun, 01 Nov 2026 20:14:42 GMT",
+        "Content-Type": "text/html",
+        "Content-Length": "5",
+        "Last-Modified": "Sat, 16 Dec 2023 08:47:57 GMT",
+        "Connection": "keep-alive",
+        "ETag": "\"657d643d-5\"",
+        "Accept-Ranges": "bytes"
+      },
+      "cve_findings": [
+        {
+          "cve": "CVE-2026-15176",
+          "description": "NGINX alias + rewrite path traversal",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 9.8,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "alias directive with trailing slash",
+            "rewrite directive in same location",
+            "URI with encoded path traversal"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-97205",
+          "description": "SSI (Server Side Includes) injection via shtml",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "ssi on; directive enabled",
+            ".shtml files served",
+            "User input reflected in shtml"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-93479",
+          "description": "HTTP/2 stream cancellation memory corruption",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 8.1,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "HTTP/2 enabled (listen ... http2)",
+            "Specific stream cancellation pattern"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-95101",
+          "description": "HTTP/3 QUIC stream handling DoS",
+          "status": "NOT_AFFECTED",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_ranges": [
+            "1.25.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is not in affected ranges: ['1.25.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "QUIC/HTTP/3 enabled (listen ... quic)",
+            "Alt-Svc header present"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        }
+      ],
+      "configuration_checks": {
+        "alias_rewrite_check": {
+          "tested": true,
+          "vulnerable": false,
+          "tested_paths": [
+            {
+              "path": "/static/../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/assets/../../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/media/../../../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/static/%2e%2e/%2e%2e/etc/passwd",
+              "status": 400,
+              "content_length": 166
+            }
+          ]
+        },
+        "ssi_check": {
+          "tested": true,
+          "ssi_enabled": false,
+          "tested_files": [
+            {
+              "path": "/index.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/test.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/ssi.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            }
+          ]
+        },
+        "http3_check": {
+          "alt_svc_header": "",
+          "http3_enabled": false,
+          "quic_enabled": false
+        },
+        "security_headers": {
+          "headers": {
+            "X-Frame-Options": "MISSING",
+            "X-Content-Type-Options": "MISSING",
+            "X-XSS-Protection": "MISSING",
+            "Strict-Transport-Security": "MISSING",
+            "Content-Security-Policy": "MISSING",
+            "Referrer-Policy": "MISSING",
+            "Permissions-Policy": "MISSING"
+          },
+          "missing_count": 7,
+          "missing_list": [
+            "X-Frame-Options",
+            "X-Content-Type-Options",
+            "X-XSS-Protection",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "Referrer-Policy",
+            "Permissions-Policy"
+          ]
+        }
+      },
+      "risk_level": "CRITICAL"
+    },
+    "https://tc5.singapore.hotgame.win": {
+      "url": "https://tc5.singapore.hotgame.win",
+      "timestamp": "2026-11-01T15:14:51.234650",
+      "server_header": "nginx/1.18.0 (Ubuntu)",
+      "version": [
+        1,
+        18,
+        0
+      ],
+      "headers": {
+        "Server": "nginx/1.18.0 (Ubuntu)",
+        "Date": "Sun, 01 Nov 2026 20:14:52 GMT",
+        "Content-Type": "text/html",
+        "Content-Length": "5",
+        "Last-Modified": "Sat, 16 Dec 2023 08:47:57 GMT",
+        "Connection": "keep-alive",
+        "ETag": "\"657d643d-5\"",
+        "Accept-Ranges": "bytes"
+      },
+      "cve_findings": [
+        {
+          "cve": "CVE-2026-15176",
+          "description": "NGINX alias + rewrite path traversal",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 9.8,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "alias directive with trailing slash",
+            "rewrite directive in same location",
+            "URI with encoded path traversal"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-97205",
+          "description": "SSI (Server Side Includes) injection via shtml",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "ssi on; directive enabled",
+            ".shtml files served",
+            "User input reflected in shtml"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-93479",
+          "description": "HTTP/2 stream cancellation memory corruption",
+          "status": "VULNERABLE_VERSION",
+          "cvss": 8.1,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_ranges": [
+            "1.18.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is in affected ranges: ['1.18.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "HTTP/2 enabled (listen ... http2)",
+            "Specific stream cancellation pattern"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        },
+        {
+          "cve": "CVE-2026-95101",
+          "description": "HTTP/3 QUIC stream handling DoS",
+          "status": "NOT_AFFECTED",
+          "cvss": 7.5,
+          "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_ranges": [
+            "1.25.0-1.30.5",
+            "1.31.0-1.31.6"
+          ],
+          "detected_version": "1.18.0",
+          "details": "Version 1.18.0 is not in affected ranges: ['1.25.0-1.30.5', '1.31.0-1.31.6']",
+          "requirements": [
+            "QUIC/HTTP/3 enabled (listen ... quic)",
+            "Alt-Svc header present"
+          ],
+          "exploit_available": false,
+          "poc_tested": false
+        }
+      ],
+      "configuration_checks": {
+        "alias_rewrite_check": {
+          "tested": true,
+          "vulnerable": false,
+          "tested_paths": [
+            {
+              "path": "/static/../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/assets/../../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/media/../../../etc/passwd",
+              "status": 404,
+              "content_length": 162
+            },
+            {
+              "path": "/static/%2e%2e/%2e%2e/etc/passwd",
+              "status": 400,
+              "content_length": 166
+            }
+          ]
+        },
+        "ssi_check": {
+          "tested": true,
+          "ssi_enabled": false,
+          "tested_files": [
+            {
+              "path": "/index.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/test.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            },
+            {
+              "path": "/ssi.shtml",
+              "status": 404,
+              "content_type": "text/html",
+              "has_ssi_comment": false
+            }
+          ]
+        },
+        "http3_check": {
+          "alt_svc_header": "",
+          "http3_enabled": false,
+          "quic_enabled": false
+        },
+        "security_headers": {
+          "headers": {
+            "X-Frame-Options": "MISSING",
+            "X-Content-Type-Options": "MISSING",
+            "X-XSS-Protection": "MISSING",
+            "Strict-Transport-Security": "MISSING",
+            "Content-Security-Policy": "MISSING",
+            "Referrer-Policy": "MISSING",
+            "Permissions-Policy": "MISSING"
+          },
+          "missing_count": 7,
+          "missing_list": [
+            "X-Frame-Options",
+            "X-Content-Type-Options",
+            "X-XSS-Protection",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "Referrer-Policy",
+            "Permissions-Policy"
+          ]
+        }
+      },
+      "risk_level": "CRITICAL"
+    }
+  },
+  "summary": {
+    "total_targets": 8,
+    "vulnerable_targets": 8,
+    "cve_summary": {
+      "CVE-2026-15176": {
+        "vulnerable": 8,
+        "total": 8
+      },
+      "CVE-2026-97205": {
+        "vulnerable": 8,
+        "total": 8
+      },
+      "CVE-2026-93479": {
+        "vulnerable": 8,
+        "total": 8
+      },
+      "CVE-2026-95101": {
+        "vulnerable": 0,
+        "total": 8
+      }
+    },
+    "recommendations": [
+      "CVE-2026-15176: Audit nginx configs for 'alias' + 'rewrite' combinations; upgrade to 1.30.6+ or 1.31.7+",
+      "CVE-2026-97205: Disable SSI if not needed (ssi off); sanitize .shtml inputs; upgrade to 1.30.6+/1.31.7+",
+      "CVE-2026-93479: Disable HTTP/2 if not needed; upgrade to patched version"
+    ]
+  }
+}

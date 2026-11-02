@@ -99,7 +99,7 @@ AI_MODEL_CATALOG: Dict[str, AIModelProfile] = {
         hardware_notes="Lightweight in-memory model"
     ),
     "gemini_flash": AIModelProfile(
-        model_id="gemini-2.0-flash",
+        model_id=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
         display_name="Google Gemini 2.0 Flash",
         role_title="High-Throughput Reconnaissance & Context Correlator",
         tier=ModelTier.CLOUD_FAST,

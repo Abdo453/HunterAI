@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Attack Path: Druid → Swagger → IDOR → SQLi → Data Dump",
+    "output": "attack-path-diagram.html",
+    "quality_profile": "standard",
+    "viewBox": [1080, 696],
+    "column_fit": "spread",
+    "animation": "trace"
+  },
+  "participants": [
+    { "id": "attacker", "type": "external", "label": "Attacker", "sublabel": "external" },
+    { "id": "druid", "type": "backend", "label": "Druid", "sublabel": "monitor" },
+    { "id": "swagger", "type": "backend", "label": "Swagger", "sublabel": "OpenAPI" },
+    { "id": "gamectrl", "type": "backend", "label": "GameCtrl", "sublabel": "SysGameData" },
+    { "id": "platctrl", "type": "backend", "label": "PlatCtrl", "sublabel": "Platform" },
+    { "id": "waf", "type": "security", "label": "WAF", "sublabel": "firewall" },
+    { "id": "db", "type": "database", "label": "MySQL", "sublabel": "gamemanager" }
+  ],
+  "segments": [
+    { "from": 140, "to": 210, "label": "Recon" },
+    { "from": 225, "to": 295, "label": "Map" },
+    { "from": 330, "to": 400, "label": "IDOR" },
+    { "from": 405, "to": 535, "label": "SQLi" },
+    { "from": 540, "to": 610, "label": "Persist" }
+  ],
+  "messages": [
+    { "id": "m1", "from": "attacker", "to": "druid", "y": 160, "label": "GET /druid (no auth)", "variant": "emphasis" },
+    { "id": "m2", "from": "druid", "to": "attacker", "y": 190, "label": "200: schema (t_sys_user)", "variant": "return" },
+    { "id": "m3", "from": "attacker", "to": "swagger", "y": 230, "label": "GET /v2/api-docs", "variant": "emphasis" },
+    { "id": "m4", "from": "swagger", "to": "attacker", "y": 265, "label": "200: API surface mapped", "variant": "return" },
+    { "id": "m5", "from": "attacker", "to": "gamectrl", "y": 335, "label": "GET ?gameId=1 (IDOR)", "variant": "emphasis" },
+    { "id": "m6", "from": "gamectrl", "to": "attacker", "y": 365, "label": "200: cross-tenant data", "variant": "return" },
+    { "id": "m7", "from": "attacker", "to": "gamectrl", "y": 395, "label": "GET ?gameId=2 (IDOR)", "variant": "emphasis" },
+    { "id": "m8", "from": "gamectrl", "to": "attacker", "y": 425, "label": "200: auth bypass", "variant": "return" },
+    { "id": "m9", "from": "attacker", "to": "platctrl", "y": 455, "label": "GET PlatformController/*", "variant": "emphasis" },
+    { "id": "m10", "from": "platctrl", "to": "attacker", "y": 485, "label": "200: platform data", "variant": "return" },
+    { "id": "m11", "from": "attacker", "to": "waf", "y": 515, "label": "SQLi: sort=extractvalue()", "variant": "security" },
+    { "id": "m12", "from": "waf", "to": "gamectrl", "y": 545, "label": "passes WAF", "variant": "dashed" },
+    { "id": "m13", "from": "gamectrl", "to": "db", "y": 575, "label": "ORDER BY extractvalue(SELECT)", "variant": "emphasis" },
+    { "id": "m14", "from": "db", "to": "gamectrl", "y": 605, "label": "XPATH error: 95 rows", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "druid", "from": 155, "to": 200, "type": "backend" },
+    { "participant": "swagger", "from": 225, "to": 275, "type": "backend" },
+    { "participant": "gamectrl", "from": 330, "to": 620, "type": "backend" },
+    { "participant": "platctrl", "from": 450, "to": 495, "type": "backend" },
+    { "participant": "waf", "from": 510, "to": 550, "type": "security" },
+    { "participant": "db", "from": 570, "to": 620, "type": "database" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Druid Exposure (CVSS 7.5)", "items": ["Unauthenticated /druid/ exposes schema", "t_sys_user table identified"] },
+    { "dot": "amber", "title": "Swagger Leak (CVSS 5.3)", "items": ["Full OpenAPI spec public", "sort parameter found"] },
+    { "dot": "orange", "title": "IDOR (CVSS 6.5)", "items": ["gameId cross-tenant access", "PlatformController bypass"] },
+    { "dot": "violet", "title": "SQL Injection (CVSS 8.6)", "items": ["extractvalue() error-based", "WAF bypass via unknown payload", "95 rows via GROUP_CONCAT"] },
+    { "dot": "cyan", "title": "DB Credentials (CVSS 7.5)", "items": ["Connection string in config", "Direct MySQL access"] }
+  ]
+}

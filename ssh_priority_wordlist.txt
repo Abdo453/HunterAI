@@ -1,0 +1,13 @@
+admin:dDSe8&7#d2
+root:dDSe8&7#d2
+ubuntu:dDSe8&7#d2
+ec2-user:dDSe8&7#d2
+root:kUmaI@d8m3i!
+ubuntu:kUmaI@d8m3i!
+ec2-user:kUmaI@d8m3i!
+root:SaNgO@34k8d!@
+ubuntu:SaNgO@34k8d!@
+ec2-user:SaNgO@34k8d!@
+root:dDSe8&7#d2
+ubuntu:dDSe8&7#d2
+admin:dDSe8&7#d2

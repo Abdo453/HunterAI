@@ -70,7 +70,7 @@ class AdaptiveTestAdvisor:
             )
             if record.unit_id:
                 suggestions.append(
-                    f"modbus-cli read-holding-registers -a {ip} -u {record.unit_id}  # قراءة مسجلات"
+                    f"modbus-cli read -u {ip} -a 0 -i {record.unit_id} -l 1  # قراءة مسجلات"
                 )
         if protocol == OTProtocol.S7:
             suggestions.append(
