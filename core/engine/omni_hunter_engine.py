@@ -20,6 +20,12 @@ Completion Criteria (whichever comes first):
 """
 from __future__ import annotations
 
+from core.engine.real_tool_adapter import RealToolAdapter
+from core.auth.identity_matrix import DualIdentityMatrix, IdentityContext
+from core.oob.oob_engine import OOBEngine
+from core.engine.poc_bundle_generator import PoCBundleGenerator, FindingContext
+
+
 import logging
 import time
 import uuid
@@ -107,6 +113,12 @@ class AssessmentConfig:
     )
     authorized_by: str = "Authorized Red Team Operator"
     policy_secret: bytes = b"hunter-ai-default-authorized-secret"
+    auth_user_a: Optional[IdentityContext] = None
+    auth_user_b: Optional[IdentityContext] = None
+    enable_oob: bool = True
+    oob_callback_domain: str = "oob.hunterai.internal"
+    generate_poc_bundles: bool = True
+    force_tool_fallback: bool = False
     notes: str = ""
 
 
@@ -216,6 +228,10 @@ class OmniHunterEngine:
             snapshot_dir=config.snapshot_dir,
         )
         self.planner = InformationGainPlanner()
+        self.tool_adapter = RealToolAdapter(force_fallback=config.force_tool_fallback)
+        self.identity_matrix = DualIdentityMatrix(user_attacker=config.auth_user_a, user_victim=config.auth_user_b)
+        self.oob_engine = OOBEngine(callback_domain=config.oob_callback_domain) if config.enable_oob else None
+        self.poc_generator = PoCBundleGenerator(output_base_dir="findings") if config.generate_poc_bundles else None
 
         # Dynamic attack surface inventory
         self.surface: Dict[str, List[str]] = {
@@ -251,6 +267,15 @@ class OmniHunterEngine:
     def _run_recon_phase(self) -> None:
         logger.info("[OmniHunter] ── Phase 1: RECONNAISSANCE ──")
         target = self.config.target_url
+
+                # Run external subfinder adapter if available
+        clean_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
+        subfinder_res = self.tool_adapter.execute_subfinder(clean_domain)
+        if subfinder_res.success and subfinder_res.structured_data:
+            for sub in subfinder_res.structured_data.get("discovered_subdomains", []):
+                if self._scope_check(sub, ActionClass.READ_ONLY) and sub not in self.surface["domains"]:
+                    self.surface["domains"].append(sub)
+                    self.ledger.record_discovery(AssetType.DOMAIN, sub)
 
         # Task 1: Asset Discovery
         task = self.scheduler.add_task(
@@ -465,6 +490,21 @@ class OmniHunterEngine:
                     "evidence": [asdict(e) if hasattr(e, "__dict__") else e for e in ver_result.evidence_artifacts],
                     "timestamp": time.time(),
                 }
+                if self.poc_generator:
+                    try:
+                        bundle_ctx = FindingContext(
+                            finding_id=ver_task.task_id,
+                            target_url=task.target,
+                            vuln_class=vuln_class,
+                            parameter=res_data.get("parameter", ""),
+                            response_status=200,
+                            response_body=probed[:2000] if probed else "OK",
+                        )
+                        bundle_dir = self.poc_generator.generate_bundle(bundle_ctx)
+                        finding["poc_bundle_dir"] = str(bundle_dir)
+                    except Exception as bundle_err:
+                        logger.warning("[OmniHunter] Failed to generate PoC bundle: %s", bundle_err)
+
                 self.confirmed_findings.append(finding)
                 logger.info("[OmniHunter] ✓ CONFIRMED VULNERABILITY: %s on %s", vuln_class, task.target)
 

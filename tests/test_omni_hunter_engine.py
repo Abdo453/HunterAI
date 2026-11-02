@@ -200,6 +200,7 @@ def test_omni_hunter_executes_authorized_loop(tmp_path):
         scope_domains=["authorized-corp.com", "api.authorized-corp.com"],
         coverage_threshold=0.01,  # Short run for hermetic test
         max_cycles=3,
+        force_tool_fallback=True,
         snapshot_dir=str(tmp_path / "snapshots"),
         engagement_id="TEST-AUTH-ENG",
     )

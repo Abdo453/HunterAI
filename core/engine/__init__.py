@@ -24,6 +24,24 @@ from core.engine.omni_hunter_engine import (
     AssessmentPhase,
     InformationGainPlanner,
 )
+from core.engine.real_tool_adapter import (
+    RealToolAdapter,
+    ToolExecutionResult as AdapterExecutionResult,
+)
+from core.engine.poc_bundle_generator import (
+    PoCBundleGenerator,
+    FindingContext,
+)
+from core.auth.identity_matrix import (
+    DualIdentityMatrix,
+    IdentityContext,
+    IDORVerdict,
+    DifferentialEvidence,
+)
+from core.oob.oob_engine import (
+    OOBEngine,
+    OOBVerdictReport,
+)
 
 __all__ = [
     "SKILL_MATRIX",
@@ -43,4 +61,14 @@ __all__ = [
     "AssessmentResult",
     "AssessmentPhase",
     "InformationGainPlanner",
+    "RealToolAdapter",
+    "AdapterExecutionResult",
+    "PoCBundleGenerator",
+    "FindingContext",
+    "DualIdentityMatrix",
+    "IdentityContext",
+    "IDORVerdict",
+    "DifferentialEvidence",
+    "OOBEngine",
+    "OOBVerdictReport",
 ]
