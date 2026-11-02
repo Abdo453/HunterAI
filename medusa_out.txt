@@ -1,3 +1,0 @@
-# Medusa v.2.3 (2026-11-01 16:47:40)
-# medusa -h 43.106.24.81 -u root -P /home/kali/Desktop/Agant/PentestAI-Unified/targeted_passwords.txt -M ssh -t 4 -O /home/kali/Desktop/Agant/PentestAI-Unified/medusa_out.txt 
-# Medusa has finished (2026-11-01 16:48:51).

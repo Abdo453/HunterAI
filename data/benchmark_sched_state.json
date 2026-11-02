@@ -18,7 +18,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -41,7 +41,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -64,7 +64,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -87,7 +87,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -110,7 +110,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -133,7 +133,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -156,7 +156,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -179,7 +179,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -202,7 +202,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -225,7 +225,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -248,7 +248,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -271,7 +271,7 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132140.9507885,
+    "created_at": 1793656077.0230274,
     "started_at": null,
     "completed_at": null
   },
@@ -291,9 +291,173 @@
     "status": "DONE",
     "retry_count": 0,
     "max_retries": 2,
+    "result": null,
+    "review_notes": "",
+    "review_passed": null,
+    "created_at": 1793656077.0230274,
+    "started_at": null,
+    "completed_at": null
+  },
+  {
+    "task_id": "TASK-B4FEA5",
+    "title": "Port Scan",
+    "team": "NETWORK",
+    "owner_agent": "NetworkWorker_1",
+    "reviewer_agent": "NetworkReviewAgent",
+    "target": "target.com",
+    "action": "port_scan",
+    "parameters": {},
+    "priority": 5,
+    "depends_on": [],
+    "success_criteria": [],
+    "scope_verified": false,
+    "status": "DONE",
+    "retry_count": 0,
+    "max_retries": 2,
+    "result": null,
+    "review_notes": "",
+    "review_passed": null,
+    "created_at": 1793656077.0230274,
+    "started_at": null,
+    "completed_at": null
+  },
+  {
+    "task_id": "TASK-AB17A7",
+    "title": "Content Discovery",
+    "team": "WEB",
+    "owner_agent": "WebWorker_1",
+    "reviewer_agent": "WebReviewAgent",
+    "target": "https://target.com",
+    "action": "content_discovery",
+    "parameters": {},
+    "priority": 5,
+    "depends_on": [],
+    "success_criteria": [],
+    "scope_verified": false,
+    "status": "DONE",
+    "retry_count": 0,
+    "max_retries": 2,
+    "result": null,
+    "review_notes": "",
+    "review_passed": null,
+    "created_at": 1793656077.0230274,
+    "started_at": null,
+    "completed_at": null
+  },
+  {
+    "task_id": "TASK-A27204",
+    "title": "API Parameter Map",
+    "team": "API",
+    "owner_agent": "APIWorker_1",
+    "reviewer_agent": "APIReviewAgent",
+    "target": "https://target.com/api/v1/users/{id}",
+    "action": "parameter_intelligence",
+    "parameters": {},
+    "priority": 5,
+    "depends_on": [],
+    "success_criteria": [],
+    "scope_verified": false,
+    "status": "DONE",
+    "retry_count": 0,
+    "max_retries": 2,
+    "result": null,
+    "review_notes": "",
+    "review_passed": null,
+    "created_at": 1793656077.0230274,
+    "started_at": null,
+    "completed_at": null
+  },
+  {
+    "task_id": "TASK-97FCAD",
+    "title": "JS Route Extract",
+    "team": "JAVASCRIPT",
+    "owner_agent": "JSWorker_1",
+    "reviewer_agent": "JSReviewAgent",
+    "target": "https://target.com/static/main.js",
+    "action": "route_extraction",
+    "parameters": {},
+    "priority": 5,
+    "depends_on": [],
+    "success_criteria": [],
+    "scope_verified": false,
+    "status": "DONE",
+    "retry_count": 0,
+    "max_retries": 2,
+    "result": null,
+    "review_notes": "",
+    "review_passed": null,
+    "created_at": 1793656077.0230274,
+    "started_at": null,
+    "completed_at": null
+  },
+  {
+    "task_id": "TASK-A1FB89",
+    "title": "Verify IDOR",
+    "team": "VERIFICATION",
+    "owner_agent": "VerifierWorker_1",
+    "reviewer_agent": "EvidenceCourtReviewer",
+    "target": "https://target.com/api/v1/users/456",
+    "action": "verify_finding",
+    "parameters": {
+      "vuln_class": "IDOR",
+      "parameter": "id"
+    },
+    "priority": 5,
+    "depends_on": [],
+    "success_criteria": [],
+    "scope_verified": false,
+    "status": "DONE",
+    "retry_count": 0,
+    "max_retries": 2,
+    "result": null,
+    "review_notes": "",
+    "review_passed": null,
+    "created_at": 1793656077.0230274,
+    "started_at": null,
+    "completed_at": null
+  },
+  {
+    "task_id": "TASK-F8B7A7",
+    "title": "Self Review Probe",
+    "team": "WEB",
+    "owner_agent": "Agent_Narcissus",
+    "reviewer_agent": "",
+    "target": "https://target.com",
+    "action": "test_action",
+    "parameters": {},
+    "priority": 5,
+    "depends_on": [],
+    "success_criteria": [],
+    "scope_verified": false,
+    "status": "RUNNING",
+    "retry_count": 0,
+    "max_retries": 2,
+    "result": null,
+    "review_notes": "",
+    "review_passed": null,
+    "created_at": 1793656077.0230274,
+    "started_at": null,
+    "completed_at": null
+  },
+  {
+    "task_id": "TASK-9EF164",
+    "title": "Recon Pass",
+    "team": "RECON",
+    "owner_agent": "ReconWorker_1",
+    "reviewer_agent": "ReconReviewAgent",
+    "target": "https://target.com",
+    "action": "asset_discovery",
+    "parameters": {},
+    "priority": 5,
+    "depends_on": [],
+    "success_criteria": [],
+    "scope_verified": false,
+    "status": "DONE",
+    "retry_count": 0,
+    "max_retries": 2,
     "result": {
-      "execution_id": "EXEC-E0DEA1",
-      "task_id": "TASK-E62015",
+      "execution_id": "EXEC-5E1ADF",
+      "task_id": "TASK-9EF164",
       "tool_name": "AssetDiscoveryAgent",
       "action": "asset_discovery",
       "target": "https://target.com",
@@ -304,13 +468,13 @@
       "raw_output": "Discovered 7 domains, 3 live hosts",
       "normalized_data": {
         "domains": [
-          "static.target.com",
-          "api.target.com",
-          "https://target.com",
-          "app.target.com",
           "auth.target.com",
+          "api.target.com",
+          "admin.target.com",
+          "app.target.com",
           "target.com",
-          "admin.target.com"
+          "https://target.com",
+          "static.target.com"
         ],
         "live_hosts": [
           "target.com",
@@ -323,7 +487,7 @@
       "error_category": "",
       "evidence_artifacts": [
         {
-          "evidence_id": "EV-1BE208",
+          "evidence_id": "EV-43364C",
           "significance": "OBSERVATION",
           "source_tool": "AssetDiscoveryAgent",
           "target": "target.com",
@@ -334,10 +498,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132140.955338
+          "timestamp": 1793656077.0280228
         },
         {
-          "evidence_id": "EV-3E429B",
+          "evidence_id": "EV-05E73E",
           "significance": "OBSERVATION",
           "source_tool": "AssetDiscoveryAgent",
           "target": "api.target.com",
@@ -348,10 +512,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132140.955338
+          "timestamp": 1793656077.0280228
         },
         {
-          "evidence_id": "EV-D09276",
+          "evidence_id": "EV-77E131",
           "significance": "OBSERVATION",
           "source_tool": "AssetDiscoveryAgent",
           "target": "auth.target.com",
@@ -362,17 +526,17 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132140.955338
+          "timestamp": 1793656077.0280228
         }
       ],
       "covered_items": [
-        "static.target.com",
-        "api.target.com",
-        "https://target.com",
-        "app.target.com",
         "auth.target.com",
+        "api.target.com",
+        "admin.target.com",
+        "app.target.com",
         "target.com",
-        "admin.target.com"
+        "https://target.com",
+        "static.target.com"
       ],
       "coverage_limits": [
         "Passive DNS enumeration",
@@ -399,16 +563,16 @@
           "target": "https://auth.target.com"
         }
       ],
-      "timestamp": 1793132140.955338
+      "timestamp": 1793656077.0280228
     },
     "review_notes": "Verified 7 items within authorized scope.",
     "review_passed": true,
-    "created_at": 1793132140.9513245,
-    "started_at": 1793132140.953531,
-    "completed_at": 1793132140.9880736
+    "created_at": 1793656077.0230274,
+    "started_at": 1793656077.0260239,
+    "completed_at": 1793656077.0560338
   },
   {
-    "task_id": "TASK-B4FEA5",
+    "task_id": "TASK-7A3248",
     "title": "Port Scan",
     "team": "NETWORK",
     "owner_agent": "NetworkWorker_1",
@@ -424,8 +588,8 @@
     "retry_count": 0,
     "max_retries": 2,
     "result": {
-      "execution_id": "EXEC-85F19B",
-      "task_id": "TASK-B4FEA5",
+      "execution_id": "EXEC-EF332F",
+      "task_id": "TASK-7A3248",
       "tool_name": "NetworkDiscoveryAgent",
       "action": "port_scan",
       "target": "target.com",
@@ -461,7 +625,7 @@
       "error_category": "",
       "evidence_artifacts": [
         {
-          "evidence_id": "EV-C79C80",
+          "evidence_id": "EV-E12112",
           "significance": "OBSERVATION",
           "source_tool": "NetworkDiscoveryAgent",
           "target": "target.com:80",
@@ -472,10 +636,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132140.9926016
+          "timestamp": 1793656077.0610316
         },
         {
-          "evidence_id": "EV-F50AA4",
+          "evidence_id": "EV-18F58F",
           "significance": "OBSERVATION",
           "source_tool": "NetworkDiscoveryAgent",
           "target": "target.com:443",
@@ -486,10 +650,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132140.9926016
+          "timestamp": 1793656077.0610316
         },
         {
-          "evidence_id": "EV-B5909F",
+          "evidence_id": "EV-4332FD",
           "significance": "OBSERVATION",
           "source_tool": "NetworkDiscoveryAgent",
           "target": "target.com:8443",
@@ -500,7 +664,7 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132140.9926016
+          "timestamp": 1793656077.0610316
         }
       ],
       "covered_items": [
@@ -522,16 +686,16 @@
           "target": "target.com:8443"
         }
       ],
-      "timestamp": 1793132140.9926016
+      "timestamp": 1793656077.0610316
     },
     "review_notes": "Network review passed; verified 3 items.",
     "review_passed": true,
-    "created_at": 1793132140.9880736,
-    "started_at": 1793132140.9910803,
-    "completed_at": 1793132141.0083306
+    "created_at": 1793656077.0560338,
+    "started_at": 1793656077.0580306,
+    "completed_at": 1793656077.07551
   },
   {
-    "task_id": "TASK-AB17A7",
+    "task_id": "TASK-9539C8",
     "title": "Content Discovery",
     "team": "WEB",
     "owner_agent": "WebWorker_1",
@@ -547,8 +711,8 @@
     "retry_count": 0,
     "max_retries": 2,
     "result": {
-      "execution_id": "EXEC-FA0F9B",
-      "task_id": "TASK-AB17A7",
+      "execution_id": "EXEC-1A9750",
+      "task_id": "TASK-9539C8",
       "tool_name": "ContentDiscoveryAgent",
       "action": "content_discovery",
       "target": "https://target.com",
@@ -588,7 +752,7 @@
       "error_category": "",
       "evidence_artifacts": [
         {
-          "evidence_id": "EV-E46287",
+          "evidence_id": "EV-7815B3",
           "significance": "ANOMALY",
           "source_tool": "ContentDiscoveryAgent",
           "target": "https://target.com/api/v1/users",
@@ -599,10 +763,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0139432
+          "timestamp": 1793656077.0822442
         },
         {
-          "evidence_id": "EV-D4204E",
+          "evidence_id": "EV-4C30C0",
           "significance": "OBSERVATION",
           "source_tool": "ContentDiscoveryAgent",
           "target": "https://target.com/api/v1/auth/login",
@@ -613,10 +777,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0139432
+          "timestamp": 1793656077.0822442
         },
         {
-          "evidence_id": "EV-9F3525",
+          "evidence_id": "EV-A7F468",
           "significance": "OBSERVATION",
           "source_tool": "ContentDiscoveryAgent",
           "target": "https://target.com/api/v1/auth/login",
@@ -627,7 +791,7 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0139432
+          "timestamp": 1793656077.0822442
         }
       ],
       "covered_items": [
@@ -653,16 +817,16 @@
           "observation": "Object reference parameter 'id' discovered in /api/v1/users"
         }
       ],
-      "timestamp": 1793132141.0139432
+      "timestamp": 1793656077.0822442
     },
     "review_notes": "Web review complete; verified 5 endpoints.",
     "review_passed": true,
-    "created_at": 1793132141.0083306,
-    "started_at": 1793132141.0109475,
-    "completed_at": 1793132141.0476747
+    "created_at": 1793656077.07551,
+    "started_at": 1793656077.07824,
+    "completed_at": 1793656077.1085565
   },
   {
-    "task_id": "TASK-A27204",
+    "task_id": "TASK-93D4E9",
     "title": "API Parameter Map",
     "team": "API",
     "owner_agent": "APIWorker_1",
@@ -678,8 +842,8 @@
     "retry_count": 0,
     "max_retries": 2,
     "result": {
-      "execution_id": "EXEC-BD754D",
-      "task_id": "TASK-A27204",
+      "execution_id": "EXEC-FB72B7",
+      "task_id": "TASK-93D4E9",
       "tool_name": "ParameterIntelligenceAgent",
       "action": "parameter_intelligence",
       "target": "https://target.com/api/v1/users/{id}",
@@ -711,7 +875,7 @@
       "error_category": "",
       "evidence_artifacts": [
         {
-          "evidence_id": "EV-52BACA",
+          "evidence_id": "EV-3341A0",
           "significance": "ANOMALY",
           "source_tool": "ParameterIntelligenceAgent",
           "target": "https://target.com/api/v1/users/{id}",
@@ -722,10 +886,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0556872
+          "timestamp": 1793656077.1164207
         },
         {
-          "evidence_id": "EV-DF85DC",
+          "evidence_id": "EV-576672",
           "significance": "ANOMALY",
           "source_tool": "ParameterIntelligenceAgent",
           "target": "https://target.com/api/v1/users/{id}",
@@ -736,7 +900,7 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0556872
+          "timestamp": 1793656077.1164207
         }
       ],
       "covered_items": [
@@ -756,16 +920,16 @@
           "observation": "Object parameter 'id' on https://target.com/api/v1/users/{id} requires differential authorization validation"
         }
       ],
-      "timestamp": 1793132141.0556872
+      "timestamp": 1793656077.1164207
     },
     "review_notes": "API review complete; validated 1 routes/parameters.",
     "review_passed": true,
-    "created_at": 1793132141.0476747,
-    "started_at": 1793132141.0516734,
-    "completed_at": 1793132141.0662966
+    "created_at": 1793656077.1085565,
+    "started_at": 1793656077.1124072,
+    "completed_at": 1793656077.1264412
   },
   {
-    "task_id": "TASK-97FCAD",
+    "task_id": "TASK-C46221",
     "title": "JS Route Extract",
     "team": "JAVASCRIPT",
     "owner_agent": "JSWorker_1",
@@ -781,8 +945,8 @@
     "retry_count": 0,
     "max_retries": 2,
     "result": {
-      "execution_id": "EXEC-97DF57",
-      "task_id": "TASK-97FCAD",
+      "execution_id": "EXEC-02EC2C",
+      "task_id": "TASK-C46221",
       "tool_name": "RouteExtractionAgent",
       "action": "route_extraction",
       "target": "https://target.com/static/main.js",
@@ -804,7 +968,7 @@
       "error_category": "",
       "evidence_artifacts": [
         {
-          "evidence_id": "EV-5A716E",
+          "evidence_id": "EV-C32643",
           "significance": "OBSERVATION",
           "source_tool": "RouteExtractionAgent",
           "target": "/api/v1/internal/health",
@@ -815,10 +979,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0750148
+          "timestamp": 1793656077.1354408
         },
         {
-          "evidence_id": "EV-BD5A69",
+          "evidence_id": "EV-7AEFEA",
           "significance": "OBSERVATION",
           "source_tool": "RouteExtractionAgent",
           "target": "/api/v1/admin/feature-flags",
@@ -829,10 +993,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0750148
+          "timestamp": 1793656077.1354408
         },
         {
-          "evidence_id": "EV-34C564",
+          "evidence_id": "EV-A520AC",
           "significance": "OBSERVATION",
           "source_tool": "RouteExtractionAgent",
           "target": "/api/v1/users/export",
@@ -843,10 +1007,10 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0750148
+          "timestamp": 1793656077.1354408
         },
         {
-          "evidence_id": "EV-F46D4D",
+          "evidence_id": "EV-D5A5CA",
           "significance": "OBSERVATION",
           "source_tool": "RouteExtractionAgent",
           "target": "/v2/debug/profiler",
@@ -857,7 +1021,7 @@
           "payload_used": null,
           "diff_data": {},
           "poe_verified": false,
-          "timestamp": 1793132141.0750148
+          "timestamp": 1793656077.1354408
         }
       ],
       "covered_items": [
@@ -881,16 +1045,16 @@
           "target": "/api/v1/admin/feature-flags"
         }
       ],
-      "timestamp": 1793132141.0750148
+      "timestamp": 1793656077.1354408
     },
     "review_notes": "JS bundle review complete; verified 1 files.",
     "review_passed": true,
-    "created_at": 1793132141.0662966,
-    "started_at": 1793132141.0703044,
-    "completed_at": 1793132141.085189
+    "created_at": 1793656077.1264412,
+    "started_at": 1793656077.1314404,
+    "completed_at": 1793656077.1445177
   },
   {
-    "task_id": "TASK-A1FB89",
+    "task_id": "TASK-B08CB4",
     "title": "Verify IDOR",
     "team": "VERIFICATION",
     "owner_agent": "VerifierWorker_1",
@@ -909,8 +1073,8 @@
     "retry_count": 0,
     "max_retries": 2,
     "result": {
-      "execution_id": "EXEC-1CCEDB",
-      "task_id": "TASK-A1FB89",
+      "execution_id": "EXEC-7B8802",
+      "task_id": "TASK-B08CB4",
       "tool_name": "CausalVerificationAgent",
       "action": "verify_finding",
       "target": "https://target.com/api/v1/users/456",
@@ -929,7 +1093,7 @@
       "error_category": "",
       "evidence_artifacts": [
         {
-          "evidence_id": "EV-0A19CF",
+          "evidence_id": "EV-2EC24E",
           "significance": "PROOF",
           "source_tool": "CausalVerificationAgent",
           "target": "https://target.com/api/v1/users/456",
@@ -944,7 +1108,7 @@
             "delta_bytes": 29
           },
           "poe_verified": true,
-          "timestamp": 1793132141.0967216
+          "timestamp": 1793656077.1545281
         }
       ],
       "covered_items": [
@@ -959,16 +1123,16 @@
           "target": "https://target.com/api/v1/users/456"
         }
       ],
-      "timestamp": 1793132141.0967216
+      "timestamp": 1793656077.1545281
     },
-    "review_notes": "EvidenceCourt confirmed finding judg_f8a1c078 (Verdict: CONFIRMED, proof=DERIVED)",
+    "review_notes": "EvidenceCourt confirmed finding judg_f0219ca1 (Verdict: CONFIRMED, proof=DERIVED)",
     "review_passed": true,
-    "created_at": 1793132141.0857584,
-    "started_at": 1793132141.0917556,
-    "completed_at": 1793132142.8289611
+    "created_at": 1793656077.1445177,
+    "started_at": 1793656077.149515,
+    "completed_at": 1793656085.617285
   },
   {
-    "task_id": "TASK-F8B7A7",
+    "task_id": "TASK-F31813",
     "title": "Self Review Probe",
     "team": "WEB",
     "owner_agent": "Agent_Narcissus",
@@ -986,8 +1150,8 @@
     "result": null,
     "review_notes": "",
     "review_passed": null,
-    "created_at": 1793132142.8289611,
-    "started_at": 1793132142.8349254,
+    "created_at": 1793656085.617285,
+    "started_at": 1793656085.6232767,
     "completed_at": null
   }
 ]
