@@ -880,6 +880,16 @@ async def analyze_http_traffic(req: Request):
 
 
 # ── Dynamic Skill Memory & Triage API ────────────────────────
+@app.get("/api/skills/catalog")
+async def get_skills_catalog(category: Optional[str] = None, layer: Optional[str] = None):
+    """قائمة المهارات الكاملة عبر جميع طبقات النظام (133+ مهارة)"""
+    from core.skills.skill_matrix_viewer import SkillMatrixViewer
+    return {
+        "summary": SkillMatrixViewer.get_summary_stats(),
+        "skills": SkillMatrixViewer.list_all_skills(category=category, layer=layer)
+    }
+
+
 @app.get("/api/skills")
 async def list_skills():
     """عرض كافة المهارات والتقنيات المحفوظة في ذاكرة الـ AI"""
