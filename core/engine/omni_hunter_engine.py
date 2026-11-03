@@ -24,6 +24,7 @@ from core.engine.real_tool_adapter import RealToolAdapter
 from core.auth.identity_matrix import DualIdentityMatrix, IdentityContext
 from core.oob.oob_engine import OOBEngine
 from core.engine.poc_bundle_generator import PoCBundleGenerator, FindingContext
+from core.cognitive.cognitive_deliberator import CognitiveDeliberator, StrategicDeliberation
 
 
 import logging
@@ -119,6 +120,7 @@ class AssessmentConfig:
     oob_callback_domain: str = "oob.hunterai.internal"
     generate_poc_bundles: bool = True
     force_tool_fallback: bool = False
+    enable_thinking: bool = False
     notes: str = ""
 
 
@@ -228,6 +230,7 @@ class OmniHunterEngine:
             snapshot_dir=config.snapshot_dir,
         )
         self.planner = InformationGainPlanner()
+        self.deliberator = CognitiveDeliberator()
         self.tool_adapter = RealToolAdapter(force_fallback=config.force_tool_fallback)
         self.identity_matrix = DualIdentityMatrix(user_attacker=config.auth_user_a, user_victim=config.auth_user_b)
         self.oob_engine = OOBEngine(callback_domain=config.oob_callback_domain) if config.enable_oob else None
@@ -626,6 +629,17 @@ class OmniHunterEngine:
 
         for cycle, phase in enumerate(PHASE_ORDER):
             self.current_phase = phase
+
+            # Cognitive Multi-Hypothesis Deliberation before Phase execution
+            if self.deliberator:
+                delib = self.deliberator.deliberate_strategy(
+                    target=self.config.target_url,
+                    objective=f"Advance Phase {phase.value} and discover actionable leads",
+                    surface=self.surface,
+                    current_findings=self.confirmed_findings,
+                )
+                if self.config.enable_thinking:
+                    print(self.deliberator.format_strategic_trace(delib))
 
             # Watchdog health tick before phase
             watchdog_res = self.watchdog.tick()
