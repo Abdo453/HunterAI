@@ -2522,3 +2522,230 @@ async def list_cloud_metadata_matrix():
     ]
 
 
+
+
+# ── Universal Kali Arsenal & MCP APIs ────────────────────────────────────────
+
+@app.get("/api/arsenal/tools")
+async def get_arsenal_tools(category: Optional[str] = None):
+    """Returns complete Kali Linux Tool Catalog and installation status."""
+    from core.arsenal import ToolAgentFactory
+    factory = ToolAgentFactory()
+    tools = factory.list_arsenal_status()
+    if category:
+        tools = [t for t in tools if t["category"].lower() == category.lower()]
+    return {
+        "total": len(tools),
+        "installed": sum(1 for t in tools if t["installed"]),
+        "tools": tools,
+    }
+
+
+@app.get("/api/arsenal/tool/{tool_name}")
+async def get_arsenal_tool_detail(tool_name: str):
+    """Returns agent persona, system prompt, and MCP JSON schema for tool."""
+    from core.arsenal import ToolAgentFactory
+    factory = ToolAgentFactory()
+    agent = factory.get_agent(tool_name)
+    if not agent:
+        return JSONResponse(status_code=404, content={"error": f"Tool '{tool_name}' not found"})
+    return {
+        "name": agent.tool_def.name,
+        "binary": agent.tool_def.binary_name,
+        "package": agent.tool_def.kali_package,
+        "category": agent.tool_def.category.value,
+        "description": agent.tool_def.description,
+        "risk_level": agent.tool_def.risk_level,
+        "default_args": agent.tool_def.default_args,
+        "installed": factory.adapter.is_tool_available(agent.tool_def.binary_name),
+        "system_prompt": agent.system_prompt,
+        "mcp_schema": agent.skill.to_mcp_tool_schema(),
+    }
+
+
+@app.post("/api/arsenal/run")
+async def run_arsenal_tool(req: Request):
+    """Executes a Kali tool via DynamicToolAgent with tactical deliberation."""
+    data = await req.json()
+    tool_name = data.get("tool")
+    target = data.get("target")
+    if not tool_name or not target:
+        return JSONResponse(status_code=400, content={"error": "Both 'tool' and 'target' are required"})
+
+    extra_args = data.get("extra_args")
+    fallback = data.get("force_fallback", False)
+    verbose_thinking = data.get("thinking", True)
+
+    from core.arsenal import ToolAgentFactory
+    factory = ToolAgentFactory()
+    agent = factory.get_agent(tool_name)
+    if not agent:
+        return JSONResponse(status_code=404, content={"error": f"Tool '{tool_name}' not found"})
+
+    res = await asyncio.to_thread(
+        agent.execute,
+        target=target,
+        extra_args=extra_args,
+        force_fallback=fallback,
+        deliberate=True,
+        verbose_thinking=False,
+    )
+    return {
+        "tool": res.tool_name,
+        "target": res.target,
+        "success": res.success,
+        "exit_code": res.exit_code,
+        "used_fallback": res.used_fallback,
+        "duration_secs": round(res.duration_secs, 2),
+        "stdout": res.stdout,
+        "stderr": res.stderr,
+        "structured_data": res.structured_data,
+    }
+
+
+# ── Cognitive Reasoning & CoT APIs ──────────────────────────────────────────
+
+@app.post("/api/cognitive/deliberate")
+async def deliberate_cognitive(req: Request):
+    """Runs strategic deliberation and returns competing hypotheses & CoT trace."""
+    data = await req.json()
+    target = data.get("target", "target.local")
+    objective = data.get("objective", "Autonomous surface assessment")
+    stakes = data.get("stakes", "high")
+
+    from core.cognitive.cognitive_deliberator import CognitiveDeliberator
+    deliberator = CognitiveDeliberator()
+    delib = await asyncio.to_thread(
+        deliberator.deliberate_strategy,
+        target=target,
+        objective=objective,
+        stakes=stakes,
+    )
+    return {
+        "deliberation_id": delib.deliberation_id,
+        "target": delib.target,
+        "objective": delib.objective,
+        "complexity_score": round(delib.complexity_score, 2),
+        "strategy": delib.strategy.value,
+        "thinking_mode": delib.thinking_mode.value,
+        "budget_tokens": delib.estimated_budget_tokens,
+        "hypotheses": delib.hypotheses,
+        "skepticism_notes": delib.skepticism_notes,
+        "inner_monologue": delib.inner_monologue,
+        "chosen_action_path": delib.chosen_action_path,
+        "formatted_trace": deliberator.format_strategic_trace(delib),
+    }
+
+
+# ── OmniHunter Autonomous Mission APIs ──────────────────────────────────────
+
+_OMNI_RUNS: Dict[str, Any] = {}
+
+@app.post("/api/omni/launch")
+async def launch_omni_mission(req: Request):
+    """Launches OmniHunter Autonomous OODA Pentest Mission in background."""
+    data = await req.json()
+    target = data.get("target")
+    if not target:
+        return JSONResponse(status_code=400, content={"error": "'target' is required"})
+
+    scope = data.get("scope") or [target.replace("https://", "").replace("http://", "").split("/")[0]]
+    if isinstance(scope, str):
+        scope = [s.strip() for s in scope.split(",") if s.strip()]
+
+    authorized = data.get("authorized", True)
+    enable_oob = data.get("enable_oob", True)
+    fallback = data.get("force_fallback", False)
+
+    from core.engine.omni_hunter_engine import AssessmentConfig, OmniHunterEngine
+    config = AssessmentConfig(
+        target_url=target,
+        scope_domains=scope,
+        coverage_threshold=data.get("threshold", 0.85),
+        max_cycles=data.get("max_cycles", 15),
+        enable_oob=enable_oob,
+        force_tool_fallback=fallback,
+        enable_thinking=True,
+        authorized_by="Web UI Operator" if authorized else "Unverified Operator",
+    )
+    eng_id = config.engagement_id
+    engine = OmniHunterEngine(config)
+
+    _OMNI_RUNS[eng_id] = {
+        "engagement_id": eng_id,
+        "target": target,
+        "scope": scope,
+        "status": "RUNNING",
+        "current_phase": "INIT",
+        "coverage_pct": 0.0,
+        "confirmed_findings": [],
+        "engine": engine,
+        "start_time": time.time(),
+        "result": None,
+    }
+
+    async def _run_job():
+        try:
+            res = await asyncio.to_thread(engine.run)
+            _OMNI_RUNS[eng_id]["status"] = "COMPLETED"
+            _OMNI_RUNS[eng_id]["result"] = {
+                "phase_reached": res.phase_reached.value,
+                "coverage_pct": res.coverage_pct,
+                "confirmed_findings": res.confirmed_findings,
+                "total_tasks": res.total_tasks,
+                "completed_tasks": res.completed_tasks,
+                "duration_secs": round(res.duration_secs, 2),
+            }
+            _OMNI_RUNS[eng_id]["confirmed_findings"] = res.confirmed_findings
+            _OMNI_RUNS[eng_id]["coverage_pct"] = res.coverage_pct
+            _OMNI_RUNS[eng_id]["current_phase"] = res.phase_reached.value
+        except Exception as e:
+            _OMNI_RUNS[eng_id]["status"] = "FAILED"
+            _OMNI_RUNS[eng_id]["error"] = str(e)
+
+    asyncio.create_task(_run_job())
+    return {
+        "status": "LAUNCHED",
+        "engagement_id": eng_id,
+        "target": target,
+        "scope": scope,
+    }
+
+
+@app.get("/api/omni/status/{engagement_id}")
+async def get_omni_mission_status(engagement_id: str):
+    """Returns real-time status of an OmniHunter mission."""
+    run = _OMNI_RUNS.get(engagement_id)
+    if not run:
+        return JSONResponse(status_code=404, content={"error": f"Mission '{engagement_id}' not found"})
+    eng = run.get("engine")
+    cur_phase = eng.current_phase.value if eng else run.get("current_phase", "UNKNOWN")
+    cov = eng.ledger.testing_coverage_pct if (eng and hasattr(eng.ledger, "testing_coverage_pct")) else run.get("coverage_pct", 0.0)
+    findings = eng.confirmed_findings if eng else run.get("confirmed_findings", [])
+
+    return {
+        "engagement_id": engagement_id,
+        "target": run["target"],
+        "status": run["status"],
+        "current_phase": cur_phase,
+        "coverage_pct": round(cov, 1),
+        "confirmed_findings_count": len(findings),
+        "confirmed_findings": findings,
+        "elapsed_secs": round(time.time() - run["start_time"], 1),
+    }
+
+
+@app.get("/api/omni/findings/{engagement_id}")
+async def get_omni_findings(engagement_id: str):
+    """Returns confirmed findings and PoC bundle references."""
+    run = _OMNI_RUNS.get(engagement_id)
+    if not run:
+        return JSONResponse(status_code=404, content={"error": f"Mission '{engagement_id}' not found"})
+    eng = run.get("engine")
+    findings = eng.confirmed_findings if eng else run.get("confirmed_findings", [])
+    return {
+        "engagement_id": engagement_id,
+        "target": run["target"],
+        "count": len(findings),
+        "findings": findings,
+    }
