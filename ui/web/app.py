@@ -614,63 +614,21 @@ async def get_agent_memory(agent_name: str):
 
 @app.post("/api/browser/browse")
 async def browser_browse(req: Request):
-    """فتح وتحكم في المتصفح تلقائياً (Firefox, Chrome, Chromium, Edge) وفحص الـ DOM وتوجيه الترافيك لـ Burp Suite"""
+    """Active interactive browser exploration using Playwright."""
     data = await req.json()
     url = data.get("url", "").strip()
-    visible = data.get("visible", True)
-    browser_pref = data.get("browser", "auto")
-    proxy = data.get("proxy", "127.0.0.1:8080" if data.get("use_proxy", False) else None)
+    visible = data.get("visible", False)
+    canary = data.get("canary", "hunter_canary_probe_1337")
 
     if not url:
         return JSONResponse(status_code=400, content={"error": "URL required"})
-    if not url.startswith("http"):
-        url = f"http://{url}"
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = f"https://{url}"
 
-    from tools.browser_tools import BrowserController
-    bc = BrowserController(headless=not visible, proxy=proxy)
-    started = bc.start(visible=visible, preferred_browser=browser_pref)
-    if not started:
-        avail = bc.detect_available_browsers()
-        return JSONResponse(status_code=500, content={
-            "error": "لم يتم العثور على أي متصفح مدعوم (Firefox, Chrome, Chromium, Edge). يرجى التأكد من تثبيت المتصفح والـ driver.",
-            "detected_browsers": avail
-        })
-
-    try:
-        bc.navigate(url)
-        title = bc.get_title()
-        curr_url = bc.get_current_url()
-        elements = bc.find_interactive_elements()
-        cookies = bc.get_cookies()
-        screenshot_path = bc.screenshot()
-        
-        # Execute actions if provided
-        action_results = []
-        for act in data.get("actions", []):
-            atype = act.get("type")
-            if atype == "click" and act.get("selector"):
-                from selenium.webdriver.common.by import By
-                ok = bc.click_element(By.CSS_SELECTOR, act["selector"])
-                action_results.append({"action": "click", "selector": act["selector"], "success": ok})
-            elif atype == "fill" and act.get("selector"):
-                ok = bc.fill_input(act["selector"], act.get("text", ""))
-                action_results.append({"action": "fill", "selector": act["selector"], "success": ok})
-
-        return {
-            "status": "success",
-            "active_browser": bc.active_browser or "Browser",
-            "url": curr_url,
-            "title": title,
-            "interactive_elements": elements,
-            "cookies_count": len(cookies),
-            "screenshot": screenshot_path,
-            "actions_executed": action_results,
-            "proxy_active": proxy is not None
-        }
-    finally:
-        if visible:
-            await asyncio.sleep(2)
-        bc.stop()
+    from core.browser.active_browser_agent import ActiveBrowserAgent
+    agent = ActiveBrowserAgent(headless=not visible, max_actions=20, timeout_secs=35.0)
+    report = await agent.explore_and_interact(target_url=url, canary_payload=canary)
+    return report.to_dict()
 
 
 @app.post("/api/waf-check")
@@ -2655,6 +2613,7 @@ async def launch_omni_mission(req: Request):
 
     authorized = data.get("authorized", True)
     enable_oob = data.get("enable_oob", True)
+    enable_browser = data.get("enable_browser", False)
     fallback = data.get("force_fallback", False)
 
     from core.engine.omni_hunter_engine import AssessmentConfig, OmniHunterEngine
@@ -2664,6 +2623,7 @@ async def launch_omni_mission(req: Request):
         coverage_threshold=data.get("threshold", 0.85),
         max_cycles=data.get("max_cycles", 15),
         enable_oob=enable_oob,
+        enable_browser=enable_browser,
         force_tool_fallback=fallback,
         enable_thinking=True,
         authorized_by="Web UI Operator" if authorized else "Unverified Operator",

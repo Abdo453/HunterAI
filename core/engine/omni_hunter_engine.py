@@ -121,6 +121,7 @@ class AssessmentConfig:
     generate_poc_bundles: bool = True
     force_tool_fallback: bool = False
     enable_thinking: bool = False
+    enable_browser: bool = False
     notes: str = ""
 
 
@@ -381,6 +382,32 @@ class OmniHunterEngine:
 
             reviewer = WebReviewAgent()
             reviewer.review(task, self.ledger)
+
+        # Autonomous Active Browser Exploration (Playwright SPA interaction)
+        if getattr(self.config, "enable_browser", False):
+            logger.info("[OmniHunter] Launching ActiveBrowserAgent for dynamic SPA exploration on %s", self.config.target_url)
+            try:
+                from core.browser.active_browser_agent import run_browser_exploration_sync
+                b_report = run_browser_exploration_sync(
+                    self.config.target_url,
+                    cookies=self.config.session_cookies,
+                    headers=self.config.auth_headers,
+                    headless=True,
+                )
+                if b_report and b_report.success:
+                    logger.info("[OmniHunter] Active browser executed %d actions, visited %d pages, intercepted %d APIs",
+                                len(b_report.actions_performed), len(b_report.pages_visited), len(b_report.intercepted_api_endpoints))
+                    for ep_item in b_report.intercepted_api_endpoints:
+                        ep_url = ep_item.get("url", "")
+                        if ep_url and ep_url not in self.surface["endpoints"]:
+                            self.surface["endpoints"].append(ep_url)
+                            self.ledger.record_discovery(AssetType.ENDPOINT, ep_url)
+                    for p_url in b_report.pages_visited:
+                        if p_url and p_url not in self.surface["endpoints"]:
+                            self.surface["endpoints"].append(p_url)
+                            self.ledger.record_discovery(AssetType.ENDPOINT, p_url)
+            except Exception as b_err:
+                logger.warning("[OmniHunter] ActiveBrowserAgent note: %s", b_err)
 
         self._save_checkpoint()
 
