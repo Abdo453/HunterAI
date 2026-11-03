@@ -383,15 +383,14 @@ class OmniHunterEngine:
             reviewer = WebReviewAgent()
             reviewer.review(task, self.ledger)
 
-        # Autonomous Active Browser Exploration (Playwright SPA interaction)
+        # Autonomous Active Browser Exploration (Playwright SPA interaction with AI Operator)
         if getattr(self.config, "enable_browser", False):
-            logger.info("[OmniHunter] Launching ActiveBrowserAgent for dynamic SPA exploration on %s", self.config.target_url)
+            logger.info("[OmniHunter] Launching AIBrowserOperator for dynamic AI-driven exploration on %s", self.config.target_url)
             try:
-                from core.browser.active_browser_agent import run_browser_exploration_sync
-                b_report = run_browser_exploration_sync(
+                from core.browser.ai_browser_operator import run_ai_browser_session_sync
+                b_report = run_ai_browser_session_sync(
                     self.config.target_url,
-                    cookies=self.config.session_cookies,
-                    headers=self.config.auth_headers,
+                    objective=f"Deep SPA surface exploration on {self.config.target_url}",
                     headless=True,
                 )
                 if b_report and b_report.success:

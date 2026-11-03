@@ -614,21 +614,29 @@ async def get_agent_memory(agent_name: str):
 
 @app.post("/api/browser/browse")
 async def browser_browse(req: Request):
-    """Active interactive browser exploration using Playwright."""
+    """Active interactive browser exploration with AI Autonomous control."""
     data = await req.json()
     url = data.get("url", "").strip()
     visible = data.get("visible", False)
     canary = data.get("canary", "hunter_canary_probe_1337")
+    use_ai = data.get("use_ai", True)
+    objective = data.get("objective", "Audit application surface, discover hidden endpoints and test input fields")
 
     if not url:
         return JSONResponse(status_code=400, content={"error": "URL required"})
     if not url.startswith("http://") and not url.startswith("https://"):
         url = f"https://{url}"
 
-    from core.browser.active_browser_agent import ActiveBrowserAgent
-    agent = ActiveBrowserAgent(headless=not visible, max_actions=20, timeout_secs=35.0)
-    report = await agent.explore_and_interact(target_url=url, canary_payload=canary)
-    return report.to_dict()
+    if use_ai:
+        from core.browser.ai_browser_operator import AIBrowserOperator
+        operator = AIBrowserOperator(headless=not visible, max_steps=8, timeout_secs=35.0)
+        report = await operator.run_ai_browser_session(target_url=url, security_objective=objective)
+        return report.to_dict()
+    else:
+        from core.browser.active_browser_agent import ActiveBrowserAgent
+        agent = ActiveBrowserAgent(headless=not visible, max_actions=20, timeout_secs=35.0)
+        report = await agent.explore_and_interact(target_url=url, canary_payload=canary)
+        return report.to_dict()
 
 
 @app.post("/api/waf-check")
