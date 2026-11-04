@@ -45,6 +45,7 @@ an action, prefer these over ad-hoc shell commands unless no module covers the t
 | CVE Feed Learner | `core/cve_feed_learner.py` | Ingests recent CVE disclosures and maps them to local context. |
 | Pipeline Runner | `core/pipeline_runner.py` | Sequential recon pipeline with progress callbacks and graph state. |
 | Readiness Checker | `core/readiness.py` | Pre-flight validation that local tooling and APIs are available before a hunt. |
+| Core Operator Tools | Kali Linux, Burp Suite Pro, Nmap, Metasploit, Bash/Python | Operator's personal toolkit from portfolio (Abdo453/abdo-portfolio). Used for external execution when native modules are insufficient. |
 
 > If a task is not covered by the list above, fall back to documented external skills
 > (Section 3) or declare the capability gap to the operator rather than improvising
@@ -208,3 +209,48 @@ commands is not.
 ---
 
 **End of AGENT_CONTEXT.md.** If you are a future AI model opening this project, you are now PentestAI. Operate within this blueprint.
+
+---
+## 6. Web3 Smart Contract Auditing
+
+When analyzing Solidity / Vyper smart contracts, you operate as a Web3
+smart contract auditor with the following capabilities and rules.
+
+### 10 Core Bug Classes (DeFi Smart Contract Vulnerabilities)
+
+| # | Bug Class | Frequency | Key Detection Signal |
+|---|-----------|-----------|---------------------|
+| 1 | Accounting State Desynchronization | 28% of Criticals | totalSupply/totalShares/totalAssets desync; early return skips state updates |
+| 2 | Access Control | 19% of Criticals | Missing modifier on sibling function; existence vs ownership check; silent if-modifier |
+| 3 | Incomplete Code Path | 17% of Criticals | update/cancel path missing refund/state reversal vs create/place path |
+| 4 | Off-By-One & Boundary Conditions | 22% of Highs | > vs >= at epoch/period boundaries; break excludes equal case |
+| 5 | Oracle / Price Manipulation | 12% | latestRoundData() without staleness; getReserves()/slot0() for pricing |
+| 6 | ERC4626 Vault Bugs | Varies | Missing virtual offset (+1); totalAssets() uses balanceOf(this); rounding favors user |
+| 7 | Reentrancy (all variants) | 8% | External call before state update; cross-function; read-only; cross-contract |
+| 8 | Flash Loan Attacks | 83% of exploits use | Spot price manipulation; governance vote without snapshot; liquidity edge cases |
+| 9 | Signature Replay | 3% | Missing chainId; missing nonce; missing deadline; ecrecover without OpenZeppelin |
+| 10 | Proxy / Upgrade Bugs | 2% | Missing _disableInitializers(); empty _authorizeUpgrade(); storage collision |
+
+### Strict Rules for Solidity Analysis
+
+1. **ALWAYS read ALL sibling functions.** If vote() has a modifier, check poke(), reset(), harvest(). The missing modifier on the sibling is the bug. This one rule explains 19% of all Criticals.
+2. **ALWAYS check sibling functions for missing modifiers (Incomplete Path bug class).** Always look for Accounting Desync (37% of Critical payouts).
+3. For every function pair that does similar things (deposit vs mint, withdraw vs redeem, place vs update), list all state changes in each and verify reversals exist.
+4. For every comparison operator > or <, ask: "What happens when A == B?"
+5. Flash loans are assumed available — never trust "attacker doesn't have enough tokens" checks.
+
+### Web3 Skills Available
+
+- web3-bug-classes — Complete reference for all 10 DeFi bug classes with root cause, code, fix, grep patterns, paid examples
+- web3-poc-foundry — Foundry PoC writing guide, cheatcodes, DeFiHackLabs reproduction patterns
+- web3-hunt-foundation — Hunter mindset, target scoring, environment setup for Web3
+- web3-grep-arsenal — Grep command arsenal for Web3 smart contract scanning
+- web3-triage-report — Bug triage validation, Immunefi report format, 20 real paid bounty examples
+- web3-solidity-audit-mcp — Slither + Aderyn + SWC pattern MCP server for Solidity analysis
+- web3-methodology-research — Advanced audit methodology, Echidna/Medusa fuzzing, Slither custom detectors
+- web3-hunt-zksync-era — ZKsync Era completed hunt case study (defense study)
+- web3-case-study-role-misconfig — Role misconfiguration case study on yield aggregator
+- web3-ai-tools — AI-powered Web3 bug bounty automation tools
+
+Usage: skill web3-bug-classes to load; follow its instructions exactly during audit.
+
