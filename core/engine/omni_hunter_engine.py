@@ -133,6 +133,7 @@ class AssessmentConfig:
     enable_elite_skills: bool = True
     proxy: Optional[str] = None
     resume_engagement_id: Optional[str] = None
+    burp_log_file: Optional[str] = None
     notes: str = ""
     # Autonomy: when True, high-risk actions that are cryptographically
     # verified IN-SCOPE by the RedTeamPolicyEngine are auto-approved instead of
@@ -582,6 +583,45 @@ class OmniHunterEngine:
                 from skills.base_skill import SkillContext
                 from core.workspace_manager import WorkspaceManager
                 from tools.tool_manager import ToolManager
+
+                # 0. Professional Burp Log & Traffic Inspector
+                try:
+                    from skills.burp.burp_log_inspector.skill import BurpLogInspectorSkill
+                    insp_ctx = SkillContext(
+                        target=self.config.target_url,
+                        session_id=self.config.engagement_id,
+                        workspace=WorkspaceManager(self.config.snapshot_dir),
+                        tool_manager=ToolManager(),
+                        extra={
+                            "log_file": getattr(self.config, "burp_log_file", None),
+                            "burp_port": 8085,
+                        }
+                    )
+                    insp_skill = BurpLogInspectorSkill()
+                    insp_res = asyncio.run(insp_skill.execute(insp_ctx))
+                    if insp_res.success:
+                        for new_ep in insp_res.metadata.get("discovered_endpoints", []):
+                            if new_ep not in self.surface["endpoints"]:
+                                self.surface["endpoints"].append(new_ep)
+                                self.ledger.record_discovery(AssetType.ENDPOINT, new_ep)
+                        for new_api in insp_res.metadata.get("discovered_apis", []):
+                            if new_api not in self.surface["apis"]:
+                                self.surface["apis"].append(new_api)
+                                self.ledger.record_discovery(AssetType.API, new_api)
+                        for bf in insp_res.findings:
+                            self.confirmed_findings.append({
+                                "vuln_class": bf.get("type", "BURP_INSPECTION_FINDING"),
+                                "target": bf.get("url", self.config.target_url),
+                                "verdict": "CONFIRMED",
+                                "confidence": 0.90,
+                                "title": bf.get("title", "Burp Telemetry Finding"),
+                                "evidence": bf.get("evidence", ""),
+                                "timestamp": time.time(),
+                            })
+                        logger.info("[OmniHunter] BurpLogInspector ingested %d endpoints and %d findings",
+                                    len(insp_res.metadata.get("discovered_endpoints", [])), len(insp_res.findings))
+                except Exception as insp_err:
+                    logger.debug("[OmniHunter] BurpLogInspector note: %s", insp_err)
 
                 # 1. Burp Request Mutation & Differential Analysis
                 try:

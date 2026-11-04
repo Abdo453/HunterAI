@@ -1,0 +1,21 @@
+name: burp_log_inspector
+class: BurpLogInspectorSkill
+category: burp
+description: "Professional Burp Suite log and HTTP history inspector -- parses XML items, JSON captures, HAR, and live proxy logs to detect secrets, classify attack parameters, detect BOLA/IDOR, and reconstruct attack surfaces"
+version: "2.0"
+input:
+  - target: str
+  - log_file: str
+  - burp_port: int
+  - min_risk_score: float
+output:
+  - burp_log_findings.json
+  - burp_attack_surface.json
+  - burp_log_analysis_report.md
+depends_on: []
+next_skills: [exploit_chain_builder, triage_gate]
+fallback_skills: [endpoint_discovery]
+tools_required: []
+timeout_seconds: 180
+max_retries: 1
+enabled: true

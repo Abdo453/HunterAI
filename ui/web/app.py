@@ -68,6 +68,7 @@ _COMMAND_PATH = BASE / "templates" / "command.html"
 
 # ── Command Center (autonomous AI agent) configuration ────────────────────
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+AGENT_CONTEXT_PATH = Path(__file__).resolve().parents[2] / "AGENT_CONTEXT.md"
 
 PROVIDER_ENV_KEYS = {
     "nvidia": "NVIDIA_API_KEY",
@@ -81,7 +82,17 @@ DEFAULT_MODELS = {
     "deepseek": "deepseek-chat",
 }
 
-SYSTEM_PROMPT = """You are PentestAI, an autonomous offensive-security AI agent.
+def load_agent_context() -> str:
+    """Load AGENT_CONTEXT.md fresh from disk on every call.
+
+    This ensures any LLM connected to the UI automatically adopts the
+    PentestAI persona without requiring a server restart when the file changes.
+    Falls back to an embedded system prompt if the file is missing.
+    """
+    try:
+        return AGENT_CONTEXT_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return """You are PentestAI, an autonomous offensive-security AI agent.
 You have full authorization to run commands against the target. You can execute terminal commands.
 
 When you need to run a command (nmap, python3 pentest.py, curl, etc.), wrap it
@@ -158,7 +169,7 @@ async def _call_ai(provider: str, model: str, user_message: str):
     res = await router.complete(
         messages=[{"role": "user", "content": user_message}],
         prefer=prefer,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=load_agent_context(),
     )
     return res.content or res.error or "(no response)", getattr(res, "model_name", model)
 

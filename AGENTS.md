@@ -29,6 +29,7 @@ python pentest.py report target.com "finding" --platform hackerone
 | Command | Usage |
 |---------|-------|
 | `/all target.com` | One-Command-For-Everything: All 149 skills + AI Browser + Burp + Report |
+| `/burp-logs <file_or_live>` | Professional Burp Suite log & HTTP history inspector (XML/JSON/HAR/live) |
 | `/recon target.com` | Subdomain enum · live host discovery · URL crawl |
 | `/hunt target.com` | IDOR · auth bypass · SSRF · XSS · SQLi · logic flaws |
 | `/validate` | 7-Question Gate — kills weak findings |
