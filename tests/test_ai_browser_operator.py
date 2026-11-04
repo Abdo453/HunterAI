@@ -225,8 +225,8 @@ def test_loop_detection_and_unvisited_affordance_selection():
 
 
 def test_synthetic_exploration_includes_advanced_telemetry():
-    """Verify report contains DOM XSS candidates, State Graph summary, and WebSockets."""
-    operator = AIBrowserOperator()
+    """Verify report contains DOM XSS candidates, State Graph summary, WebSockets, and DOM mutations."""
+    operator = AIBrowserOperator(session_storage_file="data/sessions/test_state.json")
     report = operator._synthetic_ai_exploration("https://elite-target.corp", "Autonomous hunt")
 
     assert report.state_graph_summary is not None
@@ -235,4 +235,7 @@ def test_synthetic_exploration_includes_advanced_telemetry():
     assert report.dom_xss_candidates[0]["sink"] == "Element.innerHTML"
     assert len(report.intercepted_websockets) > 0
     assert "wss://" in report.intercepted_websockets[0]["url"]
+    assert len(report.dom_mutations) > 0
+    assert report.dom_mutations[0]["diff"]["has_changes"] is True
+    assert operator.session_storage_file == "data/sessions/test_state.json"
 

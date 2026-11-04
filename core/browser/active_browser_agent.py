@@ -21,6 +21,15 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
+from core.autonomous_hunter import (
+    ExploitResult,
+    InterceptedAPI,
+    is_authorized,
+    push_to_vector_memory,
+    save_intercepted_api,
+    trigger_exploit,
+)
+
 logger = logging.getLogger("hunter_ai.active_browser_agent")
 
 try:
@@ -64,6 +73,8 @@ class ActiveBrowserReport:
     state_graph_summary: Optional[Dict[str, Any]] = None
     intercepted_websockets: List[Dict[str, Any]] = field(default_factory=list)
     dual_session_idor_candidates: List[Dict[str, Any]] = field(default_factory=list)
+    exploit_findings: List[Dict[str, Any]] = field(default_factory=list)
+    dom_mutations: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -169,6 +180,22 @@ class ActiveBrowserAgent:
                         "resource_type": req.resource_type,
                         "headers": dict(req.headers),
                     })
+
+                    # Auto-handover to Exploit Engine: persist + push to Vector Memory
+                    # (network exploitation is deferred to post-exploration to avoid blocking the browser)
+                    try:
+                        _api = InterceptedAPI(
+                            url=url,
+                            method=req.method,
+                            headers=dict(req.headers),
+                            body=None,
+                            params={},
+                            source="active_browser_agent",
+                        )
+                        save_intercepted_api(_api)
+                        push_to_vector_memory(_api, [])
+                    except Exception:
+                        pass
 
             page.on("request", handle_request)
 
@@ -276,6 +303,26 @@ class ActiveBrowserAgent:
                 f"{action_count} actions executed, {len(self._intercepted_apis)} APIs intercepted in {duration}s."
             )
 
+            # ── 6. Exploit Handover: auto-trigger exploit engine on intercepted APIs ──
+            exploit_findings: List[Dict[str, Any]] = []
+            for api_dict in self._intercepted_apis:
+                try:
+                    if not is_authorized(api_dict["url"]):
+                        continue
+                    results = trigger_exploit(api_dict, authorized=True)
+                    for r in results:
+                        exploit_findings.append({
+                            "url": api_dict["url"],
+                            "method": api_dict["method"],
+                            "param": r.param,
+                            "vuln_type": r.vuln_type,
+                            "evidence": r.evidence,
+                            "confirmed": r.confirmed,
+                            "payload_used": r.payload_used,
+                        })
+                except Exception as exc:
+                    logger.debug("Exploit handover skipped for %s: %s", api_dict.get("url"), exc)
+
             return ActiveBrowserReport(
                 target_url=target_url,
                 title=page_title,
@@ -291,6 +338,8 @@ class ActiveBrowserAgent:
                 dom_xss_candidates=dom_xss_signals,
                 screenshot_path=str(screenshot_file),
                 success=True,
+                state_graph_summary=None,
+                exploit_findings=exploit_findings,
             )
 
         except Exception as exc:

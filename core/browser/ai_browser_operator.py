@@ -27,6 +27,7 @@ from urllib.parse import urlparse
 from core.ai_reasoning_core import AIReasoningCore
 from core.browser.active_browser_agent import ActiveBrowserReport, BrowserInteractionEvent, PLAYWRIGHT_READY
 from core.browser.state_graph import ApplicationStateGraph, AppState, StateTransition
+from core.browser.dom_diff import DOMDiffEngine, DOMDiffResult
 
 if PLAYWRIGHT_READY:
     from playwright.async_api import Browser, BrowserContext, ElementHandle, Page, async_playwright
@@ -268,6 +269,7 @@ class AIBrowserOperator:
         proxy: Optional[str] = None,
         auth_context_a: Optional[Dict[str, Any]] = None,
         auth_context_b: Optional[Dict[str, Any]] = None,
+        session_storage_file: Optional[str] = None,
     ):
         self.headless = headless
         self.max_steps = max_steps
@@ -279,12 +281,14 @@ class AIBrowserOperator:
         self.proxy = proxy
         self.auth_context_a = auth_context_a
         self.auth_context_b = auth_context_b
+        self.session_storage_file = session_storage_file
 
         self._steps_log: List[AICognitiveStep] = []
         self._intercepted_apis: List[Dict[str, Any]] = []
         self._intercepted_websockets: List[Dict[str, Any]] = []
         self._dom_xss_candidates: List[Dict[str, Any]] = []
         self._dual_session_idor_candidates: List[Dict[str, Any]] = []
+        self._dom_mutations: List[Dict[str, Any]] = []
         self.state_graph: Optional[ApplicationStateGraph] = None
 
     async def _emit(self, msg: str) -> None:
@@ -339,10 +343,15 @@ class AIBrowserOperator:
             browser = await playwright.chromium.launch(**launch_kwargs)
 
             # Primary Browser Context (Attacker / User A)
-            context = await browser.new_context(
-                ignore_https_errors=True,
-                viewport={"width": 1280, "height": 800},
-            )
+            context_kwargs: Dict[str, Any] = {
+                "ignore_https_errors": True,
+                "viewport": {"width": 1280, "height": 800},
+            }
+            if self.session_storage_file and Path(self.session_storage_file).exists():
+                context_kwargs["storage_state"] = str(self.session_storage_file)
+                await self._emit(f"🔑 Restored browser session storage from {self.session_storage_file}")
+
+            context = await browser.new_context(**context_kwargs)
 
             # Inject Taint Instrumentation Script
             await context.add_init_script(TAINT_INSTRUMENTATION_SCRIPT)
@@ -491,7 +500,14 @@ class AIBrowserOperator:
                         except Exception:
                             pass
 
-                # 5. Browser Action Execution
+                # 5. Capture pre-action DOM snapshot for diffing
+                html_before = ""
+                try:
+                    html_before = await page.content()
+                except Exception:
+                    pass
+
+                # Browser Action Execution
                 await self._execute_ai_action(page, action, matched_target, val)
                 self._steps_log.append(AICognitiveStep(
                     step_num=step_idx,
@@ -503,12 +519,39 @@ class AIBrowserOperator:
                     state_id=cur_state.state_id,
                 ))
 
+                # Post-action DOM diffing
+                dom_diff_dict: Dict[str, Any] = {}
+                try:
+                    html_after = await page.content()
+                    if html_before and html_after:
+                        diff = DOMDiffEngine.diff(html_before, html_after)
+                        if diff.has_changes:
+                            dom_diff_dict = diff.to_dict()
+                            mut_parts = []
+                            if diff.new_modals:
+                                mut_parts.append(f"{len(diff.new_modals)} modal(s)")
+                            if diff.new_forms:
+                                mut_parts.append(f"{len(diff.new_forms)} form(s)")
+                            if diff.new_inputs:
+                                mut_parts.append(f"{len(diff.new_inputs)} input(s)")
+                            desc = ", ".join(mut_parts) or f"{len(diff.added_elements)} new element(s)"
+                            await self._emit(f"✨ [DOM MUTATION]: Dynamic state change: {desc}")
+                            self._dom_mutations.append({
+                                "step": step_idx,
+                                "action": action,
+                                "summary": desc,
+                                "diff": dom_diff_dict,
+                            })
+                except Exception as diff_err:
+                    logger.debug("DOM diff computation failed: %s", diff_err)
+
                 # Record transition in State Graph
                 if prev_state_id and prev_state_id != cur_state.state_id:
                     self.state_graph.record_transition(
                         from_state_id=prev_state_id,
                         to_state_id=cur_state.state_id,
                         trigger_action=f"{action} on {matched_target.selector}",
+                        dom_diff=dom_diff_dict,
                     )
                 prev_state_id = cur_state.state_id
 
@@ -555,6 +598,7 @@ class AIBrowserOperator:
                 state_graph_summary=self.state_graph.to_dict(),
                 intercepted_websockets=self._intercepted_websockets,
                 dual_session_idor_candidates=self._dual_session_idor_candidates,
+                dom_mutations=self._dom_mutations,
                 success=True,
             )
 
@@ -562,6 +606,14 @@ class AIBrowserOperator:
             logger.warning("AI browser loop exception on %s: %s (using synthetic fallback)", target_url, exc)
             return self._synthetic_ai_exploration(target_url, security_objective)
         finally:
+            if self.session_storage_file and context:
+                try:
+                    Path(self.session_storage_file).parent.mkdir(parents=True, exist_ok=True)
+                    await context.storage_state(path=str(self.session_storage_file))
+                    await self._emit(f"💾 Persisted browser session storage state to {self.session_storage_file}")
+                except Exception as save_err:
+                    logger.debug("Failed saving storage state: %s", save_err)
+
             if context_b:
                 try:
                     await context_b.close()
@@ -756,14 +808,32 @@ class AIBrowserOperator:
     # ── Action Execution ──────────────────────────────────────────────────────
 
     async def _execute_ai_action(self, page: Page, action: str, target: DOMAffordance, value: str) -> None:
-        """Executes the AI-mandated action against the live DOM."""
+        """Executes the AI-mandated action against the live DOM with multi-field form intelligence."""
         try:
             if action == "fill":
-                await self._emit(f"⚡ [AI ACTION]: Typing '{value}' into {target.selector}...")
-                el = await page.query_selector(target.selector)
-                if el:
-                    await el.fill(value)
-                    await el.press("Enter")
+                is_multi_form = False
+                try:
+                    form_inputs_count = await page.evaluate(
+                        """(sel) => {
+                            const el = document.querySelector(sel);
+                            const f = el ? el.closest('form') : null;
+                            return f ? f.querySelectorAll("input:not([type='hidden']), textarea, select").length : 0;
+                        }""",
+                        target.selector,
+                    )
+                    if form_inputs_count > 1:
+                        is_multi_form = True
+                except Exception:
+                    pass
+
+                if is_multi_form:
+                    await self._fill_form_intelligently(page, target, value)
+                else:
+                    await self._emit(f"⚡ [AI ACTION]: Typing '{value}' into {target.selector}...")
+                    el = await page.query_selector(target.selector)
+                    if el:
+                        await el.fill(value)
+                        await el.press("Enter")
             elif action in ("click", "press_enter"):
                 await self._emit(f"⚡ [AI ACTION]: Clicking on {target.selector} ('{target.text_content}')...")
                 el = await page.query_selector(target.selector)
@@ -771,6 +841,64 @@ class AIBrowserOperator:
                     await el.click(timeout=4000)
         except Exception as act_err:
             logger.debug("Failed executing AI action %s on %s: %s", action, target.selector, act_err)
+
+    async def _fill_form_intelligently(self, page: Page, target: DOMAffordance, primary_value: str) -> None:
+        """Intelligently fills all fields within the same form with contextual values and submits."""
+        try:
+            fields_meta = await page.evaluate(
+                """(sel) => {
+                    const el = document.querySelector(sel);
+                    const form = el ? el.closest('form') : null;
+                    if (!form) return [];
+                    const inputs = form.querySelectorAll("input:not([type='hidden']), textarea, select");
+                    return Array.from(inputs).map((inp, idx) => ({
+                        idx: idx,
+                        tag: inp.tagName.toLowerCase(),
+                        type: (inp.getAttribute('type') || 'text').toLowerCase(),
+                        name: inp.getAttribute('name') || inp.getAttribute('id') || '',
+                    }));
+                }""",
+                target.selector,
+            )
+            await self._emit(f"📝 [MULTI-FIELD FORM]: Detected {len(fields_meta)} form fields. Populating contextually...")
+            for f in fields_meta:
+                name_low = f["name"].lower()
+                type_low = f["type"].lower()
+                if target.name_or_id and target.name_or_id.lower() in name_low:
+                    val = primary_value
+                elif "pass" in name_low or type_low == "password":
+                    val = "HunterTest123!"
+                elif "email" in name_low or type_low == "email":
+                    val = "audit_probe@hunterai.internal"
+                elif "user" in name_low or "login" in name_low:
+                    val = "audit_user"
+                elif "search" in name_low or "query" in name_low or name_low == "q":
+                    val = primary_value or "hunter_probe"
+                elif "tel" in name_low or "phone" in name_low:
+                    val = "+15551234567"
+                elif type_low in ("number", "range"):
+                    val = "1"
+                else:
+                    val = primary_value or "hunter_canary"
+
+                sel = f"{f['tag']}[name='{f['name']}']" if f["name"] else f"form input:nth-of-type({f['idx'] + 1})"
+                try:
+                    el = await page.query_selector(sel)
+                    if el and await el.is_visible():
+                        await el.fill(val)
+                except Exception:
+                    pass
+
+            submit_btn = await page.query_selector("form button[type='submit'], form input[type='submit'], form button")
+            if submit_btn and await submit_btn.is_visible():
+                await self._emit("⚡ [AI ACTION]: Clicking form submit button...")
+                await submit_btn.click(timeout=4000)
+            else:
+                el = await page.query_selector(target.selector)
+                if el:
+                    await el.press("Enter")
+        except Exception as f_err:
+            logger.debug("Intelligent form fill error: %s", f_err)
 
     def _synthetic_ai_exploration(self, target_url: str, objective: str) -> ActiveBrowserReport:
         """Offline synthetic report for unit testing and offline environments."""
@@ -831,6 +959,14 @@ class AIBrowserOperator:
                 }
             ],
             dual_session_idor_candidates=[],
+            dom_mutations=[
+                {
+                    "step": 1,
+                    "action": "fill",
+                    "summary": "1 form(s), 2 input(s)",
+                    "diff": {"has_changes": True, "new_forms": ["/search"], "new_inputs": ["q", "submit"]},
+                }
+            ],
             screenshot_path=None,
             success=True,
         )
@@ -845,6 +981,7 @@ def run_ai_browser_session_sync(
     max_steps: int = 8,
     auth_context_a: Optional[Dict[str, Any]] = None,
     auth_context_b: Optional[Dict[str, Any]] = None,
+    session_storage_file: Optional[str] = None,
 ) -> ActiveBrowserReport:
     """Synchronous runner for AIBrowserOperator, safely executed in an isolated thread."""
     import concurrent.futures
@@ -857,6 +994,7 @@ def run_ai_browser_session_sync(
             proxy=proxy,
             auth_context_a=auth_context_a,
             auth_context_b=auth_context_b,
+            session_storage_file=session_storage_file,
         )
         return asyncio.run(operator.run_ai_browser_session(target_url, security_objective=objective))
 
