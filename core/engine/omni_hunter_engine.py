@@ -27,6 +27,7 @@ from core.engine.poc_bundle_generator import PoCBundleGenerator, FindingContext
 from core.cognitive.cognitive_deliberator import CognitiveDeliberator, StrategicDeliberation
 
 
+import asyncio
 import logging
 import time
 import uuid
@@ -120,8 +121,10 @@ class AssessmentConfig:
     oob_callback_domain: str = "oob.hunterai.internal"
     generate_poc_bundles: bool = True
     force_tool_fallback: bool = False
-    enable_thinking: bool = False
-    enable_browser: bool = False
+    enable_thinking: bool = True
+    enable_browser: bool = True
+    enable_burp: bool = True
+    enable_elite_skills: bool = True
     notes: str = ""
 
 
@@ -140,6 +143,7 @@ class AssessmentResult:
     failed_tasks: int
     duration_secs: float
     snapshot_id: Optional[str]
+    exploit_chains: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -247,6 +251,7 @@ class OmniHunterEngine:
             "services": [],
         }
         self.confirmed_findings: List[Dict[str, Any]] = []
+        self.exploit_chains: List[Dict[str, Any]] = []
         self.current_phase = AssessmentPhase.INIT
         self._start_time: float = 0.0
 
@@ -405,6 +410,37 @@ class OmniHunterEngine:
                         if p_url and p_url not in self.surface["endpoints"]:
                             self.surface["endpoints"].append(p_url)
                             self.ledger.record_discovery(AssetType.ENDPOINT, p_url)
+
+                # Automated DOM XSS Exploration against candidate endpoints
+                try:
+                    from skills.browser.dom_xss_hunter.skill import DOMXSSHunterSkill
+                    from skills.base_skill import SkillContext
+                    from core.workspace_manager import WorkspaceManager
+                    from tools.tool_manager import ToolManager
+
+                    dom_ctx = SkillContext(
+                        target=self.config.target_url,
+                        session_id=self.config.engagement_id,
+                        workspace=WorkspaceManager(self.config.snapshot_dir),
+                        tool_manager=ToolManager(),
+                        extra={"urls": self.surface["endpoints"][:10]}
+                    )
+                    dom_skill = DOMXSSHunterSkill()
+                    dom_res = asyncio.run(dom_skill.execute(dom_ctx))
+                    if dom_res.findings:
+                        for df in dom_res.findings:
+                            self.confirmed_findings.append({
+                                "vuln_class": "DOM_XSS",
+                                "target": df.get("endpoint", self.config.target_url),
+                                "verdict": "CONFIRMED",
+                                "confidence": 0.90,
+                                "title": df.get("title", "DOM XSS Vulnerability"),
+                                "evidence": df.get("evidence", "Client-side sink reflection"),
+                                "timestamp": time.time(),
+                            })
+                            logger.info("[OmniHunter] [!] Verified DOM XSS Finding: %s", df.get("title"))
+                except Exception as dom_err:
+                    logger.debug("[OmniHunter] DOM XSS note: %s", dom_err)
             except Exception as b_err:
                 logger.warning("[OmniHunter] ActiveBrowserAgent note: %s", b_err)
 
@@ -439,6 +475,79 @@ class OmniHunterEngine:
 
         reviewer = APIReviewAgent()
         reviewer.review(task, self.ledger)
+
+        # Autonomous Elite Vulnerability & Burp Skills Suite
+        if getattr(self.config, "enable_elite_skills", True) and bool(self.config.authorized_by):
+            logger.info("[OmniHunter] Executing Elite Bug Bounty Skills Suite on discovered endpoints...")
+            try:
+                from agents.skills.http_smuggling_skill import HTTPSmugglingSkill
+                from agents.skills.cache_poisoning_skill import CachePoisoningSkill
+                from agents.skills.oauth2_abuse_skill import OAuth2AbuseSkill
+                from agents.skills.prototype_pollution_skill import PrototypePollutionSkill
+                from agents.skills.path_traversal_skill import PathTraversalSkill
+                from agents.skills.jwt_advanced_skill import JWTAdvancedSkill
+                from skills.burp.request_mutator.skill import RequestMutatorSkill
+                from skills.base_skill import SkillContext
+                from core.workspace_manager import WorkspaceManager
+                from tools.tool_manager import ToolManager
+
+                # 1. Burp Request Mutation & Differential Analysis
+                try:
+                    mut_ctx = SkillContext(
+                        target=self.config.target_url,
+                        session_id=self.config.engagement_id,
+                        workspace=WorkspaceManager(self.config.snapshot_dir),
+                        tool_manager=ToolManager(),
+                        extra={"requests": [{"url": ep, "method": "GET"} for ep in self.surface["endpoints"][:8]]}
+                    )
+                    mut_skill = RequestMutatorSkill()
+                    mut_res = asyncio.run(mut_skill.execute(mut_ctx))
+                    if mut_res.findings:
+                        for mf in mut_res.findings:
+                            self.confirmed_findings.append({
+                                "vuln_class": "BUSINESS_LOGIC_MUTATION",
+                                "target": mf.get("endpoint", self.config.target_url),
+                                "verdict": "CONFIRMED",
+                                "confidence": 0.85,
+                                "title": mf.get("title", "Request Mutation Anomaly"),
+                                "evidence": mf.get("description", "Differential status code anomaly"),
+                                "timestamp": time.time(),
+                            })
+                except Exception as mut_err:
+                    logger.debug("[OmniHunter] RequestMutator note: %s", mut_err)
+
+                # 2. Elite Vulnerability Autonomous Probers
+                elite_skills = [
+                    HTTPSmugglingSkill(),
+                    CachePoisoningSkill(),
+                    OAuth2AbuseSkill(),
+                    PrototypePollutionSkill(),
+                    PathTraversalSkill(),
+                    JWTAdvancedSkill(),
+                ]
+                endpoints_to_probe = self.surface["endpoints"][:6] or [self.config.target_url]
+                for ep_url in endpoints_to_probe:
+                    for sk in elite_skills:
+                        try:
+                            sk_res = asyncio.run(sk.run(ep_url, param_name=""))
+                            if sk_res.verified:
+                                self.confirmed_findings.append({
+                                    "vuln_class": sk_res.vuln_type.upper(),
+                                    "target": ep_url,
+                                    "verdict": "CONFIRMED",
+                                    "confidence": sk_res.confidence,
+                                    "title": sk_res.title,
+                                    "evidence": sk_res.evidence,
+                                    "payload": sk_res.payload_used,
+                                    "cwe": sk_res.cwe,
+                                    "timestamp": time.time(),
+                                })
+                                logger.info("[OmniHunter] [!] Verified Elite Vulnerability: %s on %s", sk_res.vuln_type, ep_url)
+                        except Exception:
+                            pass
+            except Exception as elite_err:
+                logger.warning("[OmniHunter] Elite skills execution note: %s", elite_err)
+
         self._save_checkpoint()
 
     def _run_javascript_phase(self) -> None:
@@ -469,11 +578,12 @@ class OmniHunterEngine:
     def _run_verification_phase(self) -> None:
         logger.info("[OmniHunter] ── Phase 6: ADVERSARIAL VERIFICATION & REFUTATION ──")
         all_sched_tasks = self.scheduler.list_tasks()
-        task_list = all_sched_tasks.values() if isinstance(all_sched_tasks, dict) else all_sched_tasks
-        tasks_to_verify = [
-            t for t in task_list
-            if t.status == TaskLifecycleStatus.REVIEW
-        ]
+        task_list = list(all_sched_tasks.values()) if isinstance(all_sched_tasks, dict) else list(all_sched_tasks)
+        tasks_to_verify = []
+        for t in task_list:
+            st = t.get("status") if isinstance(t, dict) else getattr(t, "status", None)
+            if st == TaskLifecycleStatus.REVIEW or st == "REVIEW":
+                tasks_to_verify.append(t)
 
         for task in tasks_to_verify:
             if not task.result:
@@ -536,6 +646,29 @@ class OmniHunterEngine:
 
                 self.confirmed_findings.append(finding)
                 logger.info("[OmniHunter] ✓ CONFIRMED VULNERABILITY: %s on %s", vuln_class, task.target)
+
+        # Autonomous Multi-Step Exploit Chaining (A -> B -> C -> ATO)
+        if self.confirmed_findings:
+            try:
+                from skills.cognitive.exploit_chain_builder.skill import ExploitChainBuilderSkill
+                from skills.base_skill import SkillContext
+                from core.workspace_manager import WorkspaceManager
+                from tools.tool_manager import ToolManager
+
+                ec_ctx = SkillContext(
+                    target=self.config.target_url,
+                    session_id=self.config.engagement_id,
+                    workspace=WorkspaceManager(self.config.snapshot_dir),
+                    tool_manager=ToolManager(),
+                    extra={"findings": self.confirmed_findings}
+                )
+                ec_skill = ExploitChainBuilderSkill()
+                ec_res = asyncio.run(ec_skill.execute(ec_ctx))
+                self.exploit_chains = ec_res.metadata.get("chains", [])
+                if self.exploit_chains:
+                    logger.info("[OmniHunter] Successfully assembled %d multi-step exploit chains!", len(self.exploit_chains))
+            except Exception as ec_err:
+                logger.debug("[OmniHunter] ExploitChainBuilder note: %s", ec_err)
 
         self._save_checkpoint()
 
