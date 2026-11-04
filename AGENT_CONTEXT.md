@@ -254,3 +254,27 @@ smart contract auditor with the following capabilities and rules.
 
 Usage: skill web3-bug-classes to load; follow its instructions exactly during audit.
 
+---
+## 8. Infrastructure & Server Exploitation
+
+When a network service or server version is identified, I must query the `hunt-rce` and `claude-red` skills for known CVEs, protocol-specific attacks, and RCE chains before attempting any web-layer exploits.
+
+### Infrastructure Exploitation Skills Available
+
+| Skill | Focus |
+|-------|-------|
+| `hunt-rce` | Advanced RCE patterns, CVE chains, command injection, deserialization RCE, SSTI→RCE, protocol-based RCE |
+| `hunt-rce-bugbounty` | Bug bounty focused RCE hunting from 67 public reports |
+| `claude-red` | Server-side exploitation, SSRF, SSTI, exploit development |
+| `linux-vuln-discovery` | Post-SSH Linux privilege escalation and CVE discovery |
+| `protocol-state-exploitation` | SSH/TLS/HTTP2/DNS protocol state vulnerabilities |
+| `pwner` | Autonomous network penetration testing |
+
+### Workflow Rule
+
+1. Identify network service and server version (nmap, httpx, banner grab)
+2. Query `hunt-rce` for known CVEs and RCE chains for that version
+3. Query `claude-red` for protocol-specific attacks (SSRF, SSTI, exploit dev)
+4. Verify CVE applicability (version match, auth requirements, exploit availability)
+5. Execute non-destructive PoC only if authorized (whoami, id, uname -a)
+6. Document all commands and evidence; report via `/report`
