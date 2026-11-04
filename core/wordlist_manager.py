@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from core.wordlist_intelligence.agent import WordlistIntelligenceAgent
+from core.wordlist_intelligence.cognitive_resolver import CognitiveWordlistResolver, get_cognitive_resolver
 
 logger = logging.getLogger("hunter_ai.wordlists")
 
@@ -157,6 +158,54 @@ class WordlistManager:
                 "passwords.txt",
             ],
         },
+        "ai_llm": {
+            "deep": [
+                "Ai/LLM_Testing/Ethical_and_Safety_Boundaries/harmful_prompts.txt",
+                "Ai/LLM_Testing/Ethical_and_Safety_Boundaries/jailbreak_prompts.txt",
+                "Ai/LLM_Testing/Data_Leakage/personal_data.txt",
+                "Ai/LLM_Testing/Divergence_attack/escape_out_of_allignment_training.txt",
+                "Ai/LLM_Testing/Bias_Testing/gender_bias.txt",
+                "ai_llm_ethical_boundaries.txt",
+            ],
+            "standard": [
+                "Ai/LLM_Testing/Ethical_and_Safety_Boundaries/harmful_prompts.txt",
+                "Ai/LLM_Testing/Data_Leakage/personal_data.txt",
+                "ai_llm_ethical_boundaries.txt",
+            ],
+            "safe": [
+                "Ai/LLM_Testing/Ethical_and_Safety_Boundaries/harmful_prompts.txt",
+                "ai_llm_ethical_boundaries.txt",
+            ],
+        },
+        "usernames": {
+            "deep": [
+                "Usernames/Names/names.txt",
+                "Usernames/top-usernames-shortlist.txt",
+                "Usernames/cirt-default-usernames.txt",
+                "usernames.txt",
+            ],
+            "standard": [
+                "Usernames/top-usernames-shortlist.txt",
+                "Usernames/cirt-default-usernames.txt",
+                "usernames.txt",
+            ],
+            "safe": [
+                "Usernames/top-usernames-shortlist.txt",
+                "usernames.txt",
+            ],
+        },
+        "web_shells": {
+            "deep": [
+                "Web-Shells/PHP/simple-backdoor.php",
+                "Web-Shells/JSP/cmd.jsp",
+            ],
+            "standard": [
+                "Web-Shells/PHP/simple-backdoor.php",
+            ],
+            "safe": [
+                "Web-Shells/PHP/simple-backdoor.php",
+            ],
+        },
     }
 
     def __init__(self, custom_roots: Optional[List[str | Path]] = None):
@@ -183,6 +232,7 @@ class WordlistManager:
             
         self.ensure_fallbacks()
         self.intelligence = WordlistIntelligenceAgent(custom_roots=self.roots, auto_index=False)
+        self.cognitive = CognitiveWordlistResolver(custom_roots=self.roots)
 
     def get_active_roots(self) -> List[Path]:
         """Returns list of roots that actually exist on the current filesystem."""
@@ -245,6 +295,15 @@ class WordlistManager:
         # If caller passed a direct existing file path, return it immediately
         if os.path.isfile(category):
             return category
+
+        # Check Cognitive Wordlist Resolver first
+        try:
+            if hasattr(self, "cognitive") and self.cognitive:
+                res = self.cognitive.deliberate_and_resolve(category, profile=profile)
+                if res.selected_path and os.path.isfile(res.selected_path):
+                    return res.selected_path
+        except Exception:
+            pass
 
         category_key = category.lower()
         if category_key in ("web_content", "directory", "dir"):

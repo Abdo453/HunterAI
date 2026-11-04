@@ -22,6 +22,9 @@ class WordlistCategory(str, Enum):
     FUZZING = "fuzzing"
     PAYLOADS = "payloads"
     AUTHENTICATION = "authentication"
+    PASSWORDS = "passwords"
+    USERNAMES = "usernames"
+    WEBSHELLS = "web_shells"
     SECRETS = "secrets"
     LLM_SECURITY = "llm_security"
     CUSTOM = "custom"
@@ -113,4 +116,32 @@ class TargetContext:
             "discovered_words_count": len(self.discovered_words),
             "is_api_target": self.is_api_target,
             "is_llm_target": self.is_llm_target,
+        }
+
+
+@dataclass
+class WordlistResolutionResult:
+    category: str
+    need: str
+    selected_path: str
+    exists_on_disk: bool
+    line_count: int
+    source_root: str
+    tier: str
+    reasoning_trace: List[str]
+    arabic_summary: str
+    sample_preview: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "category": self.category,
+            "need": self.need,
+            "selected_path": self.selected_path,
+            "exists_on_disk": self.exists_on_disk,
+            "line_count": self.line_count,
+            "source_root": self.source_root,
+            "tier": self.tier,
+            "reasoning_trace": self.reasoning_trace,
+            "arabic_summary": self.arabic_summary,
+            "sample_preview": self.sample_preview,
         }

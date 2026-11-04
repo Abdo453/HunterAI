@@ -3099,3 +3099,28 @@ async def execute_opencode_skill(request: Request):
         "result": execution_result,
         "output": "\n".join(logs),
     }
+
+
+# ── Wordlist & SecLists Cognitive Resolution API ───────────────────────────────
+
+@app.get("/api/wordlists/resolve")
+async def resolve_cognitive_wordlist(query: str, target: Optional[str] = None, profile: str = "standard"):
+    """
+    Cognitively deliberates and resolves optimal SecLists or local wordlist path.
+    """
+    from core.wordlist_intelligence.cognitive_resolver import get_cognitive_resolver
+    resolver = get_cognitive_resolver()
+    result = resolver.deliberate_and_resolve(need=query, target=target, profile=profile)
+    return result.to_dict()
+
+
+@app.get("/api/wordlists/roots")
+async def get_wordlist_roots():
+    """Returns candidate discovery roots and active status."""
+    from core.wordlist_intelligence.cognitive_resolver import get_cognitive_resolver
+    resolver = get_cognitive_resolver()
+    return {
+        "candidate_roots": [str(r) for r in resolver.roots],
+        "active_roots": [str(r) for r in resolver.get_active_roots()],
+        "fallback_dir": str(resolver.local_fallback_dir),
+    }

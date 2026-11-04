@@ -41,6 +41,7 @@ python pentest.py report target.com "finding" --platform hackerone
 | `/opencode [target]` | Dual Master 2: All 217 skills + OpenCode Studio Hub (`http://127.0.0.1:8000/opencode`) |
 | `/all target.com` | Headless Master: All skills + AI Browser + Burp + Report |
 | `/burp-logs <file_or_live>` | Professional Burp Suite log & HTTP history inspector (XML/JSON/HAR/live) |
+| `/wordlist <query>` | Cognitive SecLists & Wordlist Resolver (AI/LLM, Passwords, Discovery, Fuzzing) |
 | `/recon target.com` | Subdomain enum · live host discovery · URL crawl |
 | `/hunt target.com` | IDOR · auth bypass · SSRF · XSS · SQLi · logic flaws |
 | `/validate` | 7-Question Gate — kills weak findings |

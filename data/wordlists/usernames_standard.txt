@@ -1,0 +1,13 @@
+admin
+root
+administrator
+user
+test
+guest
+api_user
+service
+dev
+operator
+support
+sysadmin
+hunter
