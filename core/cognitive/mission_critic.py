@@ -20,7 +20,9 @@ Design constraints:
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 __all__ = [
@@ -74,6 +76,39 @@ class MissionRetrospective:
             "recommendations": list(self.recommendations),
             "next_run_checklist": list(self.next_run_checklist),
         }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Persistent lesson store (feeds next run so the agent avoids dead techniques)
+# ──────────────────────────────────────────────────────────────────────────
+
+LESSONS_PATH = Path("data/knowledge_base/lessons_learned.json")
+
+
+def load_persistent_lessons(path: Path = LESSONS_PATH) -> List[str]:
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_persistent_lessons(lessons: List[str], path: Path = LESSONS_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(lessons, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def merge_lessons(existing: List[str], new: List[str], cap: int = 200) -> List[str]:
+    merged: List[str] = []
+    seen = set()
+    for item in new + existing:
+        key = item.strip()
+        if key and key not in seen:
+            seen.add(key)
+            merged.append(key)
+    return merged[:cap]
 
 
 class MissionCritic:

@@ -30,6 +30,9 @@ from core.cognitive.mission_critic import (
     PhaseCritique,
     format_phase_trace,
     format_retrospective_trace,
+    load_persistent_lessons,
+    save_persistent_lessons,
+    merge_lessons,
 )
 
 
@@ -180,8 +183,48 @@ class InformationGainPlanner:
         current_phase: AssessmentPhase,
         ledger: CoverageLedger,
         surface: Dict[str, List[str]],
+        directives: Optional[List[str]] = None,
+        lessons: Optional[List[str]] = None,
     ) -> AssessmentPhase:
-        """Returns the next assessment phase in order."""
+        """
+        Adaptive next-phase selection.
+        - Honors critic directives (e.g. CHANGE APPROACH pushes deep phases forward).
+        - Skips phases flagged as dead in persistent lessons.
+        - Falls back to linear PHASE_ORDER when no signal exists.
+        """
+        directives = directives or []
+        lessons = lessons or []
+        change_approach = any("CHANGE APPROACH" in d for d in directives)
+
+        # Priority order when critic signals a stall / approach change
+        priority = [
+            AssessmentPhase.WEB,
+            AssessmentPhase.API,
+            AssessmentPhase.JAVASCRIPT,
+            AssessmentPhase.VERIFICATION,
+            AssessmentPhase.RECON,
+            AssessmentPhase.NETWORK,
+        ]
+
+        # Build candidate list: deep phases first if change approach, else linear from current
+        if change_approach:
+            candidates = [p for p in priority if p != current_phase]
+        else:
+            phase_idx = PHASE_ORDER.index(current_phase) if current_phase in PHASE_ORDER else -1
+            candidates = PHASE_ORDER[phase_idx + 1:] if phase_idx >= 0 else list(PHASE_ORDER)
+
+        # Filter out phases flagged as dead by persistent lessons
+        dead_lessons = [l.lower() for l in lessons]
+        filtered = []
+        for p in candidates:
+            pname = p.value.lower()
+            if any(pname in k for k in dead_lessons):
+                continue
+            filtered.append(p)
+
+        if filtered:
+            return filtered[0]
+        # Fallback: linear next phase
         phase_idx = PHASE_ORDER.index(current_phase) if current_phase in PHASE_ORDER else -1
         if phase_idx < len(PHASE_ORDER) - 1:
             return PHASE_ORDER[phase_idx + 1]
@@ -250,6 +293,9 @@ class OmniHunterEngine:
         )
         self.planner = InformationGainPlanner()
         self.deliberator = CognitiveDeliberator()
+
+        # Persistent cross-run lessons (feeds next mission so dead techniques are skipped)
+        self._persistent_lessons: List[str] = load_persistent_lessons()
 
         # Metacognitive mission critic (deterministic, fail-soft)
         self.critic = MissionCritic()
@@ -928,7 +974,23 @@ class OmniHunterEngine:
             AssessmentPhase.ADJUDICATION: self._run_adjudication_phase,
         }
 
-        for cycle, phase in enumerate(PHASE_ORDER):
+        # ── Adaptive phase queue (re-ordered by MissionCritic directives) ──
+        phase_queue: List[AssessmentPhase] = list(PHASE_ORDER)
+        cycle = 0
+        while phase_queue and cycle < self.config.max_cycles:
+            # Pick highest-value next phase using planner + persistent lessons
+            phase = self.planner.next_phase(
+                current_phase=phase_queue[0] if phase_queue else AssessmentPhase.RECON,
+                ledger=self.ledger,
+                surface=self.surface,
+                directives=self._last_directives,
+                lessons=self._persistent_lessons,
+            )
+            if phase not in phase_queue:
+                # planner picked a phase already executed or out of queue; fall back to head
+                phase = phase_queue.pop(0)
+            else:
+                phase_queue.remove(phase)
             self.current_phase = phase
 
             # Cognitive Multi-Hypothesis Deliberation before Phase execution
@@ -970,12 +1032,23 @@ class OmniHunterEngine:
                 self._last_directives = list(critique.directives)
                 if self.config.enable_thinking:
                     print(format_phase_trace(critique))
+
+                # ── Cognitive adaptation: reorder remaining queue on stall/change ──
+                if critique.verdict == "STALLED" or any("CHANGE APPROACH" in d for d in critique.directives):
+                    remaining = list(phase_queue)
+                    # Move deep-probing phases forward; push RECON/NETWORK to back if stalled
+                    priority = [AssessmentPhase.WEB, AssessmentPhase.API, AssessmentPhase.JAVASCRIPT,
+                                AssessmentPhase.VERIFICATION]
+                    reordered = [p for p in priority if p in remaining] + [p for p in remaining if p not in priority]
+                    phase_queue = reordered
+                    logger.info("[OmniHunter] Critic triggered phase re-order: %s", [p.value for p in phase_queue])
             except Exception:
                 logger.debug("MissionCritic phase critique skipped.", exc_info=True)
 
             # Check termination criteria
             if not self.planner.should_continue(self.ledger, self.config.coverage_threshold, cycle, self.config.max_cycles):
                 break
+            cycle += 1
 
         # ── End-of-Mission Retrospective ──────────────────────────────────────
         try:
@@ -991,6 +1064,14 @@ class OmniHunterEngine:
             )
             if self.config.enable_thinking:
                 print(format_retrospective_trace(self._retrospective))
+
+            # Persist lessons for next run (merge + cap)
+            new_lessons: List[str] = list(self._retrospective.lessons)
+            for c in self._phase_critiques:
+                for d in c.directives:
+                    new_lessons.append(f"[{c.phase}] {d}")
+            merged = merge_lessons(self._persistent_lessons, new_lessons)
+            save_persistent_lessons(merged)
         except Exception:
             logger.debug("MissionCritic retrospective skipped.", exc_info=True)
 
