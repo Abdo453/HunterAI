@@ -1,0 +1,19 @@
+name: burp_browser_fusion
+class: BurpBrowserFusionSkill
+category: burp
+description: "Routes AI browser traffic through Burp proxy -- all interactions intercepted and analyzed"
+version: "1.0"
+input:
+  - target: str
+  - burp_proxy: str
+  - auth_context: dict
+output:
+  - fusion_endpoints.json
+  - fusion_report.md
+depends_on: [auth_session_extractor]
+next_skills: [burp_traffic_analyzer]
+fallback_skills: [spa_api_extractor]
+tools_required: []
+timeout_seconds: 150
+max_retries: 1
+enabled: true

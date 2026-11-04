@@ -1,0 +1,19 @@
+name: adversarial_planner
+class: AdversarialPlannerSkill
+category: cognitive
+description: "Red team adversarial planning -- builds 5-step exploitation strategy using LLM"
+version: "1.0"
+input:
+  - target: str
+  - findings_so_far: list
+  - tech_stack: list
+output:
+  - attack_plan.md
+  - next_actions.json
+depends_on: [threat_modeler]
+next_skills: [full_pipeline_orchestrator]
+fallback_skills: [threat_modeler]
+tools_required: []
+timeout_seconds: 120
+max_retries: 1
+enabled: true

@@ -1,0 +1,18 @@
+name: dom_xss_hunter
+class: DOMXSSHunterSkill
+category: browser
+description: "AI-controlled browser DOM XSS detection - targets innerHTML, eval, document.write, postMessage sinks"
+version: "1.0"
+input:
+  - target: str
+  - urls: list
+output:
+  - dom_xss_findings.json
+  - dom_xss_report.md
+depends_on: [browser_recon]
+next_skills: [triage_gate]
+fallback_skills: [xss_hunter]
+tools_required: []
+timeout_seconds: 120
+max_retries: 1
+enabled: true

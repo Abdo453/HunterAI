@@ -67,6 +67,7 @@ class SkillResult:
     duration: float = 0.0
     tool_used: str = ""
     next_skills: List[str] = field(default_factory=list)         # override recommended next skills
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def has_findings(self) -> bool:

@@ -1,0 +1,20 @@
+name: threat_modeler
+class: ThreatModelerSkill
+category: cognitive
+description: "AI-powered threat model builder -- STRIDE analysis + ranked attack paths"
+version: "1.0"
+input:
+  - target: str
+  - endpoints: list
+  - tech_stack: list
+output:
+  - threat_model.json
+  - attack_tree.md
+depends_on: []
+next_skills: [adversarial_planner, exploit_chain_builder]
+fallback_skills: []
+tools_required: []
+fallback_tools: []
+timeout_seconds: 120
+max_retries: 1
+enabled: true

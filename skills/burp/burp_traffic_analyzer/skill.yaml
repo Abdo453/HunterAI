@@ -1,0 +1,19 @@
+name: burp_traffic_analyzer
+class: BurpTrafficAnalyzerSkill
+category: burp
+description: "AI-powered Burp Suite traffic analysis -- reads live Burp proxy traffic and routes to vuln skills"
+version: "1.0"
+input:
+  - target: str
+  - burp_port: int
+  - traffic_limit: int
+output:
+  - burp_findings.json
+  - burp_analysis_report.md
+depends_on: []
+next_skills: [triage_gate]
+fallback_skills: [endpoint_discovery]
+tools_required: []
+timeout_seconds: 120
+max_retries: 1
+enabled: true

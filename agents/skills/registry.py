@@ -343,6 +343,21 @@ def bootstrap_builtin_skills() -> SkillRegistry:
     reg.register_class(SessionFlawsSkill, param_keywords=["session", "sess", "sessionid", "jsessionid",
                                                           "phpsessid", "auth", "token", "cfid", "cftoken"])
 
+    # ── Elite Bug Bounty Skills (v3.0) ─────────────────────────────────────────
+    from agents.skills.http_smuggling_skill import HTTPSmugglingSkill
+    from agents.skills.cache_poisoning_skill import CachePoisoningSkill
+    from agents.skills.oauth2_abuse_skill import OAuth2AbuseSkill
+    from agents.skills.prototype_pollution_skill import PrototypePollutionSkill
+    from agents.skills.path_traversal_skill import PathTraversalSkill
+    from agents.skills.jwt_advanced_skill import JWTAdvancedSkill
+
+    reg.register_class(HTTPSmugglingSkill, param_keywords=["api", "endpoint", "v1", "v2", "service"])
+    reg.register_class(CachePoisoningSkill, param_keywords=["host", "url", "path", "page", "resource"])
+    reg.register_class(OAuth2AbuseSkill, param_keywords=["code", "state", "redirect_uri", "client_id", "response_type"])
+    reg.register_class(PrototypePollutionSkill, param_keywords=["config", "options", "data", "settings", "json", "__proto__"])
+    reg.register_class(PathTraversalSkill, param_keywords=["file", "path", "doc", "document", "page", "include", "template", "view", "read", "dir", "filename"])
+    reg.register_class(JWTAdvancedSkill, param_keywords=["token", "jwt", "access_token", "auth", "authorization", "bearer"])
+
     return reg
 
 

@@ -1,0 +1,21 @@
+name: full_pipeline_orchestrator
+class: FullPipelineOrchestratorSkill
+category: meta
+description: "Master orchestrator -- runs full autonomous Bug Bounty pipeline: Recon->Model->Browse->Burp->Hunt->Chain->Report"
+version: "1.0"
+input:
+  - target: str
+  - authorized: bool
+  - scope_domains: list
+  - credentials: dict
+  - burp_enabled: bool
+output:
+  - pipeline_report.md
+  - pipeline_findings.json
+depends_on: []
+next_skills: []
+fallback_skills: []
+tools_required: []
+timeout_seconds: 300
+max_retries: 1
+enabled: true

@@ -1,0 +1,19 @@
+name: request_mutator
+class: RequestMutatorSkill
+category: burp
+description: "AI-guided request mutation -- intelligently modifies requests for parameter tampering and header injection"
+version: "1.0"
+input:
+  - target: str
+  - requests: list
+  - mutation_strategy: str
+output:
+  - mutation_results.json
+  - mutation_report.md
+depends_on: [burp_traffic_analyzer]
+next_skills: [triage_gate]
+fallback_skills: []
+tools_required: []
+timeout_seconds: 90
+max_retries: 1
+enabled: true
