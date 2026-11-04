@@ -2,7 +2,8 @@
   "nodes": {},
   "edges": [],
   "in_scope": [
-    "https://dashboard.f1.hotgame.win",
-    "example.com"
+    "example.com",
+    "https://example.com/search",
+    "https://dashboard.f1.hotgame.win"
   ]
 }

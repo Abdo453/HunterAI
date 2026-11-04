@@ -1,0 +1,2 @@
+# benign web shell testing stub
+test_webshell_marker
