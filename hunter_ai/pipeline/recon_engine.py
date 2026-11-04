@@ -18,6 +18,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
+from core.playbooks.methodology_kb import MethodologyKB
+from core.recon.js_secret_miner import JSSecretMiner
+from core.recon.param_miner import ParamMiner
+
 # نمط اسم مضيف صالح (.labels + TLD)
 _HOST_RE = re.compile(r"^(?:[a-z0-9_-]+\.)+[a-z]{2,}$", re.I)
 
@@ -366,6 +370,59 @@ async def run_recon(
         else:
             tools_missing.add("nuclei")
 
+    # ── 7) Deep URL Categorization & Stream Routing ──────────────────────────
+    all_urls = sorted(url_pool.keys())
+    js_urls = [u for u in all_urls if re.search(r"\.js(?:$|\?)", u, re.I)]
+    dynamic_urls = [
+        u for u in all_urls
+        if re.search(r"\.(?:php|aspx|ashx|jsp|do|action)(?:$|\?)", u, re.I) or "/api/" in u.lower()
+    ]
+    param_urls = [u for u in all_urls if "?" in u and "=" in u]
+    sensitive_files = [
+        u for u in all_urls
+        if any(ext in u.lower() for ext in (".env", ".git", ".bak", ".config", ".sql", ".log"))
+    ]
+
+    # ── 8) JavaScript Intelligence & Secret Mining (JSSecretMiner) ───────────
+    js_miner = JSSecretMiner()
+    discovered_secrets: List[Dict[str, Any]] = []
+    js_discovered_endpoints: Set[str] = set()
+
+    for js_u in js_urls[:20]:
+        try:
+            res = await master.tm.execute(f"curl -s -m 10 -L \"{js_u}\"", timeout=15)
+            if res.success and res.stdout and len(res.stdout) > 20:
+                sec_items = js_miner.mine_text(res.stdout, source=js_u)
+                for s in sec_items:
+                    discovered_secrets.append(s.to_dict())
+                    _record("nuclei_findings", f"Exposed {s.secret_type} in {js_u}", "js_secret_miner")
+                hidden = js_miner.extract_hidden_endpoints(res.stdout)
+                for ep in hidden:
+                    js_discovered_endpoints.add(ep)
+                    full_ep_url = f"https://{domain}{ep}"
+                    url_pool.setdefault(full_ep_url, set()).add("js_analyzer")
+                    _record("urls", full_ep_url, "js_analyzer")
+        except Exception:
+            pass
+
+    # ── 9) Deep Parameter Mining (ParamMiner) ────────────────────────────────
+    param_miner = ParamMiner()
+    parameter_targets = param_miner.extract_from_urls(all_urls)
+    param_targets_dict = [t.to_dict() for t in parameter_targets]
+
+    # ── 10) 403 / 401 Bypass Header & Path Matrix ────────────────────────────
+    bypass_candidates: List[Dict[str, Any]] = []
+    for host, meta in live_meta.items():
+        sc = meta.get("status_code")
+        if sc in (401, 403):
+            host_url = meta.get("url") or f"https://{host}"
+            variations = MethodologyKB.get_403_bypass_variations(host_url)
+            bypass_candidates.extend(variations[:10])
+
+    # ── 11) Google & GitHub Dork Intelligence (GHDB) ─────────────────────────
+    google_dorks = MethodologyKB.get_google_dorks(domain)
+    github_dorks = MethodologyKB.get_github_dorks(domain)
+
     results: Dict[str, Any] = {
         "target": target,
         "domain": domain,
@@ -374,6 +431,17 @@ async def run_recon(
         "live_hosts": sorted(live_hosts.keys()),
         "live_hosts_meta": live_meta,
         "urls": sorted(url_pool.keys()),
+        "js_urls": js_urls,
+        "dynamic_urls": dynamic_urls,
+        "param_urls": param_urls,
+        "sensitive_files": sensitive_files,
+        "discovered_secrets": discovered_secrets,
+        "js_endpoints": sorted(js_discovered_endpoints),
+        "parameter_targets": param_targets_dict,
+        "bypass_candidates": bypass_candidates,
+        "google_dorks": google_dorks,
+        "github_dorks": github_dorks,
+        "master_extensions": MethodologyKB.get_master_extensions(),
         "nuclei_findings": nuclei_findings,
         "provenance": provenance,
         "tools_used": sorted(tools_used),

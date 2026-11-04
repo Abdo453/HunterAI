@@ -717,3 +717,159 @@ async function executeModalTool() {
     pre.textContent = 'خطأ أثناء التشغيل: ' + err;
   }
 }
+
+
+// ── Reconnaissance & Intelligence Studio Extensions ─────────────────────────
+let _activeDorksData = null;
+
+async function fetchTargetDorks() {
+  const domain = document.getElementById('dork-target-domain').value.trim();
+  if (!domain) {
+    alert('يرجى إدخال اسم النطاق (Target Domain)!');
+    return;
+  }
+  const box = document.getElementById('dorks-results-box');
+  const list = document.getElementById('dorks-items-list');
+  box.style.display = 'block';
+  list.innerHTML = '<div style="color:var(--cyan);padding:10px;">⏳ جاري توليد استعلامات GHDB و GitHub Dorks...</div>';
+
+  try {
+    const res = await fetch(`/api/recon/dorks?domain=${encodeURIComponent(domain)}`);
+    const data = await res.json();
+    _activeDorksData = data;
+    filterDorkCategory('all', null);
+  } catch (err) {
+    list.innerHTML = `<div style="color:var(--red);padding:10px;">خطأ أثناء جلب استعلامات Dorks: ${err}</div>`;
+  }
+}
+
+function filterDorkCategory(category, btn) {
+  if (btn) {
+    const container = btn.parentElement;
+    container.querySelectorAll('.cat-pill-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  if (!_activeDorksData) return;
+
+  const list = document.getElementById('dorks-items-list');
+  list.innerHTML = '';
+
+  let items = [];
+  if (category === 'all') {
+    for (const [catName, catItems] of Object.entries(_activeDorksData.google_dorks || {})) {
+      items = items.concat(catItems.map(it => ({ ...it, source: 'Google', cat: catName })));
+    }
+    items = items.concat((_activeDorksData.github_dorks || []).map(it => ({
+      dork: it.query,
+      search_url: it.search_url,
+      source: 'GitHub',
+      cat: it.name
+    })));
+  } else if (category === 'github') {
+    items = (_activeDorksData.github_dorks || []).map(it => ({
+      dork: it.query,
+      search_url: it.search_url,
+      source: 'GitHub',
+      cat: it.name
+    }));
+  } else {
+    items = ((_activeDorksData.google_dorks || {})[category] || []).map(it => ({
+      ...it,
+      source: 'Google',
+      cat: category
+    }));
+  }
+
+  if (items.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-muted);padding:10px;">لا توجد استعلامات في هذا القسم.</div>';
+    return;
+  }
+
+  items.forEach(it => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;gap:10px;';
+    row.innerHTML = `
+      <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${it.source === 'Google' ? '#1a73e8' : '#333'};color:#fff;margin-left:6px;">${it.source}</span>
+        <code style="color:#a8ff78;">${escapeHtml(it.dork)}</code>
+      </div>
+      <a href="${it.search_url}" target="_blank" rel="noopener noreferrer" style="color:var(--cyan);text-decoration:none;font-weight:bold;white-space:nowrap;padding:2px 8px;border:1px solid var(--cyan);border-radius:4px;font-size:11px;">
+        فتح ↗
+      </a>
+    `;
+    list.appendChild(row);
+  });
+}
+
+async function runJSSecretMiner() {
+  const content = document.getElementById('js-miner-content').value.trim();
+  if (!content) {
+    alert('يرجى وضع كود جافاسكريبت أو رابط الملف!');
+    return;
+  }
+  const out = document.getElementById('js-miner-output');
+  out.style.display = 'block';
+  out.innerHTML = '<div style="color:var(--cyan);">⏳ جاري فحص الكود وحساب الإنتروبيا (Shannon Entropy)...</div>';
+
+  try {
+    const res = await fetch('/api/recon/mine-js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content, source: 'web_studio' })
+    });
+    const data = await res.json();
+
+    let html = `<div style="font-weight:bold;margin-bottom:8px;color:var(--cyan);">النتائج: ${data.secrets_count} سر مكتشف | ${data.endpoints_count} نقطة نهاية</div>`;
+    if (data.secrets_count > 0) {
+      html += '<div style="font-weight:bold;color:#ff5e62;margin-top:6px;">الأسرار المكتشفة:</div>';
+      data.secrets.forEach(s => {
+        html += `<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
+          <span style="color:var(--yellow);font-weight:bold;">[${s.secret_type}]</span>
+          <code>${escapeHtml(s.masked_value)}</code>
+          <span style="color:var(--cyan);font-size:10px;margin-right:8px;">(Entropy: ${s.entropy} | Confidence: ${s.confidence})</span>
+        </div>`;
+      });
+    }
+    if (data.endpoints_count > 0) {
+      html += '<div style="font-weight:bold;color:var(--cyan);margin-top:10px;">المسارات ونقاط الـ Endpoints المخفية:</div>';
+      data.endpoints.slice(0, 15).forEach(ep => {
+        html += `<div style="color:#a8ff78;padding:2px 0;"><code>${escapeHtml(ep)}</code></div>`;
+      });
+    }
+    out.innerHTML = html;
+  } catch (err) {
+    out.innerHTML = `<div style="color:var(--red);">خطأ أثناء الفحص: ${err}</div>`;
+  }
+}
+
+async function generate403Bypasses() {
+  const url = document.getElementById('bypass-target-url').value.trim();
+  if (!url) {
+    alert('يرجى إدخال الرابط المستهدف المحظور (403 URL)!');
+    return;
+  }
+  const container = document.getElementById('bypass-output-container');
+  container.style.display = 'block';
+  container.innerHTML = '<div style="color:var(--cyan);">⏳ جاري توليد مصفوفة الهيدرات والمسارات...</div>';
+
+  try {
+    const res = await fetch(`/api/recon/403-bypasses?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+
+    let html = `<div style="font-weight:bold;margin-bottom:6px;color:var(--cyan);">تم توليد ${data.count} محاولة تجاوز:</div>`;
+    data.variations.forEach((v, idx) => {
+      let headerStr = Object.entries(v.headers).map(([k, val]) => `-H "${k}: ${val}"`).join(' ');
+      let curlCmd = `curl -k -s -o /dev/null -w "%{http_code}" ${headerStr ? headerStr + ' ' : ''}"${v.url}"`;
+      html += `<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;align-items:center;">
+        <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          <span style="color:var(--yellow);font-size:11px;">#${idx+1} [${v.type}]</span>
+          <code style="color:#fff;font-size:11px;margin-right:6px;">${escapeHtml(v.description)}</code>
+        </div>
+        <button class="cyber-btn" style="padding:2px 6px;font-size:10px;" onclick="navigator.clipboard.writeText('${curlCmd.replace(/'/g, "\\'")}')">نسخ cURL</button>
+      </div>`;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--red);">خطأ: ${err}</div>`;
+  }
+}

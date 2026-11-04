@@ -639,6 +639,71 @@
         <!-- Tools Grid -->
         <div id="arsenal-tools-container" class="arsenal-tools-grid"></div>
       </div>
+
+      <!-- ── Reconnaissance & Intelligence Matrix Studio ── -->
+      <div class="cyber-card" style="margin-top:20px;">
+        <div class="card-title-row">
+          <div class="card-title">
+            <span>🌐</span> استخبارات الـ GHDB و Dorking المتقدم (Google & GitHub OSINT Engine)
+          </div>
+          <span class="status-badge badge-cyan">Automated Target Profiling</span>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:12px;">
+          <input type="text" id="dork-target-domain" class="cyber-input" placeholder="example.com" style="flex:1;">
+          <button class="cyber-btn" onclick="fetchTargetDorks()">
+            <span>🔍</span> توليد استعلامات Dorks
+          </button>
+        </div>
+        <div id="dorks-results-box" style="display:none;">
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="cat-pill-btn active" onclick="filterDorkCategory('all', this)">الكل</button>
+            <button class="cat-pill-btn" onclick="filterDorkCategory('sensitive_files', this)">الملفات الحساسة</button>
+            <button class="cat-pill-btn" onclick="filterDorkCategory('admin_and_portals', this)">لوحات التحكم</button>
+            <button class="cat-pill-btn" onclick="filterDorkCategory('api_and_endpoints', this)">نقاط الـ API</button>
+            <button class="cat-pill-btn" onclick="filterDorkCategory('leaked_secrets_and_creds', this)">الأسرار والمفاتيح</button>
+            <button class="cat-pill-btn" onclick="filterDorkCategory('error_and_database_exposure', this)">أخطاء قواعد البيانات</button>
+            <button class="cat-pill-btn" onclick="filterDorkCategory('github', this)">GitHub Dorks</button>
+          </div>
+          <div id="dorks-items-list" style="max-height:300px;overflow-y:auto;background:rgba(0,0,0,0.4);border-radius:6px;padding:10px;"></div>
+        </div>
+      </div>
+
+      <!-- ── JS Secret Miner & Parameter Matrix ── -->
+      <div class="cards-grid-2" style="margin-top:20px;">
+        <!-- JS Secret Miner -->
+        <div class="cyber-card">
+          <div class="card-title-row">
+            <div class="card-title">
+              <span>🗝️</span> استوديو تعدين أسرار الجافاسكريبت (JS Secret Miner)
+            </div>
+            <span class="status-badge badge-green">Mantra / TruffleHog</span>
+          </div>
+          <textarea id="js-miner-content" class="cyber-input" style="height:110px;resize:vertical;" placeholder="ألصق كود جافاسكريبت أو رابط bundle.js هنا..."></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+            <button class="cyber-btn" onclick="runJSSecretMiner()">
+              <span>⚡</span> استخراج الأسرار والـ Endpoints
+            </button>
+          </div>
+          <div id="js-miner-output" style="display:none;margin-top:10px;background:rgba(0,0,0,0.5);border-radius:6px;padding:10px;font-size:12px;"></div>
+        </div>
+
+        <!-- 403 Bypass Matrix -->
+        <div class="cyber-card">
+          <div class="card-title-row">
+            <div class="card-title">
+              <span>🛡️</span> مصفوفة تجاوز حظر 403 (403/401 Bypass Matrix)
+            </div>
+            <span class="status-badge badge-cyan">Header & Path Mutator</span>
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:10px;">
+            <input type="text" id="bypass-target-url" class="cyber-input" placeholder="https://target.com/admin" style="flex:1;">
+            <button class="cyber-btn" onclick="generate403Bypasses()">
+              <span>🚀</span> توليد
+            </button>
+          </div>
+          <div id="bypass-output-container" style="display:none;max-height:180px;overflow-y:auto;background:rgba(0,0,0,0.5);border-radius:6px;padding:10px;font-size:12px;"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ── PILLAR 6: COGNITIVE DEEP THINKING & REASONING DECK ───────── -->

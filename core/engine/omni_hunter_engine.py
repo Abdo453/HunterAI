@@ -409,6 +409,36 @@ class OmniHunterEngine:
                     self.surface["domains"].append(sub)
                     self.ledger.record_discovery(AssetType.DOMAIN, sub)
 
+        # Ingest cached pipeline recon intelligence if available
+        try:
+            from hunter_ai.pipeline.recon_engine import load_recon
+            recon_data = load_recon(clean_domain)
+            if recon_data:
+                for sub in recon_data.get("subdomains", []):
+                    if sub not in self.surface["domains"] and self._scope_check(sub, ActionClass.READ_ONLY):
+                        self.surface["domains"].append(sub)
+                        self.ledger.record_discovery(AssetType.DOMAIN, sub)
+                for host in recon_data.get("live_hosts", []):
+                    if host not in self.surface["live_hosts"] and self._scope_check(host, ActionClass.READ_ONLY):
+                        self.surface["live_hosts"].append(host)
+                        self.ledger.record_discovery(AssetType.HOST, host)
+                for u in recon_data.get("urls", []):
+                    if u not in self.surface["endpoints"]:
+                        self.surface["endpoints"].append(u)
+                        self.ledger.record_discovery(AssetType.ENDPOINT, u)
+                for sec in recon_data.get("discovered_secrets", []):
+                    self.confirmed_findings.append({
+                        "vuln_class": "EXPOSED_SECRET",
+                        "target": sec.get("source", clean_domain),
+                        "verdict": "CONFIRMED",
+                        "confidence": 0.95,
+                        "title": f"Exposed {sec.get('secret_type')} from Recon",
+                        "evidence": f"Type: {sec.get('secret_type')}\nValue: {sec.get('masked_value')}\nEntropy: {sec.get('entropy')}",
+                        "timestamp": time.time(),
+                    })
+        except Exception as recon_err:
+            logger.debug("[OmniHunter] Recon cache check note: %s", recon_err)
+
         # Task 1: Asset Discovery
         task = self.scheduler.add_task(
             "Asset Discovery", "asset_discovery", target=target, team=AgentTeam.RECON, priority=10
@@ -764,7 +794,11 @@ class OmniHunterEngine:
         self._save_checkpoint()
 
     def _run_javascript_phase(self) -> None:
-        logger.info("[OmniHunter] ── Phase 5: JAVASCRIPT BUNDLE UNPACKING ──")
+        logger.info("[OmniHunter] ── Phase 5: JAVASCRIPT BUNDLE UNPACKING & SECRET MINING ──")
+        from core.recon.js_secret_miner import JSSecretMiner
+        from core.recon.param_miner import ParamMiner
+        miner = JSSecretMiner()
+
         for js_url in self.surface.get("js_files", [])[:15]:
             clean = js_url.replace("https://", "").replace("http://", "").split("/")[0]
             if not self._scope_check(clean, ActionClass.READ_ONLY):
@@ -783,8 +817,38 @@ class OmniHunterEngine:
                         self.surface["endpoints"].append(route)
                         self.ledger.record_discovery(AssetType.ENDPOINT, route)
 
+                # High-Entropy Secret & Key Extraction
+                bundle_text = result.normalized_data.get("raw_content", "") or ""
+                if bundle_text:
+                    discovered_secrets = miner.mine_text(bundle_text, source=js_url)
+                    for sec in discovered_secrets:
+                        if sec.confidence == "HIGH":
+                            self.confirmed_findings.append({
+                                "vuln_class": "EXPOSED_SECRET",
+                                "target": js_url,
+                                "verdict": "CONFIRMED",
+                                "confidence": 0.95,
+                                "title": f"Exposed {sec.secret_type} in JavaScript Bundle",
+                                "evidence": f"Type: {sec.secret_type}\nMasked Value: {sec.masked_value}\nEntropy: {sec.entropy}\nSource: {js_url}",
+                                "timestamp": time.time(),
+                            })
+                            logger.info("[OmniHunter] [!] Verified JS Secret Exposure: %s in %s", sec.secret_type, js_url)
+
+                    # Hidden Endpoints from JS AST/strings
+                    for hidden_ep in miner.extract_hidden_endpoints(bundle_text):
+                        if hidden_ep not in self.surface["endpoints"]:
+                            self.surface["endpoints"].append(hidden_ep)
+                            self.ledger.record_discovery(AssetType.ENDPOINT, hidden_ep)
+
             reviewer = JSReviewAgent()
             reviewer.review(task, self.ledger)
+
+        # Parameter classification across discovered endpoints
+        pm = ParamMiner()
+        param_targets = pm.extract_from_urls(self.surface["endpoints"])
+        if param_targets:
+            self.surface.setdefault("parameter_targets", []).extend([t.to_dict() for t in param_targets])
+            logger.info("[OmniHunter] ParamMiner classified %d candidate parameter targets", len(param_targets))
 
         self._save_checkpoint()
 

@@ -2913,3 +2913,88 @@ async def get_omni_findings(engagement_id: str):
         "count": len(findings),
         "findings": findings,
     }
+
+
+
+# ── Reconnaissance, GHDB Dorks & HexStrike Arsenal APIs ───────────────────────
+
+@app.get("/api/recon/dorks")
+async def get_recon_dorks(domain: str):
+    """Generates populated Google Dorks and GitHub Dorks for target domain."""
+    from core.playbooks.methodology_kb import MethodologyKB
+    google_dorks = MethodologyKB.get_google_dorks(domain)
+    github_dorks = MethodologyKB.get_github_dorks(domain)
+    return {
+        "domain": domain,
+        "google_dorks": google_dorks,
+        "github_dorks": github_dorks,
+    }
+
+
+@app.get("/api/recon/403-bypasses")
+async def get_403_bypasses(url: str):
+    """Generates 403 bypass header injection and path mutation candidates."""
+    from core.playbooks.methodology_kb import MethodologyKB
+    variations = MethodologyKB.get_403_bypass_variations(url)
+    return {
+        "url": url,
+        "count": len(variations),
+        "variations": variations,
+    }
+
+
+@app.get("/api/recon/hexstrike-arsenal")
+async def get_hexstrike_arsenal():
+    """Returns the HexStrike 150+ security tools inventory categorized across 7 domains."""
+    from core.playbooks.methodology_kb import MethodologyKB
+    catalog = MethodologyKB.get_hexstrike_catalog()
+    return {
+        "categories_count": len(catalog),
+        "catalog": catalog,
+        "master_extensions": MethodologyKB.get_master_extensions(),
+        "sensitive_cms_paths": MethodologyKB.get_sensitive_cms_paths(),
+    }
+
+
+@app.post("/api/recon/mine-js")
+async def mine_javascript(request: Request):
+    """Extracts API keys, tokens, entropy, and hidden routes from JavaScript content."""
+    from core.recon.js_secret_miner import JSSecretMiner
+    data = await request.json()
+    content = data.get("content", "")
+    source = data.get("source", "manual_input")
+
+    miner = JSSecretMiner()
+    secrets = miner.mine_text(content, source=source)
+    endpoints = miner.extract_hidden_endpoints(content)
+
+    return {
+        "source": source,
+        "secrets_count": len(secrets),
+        "secrets": [s.to_dict() for s in secrets],
+        "endpoints_count": len(endpoints),
+        "endpoints": endpoints,
+    }
+
+
+@app.post("/api/recon/classify-params")
+async def classify_parameters(request: Request):
+    """Classifies URL parameters into attack vector categories (IDOR, SSRF, SQLi, LFI)."""
+    from core.recon.param_miner import ParamMiner
+    data = await request.json()
+    urls = data.get("urls", [])
+
+    miner = ParamMiner()
+    targets = miner.extract_from_urls(urls)
+    results = []
+    for t in targets:
+        d = t.to_dict()
+        if t.vulnerability_category == "SQLI":
+            d["sqlmap_command"] = miner.synthesize_sqlmap_command(t)
+        results.append(d)
+
+    return {
+        "urls_processed": len(urls),
+        "targets_count": len(results),
+        "targets": results,
+    }
