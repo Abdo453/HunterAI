@@ -1,0 +1,265 @@
+---
+name: bri-iam-audit
+description: "Audit, design, and migrate Identity and Access Management — cloud provider IAM (AWS, GCP, Azure), identity providers (Okta, Entra ID / Azure AD, Auth0, Google Workspace), application authorization (RBAC, ABAC, ReBAC), and federated identity. Use when the user mentions 'IAM,' 'identity,' 'access management,' 'least privilege,' 'role design,' 'SSO,' 'SAML,' 'OIDC,' 'OAuth,' 'JIT access,' 'just-in-time access,' 'break-glass,' 'service accounts,' 'RBAC,' 'ABAC,' 'privilege creep,' 'role explosion,' 'identity governance,' 'IAM strategy,' 'identity migration,' 'Okta,' 'Entra ID,' 'Azure AD,' 'Auth0,' 'Cognito,' or needs identity consultant-level guidance."
+allowed-tools: Read, Grep, Glob, WebSearch, Bash(aws accessanalyzer list-findings:*), Bash(aws iam get-account-authorization-details:*), Bash(gcloud asset analyze-iam-policy:*), Bash(gcloud policy-intelligence query-activity:*), Bash(az role assignment list:*)
+---
+
+# IAM Audit — Identity & Access Management Review and Design
+
+Cover the identity and access layer end-to-end: audit existing setup, design from scratch, plan migrations, and codify the patterns most teams get wrong. This is the consultant-style skill — not just "what's misconfigured" but "what should this look like."
+
+Three modes — pick the one that matches the engagement:
+- **Audit** — review what's already deployed, find privilege creep and gaps
+- **Design** — greenfield IAM for a new project or new identity provider
+- **Migrate** — consolidate multiple identity providers, federate access, move to SSO
+
+Cross-references: `cloud-audit` for the cloud-provider audit (broader than IAM), `container-audit` for K8s RBAC and ServiceAccounts (orchestration-layer identity), `personal-opsec` for the individual operator's own accounts — hardware-key MFA, recovery paths, SIM-swap protection — which org IAM doesn't reach; `cicd-security` for the CI side of OIDC federation (which workflows and refs can assume a cloud role).
+
+## Authorization
+
+Audit only identity providers, cloud accounts and applications the user owns or is authorized to review, with read access granted for that purpose. The pre-approved commands read policies and findings. Never change a role, remove a user, rotate credentials or try a privilege-escalation path live during the audit: report the path and the fix, and let the owner act.
+
+## Mode 1 — Audit existing IAM
+
+### Cloud provider IAM
+
+**AWS:**
+- IAM users with console access — should be zero in mature setups (use SSO/Identity Center)
+- IAM users with permanent access keys — every one is a credential rotation problem; replace with role assumption via SSO or IAM Roles Anywhere
+- Permissions boundaries set on every role that can create roles (prevents privilege escalation via `iam:CreateRole` + `iam:AttachRolePolicy`)
+- `AdministratorAccess` policy attachments — flag every one and justify
+- Wildcard `Action: "*"` or `Resource: "*"` outside of break-glass roles
+- Cross-account trust policies — `Principal: { AWS: "*" }` is open to the world; should be specific account IDs with optional `aws:PrincipalOrgID` condition
+- IMDSv2 enforced — `MetadataOptions.HttpTokens: required` on every EC2 launch template
+- Service-linked roles audited — they bypass normal restrictions
+- Run: `aws accessanalyzer list-findings`, `aws iam generate-credential-report`, `aws iam get-account-authorization-details`
+
+**GCP:**
+- `roles/owner` and `roles/editor` are too broad — replace with custom roles or fine-grained `roles/*Admin`
+- Service account keys downloaded (`projects.serviceAccounts.keys.create`) — should be zero; use Workload Identity Federation
+- Service accounts with `iam.serviceAccountTokenCreator` on themselves = self-impersonation = privilege escalation
+- Org-level vs project-level bindings — over-scoped bindings at the org level are silent privilege grants to every project
+- `allUsers` / `allAuthenticatedUsers` bindings on any sensitive resource
+- Run: `gcloud asset analyze-iam-policy`, `gcloud policy-intelligence query-activity`, Recommender API
+
+**Azure:**
+- `Owner` and `Contributor` role assignments at subscription/management-group scope
+- Custom roles with `*` actions
+- Conditional Access policies cover *every* sign-in surface (legacy auth, service principals, break-glass accounts excluded with explicit reason)
+- Privileged Identity Management (PIM) used for all Global Admin / Privileged Role Admin / Application Admin roles
+- Service principal credentials (client secrets) — should expire and rotate; check expiration dates
+- Run: `az role assignment list --all`, Microsoft Graph `auditLogs/signIns`, Microsoft Entra recommendations
+
+### Identity provider
+
+**Okta / Entra ID / Auth0 / Google Workspace:**
+- MFA enforced for 100% of users — no "MFA optional" cohort
+- Phishing-resistant MFA (FIDO2 / WebAuthn / hardware key) for admins; TOTP is the minimum for everyone
+- Inactive accounts disabled after 30/60/90 days (pick a policy, enforce it)
+- Lifecycle automation — joiner / mover / leaver flows are automated, not ticket-driven
+- Group-based access — users get permissions via group membership, not direct assignment; group membership is the auditable surface
+- Admin separation — privileged admin actions require a separate elevated account, not the day-to-day account
+- App assignments — every SaaS app reviewed quarterly; orphaned apps (no longer used) removed
+- Authentication policies — block legacy protocols (IMAP, POP, SMTP basic auth), enforce device compliance for high-trust apps
+- Session lifetime appropriate to sensitivity (admin: short, end user: longer with refresh)
+- Logs forwarded to SIEM — sign-ins, admin changes, MFA failures
+
+### Active Directory and Entra ID: paths to Tier 0
+
+When the org runs Active Directory or a hybrid Entra tenant, list the Tier 0 assets (domain controllers, AD CS, AD FS, Entra Connect, the privileged groups and roles), then find every path from an ordinary user to one of them and the change that closes it. Use attack-path data the team already has (BloodHound / AzureHound exports, PingCastle, Defender for Identity) before collecting anything new; new collection needs the directory owner's yes. Paths are evidence from directory data, never exercised. Inventory, read-only queries, exposure classes with fixes (privileged nesting, control rights, SPN service accounts, pre-auth, delegation, certificate templates, LAPS, GPO rights, the hybrid bridge) and verdict rules: [references/ad-tier0-paths.md](references/ad-tier0-paths.md).
+
+### Application authorization
+
+- Role definitions written down somewhere (not just in code) — `docs/roles.md` or equivalent
+- "Admin" is not one role — usually 3-5: support, billing, content moderator, platform admin, security responder
+- Per-tenant role isolation — a "tenant admin" of org A cannot read org B even with the same role
+- Permission checks centralized — one `can(user, action, resource)` function, not scattered `if (user.role === "admin")` checks throughout
+- ABAC where the access decision depends on resource attributes (record owner, tenant, status) — ReBAC tools (Cerbos, OpenFGA, Oso, SpiceDB) when role explosion threatens
+- Permission checks logged for the audit trail
+
+### Common audit findings
+
+- **Role explosion** — every new requirement spawned a new role; nobody knows what they all do; nobody dares delete one
+- **Permission accretion** — engineers got temporary permissions for an incident, permissions were never revoked
+- **Shadow admin** — a non-admin role can `iam:AssumeRole` into admin, transitively
+- **Stale break-glass** — emergency-access accounts haven't been tested in 12+ months; nobody knows if they work
+- **MFA bypass via legacy auth** — IMAP/POP/SMTP basic auth still works against accounts that "have MFA"
+- **Service account sprawl** — more service accounts than humans, half are unused, half are over-privileged
+
+## Mode 2 — Design greenfield IAM
+
+### Principles (the consultant ones, not just OWASP)
+
+1. **Identity provider is the source of truth.** Even for cloud IAM — federate via SAML/OIDC, don't manage users in AWS/GCP/Azure directly.
+2. **People get access via groups, not directly.** Direct assignments are auditable noise.
+3. **Service accounts are roles.** Don't issue keys; use workload identity federation (AWS IRSA, GCP Workload Identity, Azure Workload Identity, Kubernetes ServiceAccounts → OIDC).
+4. **Privileged access is JIT, not standing.** Default to "no access"; grant for a defined window with audit trail (AWS IAM Identity Center + permission sets with session duration, Azure PIM, Okta Workflows, Google JIT via context-aware access).
+5. **Break-glass is a tested, alarming path.** Emergency-access accounts exist but are heavily audited and tested quarterly.
+6. **Least privilege is observable, not aspirational.** Pull access advisor / unused-access reports monthly; remove what isn't used.
+7. **Authorization decisions are logged.** Every `allow` or `deny` should be traceable for incident response.
+
+### Greenfield checklist (web app + cloud)
+
+For a new project, design these in this order:
+
+1. **Pick the identity provider.** Okta or Entra ID for enterprise; Auth0 / Clerk / Stytch / WorkOS for B2B SaaS; Google Workspace for small teams. Don't roll your own.
+2. **Define your authorization model.** RBAC is the floor. Add ABAC when permissions depend on record attributes. Use a permission service (Cerbos, OpenFGA, Oso) when permissions get complex enough that an `if` statement in code is no longer readable.
+3. **Define your roles before you write code.** What roles will exist in your product? Write them in a doc with one sentence per role describing what they can do. Most products are: end user, end user admin (tenant-scoped), support, billing, content moderator, platform admin.
+4. **Federate cloud access.** AWS IAM Identity Center + your IdP; GCP Workload Identity Federation + your IdP; Azure AD as the source of truth for Azure roles.
+5. **Workload identity, not keys.** EC2 → IAM Roles; EKS → IRSA / Pod Identity; ECS → task role; Lambda → execution role; GitHub Actions → OIDC federation. No long-lived keys.
+6. **Logging from day 1.** Cloud trail / audit log to a SIEM-bound bucket; deny `*:Delete*` and `*:Put*` on the log bucket from anything but the logging service.
+7. **Break-glass account documented and tested.** Two-person rule, hardware MFA, used only for "the IdP is down" scenarios, alarms on every login.
+
+### Auth flow choices (web/mobile clients)
+
+- Public clients (browser, mobile) — OAuth 2.0 Authorization Code with PKCE; never implicit flow (deprecated, leaks tokens)
+- Confidential clients (server-to-server) — Client Credentials grant with short-lived access tokens
+- First-party native — your IdP's native SDK (Okta, Auth0, Clerk) handles the storage and refresh nuance
+- Long-lived refresh tokens stored in HttpOnly Secure cookies; never in `localStorage` (XSS-exfiltratable)
+- Token revocation list — your IdP should support it; if it doesn't, you have a JWT problem (see `owasp-audit` A07)
+
+## Mode 3 — Migrate / consolidate
+
+### Common migrations
+
+- **From AWS IAM users → AWS IAM Identity Center (SSO):** map users to permission sets via groups; rotate / disable IAM user access keys with a deadline; the long tail is service accounts and CI/CD — convert those to OIDC federation
+- **From Active Directory → Entra ID:** sync with Entra Connect, then add Conditional Access; the hard part is legacy auth (SMB, NTLM, on-prem LDAP) — those need their own deprecation plan
+- **From "Google Workspace as IdP" → dedicated IdP (Okta / Entra):** Google handles email but provisioning into 30 SaaS apps starts to drag; the migration is mostly SCIM provisioning + SAML federation; users barely notice
+- **From `roles/owner` everywhere → custom roles (GCP):** use Recommender API to suggest least-privilege replacements; cut over one project at a time
+
+### Migration playbook (works for all of the above)
+
+1. **Inventory current state.** Who has what access where? Spreadsheet is fine. Include service accounts.
+2. **Decide the target state.** Roles defined, groups defined, IdP chosen, federation pattern picked.
+3. **Set up the target in parallel.** New IdP / IAM Identity Center / etc. lives alongside the current setup. No cutover yet.
+4. **Pilot with a small group.** 5-10 people use the new path, find friction, fix it.
+5. **Migrate in waves.** By team or by app, not big bang. Each wave has a rollback procedure.
+6. **Deprecate the old path with a deadline.** Set a "by X date, the old IAM users are disabled" — and enforce it. Migrations without deadlines never finish.
+7. **Audit-trail the cutover.** Document who moved, when, what they had, what they got, who approved.
+
+## Verify, then record
+
+Findings come from Audit mode, and from the current-state inventory in a migration (Mode 3, step 1). Design and migration recommendations are not findings: they go in the report's Recommendations table, not in `findings.json`. Close every audit candidate with one verdict, as defined in [references/findings-format.md](references/findings-format.md).
+
+**1. Save the evidence first.** Almost everything here is a deployed setting, not a file. Save the read-only output that backs each candidate, redacted, to `<audit dir>/evidence/<name>.json` (or `.txt`), pretty-printed (`| jq .`) so line numbers stay put: `evidence/aws-iam-get-account-authorization-details.json`, `evidence/aws-accessanalyzer-list-findings.json`, `evidence/gcloud-asset-analyze-iam-policy-acme-prod.json`, `evidence/okta-policies-okta-sign-on.json`, `evidence/entra-conditional-access-policies.json`. Point `location`, `trace[]` and `evidence[]` at that file and the line of the decisive statement or setting, with the path repo-relative like any other location (`security-audit/evidence/...`). For an audit with no repository, make paths relative to the audit directory and say so in the report header. Application-authorization findings point at the source file instead.
+
+Never save a secret value. Strip client secret values (`secretText`), private keys, SAML signing certificates' private halves, API tokens, session tokens and password hashes before writing the file. Keep the principal names and IDs needed to find the resource.
+
+**2. Run the refutation pass** in [references/verification.md](references/verification.md) on every candidate before it is confirmed. For IAM the path is: the lower-trust principal (an internet user with a stolen password, any repo in the GitHub org, any principal in another account, a developer role) → the grant, trust or policy gap that lets them in → the privilege or data they end up with. Write it as `trace[]` over the evidence files: `entrypoint` = the trust policy, sign-on rule or binding that admits them; `propagation` = each hop (`iam:PassRole`, `iam:CreatePolicyVersion`, `actAs`, group nesting); `sink` = the admin permission or data resource reached. Look hardest for the controls that sit above the policy you're reading: SCPs and organization policies, permissions boundaries, resource-policy conditions (`aws:PrincipalOrgID`, `aws:SourceAccount`), Conditional Access, IdP authentication policies, deny policies.
+
+**3. Pick the verdict.**
+
+| Verdict | What it looks like here |
+|---|---|
+| `confirmed` | The saved output shows the whole path. Examples: role `ci-deploy` trusts GitHub OIDC with `token.actions.githubusercontent.com:sub` = `repo:acme/*`, and its policy allows `iam:PassRole` on `*` plus `lambda:CreateFunction`, with `AdminRole` passable, so any workflow in any org repo can run code as admin. An Okta sign-on policy rule for "Everyone" has MFA not required, and the app it covers is the AWS IAM Identity Center app with production permission sets. |
+| `needs_validation` | The policy you can see supports the claim, but one decisive fact lives somewhere you couldn't read. Examples: a developer role has `iam:CreatePolicyVersion` on its own policy (escalation to `*`), but the SCPs live in the management account you have no access to (blocker: does an SCP deny `iam:CreatePolicyVersion`; plan: `aws organizations list-policies-for-target --target-id <account-id> --filter SERVICE_CONTROL_POLICY` from the management account, or `aws iam simulate-principal-policy --policy-source-arn <role-arn> --action-names iam:CreatePolicyVersion`). A Conditional Access policy requires MFA but excludes the group `CA-Exclusions`, whose members you can't list. Any check you describe but don't run is `needs_validation` with the exact command in `validation_plan`. |
+| `rejected` | A named control at a named location stops it on every path. Examples: a role with `iam:CreateRole` + `iam:AttachRolePolicy` looks like an escalation path, but an SCP denies both unless the new role carries the `dev-boundary` permissions boundary (`ruled_out_by.location` = the SCP evidence file and line). A trust policy has `"Principal": {"AWS": "*"}`, but its `Condition` requires `aws:PrincipalOrgID` = your organization. |
+
+Escalation paths that start from a principal that is already admin are not findings. An unsafe default in an IaC module or a role template you were given (a module whose trust policy allows `"AWS": "*"` unless `trusted_accounts` is set) is `confirmed`, with a `system_configuration` condition ("deployments that don't set `trusted_accounts`") and confidence `medium`.
+
+Gaps with no traced impact are hardening notes, not records: roles not written down, direct user assignments that grant nothing extra, TOTP rather than FIDO2 for non-admin users, a session lifetime longer than policy, sign-in logs not forwarded to a SIEM, a break-glass account not tested this year. They go in the report's hardening section with no severity.
+
+**4. Calibrate severity** with [references/severity-calibration.md](references/severity-calibration.md), on `confirmed` records only, and rate by what the principal ends up able to do. An escalation path to account or tenant admin from a low-privilege role is High; an open trust policy on a role that can read production data is High or Critical; missing MFA is rated by what the affected accounts reach (admins of production: High; low-privilege users of an internal wiki: Medium or Low). `overall` ≤ demonstrated impact.
+
+Confidence: a policy read from the live API is evidence, not reproduction. Never exercise an escalation path. The provider's own read-only evaluator (`aws iam simulate-principal-policy`, `gcloud policy-troubleshoot iam`, Entra's Conditional Access What If) returning "allowed" for the decisive action counts as `"reproduced": true`; record the command and result in `evidence[]`. Without it, confidence caps at `medium`.
+
+**5. Fingerprint by principal or policy, not by line.** Form: `iam-audit/<class>/<provider>/<tenant>/<principal or policy>`, or `iam-audit/<class>/<file>/<symbol>` for application authorization and IaC. Write ARNs with slashes; the validator rejects `:<digits>` segments.
+
+```
+iam-audit/shadow-admin/aws/123456789012/role/ci-deploy        # arn:aws:iam::123456789012:role/ci-deploy
+iam-audit/open-trust-policy/aws/123456789012/role/partner-read
+iam-audit/sa-self-impersonation/gcp/acme-prod/builder@acme-prod.iam.gserviceaccount.com
+iam-audit/mfa-not-enforced/okta/acme.okta.com/policy/default-sign-on
+iam-audit/tenant-role-isolation/src/auth/can.ts/can
+```
+
+Classes in use: `wildcard-policy`, `admin-attachment`, `open-trust-policy`, `missing-permissions-boundary`, `shadow-admin`, `sa-self-impersonation`, `sa-key`, `static-access-key`, `console-user`, `primitive-role`, `public-binding`, `org-level-binding`, `mfa-not-enforced`, `legacy-auth-allowed`, `ca-gap`, `sp-secret-no-expiry`, `inactive-account`, `orphaned-app`, `tenant-role-isolation`. Add a new one when none fits.
+
+**6. Domain fields go under `ext`:**
+
+| Key | Value |
+|---|---|
+| `provider` | `aws`, `gcp`, `azure`, `ad`, `entra`, `okta`, `auth0`, `google-workspace`, `cognito`, `app` |
+| `tenant` | Account ID, GCP project or org ID, Entra tenant domain, Okta org domain |
+| `principal` | The user, role, group, service account or app the finding is about, as the provider prints it |
+
+**7. Write and validate.** Set `skill: "iam-audit"`, sort by fingerprint, write `findings.json`, and fix until it passes:
+
+```bash
+node references/validate-findings.mjs findings.json
+node references/to-sarif.mjs findings.json -o findings.sarif   # optional
+```
+
+On a re-run, load the previous `findings.json` and match by fingerprint. A `rejected` record stays rejected unless the control it names changed (re-read that evidence first). Dispositions, usually set later by `finding-triage`: Fixed / Deferred / Accepted Risk / Mitigated (platform/config) / Requires major migration. A false positive is a `rejected` record.
+
+## Output Format
+
+Write `findings.json` first (Audit mode). The report is rendered from it and never changes a verdict, severity, blocker or impact the JSON doesn't already say. No "Potential" or "Possible" labels.
+
+```markdown
+# IAM [Audit | Design | Migration] Report
+## Scope: [accounts / orgs / IdPs / apps covered]   ## Mode: [Audit | Design | Migrate]   ## Date: [date]
+## Access: [read-only role / API scopes used]   ## Not covered: [what and why]
+## findings.json: [path] — validated: [yes]   ## Evidence: [audit dir]/evidence/
+
+### Executive Summary
+[2-3 paragraphs — the IAM posture in plain English, top 3 risks, recommended next 90 days]
+
+### Summary
+- Confirmed: [N] (Critical [n] | High [n] | Medium [n] | Low [n])
+- Needs validation: [N]   Rejected: [N]   Hardening notes: [N]
+
+### Confirmed findings
+#### [SEVERITY] [Title]  `fingerprint`
+**Provider / tenant / principal:** [ext.provider / ext.tenant / ext.principal]
+**Evidence:** `evidence/<file>:<line>` — [the decisive statement or setting, redacted]
+**Confidence:** [medium | high (reproduced via simulator)]   **Conditions:** [from conditions[]]
+**Path:** [lower-trust principal → grant or gap → privilege or data reached]
+**Fix:** [the policy, binding or IdP change]
+**Verify the fix:** [the read-only command or simulator check that shows it's closed]
+
+### Needs validation
+| Finding | Blocker | Check for the owner to run |
+|---|---|---|
+
+### Hardening notes (not findings)
+- [gap] — [why it isn't a finding] — [effort]
+
+### Rejected (do not re-raise)
+| Fingerprint | Ruled out by | Location |
+|---|---|---|
+
+### Privileged access inventory
+| Principal | Provider / tenant | Admin-level grant | Standing or JIT | MFA type | Last used |
+|---|---|---|---|---|---|
+
+### Recommendations (Design / Migrate mode — not findings)
+| ID | Category | Recommendation | Effort |
+|---|---|---|---|
+
+### Roadmap
+[Quarterly milestones — what to do this month, next 90 days, next year]
+```
+
+## Boundaries
+
+- Only audit accounts and identity providers the user has authorization for
+- Read-only operations during audit (no `iam:AttachPolicy`, no role creation, no user disablement)
+- For migrations: never disable a user without a confirmed rollback path
+- Refuse to help bypass MFA, recover credentials by social engineering, or design backdoor access
+- Privilege escalation chains found during audit are documented as findings, not exploited
+
+## References
+
+- AWS IAM Best Practices
+- GCP IAM Best Practices
+- Microsoft Entra ID — privileged access strategy
+- Active Directory tiering and AD CS hardening: see [references/ad-tier0-paths.md](references/ad-tier0-paths.md) for its sources
+- NIST SP 800-63 (Digital Identity Guidelines)
+- NIST SP 800-207 (Zero Trust Architecture)
+- OWASP Authentication Cheat Sheet
+- OWASP Authorization Cheat Sheet
+- Open Policy Agent / Cedar / Cerbos / OpenFGA documentation
+- AWS Permission Boundary documentation
+- "Just enough access" / JIT access patterns
+- Shared references (copied into `references/` at build time): [findings-format.md](references/findings-format.md), [findings.schema.json](references/findings.schema.json), [validate-findings.mjs](references/validate-findings.mjs), [to-sarif.mjs](references/to-sarif.mjs), [severity-calibration.md](references/severity-calibration.md), [verification.md](references/verification.md)

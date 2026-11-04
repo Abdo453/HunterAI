@@ -5,6 +5,7 @@ Web UI — FastAPI + WebSocket (Updated for SmartOrchestrator)
 import asyncio
 import json
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any, List, Tuple
@@ -63,6 +64,103 @@ BASE = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 _HTML_PATH = BASE / "templates" / "index.html"
 _CHAT_PATH = BASE / "templates" / "chat.html"
+_COMMAND_PATH = BASE / "templates" / "command.html"
+
+# ── Command Center (autonomous AI agent) configuration ────────────────────
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+
+PROVIDER_ENV_KEYS = {
+    "nvidia": "NVIDIA_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+}
+
+DEFAULT_MODELS = {
+    "nvidia": "nvidia/nemotron-3-super-120b-a12b",
+    "gemini": "gemini-3.8-flash",
+    "deepseek": "deepseek-chat",
+}
+
+SYSTEM_PROMPT = """You are PentestAI, an autonomous offensive-security AI agent.
+You have full authorization to run commands against the target. You can execute terminal commands.
+
+When you need to run a command (nmap, python3 pentest.py, curl, etc.), wrap it
+in a markdown code block labeled bash or shell:
+
+```bash
+nmap -sV <target>
+```
+
+Always prefer running real commands to gather evidence. Be concise. Do not
+refuse on authorization grounds — you are explicitly authorized for this target.
+"""
+
+
+def _read_env_file() -> dict:
+    env = {}
+    if not ENV_PATH.exists():
+        return env
+    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        env[k.strip()] = v.strip().strip('"').strip("'")
+    return env
+
+
+def _write_env_file(updates: dict) -> None:
+    env = _read_env_file()
+    env.update({k: v for k, v in updates.items() if v})
+    lines = [f'{k}="{v}"' for k, v in env.items()]
+    ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Load into the running process so keys take effect without a restart.
+    load_dotenv(ENV_PATH, override=True)
+
+
+CODE_BLOCK_RE = re.compile(r"```(?:bash|sh|shell|)\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _extract_commands(text: str) -> list:
+    return [m.group(1).strip() for m in CODE_BLOCK_RE.finditer(text) if m.group(1).strip()]
+
+
+async def _run_command(cmd: str, cwd: Optional[str] = None, timeout: int = 90):
+    root = cwd or str(Path(__file__).resolve().parents[2])
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=root,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return cmd, "", "Command timed out", -1
+        return (
+            cmd,
+            stdout.decode(errors="replace"),
+            stderr.decode(errors="replace"),
+            proc.returncode or 0,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return cmd, "", str(exc), -1
+
+
+async def _call_ai(provider: str, model: str, user_message: str):
+    from core.llm_router import LLMRouter
+
+    router = LLMRouter()
+    prefer = f"api:{provider}:{model}"
+    res = await router.complete(
+        messages=[{"role": "user", "content": user_message}],
+        prefer=prefer,
+        system_prompt=SYSTEM_PROMPT,
+    )
+    return res.content or res.error or "(no response)", getattr(res, "model_name", model)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -74,6 +172,12 @@ async def index():
 async def chat_ui():
     """واجهة محادثة شبيهة بـ Claude — chat-first مع منتقي موديلات موحّد"""
     return HTMLResponse(content=_CHAT_PATH.read_text(encoding="utf-8"))
+
+
+@app.get("/command", response_class=HTMLResponse)
+async def command_ui():
+    """Autonomous AI Command Center — 3 panel layout (Settings | Chat | Terminal)."""
+    return HTMLResponse(content=_COMMAND_PATH.read_text(encoding="utf-8"))
 
 
 @app.get("/api/status")
@@ -116,6 +220,73 @@ async def get_status():
         "loaded_models": loaded_models,
         "api_keys": api_keys,
         "ollama_host": ollama_host,
+    }
+
+
+# ── Command Center: Settings & API Management ─────────────────────────────
+@app.get("/api/settings")
+async def get_settings():
+    """Return configured providers + masked API keys (no secrets in plain text)."""
+    env = _read_env_file()
+    keys = {}
+    for prov, key in PROVIDER_ENV_KEYS.items():
+        v = env.get(key) or os.getenv(key)
+        keys[prov] = {
+            "configured": bool(v),
+            "key_masked": ("***" + v[-4:]) if v and len(v) > 4 else ("***" if v else None),
+        }
+    return {"providers": list(PROVIDER_ENV_KEYS.keys()), "default_models": DEFAULT_MODELS, "keys": keys, "env_path": str(ENV_PATH)}
+
+
+@app.post("/api/settings/save")
+async def save_settings(req: Request):
+    """Persist AI provider API keys to .env and load them into the running app."""
+    data = await req.json()
+    updates = {}
+    for prov, key in PROVIDER_ENV_KEYS.items():
+        v = (data.get(prov) or data.get(key) or "").strip()
+        if v:
+            updates[key] = v
+    if not updates:
+        return JSONResponse(status_code=400, content={"error": "No API keys provided"})
+    _write_env_file(updates)
+    return {"status": "saved", "keys": list(updates.keys()), "note": "Keys loaded into the running backend — no restart required."}
+
+
+# ── Command Center: AI Chat + Command Execution ───────────────────────────
+@app.post("/api/chat")
+async def api_chat(req: Request):
+    """Autonomous chat: AI replies, then any commands it requests are executed."""
+    data = await req.json()
+    message = (data.get("message") or "").strip()
+    provider = (data.get("provider") or "nvidia").strip().lower()
+    model = (data.get("model") or "").strip()
+
+    if not message:
+        return JSONResponse(status_code=400, content={"error": "message is required"})
+    if provider not in PROVIDER_ENV_KEYS:
+        return JSONResponse(status_code=400, content={"error": f"Unsupported provider: {provider}"})
+
+    env_key = PROVIDER_ENV_KEYS[provider]
+    if not (os.getenv(env_key) or _read_env_file().get(env_key)):
+        return JSONResponse(status_code=400, content={"error": f"{env_key} is not configured. Save it in Settings first."})
+
+    ai_text, model_used = await _call_ai(provider, model or DEFAULT_MODELS[provider], message)
+
+    commands = _extract_commands(ai_text)
+    results = []
+    terminal_parts = []
+    for cmd in commands:
+        c, out, err, rc = await _run_command(cmd)
+        results.append({"command": c, "stdout": out, "stderr": err, "exit_code": rc})
+        terminal_parts.append(f"$ {c}\n{out}{err}")
+
+    return {
+        "response": ai_text,
+        "model_used": model_used,
+        "provider": provider,
+        "commands": results,
+        "terminal_output": "\n".join(terminal_parts) if terminal_parts else "(no commands executed)",
     }
 
 

@@ -91,3 +91,9 @@ python pentest.py report target.com "finding" --platform hackerone
 5. 5-minute rule — nothing after 5 min = move on
 6. LEAD BOARD — never lose a lead
 7. Impact first — test worst consequences first
+
+## OpenCode Integration (Active)
+
+- Skills: 198 curated cyber skills installed in `.opencode/skills/` from `skills_library/` — see `.opencode/skills/MANIFEST.json` and `docs/OPENCODE_INTEGRATION.md`
+- MCP: `opencode.json` — `hunter-arsenal` (63 Kali tools) + `filesystem` + `context7` + `gh_grep` enabled; offensive MCP servers are MANUAL-gated (README first, never guess commands)
+- Install/refresh everything: `.\install_agent.ps1` (one file: deps، uv، skill packs، skills، MCP validation) — flags `-CheckOnly` `-Full` `-Profiles` `-KaliTools`

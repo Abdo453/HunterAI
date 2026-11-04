@@ -1,0 +1,1603 @@
+{
+  "schema": "opencode-skills-manifest/1",
+  "generated_at": "2026-11-04T11:34:21.006665+00:00",
+  "profiles": [
+    "core"
+  ],
+  "cap": 200,
+  "count": 198,
+  "library_inventory": {
+    "acs": 818,
+    "tob": 95,
+    "bri": 42,
+    "ant": 20,
+    "ms": 211
+  },
+  "skills": [
+    {
+      "name": "acs-exploiting-sql-injection-vulnerabilities",
+      "title": "acs-exploiting-sql-injection-vulnerabilities",
+      "description": "'Identifies and exploits SQL injection vulnerabilities in web applications\n  during authorized penetration tests using manual techniques and automated tools\n  like sqlmap. The tester detects injection points through error-based, union-based,\n  blind boolean, and time-based blind techniques across all major database engines\n  (MySQL, PostgreSQL, MSSQL, Oracle) to demonstrate data extraction, authentication\n  bypass, and potential remote code execution. Activates for requests involving SQL\n  injection testing, SQLi exploitation, database security assessment, or injection\n  vulnerability verification.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-sql-injection-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-sql-injection-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-sql-injection-with-sqlmap",
+      "title": "acs-exploiting-sql-injection-with-sqlmap",
+      "description": "Detecting and exploiting SQL injection vulnerabilities using sqlmap to\n  extract database contents during authorized penetration tests.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-sql-injection-with-sqlmap/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-sql-injection-with-sqlmap/SKILL.md"
+    },
+    {
+      "name": "acs-performing-second-order-sql-injection",
+      "title": "acs-performing-second-order-sql-injection",
+      "description": "Detect and exploit second-order SQL injection vulnerabilities where malicious\n  input is stored in a database and later executed in an unsafe SQL query during a\n  different application operation.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-second-order-sql-injection/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-second-order-sql-injection/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-nosql-injection-vulnerabilities",
+      "title": "acs-exploiting-nosql-injection-vulnerabilities",
+      "description": "Detects and exploits NoSQL injection vulnerabilities in MongoDB, CouchDB,\n  and similar databases to demonstrate authentication bypass, data extraction, and\n  unauthorized access via crafted query operators. Use when pentesting APIs or web\n  applications backed by NoSQL databases to test input validation and injection\n  defenses.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-nosql-injection-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-nosql-injection-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-xss-vulnerabilities",
+      "title": "acs-testing-for-xss-vulnerabilities",
+      "description": "Tests web applications for reflected, stored, and DOM-based Cross-Site\n  Scripting by injecting JavaScript payloads with Burp Suite (XSS extensions, Active\n  Scan++) and browser tools, then bypassing sanitization and CSP to demonstrate session\n  hijacking and user impersonation. Use for OWASP WSTG client-side injection testing or\n  when evaluating input sanitization and output encoding coverage.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-xss-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-xss-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-xss-vulnerabilities-with-burpsuite",
+      "title": "acs-testing-for-xss-vulnerabilities-with-burpsuite",
+      "description": "Identifying and validating cross-site scripting vulnerabilities using\n  Burp Suite's scanner, intruder, and repeater tools during authorized security assessments.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-xss-vulnerabilities-with-burpsuite/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-xss-vulnerabilities-with-burpsuite/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-xxe-injection-vulnerabilities",
+      "title": "acs-testing-for-xxe-injection-vulnerabilities",
+      "description": "Discovering and exploiting XML External Entity injection vulnerabilities\n  to read server files, perform SSRF, and exfiltrate data during authorized penetration\n  tests.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-xxe-injection-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-xxe-injection-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-xml-injection-vulnerabilities",
+      "title": "acs-testing-for-xml-injection-vulnerabilities",
+      "description": "Test web applications for XML injection vulnerabilities including XXE,\n  XPath injection, and XML entity attacks to identify data exposure and server-side\n  request forgery risks.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-xml-injection-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-xml-injection-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-insecure-deserialization",
+      "title": "acs-exploiting-insecure-deserialization",
+      "description": "Identifying and exploiting insecure deserialization vulnerabilities in\n  Java, PHP, Python, and .NET applications to achieve remote code execution during\n  authorized penetration tests.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-insecure-deserialization/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-insecure-deserialization/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-template-injection-vulnerabilities",
+      "title": "acs-exploiting-template-injection-vulnerabilities",
+      "description": "Detects and exploits Server-Side Template Injection (SSTI) vulnerabilities\n  across Jinja2, Twig, Freemarker, and other template engines to achieve remote\n  code execution. Use when pentesting a web application that renders user input\n  through a server-side template engine and you need to confirm and weaponize SSTI.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-template-injection-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-template-injection-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-type-juggling-vulnerabilities",
+      "title": "acs-exploiting-type-juggling-vulnerabilities",
+      "description": "Exploits PHP type juggling vulnerabilities caused by loose (==) comparison\n  operators to bypass authentication, defeat hash verification via magic hashes,\n  and manipulate application logic through type coercion. Use when pentesting PHP\n  applications that compare user input with ==, in_array, or hash functions without\n  strict type checks.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-type-juggling-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-type-juggling-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-prototype-pollution-in-javascript",
+      "title": "acs-exploiting-prototype-pollution-in-javascript",
+      "description": "Detects and exploits JavaScript prototype pollution vulnerabilities\n  in client-side and server-side (Node.js) applications to achieve XSS, RCE, or\n  authentication bypass through property injection into Object.prototype. Use when\n  assessing a JavaScript/Node.js application for prototype pollution, especially\n  where a merge, clone, or extend function accepts user-controlled keys.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-prototype-pollution-in-javascript/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-prototype-pollution-in-javascript/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-server-side-request-forgery",
+      "title": "acs-exploiting-server-side-request-forgery",
+      "description": "Identifying and exploiting SSRF vulnerabilities to access internal services,\n  cloud metadata, and restricted network resources during authorized penetration tests.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-server-side-request-forgery/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-server-side-request-forgery/SKILL.md"
+    },
+    {
+      "name": "acs-performing-ssrf-vulnerability-exploitation",
+      "title": "acs-performing-ssrf-vulnerability-exploitation",
+      "description": ">-\n  Tests web application URL parameters for Server-Side Request Forgery by\n  probing cloud metadata endpoints (AWS/GCP/Azure at 169.254.169.254),\n  internal network services, and protocol handlers (file://, gopher://,\n  dict://) using a Python script, including IP-encoding bypass and DNS\n  rebinding checks. Use during authorized penetration testing to confirm SSRF\n  in a URL-fetching parameter and generate a vulnerability report.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-ssrf-vulnerability-exploitation/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-ssrf-vulnerability-exploitation/SKILL.md"
+    },
+    {
+      "name": "acs-performing-blind-ssrf-exploitation",
+      "title": "acs-performing-blind-ssrf-exploitation",
+      "description": "Detect and exploit blind Server-Side Request Forgery (SSRF) using out-of-band\n  techniques such as Burp Collaborator DNS interactions and timing analysis, to reach internal\n  services and cloud metadata endpoints even when server responses are not reflected. Use when\n  testing URL/webhook parameters, PDF generators, image processors, or import/preview features\n  where SSRF output cannot be observed directly.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-blind-ssrf-exploitation/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-blind-ssrf-exploitation/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-http-request-smuggling",
+      "title": "acs-exploiting-http-request-smuggling",
+      "description": ">-\n  Detects and exploits HTTP request smuggling caused by Content-Length/Transfer-Encoding\n  parsing discrepancies between front-end and back-end servers, using Burp Suite\n  Repeater (auto Content-Length disabled), the HTTP Request Smuggler extension, and\n  smuggler.py. Use during authorized tests of multi-tier architectures behind a\n  reverse proxy, load balancer, or CDN to find desync flaws and bypass front-end\n  controls.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-http-request-smuggling/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-http-request-smuggling/SKILL.md"
+    },
+    {
+      "name": "acs-performing-http-parameter-pollution-attack",
+      "title": "acs-performing-http-parameter-pollution-attack",
+      "description": "Executes HTTP Parameter Pollution attacks that inject duplicate request\n  parameters to bypass input validation, WAF rules, and other security controls when\n  front-end and back-end systems parse duplicate parameters differently. Use during\n  web application penetration testing to test for parameter parsing inconsistencies\n  or WAF/validation bypass.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-http-parameter-pollution-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-http-parameter-pollution-attack/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-idor-vulnerabilities",
+      "title": "acs-exploiting-idor-vulnerabilities",
+      "description": ">-\n  Identifies and exploits Insecure Direct Object Reference (IDOR) vulnerabilities\n  by manipulating object identifiers (numeric IDs, UUIDs, slugs) in API requests\n  and URLs, using Burp Suite proxy history, Intruder, and the Authorize extension\n  to test object-level authorization across sessions. Use during authorized\n  penetration tests or bug bounty work to validate that CRUD endpoints and\n  multi-tenant applications enforce per-object access control.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-idor-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-idor-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-broken-function-level-authorization",
+      "title": "acs-exploiting-broken-function-level-authorization",
+      "description": ">-\n  Tests APIs for Broken Function Level Authorization (OWASP API5:2023) by identifying\n  admin and privileged endpoints, then reaching them with regular-user credentials\n  via HTTP method switching, URL path manipulation, and parameter tampering. Use\n  when testing whether low-privilege users can invoke admin API functions or\n  otherwise escalate privileges via function-level access control gaps.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-broken-function-level-authorization/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-broken-function-level-authorization/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-broken-access-control",
+      "title": "acs-testing-for-broken-access-control",
+      "description": "Systematically tests web applications and APIs for broken access control\n  (OWASP A01:2021), including privilege escalation, missing function-level checks, insecure\n  direct object references, and multi-tenant data leakage, using Burp Suite with the\n  Authorize extension. Use during authorized penetration tests or RBAC/multi-tenant\n  authorization audits.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-broken-access-control/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-broken-access-control/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-business-logic-vulnerabilities",
+      "title": "acs-testing-for-business-logic-vulnerabilities",
+      "description": "Manually identifies flaws in application business logic - price manipulation,\n  multi-step workflow bypass, and privilege escalation - by intercepting and modifying\n  requests with Burp Suite, going beyond what automated vulnerability scanners detect.\n  Use for e-commerce checkout/cart flows, voucher and rewards systems, or any assessment\n  where scanners find little but business rules need scrutiny.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-business-logic-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-business-logic-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-performing-web-cache-poisoning-attack",
+      "title": "acs-performing-web-cache-poisoning-attack",
+      "description": "Exploiting web cache mechanisms to serve malicious content to other users\n  by poisoning cached responses through unkeyed headers and parameters during authorized\n  security tests.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-web-cache-poisoning-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-web-cache-poisoning-attack/SKILL.md"
+    },
+    {
+      "name": "acs-performing-web-cache-deception-attack",
+      "title": "acs-performing-web-cache-deception-attack",
+      "description": "Executes web cache deception attacks by exploiting path normalization\n  discrepancies between CDN/reverse-proxy caching layers (Cloudflare, Akamai, Varnish,\n  Nginx) and origin servers to cache and retrieve sensitive authenticated content.\n  Use when testing applications behind CDNs for cache-key misconfigurations, during\n  bug bounty hunting on aggressively cached sites, or when assessing sensitive data\n  exposure through cache layer misconfiguration.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-web-cache-deception-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-web-cache-deception-attack/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-host-header-injection",
+      "title": "acs-testing-for-host-header-injection",
+      "description": "Test web applications for HTTP Host header injection vulnerabilities\n  to identify password reset poisoning, web cache poisoning, SSRF, and virtual host\n  routing manipulation risks.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-host-header-injection/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-host-header-injection/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-email-header-injection",
+      "title": "acs-testing-for-email-header-injection",
+      "description": "Tests web application email functionality (contact forms, password reset,\n  newsletter subscriptions) for CRLF/SMTP header injection using Burp Suite and OWASP ZAP,\n  checking whether attackers can inject headers, modify recipients, or abuse forms for\n  spam relay. Use when testing any user-input-driven email-sending feature during a\n  penetration test.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-email-header-injection/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-email-header-injection/SKILL.md"
+    },
+    {
+      "name": "acs-testing-cors-misconfiguration",
+      "title": "acs-testing-cors-misconfiguration",
+      "description": "Identifying and exploiting Cross-Origin Resource Sharing misconfigurations\n  that allow unauthorized cross-domain data access and credential theft during security\n  assessments.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-cors-misconfiguration/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-cors-misconfiguration/SKILL.md"
+    },
+    {
+      "name": "acs-performing-csrf-attack-simulation",
+      "title": "acs-performing-csrf-attack-simulation",
+      "description": "Testing web applications for Cross-Site Request Forgery vulnerabilities\n  by crafting forged requests that exploit authenticated user sessions during authorized\n  security assessments.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-csrf-attack-simulation/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-csrf-attack-simulation/SKILL.md"
+    },
+    {
+      "name": "acs-performing-content-security-policy-bypass",
+      "title": "acs-performing-content-security-policy-bypass",
+      "description": "Analyze Content-Security-Policy headers and bypass them to achieve cross-site\n  scripting by exploiting unsafe-inline/unsafe-eval, whitelisted JSONP endpoints, base-uri\n  and form-action gaps, and nonce/hash weaknesses, then exfiltrate data even without\n  script-src control. Use during web application security assessments or bug bounty\n  hunting when XSS is found but blocked by CSP, or when auditing CSP header configuration\n  for weaknesses.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-content-security-policy-bypass/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-content-security-policy-bypass/SKILL.md"
+    },
+    {
+      "name": "acs-performing-clickjacking-attack-test",
+      "title": "acs-performing-clickjacking-attack-test",
+      "description": "Testing web applications for clickjacking vulnerabilities by assessing\n  frame embedding controls and crafting proof-of-concept overlay attacks during authorized\n  security assessments.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-clickjacking-attack-test/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-clickjacking-attack-test/SKILL.md"
+    },
+    {
+      "name": "acs-performing-directory-traversal-testing",
+      "title": "acs-performing-directory-traversal-testing",
+      "description": "Test web applications for path traversal and Local/Remote File Inclusion\n  vulnerabilities by manipulating file path parameters, applying encoding and filter-bypass\n  techniques, automating discovery with ffuf and dotdotpwn, and reading high-value files\n  or achieving code execution. Use during authorized penetration tests of file download,\n  view, or include functionality, or when assessing APIs that accept file names or file\n  paths as parameters.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-directory-traversal-testing/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-directory-traversal-testing/SKILL.md"
+    },
+    {
+      "name": "acs-testing-for-json-web-token-vulnerabilities",
+      "title": "acs-testing-for-json-web-token-vulnerabilities",
+      "description": "Tests JWT implementations for algorithm confusion, \"none\" algorithm bypass,\n  kid/jku parameter injection, and weak secret exploitation using jwt_tool and Burp Suite's\n  JWT Editor extension, aiming to achieve authentication bypass and privilege escalation.\n  Use when assessing JWT-based auth/session management, OAuth2/OIDC token handling, or\n  SSO systems during a security engagement.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-for-json-web-token-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-for-json-web-token-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-testing-jwt-token-security",
+      "title": "acs-testing-jwt-token-security",
+      "description": "Assessing JSON Web Token implementations for cryptographic weaknesses,\n  algorithm confusion attacks, and authorization bypass vulnerabilities during security\n  engagements.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-jwt-token-security/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-jwt-token-security/SKILL.md"
+    },
+    {
+      "name": "acs-performing-jwt-none-algorithm-attack",
+      "title": "acs-performing-jwt-none-algorithm-attack",
+      "description": "Execute and test the JWT none algorithm attack, crafting tokens with\n  the alg header set to none using PyJWT and an intercepting proxy (Burp Suite/mitmproxy)\n  to bypass signature verification and forge arbitrary claims. Use during authorized\n  penetration tests or security assessments of applications that use JWT for authentication\n  or authorization, to validate that the server rejects unsigned tokens.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-jwt-none-algorithm-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-jwt-none-algorithm-attack/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-jwt-algorithm-confusion-attack",
+      "title": "acs-exploiting-jwt-algorithm-confusion-attack",
+      "description": ">-\n  Exploits JWT algorithm confusion where the server's verification library trusts\n  the alg named in the token header, by switching RS256 to HS256 (signing with the\n  RSA public key as HMAC secret), setting alg to none, or injecting kid/jku/x5u\n  headers to supply an attacker-controlled key. Use when testing RS256 JWT auth\n  for algorithm downgrade, alg:none bypass, or key-confusion signature forgery.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-jwt-algorithm-confusion-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-jwt-algorithm-confusion-attack/SKILL.md"
+    },
+    {
+      "name": "acs-testing-oauth2-implementation-flaws",
+      "title": "acs-testing-oauth2-implementation-flaws",
+      "description": "Tests OAuth 2.0 and OpenID Connect implementations for authorization code\n  interception, redirect URI manipulation, CSRF in OAuth flows, token leakage, scope\n  escalation, and PKCE bypass, using Burp Suite Professional and the EsPReSSO extension\n  to probe the authorization server, client, and token handling. Use when assessing OAuth2/OIDC\n  flows or SSO systems for misconfigurations enabling account takeover.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-oauth2-implementation-flaws/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-oauth2-implementation-flaws/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-oauth-misconfiguration",
+      "title": "acs-exploiting-oauth-misconfiguration",
+      "description": "Identifying and exploiting OAuth 2.0 and OpenID Connect misconfigurations\n  including redirect URI manipulation, token leakage, and authorization code theft\n  during security assessments.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-oauth-misconfiguration/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-oauth-misconfiguration/SKILL.md"
+    },
+    {
+      "name": "acs-testing-api-authentication-weaknesses",
+      "title": "acs-testing-api-authentication-weaknesses",
+      "description": "'Tests API authentication mechanisms for weaknesses including broken\n  token validation, missing authentication on endpoints, weak password policies, credential\n  stuffing susceptibility, token leakage in URLs or logs, and session management flaws.\n  The tester evaluates JWT implementation, API key handling, OAuth flows, and session\n  token entropy to identify authentication bypasses. Maps to OWASP API2:2023 Broken\n  Authentication. Activates for requests involving API authentication testing, token\n  validation assessment, credential security testing, or API auth bypass.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-api-authentication-weaknesses/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-api-authentication-weaknesses/SKILL.md"
+    },
+    {
+      "name": "acs-testing-api-for-broken-object-level-authorization",
+      "title": "acs-testing-api-for-broken-object-level-authorization",
+      "description": "'Tests REST and GraphQL APIs for Broken Object Level Authorization (BOLA/IDOR,\n  OWASP API1:2023) by intercepting API calls, identifying object ID parameters (numeric\n  IDs, UUIDs, slugs), and systematically substituting IDs belonging to other users\n  to check whether the server enforces per-object authorization. Use when asked to\n  test BOLA or IDOR in an API, verify object-level authorization, or assess an API\n  for access control bypass.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-api-for-broken-object-level-authorization/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-api-for-broken-object-level-authorization/SKILL.md"
+    },
+    {
+      "name": "acs-testing-api-for-mass-assignment-vulnerability",
+      "title": "acs-testing-api-for-mass-assignment-vulnerability",
+      "description": "'Tests APIs for mass assignment (auto-binding), OWASP API3:2023, by identifying\n  writable endpoints, adding undocumented fields to request bodies (role, isAdmin,\n  price, balance), and checking whether the server binds them to the data model without\n  filtering. Use when testing an API for mass assignment, parameter binding abuse,\n  or over-posting on profile, registration, or object-creation endpoints.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-api-for-mass-assignment-vulnerability/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-api-for-mass-assignment-vulnerability/SKILL.md"
+    },
+    {
+      "name": "acs-testing-api-security-with-owasp-top-10",
+      "title": "acs-testing-api-security-with-owasp-top-10",
+      "description": "Systematically assesses REST, GraphQL, and gRPC API endpoints against the OWASP\n  API Security Top 10 (2023) using Burp Suite and Postman for automated and manual testing.\n  Use during authorized API penetration tests, before deploying new endpoints to production,\n  or when validating API gateway controls and rate limiting.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-api-security-with-owasp-top-10/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-api-security-with-owasp-top-10/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-mass-assignment-in-rest-apis",
+      "title": "acs-exploiting-mass-assignment-in-rest-apis",
+      "description": ">-\n  Discovers and exploits mass assignment (autobinding) in REST APIs by injecting\n  unexpected or hidden parameters (e.g. role, isAdmin, plan) into create/update\n  requests, using Burp Suite Intruder, Arjun, and param-miner to find bindable\n  fields on ORM-backed endpoints (Rails, Django, Laravel, Spring). Use when testing\n  REST APIs for privilege escalation or authorization bypass via unintended\n  parameter binding.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-mass-assignment-in-rest-apis/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-excessive-data-exposure-in-api",
+      "title": "acs-exploiting-excessive-data-exposure-in-api",
+      "description": ">-\n  Tests APIs for excessive data exposure (OWASP API3:2023) by intercepting raw API\n  responses and comparing them against what the UI actually renders, looking for\n  leaked PII, internal identifiers, debug data, or business-sensitive fields the\n  frontend filters but the API still transmits. Use when auditing REST or mobile-app\n  APIs for over-fetching, response filtering bypass, or unintended data leakage in\n  endpoint responses.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-excessive-data-exposure-in-api/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-excessive-data-exposure-in-api/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-api-injection-vulnerabilities",
+      "title": "acs-exploiting-api-injection-vulnerabilities",
+      "description": ">-\n  Tests API parameters, headers, and request bodies for injection flaws — SQL injection,\n  NoSQL injection, OS command injection, LDAP injection, and SSRF — by crafting\n  payloads tailored to the target backend to extract data, execute commands, or\n  reach internal services, mapped to OWASP API8:2023 and API7:2023 SSRF. Use when\n  performing SQLi, NoSQL injection, command injection, or SSRF testing against APIs,\n  or assessing API input validation.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-api-injection-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-api-injection-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-performing-api-rate-limiting-bypass",
+      "title": "acs-performing-api-rate-limiting-bypass",
+      "description": "'Tests API rate limiting for bypass vulnerabilities using Python (requests/aiohttp)\n  and Burp Suite Turbo Intruder to manipulate headers (e.g. X-Forwarded-For spoofing),\n  IPs, HTTP methods, API versions, and encodings, mapping findings to OWASP API4:2023\n  Unrestricted Resource Consumption. Use when assessing, under written authorization,\n  whether rate limits can be bypassed to enable brute force or resource-exhaustion\n  attacks.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-api-rate-limiting-bypass/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-api-rate-limiting-bypass/SKILL.md"
+    },
+    {
+      "name": "acs-testing-websocket-api-security",
+      "title": "acs-testing-websocket-api-security",
+      "description": "Tests WebSocket API implementations for missing upgrade-handshake authentication,\n  Cross-Site WebSocket Hijacking (CSWSH), message injection, insufficient input validation,\n  message-flooding DoS, and information leakage, using Burp Suite's WebSocket interception\n  and the wscat CLI to craft malicious payloads. Use for real-time API penetration testing\n  or CSWSH/authorization-bypass assessments on WebSocket channels.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-websocket-api-security/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-websocket-api-security/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-websocket-vulnerabilities",
+      "title": "acs-exploiting-websocket-vulnerabilities",
+      "description": "Testing WebSocket implementations for authentication bypass, cross-site\n  hijacking, injection attacks, and insecure message handling during authorized security\n  assessments.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-websocket-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-websocket-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-performing-graphql-security-assessment",
+      "title": "acs-performing-graphql-security-assessment",
+      "description": "Assessing GraphQL API endpoints for introspection leaks, injection attacks,\n  authorization flaws, and denial-of-service vulnerabilities during authorized security\n  tests.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-graphql-security-assessment/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-graphql-security-assessment/SKILL.md"
+    },
+    {
+      "name": "acs-performing-graphql-introspection-attack",
+      "title": "acs-performing-graphql-introspection-attack",
+      "description": "'Performs GraphQL introspection attacks that extract the full API schema\n  (types, queries, mutations, subscriptions, field definitions), map the attack surface,\n  test query depth/complexity limits, and exploit GraphQL-specific weaknesses such\n  as batching attacks, alias-based brute force, and nested query DoS. Use for GraphQL\n  security testing, schema enumeration, or GraphQL API penetration testing.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-graphql-introspection-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-graphql-introspection-attack/SKILL.md"
+    },
+    {
+      "name": "acs-performing-graphql-depth-limit-attack",
+      "title": "acs-performing-graphql-depth-limit-attack",
+      "description": "Execute and test GraphQL depth limit attacks using deeply nested recursive\n  queries to identify denial-of-service vulnerabilities in GraphQL APIs.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-graphql-depth-limit-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-graphql-depth-limit-attack/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-broken-link-hijacking",
+      "title": "acs-exploiting-broken-link-hijacking",
+      "description": ">-\n  Discovers and exploits broken link hijacking by spidering a site (Burp Suite\n  Spider, Scrapy, curl scraping), extracting referenced external scripts/domains,\n  and checking DNS/CNAME records and domain registration status for expired or\n  unclaimed resources an attacker could register. Use for subdomain takeover\n  testing, supply-chain review of third-party scripts, or bug bounty hunting for\n  hijackable external resources.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-broken-link-hijacking/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-broken-link-hijacking/SKILL.md"
+    },
+    {
+      "name": "acs-performing-subdomain-enumeration-with-subfinder",
+      "title": "acs-performing-subdomain-enumeration-with-subfinder",
+      "description": "Enumerate subdomains of target domains using ProjectDiscovery's Subfinder\n  passive reconnaissance tool to map the attack surface during security assessments.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-subdomain-enumeration-with-subfinder/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-subdomain-enumeration-with-subfinder/SKILL.md"
+    },
+    {
+      "name": "acs-performing-dns-enumeration-and-zone-transfer",
+      "title": "acs-performing-dns-enumeration-and-zone-transfer",
+      "description": "'Enumerates DNS records, attempts zone transfers, brute-forces subdomains,\n  and maps DNS infrastructure during authorized reconnaissance to identify attack\n  surface, misconfigurations, and information disclosure in target domains.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-dns-enumeration-and-zone-transfer/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-dns-enumeration-and-zone-transfer/SKILL.md"
+    },
+    {
+      "name": "acs-performing-security-headers-audit",
+      "title": "acs-performing-security-headers-audit",
+      "description": "Auditing HTTP security headers including CSP, HSTS, X-Frame-Options,\n  and cookie attributes to identify missing or misconfigured browser-level protections.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-security-headers-audit/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-security-headers-audit/SKILL.md"
+    },
+    {
+      "name": "acs-performing-web-application-vulnerability-triage",
+      "title": "acs-performing-web-application-vulnerability-triage",
+      "description": "Triages web application vulnerability findings from DAST/SAST scanners\n  such as Burp Suite and ZAP, using the OWASP Risk Rating Methodology to confirm\n  true positives, dismiss false positives, and prioritize remediation. Use when\n  reviewing scanner output to reduce alert fatigue and rank vulnerabilities for\n  development teams to fix.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-web-application-vulnerability-triage/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-web-application-vulnerability-triage/SKILL.md"
+    },
+    {
+      "name": "acs-performing-web-application-penetration-test",
+      "title": "acs-performing-web-application-penetration-test",
+      "description": "'Performs systematic security testing of web applications following the\n  OWASP Web Security Testing Guide (WSTG) methodology to identify vulnerabilities\n  in authentication, authorization, input validation, session management, and business\n  logic. The tester uses Burp Suite as the primary interception proxy alongside manual\n  testing techniques to find flaws that automated scanners miss. Activates for requests\n  involving web app pentest, OWASP testing, application security assessment, or web\n  vulnerability testing.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-web-application-penetration-test/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-web-application-penetration-test/SKILL.md"
+    },
+    {
+      "name": "acs-performing-web-application-scanning-with-nikto",
+      "title": "acs-performing-web-application-scanning-with-nikto",
+      "description": "Runs Nikto, an open-source web server and web application scanner,\n  to test over 7,000 potentially dangerous files/programs, check for outdated versions\n  across 1,250+ servers, and identify XSS, SQL injection, misconfigurations, default\n  credentials, and vulnerable CGI scripts. Use when performing web application vulnerability\n  scanning, security assessments, scheduled security testing, or validating web\n  server security controls.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-web-application-scanning-with-nikto/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-web-application-scanning-with-nikto/SKILL.md"
+    },
+    {
+      "name": "acs-scanning-network-with-nmap-advanced",
+      "title": "acs-scanning-network-with-nmap-advanced",
+      "description": "'Performs advanced network recon using Nmap''s Scripting Engine (NSE),\n  timing controls, firewall/IDS evasion, and structured output parsing to discover\n  hosts, enumerate service versions, detect vulnerabilities, and fingerprint OSes.\n  Use during authorized penetration tests or enterprise asset-discovery assessments\n  needing scan evasion, NSE vulnerability checks, or output fed into a vulnerability\n  management pipeline.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/scanning-network-with-nmap-advanced/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/scanning-network-with-nmap-advanced/SKILL.md"
+    },
+    {
+      "name": "acs-performing-ssl-tls-security-assessment",
+      "title": "acs-performing-ssl-tls-security-assessment",
+      "description": ">-\n  Assess SSL/TLS server configurations using the sslyze Python scanning\n  library to evaluate supported protocol versions, cipher suite strength,\n  certificate chain validation, HSTS enforcement, OCSP stapling, and known\n  vulnerabilities such as Heartbleed and ROBOT. Use when conducting a security\n  assessment of a server's TLS configuration or verifying remediation of\n  cipher/certificate weaknesses.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-ssl-tls-security-assessment/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-ssl-tls-security-assessment/SKILL.md"
+    },
+    {
+      "name": "acs-integrating-dast-with-owasp-zap-in-pipeline",
+      "title": "acs-integrating-dast-with-owasp-zap-in-pipeline",
+      "description": "Integrates OWASP ZAP (Zed Attack Proxy) into GitHub Actions and GitLab CI pipelines, covering baseline, full, and API scan configuration against running applications, ZAP finding interpretation, scan policy tuning, and DAST quality gates. Use when testing running web apps or REST/GraphQL APIs for XSS, SQLi, CSRF, and auth/authz flaws, or when SAST alone is insufficient and runtime DAST is required for compliance or release gating.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/integrating-dast-with-owasp-zap-in-pipeline/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/integrating-dast-with-owasp-zap-in-pipeline/SKILL.md"
+    },
+    {
+      "name": "acs-performing-thick-client-application-penetration-test",
+      "title": "acs-performing-thick-client-application-penetration-test",
+      "description": "Conduct a thick client application penetration test to identify insecure\n  local storage, hardcoded credentials, DLL hijacking, memory manipulation, and insecure\n  API communication in desktop applications using dnSpy, Procmon, and Burp Suite.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-thick-client-application-penetration-test/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-thick-client-application-penetration-test/SKILL.md"
+    },
+    {
+      "name": "acs-performing-soap-web-service-security-testing",
+      "title": "acs-performing-soap-web-service-security-testing",
+      "description": "Performs security testing of SOAP web services by analyzing WSDL definitions\n  and testing for XML injection, XXE, WS-Security bypass, SOAPAction spoofing, and\n  XPath injection. Use when assessing a SOAP/WSDL-based API endpoint for XML-related\n  vulnerabilities during a penetration test.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-soap-web-service-security-testing/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-soap-web-service-security-testing/SKILL.md"
+    },
+    {
+      "name": "acs-performing-active-directory-penetration-test",
+      "title": "acs-performing-active-directory-penetration-test",
+      "description": "Conduct a focused Active Directory penetration test using BloodHound,\n  Impacket, Certipy, Rubeus, and NetExec to enumerate domain objects, discover attack\n  paths, exploit Kerberos weaknesses, escalate privileges via ADCS/DCSync, and demonstrate\n  domain compromise. Use when running an authorized AD pentest from a standard domain\n  user foothold toward Domain Admin or Enterprise Admin.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-active-directory-penetration-test/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-active-directory-penetration-test/SKILL.md"
+    },
+    {
+      "name": "acs-performing-active-directory-bloodhound-analysis",
+      "title": "acs-performing-active-directory-bloodhound-analysis",
+      "description": "Use BloodHound and SharpHound (or AzureHound) to enumerate Active Directory\n  relationships and graph attack paths from a compromised user to Domain Admin. Use\n  when performing AD red-team reconnaissance, mapping privilege-escalation chains\n  from group memberships, ACLs, and trusts, or auditing AD for exploitable misconfigurations.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-active-directory-bloodhound-analysis/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-active-directory-bloodhound-analysis/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-active-directory-with-bloodhound",
+      "title": "acs-exploiting-active-directory-with-bloodhound",
+      "description": "BloodHound is a graph-based Active Directory reconnaissance tool that\n  uses graph theory to reveal hidden and unintended relationships within AD environments.\n  Red teams use BloodHound to identify attac",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-active-directory-with-bloodhound/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-active-directory-with-bloodhound/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-adcs-with-certipy",
+      "title": "acs-exploiting-adcs-with-certipy",
+      "description": "Use Certipy to enumerate AD CS certificate authorities and templates over LDAP/RPC, then exploit ESC1-ESC16 misconfigurations - SAN abuse, NTLM relay to web enrollment (ESC8), Shadow Credentials, golden certificate forgery, and PKINIT/Schannel auth. Use during authorized penetration tests to escalate a domain foothold to Domain Admin, or to validate that certificate template ACLs and CA hardening detect these attacks.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-adcs-with-certipy/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-adcs-with-certipy/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-active-directory-certificate-services-esc1",
+      "title": "acs-exploiting-active-directory-certificate-services-esc1",
+      "description": "Exploit misconfigured Active Directory Certificate Services (AD CS) ESC1\n  vulnerability to request certificates as high-privileged users and escalate domain\n  privileges during authorized red team assessments.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-active-directory-certificate-services-esc1/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-active-directory-certificate-services-esc1/SKILL.md"
+    },
+    {
+      "name": "acs-relaying-ntlm-for-adcs-esc8",
+      "title": "acs-relaying-ntlm-for-adcs-esc8",
+      "description": "Uses Impacket's ntlmrelayx.py with a coercion tool (PetitPotam, Coercer,\n  printerbug) to relay NTLM authentication from a coerced domain controller into\n  the AD CS HTTP web-enrollment endpoint (ESC8), obtaining a DC certificate usable\n  via Certipy for PKINIT/DCSync. Use during internal AD penetration tests or purple-team\n  exercises when AD CS Web Enrollment lacks Extended Protection for Authentication.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/relaying-ntlm-for-adcs-esc8/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/relaying-ntlm-for-adcs-esc8/SKILL.md"
+    },
+    {
+      "name": "acs-coercing-authentication-with-coercer-petitpotam",
+      "title": "acs-coercing-authentication-with-coercer-petitpotam",
+      "description": "Trigger machine account authentication with PetitPotam (MS-EFSR) and Coercer (MS-RPRN, MS-DFSNM, MS-FSRVP, MS-EVEN) via Coercer's scan/coerce/fuzz modes, feeding the coerced NTLM auth into a relay against AD CS Web Enrollment (ESC8), LDAP (RBCD), or SMB. Use in authorized engagements to complete a coercion-relay chain against a Domain Controller, or to validate coercion detections and signing/EPA mitigations.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/coercing-authentication-with-coercer-petitpotam/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/coercing-authentication-with-coercer-petitpotam/SKILL.md"
+    },
+    {
+      "name": "acs-conducting-domain-persistence-with-dcsync",
+      "title": "acs-conducting-domain-persistence-with-dcsync",
+      "description": "Perform DCSync attacks by abusing MS-DRSR replication rights (DS-Replication-Get-Changes/-All) to impersonate a Domain Controller and extract KRBTGT, Domain Admin, and service account hashes for Golden Ticket forging, typically with Mimikatz. Use in authorized engagements after finding principals with replication rights, to establish long-term domain persistence, or to validate detections for replication abuse.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/conducting-domain-persistence-with-dcsync/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/conducting-domain-persistence-with-dcsync/SKILL.md"
+    },
+    {
+      "name": "acs-performing-kerberoasting-attack",
+      "title": "acs-performing-kerberoasting-attack",
+      "description": "Perform Kerberoasting, a post-exploitation technique that enumerates\n  Active Directory service accounts with Service Principal Names (SPNs), requests\n  their Kerberos TGS tickets, and cracks the NTLM-encrypted tickets offline to recover\n  service account credentials. Use during authorized red team engagements or penetration\n  tests to assess AD privilege escalation and credential access risk from weak service\n  account passwords.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-kerberoasting-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-kerberoasting-attack/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-kerberoasting-with-impacket",
+      "title": "acs-exploiting-kerberoasting-with-impacket",
+      "description": ">-\n  Performs Kerberoasting (MITRE ATT&CK T1558.003) using Impacket's GetUserSPNs.py\n  to request Kerberos TGS tickets for SPN-registered service accounts, then cracks\n  the extracted RC4/AES-encrypted hashes offline to recover service account\n  credentials. Use during authorized Active Directory penetration tests or\n  red-team engagements for credential access against service accounts via\n  Kerberos ticket-granting-service requests.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-kerberoasting-with-impacket/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-kerberoasting-with-impacket/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-zerologon-vulnerability-cve-2020-1472",
+      "title": "acs-exploiting-zerologon-vulnerability-cve-2020-1472",
+      "description": "Exploits the Zerologon vulnerability (CVE-2020-1472) in the Netlogon\n  Remote Protocol using Impacket to reset a domain controller's machine account\n  password to empty, then runs DCSync via secretsdump.py to dump domain credentials.\n  Use when red-teaming or validating unpatched Active Directory domain controllers\n  for Zerologon, including restoring the machine account password afterward.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-zerologon-vulnerability-cve-2020-1472/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-zerologon-vulnerability-cve-2020-1472/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-ms17-010-eternalblue-vulnerability",
+      "title": "acs-exploiting-ms17-010-eternalblue-vulnerability",
+      "description": ">-\n  Detects and exploits MS17-010 (EternalBlue), a critical remote code execution\n  flaw in Microsoft's SMBv1 implementation, using Nmap's ms-17-010 NSE script for\n  detection and Metasploit's ms17_010_eternalblue/ms17_010_psexec modules for\n  exploitation. Use during authorized red-team engagements or penetration tests\n  against legacy Windows environments with unpatched SMBv1 to gain remote code\n  execution.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-ms17-010-eternalblue-vulnerability/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-ms17-010-eternalblue-vulnerability/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-nopac-cve-2021-42278-42287",
+      "title": "acs-exploiting-nopac-cve-2021-42278-42287",
+      "description": "Exploits the noPac Active Directory privilege-escalation chain (CVE-2021-42278\n  sAMAccountName spoofing plus CVE-2021-42287 KDC PAC confusion) using Impacket and\n  secretsdump.py to escalate from a standard domain user to Domain Admin. Use when\n  red-teaming or pentesting Active Directory to validate machine-account impersonation\n  and DCSync-based credential dumping.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-nopac-cve-2021-42278-42287/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-nopac-cve-2021-42278-42287/SKILL.md"
+    },
+    {
+      "name": "acs-performing-lateral-movement-with-wmiexec",
+      "title": "acs-performing-lateral-movement-with-wmiexec",
+      "description": "Perform lateral movement across Windows networks using WMI-based remote\n  execution techniques including Impacket wmiexec.py, CrackMapExec, and native WMI\n  commands for stealthy post-exploitation during red team engagements.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-lateral-movement-with-wmiexec/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-lateral-movement-with-wmiexec/SKILL.md"
+    },
+    {
+      "name": "acs-moving-laterally-with-netexec",
+      "title": "acs-moving-laterally-with-netexec",
+      "description": "Use NetExec (nxc) to validate credentials, enumerate SMB shares/users/policy, password-spray safely across lockout thresholds, execute commands, and dump SAM/LSA/NTDS credentials across SMB, WinRM, LDAP, MSSQL, SSH, and other protocol modules. Use during authorized internal penetration tests to find lateral-movement paths after obtaining credentials or hashes, or to conduct controlled password spraying and post-exploitation on in-scope hosts.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/moving-laterally-with-netexec/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/moving-laterally-with-netexec/SKILL.md"
+    },
+    {
+      "name": "acs-conducting-pass-the-ticket-attack",
+      "title": "acs-conducting-pass-the-ticket-attack",
+      "description": "Perform Pass-the-Ticket (PtT) lateral movement by extracting Kerberos TGT/TGS tickets from LSASS memory on a compromised host and injecting them into another session to impersonate the ticket owner without knowing their password. Use during authorized post-exploitation to move laterally or escalate access via stolen Kerberos tickets, or to validate detections for Kerberos ticket theft and reuse.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/conducting-pass-the-ticket-attack/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/conducting-pass-the-ticket-attack/SKILL.md"
+    },
+    {
+      "name": "acs-performing-privilege-escalation-assessment",
+      "title": "acs-performing-privilege-escalation-assessment",
+      "description": "'Performs privilege escalation assessments on compromised Linux and Windows\n  systems to identify paths from low-privilege access to root or SYSTEM-level control.\n  The tester enumerates misconfigurations, vulnerable services, kernel exploits, SUID\n  binaries, unquoted service paths, and credential stores to demonstrate the full\n  impact of an initial compromise. Activates for requests involving privilege escalation\n  testing, local exploitation, post-compromise escalation, or OS-level security assessment.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-privilege-escalation-assessment/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-privilege-escalation-assessment/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-vulnerabilities-with-metasploit-framework",
+      "title": "acs-exploiting-vulnerabilities-with-metasploit-framework",
+      "description": "Uses the Metasploit Framework (msfconsole and its exploit, auxiliary,\n  and post-exploitation modules) to validate that identified CVEs and vulnerabilities\n  are actually exploitable, gather post-exploitation evidence, and confirm patch\n  remediation. Use when performing vulnerability management validation, penetration\n  testing, or post-patch verification and you need to prove real-world exploitability\n  rather than rely on a scanner score alone.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-vulnerabilities-with-metasploit-framework/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-vulnerabilities-with-metasploit-framework/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-smb-vulnerabilities-with-metasploit",
+      "title": "acs-exploiting-smb-vulnerabilities-with-metasploit",
+      "description": "'Identifies and exploits SMB protocol vulnerabilities using Metasploit\n  Framework during authorized penetration tests to demonstrate risks from unpatched\n  Windows systems, misconfigured shares, and weak authentication in enterprise networks.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-smb-vulnerabilities-with-metasploit/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-smb-vulnerabilities-with-metasploit/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-aws-with-pacu",
+      "title": "acs-exploiting-aws-with-pacu",
+      "description": ">-\n  Runs the Pacu AWS exploitation framework end-to-end — session and credential setup,\n  IAM enumeration, automated privilege-escalation scanning via iam__privesc_scan,\n  and persistence/backdooring modules like iam__backdoor_users_keys. Use for\n  authorized AWS penetration tests or red-team engagements, assessing blast radius\n  from a compromised IAM credential, or generating attacker telemetry for purple-team\n  detection testing.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-aws-with-pacu/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-aws-with-pacu/SKILL.md"
+    },
+    {
+      "name": "acs-performing-aws-privilege-escalation-assessment",
+      "title": "acs-performing-aws-privilege-escalation-assessment",
+      "description": "'Performing authorized privilege escalation assessments in AWS environments\n  to identify IAM misconfigurations that allow users or roles to elevate their permissions\n  using Pacu, CloudFox, Principal Mapper, and manual IAM policy analysis techniques.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-aws-privilege-escalation-assessment/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-aws-privilege-escalation-assessment/SKILL.md"
+    },
+    {
+      "name": "acs-performing-aws-account-enumeration-with-scout-suite",
+      "title": "acs-performing-aws-account-enumeration-with-scout-suite",
+      "description": "Run the agentless, open-source ScoutSuite tool (via pip install and the `scout` CLI)\n  against an AWS account to enumerate resources across services, identify misconfigurations,\n  and generate an interactive HTML security report. Use when assessing an AWS account's overall\n  security posture with read-only IAM credentials, such as during a cloud security audit or\n  compliance review.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-aws-account-enumeration-with-scout-suite/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-aws-account-enumeration-with-scout-suite/SKILL.md"
+    },
+    {
+      "name": "acs-enumerating-cloud-with-cloudfox",
+      "title": "acs-enumerating-cloud-with-cloudfox",
+      "description": "Run CloudFox's read-only Describe/List/Get enumeration (all-checks,\n  role-trusts, secrets, endpoints, and permissions commands) to map AWS and Azure attack\n  paths and surface exploitable misconfigurations. Use immediately after obtaining a cloud\n  credential to build situational awareness, find exposed resources and secrets, or map\n  sts:AssumeRole trust relationships for lateral-movement/privilege-escalation planning.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/enumerating-cloud-with-cloudfox/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/enumerating-cloud-with-cloudfox/SKILL.md"
+    },
+    {
+      "name": "acs-conducting-cloud-penetration-testing",
+      "title": "acs-conducting-cloud-penetration-testing",
+      "description": "'This skill outlines methodologies for performing authorized penetration\n  testing against AWS, Azure, and GCP cloud environments. It covers understanding\n  the shared responsibility model for testing scope, leveraging cloud-specific attack\n  tools like Pacu and ScoutSuite, exploiting IAM misconfigurations, testing for SSRF\n  to cloud metadata services, and reporting findings aligned to MITRE ATT&CK Cloud\n  matrix.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/conducting-cloud-penetration-testing/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/conducting-cloud-penetration-testing/SKILL.md"
+    },
+    {
+      "name": "acs-performing-kubernetes-penetration-testing",
+      "title": "acs-performing-kubernetes-penetration-testing",
+      "description": ">-\n  Evaluates Kubernetes cluster security by actively simulating attacker techniques against the\n  API server, kubelet, etcd, pods, RBAC, network policy, and secrets, using kube-hunter,\n  Kubescape, peirates, and manual kubectl exploitation to find paths to cluster compromise.\n  Use for an authorized penetration test or hands-on validation that controls actually stop an\n  attacker. Keywords: kube-hunter, Kubescape, peirates, kubelet 10250, anonymous auth, token\n  theft, lateral movement, cluster takeover. Do not use for a configuration-only compliance\n  audit - use performing-kubernetes-cis-benchmark-with-kube-bench.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-kubernetes-penetration-testing/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-kubernetes-penetration-testing/SKILL.md"
+    },
+    {
+      "name": "acs-auditing-aws-s3-bucket-permissions",
+      "title": "acs-auditing-aws-s3-bucket-permissions",
+      "description": "'Systematically audit AWS S3 bucket permissions to identify publicly\n  accessible buckets, overly permissive ACLs, misconfigured bucket policies, and missing\n  encryption settings using AWS CLI, S3audit, and Prowler to enforce least-privilege\n  data access controls.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/auditing-aws-s3-bucket-permissions/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/auditing-aws-s3-bucket-permissions/SKILL.md"
+    },
+    {
+      "name": "acs-auditing-gcp-iam-permissions",
+      "title": "acs-auditing-gcp-iam-permissions",
+      "description": "'Auditing Google Cloud Platform IAM permissions to identify overly permissive\n  bindings, primitive role usage, service account key proliferation, and cross-project\n  access risks using gcloud CLI, Policy Analyzer, and IAM Recommender.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/auditing-gcp-iam-permissions/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/auditing-gcp-iam-permissions/SKILL.md"
+    },
+    {
+      "name": "acs-escaping-containers-to-host",
+      "title": "acs-escaping-containers-to-host",
+      "description": ">-\n  Exploits privileged pods, host mounts, runC CVEs, and exposed Docker sockets to break out of\n  a container and reach the underlying host during an authorized container-security\n  assessment. Use when executing an approved breakout test, demonstrating the real impact of a\n  privileged or hostPath workload, or validating that escape mitigations actually hold.\n  Keywords: container breakout, privileged, hostPath, docker.sock, runC CVE-2019-5736,\n  CVE-2024-21626, release_agent, nsenter. Do not use for defensive detection of these\n  techniques - use detecting-container-escape-attempts.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/escaping-containers-to-host/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/escaping-containers-to-host/SKILL.md"
+    },
+    {
+      "name": "acs-conducting-mobile-app-penetration-test",
+      "title": "acs-conducting-mobile-app-penetration-test",
+      "description": "'Conducts penetration testing of iOS and Android mobile applications\n  following the OWASP Mobile Application Security Testing Guide (MASTG) to identify\n  vulnerabilities in data storage, network communication, authentication, cryptography,\n  and platform-specific security controls. The tester performs static analysis of\n  application binaries, dynamic analysis at runtime, and API security testing to evaluate\n  the complete mobile attack surface. Activates for requests involving mobile app\n  pentest, iOS security assessment, Android security testing, or OWASP MASTG assessment.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/conducting-mobile-app-penetration-test/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/conducting-mobile-app-penetration-test/SKILL.md"
+    },
+    {
+      "name": "acs-performing-android-app-static-analysis-with-mobsf",
+      "title": "acs-performing-android-app-static-analysis-with-mobsf",
+      "description": "'Performs automated static analysis of Android applications using Mobile\n  Security Framework (MobSF) to identify hardcoded secrets, insecure permissions,\n  vulnerable components, weak cryptography, and code-level security flaws without\n  executing the application. Use when assessing Android APK/AAB files for security\n  vulnerabilities before deployment, during penetration testing, or as part of CI/CD\n  security gates. Activates for requests involving Android static analysis, MobSF\n  scanning, APK security assessment, or mobile application code review.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-android-app-static-analysis-with-mobsf/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-android-app-static-analysis-with-mobsf/SKILL.md"
+    },
+    {
+      "name": "acs-performing-ios-app-security-assessment",
+      "title": "acs-performing-ios-app-security-assessment",
+      "description": "'Performs comprehensive iOS application security assessments using Frida\n  for dynamic instrumentation, Objection for runtime exploration, SSL pinning bypass\n  for traffic interception, keychain extraction for credential analysis, and IPA static\n  analysis for binary-level review. Use when conducting authorized iOS penetration\n  tests, evaluating mobile app security posture against OWASP MASTG, or assessing\n  iOS app data protection and transport security controls. Activates for requests\n  involving iOS app pentesting, Frida-based iOS instrumentation, mobile app SSL pinning\n  bypass, or IPA reverse engineering.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-ios-app-security-assessment/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-ios-app-security-assessment/SKILL.md"
+    },
+    {
+      "name": "acs-performing-mobile-app-certificate-pinning-bypass",
+      "title": "acs-performing-mobile-app-certificate-pinning-bypass",
+      "description": "'Bypasses SSL/TLS certificate pinning implementations in Android and\n  iOS applications to enable traffic interception during authorized security assessments.\n  Covers OkHttp, TrustManager, NSURLSession, and third-party pinning library bypass\n  techniques using Frida, Objection, and custom scripts. Activates for requests involving\n  certificate pinning bypass, SSL pinning defeat, mobile TLS interception, or proxy-resistant\n  app testing.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-mobile-app-certificate-pinning-bypass/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-mobile-app-certificate-pinning-bypass/SKILL.md"
+    },
+    {
+      "name": "acs-intercepting-mobile-traffic-with-burpsuite",
+      "title": "acs-intercepting-mobile-traffic-with-burpsuite",
+      "description": "'Intercepts and analyzes HTTP/HTTPS traffic from mobile applications\n  using Burp Suite proxy to identify insecure API communications, authentication flaws,\n  data leakage, and server-side vulnerabilities. Use when performing mobile application\n  penetration testing, assessing API security, or evaluating client-server communication\n  patterns. Activates for requests involving mobile traffic interception, Burp Suite\n  mobile proxy, API security testing, or mobile HTTPS analysis.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/intercepting-mobile-traffic-with-burpsuite/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/intercepting-mobile-traffic-with-burpsuite/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-deeplink-vulnerabilities",
+      "title": "acs-exploiting-deeplink-vulnerabilities",
+      "description": "'Tests and exploits deep link (URL scheme and App Link) vulnerabilities\n  in Android and iOS mobile applications to identify unauthorized access, data injection,\n  intent hijacking, and redirect manipulation. Use when assessing mobile app attack\n  surface through custom URI schemes, Android App Links, iOS Universal Links, or intent-based\n  navigation. Activates for requests involving deep link security testing, URL scheme\n  exploitation, mobile intent abuse, or link hijacking.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-deeplink-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-deeplink-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-testing-mobile-api-authentication",
+      "title": "acs-testing-mobile-api-authentication",
+      "description": "'Tests authentication and authorization mechanisms in mobile application\n  APIs to identify broken authentication, insecure token management, session fixation,\n  privilege escalation, and IDOR vulnerabilities. Use when performing API security\n  assessments against mobile app backends, testing JWT implementations, evaluating\n  OAuth flows, or assessing session management. Activates for requests involving mobile\n  API auth testing, token security assessment, OAuth mobile flow testing, or API authorization\n  bypass.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-mobile-api-authentication/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-mobile-api-authentication/SKILL.md"
+    },
+    {
+      "name": "acs-testing-android-intents-for-vulnerabilities",
+      "title": "acs-testing-android-intents-for-vulnerabilities",
+      "description": "'Tests Android inter-process communication (IPC) through intents for\n  vulnerabilities including intent injection, unauthorized component access, broadcast\n  sniffing, pending intent hijacking, and content provider data leakage. Use when\n  assessing Android app attack surface through exported components, testing intent-based\n  data flows, or evaluating IPC security. Activates for requests involving Android\n  intent security, IPC testing, exported component analysis, or Drozer assessment.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/testing-android-intents-for-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/testing-android-intents-for-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-exploiting-insecure-data-storage-in-mobile",
+      "title": "acs-exploiting-insecure-data-storage-in-mobile",
+      "description": "'Identifies and exploits insecure local data storage vulnerabilities\n  in Android and iOS mobile applications including unencrypted databases, world-readable\n  files, insecure SharedPreferences, plaintext credential storage, and improper keychain/keystore\n  usage. Use when performing mobile penetration testing focused on OWASP M9 (Insecure\n  Data Storage) or assessing compliance with MASVS-STORAGE requirements. Activates\n  for requests involving mobile data storage security, local storage exploitation,\n  SharedPreferences analysis, or mobile data leakage assessment.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/exploiting-insecure-data-storage-in-mobile/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/exploiting-insecure-data-storage-in-mobile/SKILL.md"
+    },
+    {
+      "name": "acs-performing-open-source-intelligence-gathering",
+      "title": "acs-performing-open-source-intelligence-gathering",
+      "description": "Open Source Intelligence (OSINT) gathering is the first active phase\n  of a red team engagement, where operators collect publicly available information\n  about the target organization to identify attack s",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-open-source-intelligence-gathering/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-open-source-intelligence-gathering/SKILL.md"
+    },
+    {
+      "name": "acs-performing-osint-with-spiderfoot",
+      "title": "acs-performing-osint-with-spiderfoot",
+      "description": "Automate OSINT collection with the SpiderFoot REST API and CLI (sf.py/spiderfoot-cli) across 200+ modules, selecting scan modes (footprint, investigate, passive) and parsing results for domains, IPs, emails, leaked credentials, and DNS records into a target intelligence profile. Use when mapping an organization's attack surface or profiling a target for threat intelligence.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-osint-with-spiderfoot/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-osint-with-spiderfoot/SKILL.md"
+    },
+    {
+      "name": "acs-conducting-external-reconnaissance-with-osint",
+      "title": "acs-conducting-external-reconnaissance-with-osint",
+      "description": "Conduct external recon using OSINT techniques to map an organization's external attack surface without touching target systems, gathering DNS records, certificate transparency logs, search results, social media, code repositories, and breach databases into a target profile. Use for the passive info-gathering phase of a pentest, external footprinting, or collecting employee/email intel for a social engineering campaign.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/conducting-external-reconnaissance-with-osint/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/conducting-external-reconnaissance-with-osint/SKILL.md"
+    },
+    {
+      "name": "acs-collecting-open-source-intelligence",
+      "title": "acs-collecting-open-source-intelligence",
+      "description": "'Collects and synthesizes open-source intelligence (OSINT) about threat\n  actors, malicious infrastructure, and attack campaigns using publicly available\n  data sources, passive reconnaissance tools, and dark web monitoring. Use when investigating\n  external threat actor infrastructure, performing pre-engagement reconnaissance for\n  authorized red team assessments, or enriching CTI reports with publicly available\n  adversary context. Activates for requests involving Maltego, Shodan, OSINT framework,\n  SpiderFoot, or infrastructure reconnaissance.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/collecting-open-source-intelligence/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/collecting-open-source-intelligence/SKILL.md"
+    },
+    {
+      "name": "acs-performing-ip-reputation-analysis-with-shodan",
+      "title": "acs-performing-ip-reputation-analysis-with-shodan",
+      "description": "Analyze IP address reputation using the Shodan API to identify open ports,\n  running services, known vulnerabilities, and hosting context for threat intelligence\n  enrichment and incident triage.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-ip-reputation-analysis-with-shodan/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-ip-reputation-analysis-with-shodan/SKILL.md"
+    },
+    {
+      "name": "acs-monitoring-darkweb-sources",
+      "title": "acs-monitoring-darkweb-sources",
+      "description": "'Monitors dark web forums, marketplaces, paste sites, and ransomware\n  leak sites for mentions of organizational assets, leaked credentials, threatened\n  attacks, and threat actor communications to provide early warning intelligence.\n  Use when establishing dark web monitoring coverage, investigating specific data\n  breach claims, or enriching incident investigations with dark web context. Activates\n  for requests involving dark web OSINT, leak site monitoring, credential exposure,\n  Recorded Future dark web, or Tor hidden service intelligence.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/monitoring-darkweb-sources/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/monitoring-darkweb-sources/SKILL.md"
+    },
+    {
+      "name": "acs-performing-paste-site-monitoring-for-credentials",
+      "title": "acs-performing-paste-site-monitoring-for-credentials",
+      "description": "Monitor paste sites like Pastebin and GitHub Gists for leaked credentials,\n  API keys, and sensitive data dumps using automated scraping and keyword matching\n  to detect breaches early.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-paste-site-monitoring-for-credentials/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-paste-site-monitoring-for-credentials/SKILL.md"
+    },
+    {
+      "name": "acs-operating-sliver-c2",
+      "title": "acs-operating-sliver-c2",
+      "description": "Stand up a Sliver C2 server and mTLS listeners, generate cross-platform implants and beacons, and run post-exploitation, pivoting, and BOF/.NET tooling via the Armory for adversary emulation. Use during authorized, rules-of-engagement-bound red-team engagements that need a full open-source C2 lifecycle spanning server setup, implant generation, and post-exploitation tradecraft.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/operating-sliver-c2/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/operating-sliver-c2/SKILL.md"
+    },
+    {
+      "name": "acs-operating-havoc-c2",
+      "title": "acs-operating-havoc-c2",
+      "description": "Deploy a Havoc C2 team server with Yaotl malleable profiles, generate evasive Demon agents using indirect syscalls and sleep obfuscation, and run post-exploitation and pivoting operations. Use during authorized, rules-of-engagement-bound red-team engagements for adversary emulation requiring a full C2 lifecycle (server setup, evasive implant generation, tasking, and lateral pivoting).",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/operating-havoc-c2/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/operating-havoc-c2/SKILL.md"
+    },
+    {
+      "name": "acs-performing-red-team-with-covenant",
+      "title": "acs-performing-red-team-with-covenant",
+      "description": "Conducts red team operations using the Covenant C2 framework for authorized\n  adversary simulation, covering listener setup, grunt deployment, task execution,\n  and lateral movement tracking. Use when standing up or operating a Covenant command-and-control\n  server for an authorized red team engagement.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-red-team-with-covenant/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-red-team-with-covenant/SKILL.md"
+    },
+    {
+      "name": "acs-building-c2-infrastructure-with-sliver-framework",
+      "title": "acs-building-c2-infrastructure-with-sliver-framework",
+      "description": "Deploy and harden a Sliver C2 team server (BishopFox's Go-based adversary emulation framework) with multi-protocol listeners (mTLS, HTTP/S, DNS, WireGuard), redirectors, domain fronting, and multi-operator support for authorized red-team operations. Use when standing up resilient C2 for a red-team engagement or generating beacon/session implants that must survive blue-team detection.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/building-c2-infrastructure-with-sliver-framework/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/building-c2-infrastructure-with-sliver-framework/SKILL.md"
+    },
+    {
+      "name": "acs-building-red-team-c2-infrastructure-with-havoc",
+      "title": "acs-building-red-team-c2-infrastructure-with-havoc",
+      "description": "Deploy and configure the Havoc C2 framework (teamserver, HTTPS/HTTP/SMB\n  listeners, Nginx redirectors, and Demon agents) with malleable traffic profiles and\n  OPSEC-hardened infrastructure for authorized red team operations. Use when standing\n  up or hardening Havoc C2 infrastructure for a written, authorized adversary emulation\n  engagement.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/building-red-team-c2-infrastructure-with-havoc/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/building-red-team-c2-infrastructure-with-havoc/SKILL.md"
+    },
+    {
+      "name": "acs-performing-initial-access-with-evilginx3",
+      "title": "acs-performing-initial-access-with-evilginx3",
+      "description": "Perform authorized initial access using EvilGinx3 adversary-in-the-middle\n  phishing framework to capture session tokens and bypass multi-factor authentication\n  during red team engagements.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-initial-access-with-evilginx3/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-initial-access-with-evilginx3/SKILL.md"
+    },
+    {
+      "name": "acs-performing-threat-emulation-with-atomic-red-team",
+      "title": "acs-performing-threat-emulation-with-atomic-red-team",
+      "description": "'Executes Atomic Red Team tests for MITRE ATT&CK technique validation\n  using the atomic-operator Python framework. Loads test definitions from YAML atomics,\n  runs attack simulations, and validates detection coverage. Use when testing SIEM\n  detection rules, validating EDR coverage, or conducting purple team exercises.\n\n  '",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-threat-emulation-with-atomic-red-team/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-threat-emulation-with-atomic-red-team/SKILL.md"
+    },
+    {
+      "name": "acs-performing-hash-cracking-with-hashcat",
+      "title": "acs-performing-hash-cracking-with-hashcat",
+      "description": "Cracks password hashes with Hashcat, covering hash-type identification,\n  dictionary/brute-force/rule-based attack modes, custom rule creation, GPU benchmarking,\n  and password-strength/compliance reporting. Use for authorized penetration testing\n  or security audits that need to evaluate password strength or crack captured hashes.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/performing-hash-cracking-with-hashcat/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/performing-hash-cracking-with-hashcat/SKILL.md"
+    },
+    {
+      "name": "acs-analyzing-ethereum-smart-contract-vulnerabilities",
+      "title": "acs-analyzing-ethereum-smart-contract-vulnerabilities",
+      "description": "Perform static and symbolic analysis of Solidity smart contracts using\n  Slither and Mythril to detect reentrancy, integer overflow, access control, and\n  other vulnerability classes before deployment to Ethereum mainnet.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/analyzing-ethereum-smart-contract-vulnerabilities/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/analyzing-ethereum-smart-contract-vulnerabilities/SKILL.md"
+    },
+    {
+      "name": "acs-auditing-foundry-smart-contract-security",
+      "title": "acs-auditing-foundry-smart-contract-security",
+      "description": ">-\n  Pre-deployment security audit of Solidity smart contracts in a Foundry project.\n  Combines static analysis (Slither, Aderyn), symbolic execution (Mythril), and\n  property-based testing (forge fuzz + invariant tests with handlers) to catch\n  reentrancy, access-control, oracle/price manipulation, and arithmetic bugs\n  BEFORE deploying to an EVM chain. Also enforces key hygiene (no plaintext\n  private keys, encrypted cast keystore) and a secure deploy workflow. Use when\n  writing, reviewing, testing, or deploying Solidity/Foundry contracts, building\n  a dApp, or working with forge/cast/anvil, MetaMask, or Web3/DeFi code.",
+      "pack": "anthropic-cyber",
+      "source": "anthropic-cyber/skills/auditing-foundry-smart-contract-security/SKILL.md",
+      "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills/blob/main/skills/auditing-foundry-smart-contract-security/SKILL.md"
+    },
+    {
+      "name": "tob-semgrep",
+      "title": "tob-semgrep",
+      "description": ">-\n  Runs a Semgrep security scan over a codebase: detects languages, selects\n  rulesets, presents the plan for explicit approval, then runs every approved\n  ruleset through scripts/run-scans.sh, which batches the semgrep processes and\n  writes scans.json, and merges the output to SARIF. Supports two scan modes,\n  \"run all\" for full ruleset coverage and \"important only\" for security\n  findings at medium-to-high confidence and impact. Uses Semgrep Pro for\n  cross-file taint analysis when it is available. Use when asked to scan code\n  for vulnerabilities, run a security audit with Semgrep, find bugs, or perform\n  static analysis. For the same scan without the approval gate, use the\n  /static-analysis:semgrep-scan workflow.",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/static-analysis/skills/semgrep/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/static-analysis/skills/semgrep/SKILL.md"
+    },
+    {
+      "name": "tob-codeql",
+      "title": "tob-codeql",
+      "description": ">-\n  Scans a codebase for security vulnerabilities using CodeQL's interprocedural data flow and\n  taint tracking analysis. Triggers on \"run codeql\", \"codeql scan\", \"build codeql database\",\n  \"SAST scan\", \"taint analysis\", \"dataflow analysis\", or \"find vulnerabilities in this repo\".\n  Covers Python, JavaScript/TypeScript, Go, Java/Kotlin, C/C++, C#, Ruby, and Swift. Supports\n  \"run all\" (security-and-quality + security-experimental) and \"important only\"\n  (high-precision) scan modes, and creates data extension models for project-specific sources\n  and sinks. For fast single-file pattern matching, or when no build is available for a\n  compiled language, use the semgrep skill; to parse SARIF that already exists rather than\n  produce it, use the sarif-parsing skill.",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/static-analysis/skills/codeql/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/static-analysis/skills/codeql/SKILL.md"
+    },
+    {
+      "name": "tob-sarif-parsing",
+      "title": "tob-sarif-parsing",
+      "description": ">-\n  Parses and processes SARIF files from static analysis tools like CodeQL, Semgrep, or other\n  scanners. Triggers on \"parse sarif\", \"read scan results\", \"aggregate findings\", \"deduplicate\n  alerts\", or \"process sarif output\". Handles filtering, deduplication, format conversion, and\n  CI/CD integration of SARIF data. Does NOT run scans — use the Semgrep or CodeQL skills for that.",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/static-analysis/skills/sarif-parsing/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/static-analysis/skills/sarif-parsing/SKILL.md"
+    },
+    {
+      "name": "tob-yara-rule-authoring",
+      "title": "tob-yara-rule-authoring",
+      "description": ">\n  Guides authoring of high-quality YARA-X detection rules for malware identification.\n  Use when writing, reviewing, or optimizing YARA rules. Covers naming conventions,\n  string selection, performance optimization, migration from legacy YARA, and false\n  positive reduction. Triggers on: YARA, YARA-X, malware detection, threat hunting,\n  IOC, signature, crx module, dex module.\n---\n\n# YARA-X Rule Authoring\n\nWrite detection rules that catch malware without drowning in false positives.\n\nResolve the [linter](scripts/yara_lint.py), [atom analyzer](scripts/atom_analyzer.py),\nand [review helper](scripts/review.sh) from this installed `SKILL.md`'s directory.\nIn commands below, replace each `<resolved-...-path>` with that script's absolute\npath and keep the quotes. The rule file or directory is still relative to your\nworking directory unless you pass an absolute input path.\n\n**This skill targets YARA-X**, the Rust-based successor to legacy YARA — 5-10x faster regex, better errors, built-in formatter, stricter valida",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/yara-authoring/skills/yara-rule-authoring/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/yara-authoring/skills/yara-rule-authoring/SKILL.md"
+    },
+    {
+      "name": "tob-vulnerability-triage-brocards",
+      "title": "tob-vulnerability-triage-brocards",
+      "description": ">-\n  This skill should be used when the user asks to \"triage a vulnerability\n  report\", \"assess a CVE\", \"evaluate a bug bounty submission\", \"decide if a\n  finding is valid\", \"review a security finding\", \"dismiss a vulnerability\",\n  \"should we fix this CVE\", \"prioritize a vulnerability report\", or needs\n  to determine whether an incoming vulnerability report warrants\n  investigation. Applies 7 brocards (rules of thumb) to systematically\n  accept, dismiss, or request more information on vulnerability reports,\n  or needs to filter raw findings from agentic vulnerability\n  discovery pipelines before human review.\n---\n\n# Vulnerability Triage Brocards\n\nSystematically evaluate incoming vulnerability reports against 7 principled\ncriteria before committing resources to deeper analysis. Each brocard is a\nfalsifiable test: if a report fails any brocard, document the reason and\ndismiss or request clarification. If a report survives all 7, escalate it.\n\nThe 7 brocards are adapted from William Woodruff's\n[\"Brocards for vul",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/vulnerability-triage-brocards/skills/vulnerability-triage-brocards/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/vulnerability-triage-brocards/skills/vulnerability-triage-brocards/SKILL.md"
+    },
+    {
+      "name": "tob-variant-analysis",
+      "title": "tob-variant-analysis",
+      "description": "Hunts for the other instances of a bug already found — the variants of one root cause across a codebase. Use immediately after a vulnerability, logic bug, or bad pattern turns up in a specific file and the question becomes where else it occurs, including the bare conversational form (\"are there others like this?\", \"is this the same bug?\"). Also for generalizing one known instance into a CodeQL or Semgrep query for its whole pattern family, and for triaging a set of look-alike candidates against a known root cause. Not for initial discovery with no bug in hand.\n---\n\n# Variant Analysis\n\nFind the other instances of a bug you have already found. One root cause usually has several\nmanifestations, and they are rarely in the module where you found the first one.\n\n## When to Use\n\n- A vulnerability has been found and you need to search for similar instances\n- Building or refining CodeQL/Semgrep queries for security patterns\n- Performing systematic code audits after an initial issue discovery\n- Analyzing how a single r",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/variant-analysis/skills/variant-analysis/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/variant-analysis/skills/variant-analysis/SKILL.md"
+    },
+    {
+      "name": "tob-burpsuite-project-parser",
+      "title": "tob-burpsuite-project-parser",
+      "description": "Searches and explores Burp Suite project files (.burp) from the command line. Use when searching response headers or bodies with regex patterns, extracting security audit findings, dumping proxy history or site map data, or analyzing HTTP traffic captured in a Burp project.",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/burpsuite-project-parser/skills/burpsuite-project-parser/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/burpsuite-project-parser/skills/burpsuite-project-parser/SKILL.md"
+    },
+    {
+      "name": "tob-supply-chain-risk-auditor",
+      "title": "tob-supply-chain-risk-auditor",
+      "description": "\"Audits a project's dependencies for supply-chain risk: version-matched advisories for direct dependencies and the full lockfile tree, abandoned or archived upstreams, npm publisher concentration, and install-time script execution. Use when asked to audit dependencies, assess supply-chain or third-party package risk, or review a dependency tree before an engagement.\"",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/SKILL.md"
+    },
+    {
+      "name": "tob-agentic-actions-auditor",
+      "title": "tob-agentic-actions-auditor",
+      "description": "\"Audits GitHub Actions workflows for security vulnerabilities in AI agent integrations including Claude Code Action, Gemini CLI, OpenAI Codex, and GitHub AI Inference. Detects attack vectors where attacker-controlled input reaches AI agents running in CI/CD pipelines, including env var intermediary patterns, direct expression injection, dangerous sandbox configurations, and wildcard user allowlists. Use when reviewing workflow files that invoke AI coding agents, auditing CI/CD pipeline security for prompt injection risks, or evaluating agentic action configurations.\"",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/agentic-actions-auditor/skills/agentic-actions-auditor/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/agentic-actions-auditor/skills/agentic-actions-auditor/SKILL.md"
+    },
+    {
+      "name": "tob-audit-context-building",
+      "title": "tob-audit-context-building",
+      "description": "Understand a codebase before looking for bugs in it - what each function assumes, what it guarantees, and what it depends on elsewhere. Use when starting an audit, threat model, or architecture review on unfamiliar code, and before any vulnerability-hunting pass.",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/audit-context-building/skills/audit-context-building/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/audit-context-building/skills/audit-context-building/SKILL.md"
+    },
+    {
+      "name": "tob-entry-point-analyzer",
+      "title": "tob-entry-point-analyzer",
+      "description": "Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level (public, admin, role-restricted, contract-only), and generates structured audit reports. Excludes view/pure/read-only functions. Use when auditing smart contracts (Solidity, Vyper, Solana/Rust, Move, TON, CosmWasm) or when asked to find entry points, audit flows, external functions, access control patterns, or privileged operations.\n---\n\n# Entry Point Analyzer\n\nSystematically identify all **state-changing** entry points in a smart contract codebase to guide security audits.\n\n## Execution in Codex\n\nUse the available file-reading, search, and shell tools. Resolve bundled reference\nlinks relative to this SKILL.md, not the audited repository. Slither is optional;\nuse manual inspection if it is unavailable or fails. Report unreadable source or\nreference files as coverage gaps. Runtime permissions come from the workspace.\n\n## When",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/entry-point-analyzer/skills/entry-point-analyzer/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/entry-point-analyzer/skills/entry-point-analyzer/SKILL.md"
+    },
+    {
+      "name": "tob-constant-time-analysis",
+      "title": "tob-constant-time-analysis",
+      "description": "Detects timing side-channel vulnerabilities in cryptographic code. Use when implementing or reviewing crypto code, encountering division on secrets, secret-dependent branches, or constant-time programming questions in C, C++, Go, Rust, Swift, Java, Kotlin, C#, PHP, JavaScript, TypeScript, Python, or Ruby.",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/constant-time-analysis/skills/constant-time-analysis/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/constant-time-analysis/skills/constant-time-analysis/SKILL.md"
+    },
+    {
+      "name": "tob-post-patch-validation",
+      "title": "tob-post-patch-validation",
+      "description": ">\n  Validates security patches with reproducible baseline-versus-patched evidence, including\n  original exploits, root-cause variants, behavior preservation, regressions, and newly\n  introduced security failures. Use after a patch exists and before accepting, merging, or\n  reporting it as fixed; also use when an AI-generated patch, remediation commit, pull request,\n  or proposed upstream fix needs adversarial post-patch validation across any language.",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/post-patch-validation/skills/post-patch-validation/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/post-patch-validation/skills/post-patch-validation/SKILL.md"
+    },
+    {
+      "name": "tob-github-triage",
+      "title": "tob-github-triage",
+      "description": "\"Triages a repository's open GitHub issues and pull requests via the gh CLI. Optionally reviews and merges ready PRs — incrementally merging passing automated/bot PRs and maintainer-approved ones, and spawning review subagents for never-reviewed ones — then closes already-resolved issues with comments citing the resolving PR or commit, cross-links issues with their pending fix PRs, and assigns local-only priority and change-size estimates for everything outstanding. Use when triaging, grooming, or reviewing a repository's open issues and PRs.\"",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/github-triage/skills/github-triage/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/github-triage/skills/github-triage/SKILL.md"
+    },
+    {
+      "name": "tob-second-opinion",
+      "title": "tob-second-opinion",
+      "description": "\"Gets independent code reviews from Codex or Antigravity for uncommitted changes, branch diffs, and commits. Use when the user requests an external review, a second opinion on code, a codex review, a gemini review, an antigravity review, or /second-opinion.\"",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/second-opinion/skills/second-opinion/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/second-opinion/skills/second-opinion/SKILL.md"
+    },
+    {
+      "name": "tob-reproduce-bug",
+      "title": "tob-reproduce-bug",
+      "description": "Use when a named runtime or compiler bug in a local repository needs independent reproduction.\n---\n\n# Reproduce Bug\n\n## When to Use\n\nUse for the reproduction step of `patching-bugs` with one `finding.json` and a local\nbaseline checkout. Read the [record contract](../../references/records.md).\nBefore target commands, follow its [project guidance](../../references/records.md#project-guidance).\n\n## When NOT to Use\n\nDo not use for bug discovery, patching, or a claim that cannot be exercised locally.\nReport a blocker when the build or environment cannot exercise the claim.\n\n## Procedure\n\n1. Select `failure_type` from the record contract. Build the current baseline with the\n   project's own command. Exercise the planned scoped inputs before any edit and\n   retain their observations, including valid controls. Save raw stdout, stderr,\n   exit status, and timing. If the behavior is absent with trustworthy evidence,\n   report `not_reproduced`; if setup or observations are unreliable, report `blocked`.\n2. Runtime: exerc",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/patching-bugs/skills/reproduce-bug/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/patching-bugs/skills/reproduce-bug/SKILL.md"
+    },
+    {
+      "name": "tob-validate-bug",
+      "title": "tob-validate-bug",
+      "description": "Use when a bug PoC package needs an independent rerun and judgment before patching.\n---\n\n# Validate Bug\n\n## When to Use\n\nUse after `reproduce-bug` has supplied a finding and PoC package. Read the\n[record contract](../../references/records.md).\nBefore target commands, follow its [project guidance](../../references/records.md#project-guidance).\n\n## When NOT to Use\n\nDo not use to repair a PoC, develop a patch, or infer reproduction from the\nreproducer's narrative.\n\n## Procedure\n\n1. Read `finding.json`, the reproduction's proof type, commands, any PoC, and raw receipts.\n   Do not read the reproducer's transcript.\n2. Rerun the same baseline compiler command for compile failures, or rebuild and rerun\n   the unchanged runtime PoC and planned scoped inputs. Save stdout, stderr, exit\n   status and timing in `validate/receipts/`. If an observation is unreliable,\n   return `inconclusive` instead of inferring either presence or absence.\n3. Decide whether the target diagnostic or runtime assertion demonstrates the exact c",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/patching-bugs/skills/validate-bug/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/patching-bugs/skills/validate-bug/SKILL.md"
+    },
+    {
+      "name": "tob-fuzzing-dictionary",
+      "title": "tob-fuzzing-dictionary",
+      "description": "\"Builds and applies fuzzing dictionaries so a fuzzer can produce the keywords, magic bytes, and tokens a target expects. Covers extracting tokens from source, headers, binaries, and specifications, dictionary syntax, and wiring one into libFuzzer or AFL++. Use when fuzzing a parser, protocol, or file format, when coverage stalls at input validation, or when a target compares against fixed strings.\"\n---\n\n# Fuzzing Dictionary\n\nA fuzzing dictionary provides domain-specific tokens to guide the fuzzer toward interesting inputs. Instead of purely random mutations, the fuzzer incorporates known keywords, magic numbers, protocol commands, and format-specific strings that are more likely to reach deeper code paths in parsers, protocol handlers, and file format processors.\n\n## Overview\n\nDictionaries are text files containing quoted strings that represent meaningful tokens for your target. They help fuzzers bypass early validation checks and explore code paths that would be difficult to reach through blind mutation alon",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/fuzzing-dictionary/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/fuzzing-dictionary/SKILL.md"
+    },
+    {
+      "name": "tob-harness-writing",
+      "title": "tob-harness-writing",
+      "description": "\"Designs and improves fuzzing harnesses for C/C++ and Rust. Covers mapping raw bytes onto a target API, generating structured inputs, avoiding non-determinism and false crashes, and deciding what to fuzz together. Use when writing a first LLVMFuzzerTestOneInput or fuzz_target! harness, when a campaign finds nothing or reports crashes that will not reproduce, or when the target API needs structured rather than raw input.\"\n---\n\n# Writing Fuzzing Harnesses\n\nA fuzzing harness is the entrypoint function that receives random data from the fuzzer and routes it to your system under test (SUT). The quality of your harness directly determines which code paths get exercised and whether critical bugs are found. A poorly written harness can miss entire subsystems or produce non-reproducible crashes.\n\n## Overview\n\nThe harness is the bridge between the fuzzer's random byte generation and your application's API. It must parse raw bytes into meaningful inputs, call target functions, and handle edge cases gracefully. The most",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/harness-writing/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/harness-writing/SKILL.md"
+    },
+    {
+      "name": "tob-libfuzzer",
+      "title": "tob-libfuzzer",
+      "description": "\"Sets up and runs libFuzzer, the coverage-guided fuzzer built into LLVM, on C/C++ code that compiles with Clang. Covers harness structure, -fsanitize=fuzzer builds, corpus and dictionary management, sanitizer integration, and campaign triage. Use when writing or debugging an LLVMFuzzerTestOneInput harness, starting fuzzing on a C/C++ library, choosing between libFuzzer and AFL++, or working out why a libFuzzer run finds nothing.\"\n---\n\n# libFuzzer\n\nlibFuzzer is an in-process, coverage-guided fuzzer that is part of the LLVM project. It's the recommended starting point for fuzzing C/C++ projects due to its simplicity and integration with the LLVM toolchain. While libFuzzer has been in maintenance-only mode since late 2022, it is easier to install and use than its alternatives, has wide support, and will be maintained for the foreseeable future.\n\n## When to Use\n\n| Fuzzer | Best For | Complexity |\n|--------|----------|------------|\n| libFuzzer | Quick setup, single-project fuzzing | Low |\n| AFL++ | Multi-core fuzz",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/libfuzzer/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/libfuzzer/SKILL.md"
+    },
+    {
+      "name": "tob-cargo-fuzz",
+      "title": "tob-cargo-fuzz",
+      "description": "\"Sets up and runs cargo-fuzz, the standard fuzzing tool for Cargo-based Rust projects. Covers cargo fuzz init, the nightly toolchain requirement, fuzz_target! harnesses, Arbitrary-derived structured inputs, sanitizer options, cargo fuzz coverage, and reproducing a crash artifact. Use when fuzzing a Rust crate, writing a fuzz_target!, exercising unsafe blocks or FFI in Rust, or triaging a cargo fuzz crash.\"\n---\n\n# cargo-fuzz\n\ncargo-fuzz is the de facto choice for fuzzing Rust projects when using Cargo. It uses libFuzzer as the backend and provides a convenient Cargo subcommand that automatically enables relevant compilation flags for your Rust project, including support for sanitizers like AddressSanitizer.\n\n## When to Use\n\ncargo-fuzz is currently the primary and most mature fuzzing solution for Rust projects using Cargo.\n\n| Fuzzer | Best For | Complexity |\n|--------|----------|------------|\n| cargo-fuzz | Cargo-based Rust projects, quick setup | Low |\n| AFL++ | Multi-core fuzzing, non-Cargo projects | Medium",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/cargo-fuzz/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/cargo-fuzz/SKILL.md"
+    },
+    {
+      "name": "tob-aflpp",
+      "title": "tob-aflpp",
+      "description": "\"Sets up and runs AFL++ for multi-core fuzzing of C/C++ projects built with afl-clang-fast or afl-gcc-fast. Covers instrumentation modes, parallel main and secondary campaigns, persistent mode, corpus minimization, and crash triage. Use when scaling fuzzing across cores, fuzzing a mature C/C++ codebase, reading the afl-fuzz status screen, or moving on after libFuzzer has plateaued.\"\n---\n\n# AFL++\n\nAFL++ is a fork of the original AFL fuzzer that offers better fuzzing performance and more advanced features while maintaining stability. A major benefit over libFuzzer is that AFL++ has stable support for running fuzzing campaigns on multiple cores, making it ideal for large-scale fuzzing efforts.\n\n## When to Use\n\n| Fuzzer | Best For | Complexity |\n|--------|----------|------------|\n| AFL++ | Multi-core fuzzing, diverse mutations, mature projects | Medium |\n| libFuzzer | Quick setup, single-threaded, simple harnesses | Low |\n| LibAFL | Custom fuzzers, research, advanced use cases | High |\n\n**Choose AFL++ when:**\n- Y",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/aflpp/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/aflpp/SKILL.md"
+    },
+    {
+      "name": "tob-libafl",
+      "title": "tob-libafl",
+      "description": "\"Builds custom fuzzers with LibAFL, the modular Rust fuzzing library. Covers composing observers, feedbacks, mutators, schedulers, and executors into a fuzzer for targets the standard tools do not fit. Use when writing a bespoke fuzzer or mutator, fuzzing a non-standard target or architecture, implementing a fuzzing research idea, or when libFuzzer and AFL++ lack the control you need.\"\n---\n\n# LibAFL\n\nLibAFL is a modular fuzzing library that implements features from AFL-based fuzzers like AFL++. Unlike traditional fuzzers, LibAFL provides all functionality in a modular and customizable way as a Rust library. It can be used as a drop-in replacement for libFuzzer or as a library to build custom fuzzers from scratch.\n\n## When to Use\n\n| Fuzzer | Best For | Complexity |\n|--------|----------|------------|\n| libFuzzer | Quick setup, single-threaded | Low |\n| AFL++ | Multi-core, general purpose | Medium |\n| LibAFL | Custom fuzzers, advanced features, research | High |\n\n**Choose LibAFL when:**\n- You need custom mutatio",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/libafl/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/libafl/SKILL.md"
+    },
+    {
+      "name": "tob-atheris",
+      "title": "tob-atheris",
+      "description": "\"Sets up and runs Atheris, the coverage-guided Python fuzzer built on libFuzzer. Covers TestOneInput harnesses, FuzzedDataProvider, instrumenting both pure Python and native C extensions, and running under AddressSanitizer. Use when fuzzing a Python package, hunting memory corruption in a Python C extension, or choosing between Atheris and Hypothesis for a Python target.\"\n---\n\n# Atheris\n\nAtheris is a coverage-guided Python fuzzer built on libFuzzer. It enables fuzzing of both pure Python code and Python C extensions with integrated AddressSanitizer support for detecting memory corruption issues.\n\n## When to Use\n\n| Fuzzer | Best For | Complexity |\n|--------|----------|------------|\n| Atheris | Python code and C extensions | Low-Medium |\n| Hypothesis | Property-based testing | Low |\n| python-afl | AFL-style fuzzing | Medium |\n\n**Choose Atheris when:**\n- Fuzzing pure Python code with coverage guidance\n- Testing Python C extensions for memory corruption\n- Integration with libFuzzer ecosystem is desired\n- AddressS",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/atheris/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/atheris/SKILL.md"
+    },
+    {
+      "name": "tob-ossfuzz",
+      "title": "tob-ossfuzz",
+      "description": "\"Enrolls a project in OSS-Fuzz, Google's free continuous fuzzing service for open source, and drives it locally. Covers project.yaml, Dockerfile and build.sh setup, the helper scripts, reproducing OSS-Fuzz crash reports, and the acceptance criteria. Use when setting up continuous fuzzing for an open-source project, reproducing an OSS-Fuzz bug report, or testing an OSS-Fuzz build before submitting it.\"\n---\n\n# OSS-Fuzz\n\n[OSS-Fuzz](https://google.github.io/oss-fuzz/) is an open-source project developed by Google that provides free distributed infrastructure for continuous fuzz testing. It streamlines the fuzzing process and facilitates simpler modifications. While only select projects are accepted into OSS-Fuzz, the project's core is open-source, allowing anyone to host their own instance for private projects.\n\n## Overview\n\nOSS-Fuzz provides a simple CLI framework for building and starting harnesses or calculating their coverage. Additionally, OSS-Fuzz can be used as a service that hosts static web pages generat",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/ossfuzz/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/ossfuzz/SKILL.md"
+    },
+    {
+      "name": "tob-ruzzy",
+      "title": "tob-ruzzy",
+      "description": "\"Sets up and runs Ruzzy, Trail of Bits' coverage-guided Ruby fuzzer and the only production-ready one for the language. Covers harness structure, fuzzing pure Ruby and the native C extensions in gems, and sanitizer builds. Use when fuzzing a Ruby library or gem, testing a Ruby C extension for memory safety, or asking how to fuzz Ruby at all.\"\n---\n\n# Ruzzy\n\nRuzzy is a coverage-guided fuzzer for Ruby built on libFuzzer. It enables fuzzing both pure Ruby code and Ruby C extensions with sanitizer support for detecting memory corruption and undefined behavior.\n\n## When to Use\n\nRuzzy is currently the only production-ready coverage-guided fuzzer for Ruby.\n\n**Choose Ruzzy when:**\n- Fuzzing Ruby applications or libraries\n- Testing Ruby C extensions for memory safety issues\n- You need coverage-guided fuzzing for Ruby code\n- Working with Ruby gems that have native extensions\n\n## Quick Start\n\nSet up environment:\n```bash\nexport ASAN_OPTIONS=\"allocator_may_return_null=1:detect_leaks=0:use_sigaltstack=0\"\n```\n\nTest with the",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/ruzzy/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/ruzzy/SKILL.md"
+    },
+    {
+      "name": "tob-fuzzing-obstacles",
+      "title": "tob-fuzzing-obstacles",
+      "description": "\"Patches past the barriers that stop a fuzzer making progress — checksum and hash verification, magic-value validation, time-based seeds, and other non-deterministic global state. Covers locating the blocking check, neutering it behind a fuzzing build flag, and avoiding the false positives a patch can introduce. Use when a fuzzer is stuck at validation, when coverage shows large regions behind a checksum, or when valid inputs are impractical to generate.\"\n---\n\n# Overcoming Fuzzing Obstacles\n\nCodebases often contain anti-fuzzing patterns that prevent effective coverage. Checksums, global state (like time-seeded PRNGs), and validation checks can block the fuzzer from exploring deeper code paths. This technique shows how to patch your System Under Test (SUT) to bypass these obstacles during fuzzing while preserving production behavior.\n\n## Overview\n\nMany real-world programs were not designed with fuzzing in mind. They may:\n- Verify checksums or cryptographic hashes before processing input\n- Rely on global state",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/fuzzing-obstacles/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/fuzzing-obstacles/SKILL.md"
+    },
+    {
+      "name": "tob-coverage-analysis",
+      "title": "tob-coverage-analysis",
+      "description": "\"Measures and interprets what a fuzzing campaign actually reaches, using llvm-cov, lcov, or a fuzzer's own coverage output. Covers baselining a new campaign, reading coverage reports, and turning uncovered regions into harness, seed, or dictionary work. Use when a fuzzer plateaus, when judging whether a harness is effective, after changing a harness, or when asking why some code is never reached.\"\n---\n\n# Coverage Analysis\n\nCoverage analysis is essential for understanding which parts of your code are exercised during fuzzing. It helps identify fuzzing blockers like magic value checks and tracks the effectiveness of harness improvements over time.\n\n## Overview\n\nCode coverage during fuzzing serves two critical purposes:\n\n1. **Assessing harness effectiveness**: Understand which parts of your application are actually executed by your fuzzing harnesses\n2. **Tracking fuzzing progress**: Monitor how coverage changes when updating harnesses, fuzzers, or the system under test (SUT)\n\nCoverage is a proxy for fuzzer capab",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/coverage-analysis/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/coverage-analysis/SKILL.md"
+    },
+    {
+      "name": "tob-address-sanitizer",
+      "title": "tob-address-sanitizer",
+      "description": "\"Builds and runs code under AddressSanitizer to catch buffer overflows, use-after-free, and other memory errors during fuzzing or tests. Covers -fsanitize=address builds, ASAN_OPTIONS, reading the crash report, LeakSanitizer, and the overhead and platform trade-offs. Use when fuzzing C/C++ or Rust that has unsafe blocks or FFI, when debugging a memory corruption crash, or when reading an ASan stack trace.\"\n---\n\n# AddressSanitizer (ASan)\n\nAddressSanitizer (ASan) is a widely adopted memory error detection tool used extensively during software testing, particularly fuzzing. It helps detect memory corruption bugs that might otherwise go unnoticed, such as buffer overflows, use-after-free errors, and other memory safety violations.\n\n## Overview\n\nASan is a standard practice in fuzzing due to its effectiveness in identifying memory vulnerabilities. It instruments code at compile time to track memory allocations and accesses, detecting illegal operations at runtime.\n\n### Key Concepts\n\n| Concept | Description |\n|-----",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/address-sanitizer/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/address-sanitizer/SKILL.md"
+    },
+    {
+      "name": "tob-wycheproof",
+      "title": "tob-wycheproof",
+      "description": "\"Validates cryptographic implementations against Project Wycheproof's test vectors, which encode known attacks and edge cases across AES, RSA, ECDSA, ECDH, and more. Covers loading test vectors, mapping result flags onto pass and fail expectations, and reading a failure. Use when testing a crypto implementation against known attacks, checking a library against standard test vectors, or investigating why two implementations disagree on the same input.\"\n---\n\n# Wycheproof\n\nWycheproof is an extensive collection of test vectors designed to verify the correctness of cryptographic implementations and test against known attacks. Originally developed by Google, it is now a community-managed project where contributors can add test vectors for specific cryptographic constructions.\n\n## Background\n\n### Key Concepts\n\n| Concept | Description |\n|---------|-------------|\n| Test vector | Input/output pair for validating crypto implementation correctness |\n| Test group | Collection of test vectors sharing attributes (key size,",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/wycheproof/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/wycheproof/SKILL.md"
+    },
+    {
+      "name": "tob-constant-time-testing",
+      "title": "tob-constant-time-testing",
+      "description": "\"Measures timing side channels in cryptographic implementations by running them, using dudect for statistical analysis and Timecop over Valgrind for dynamic tracing. Covers the formal, symbolic, dynamic, and statistical tool categories and how to read a result. Use when testing whether a running implementation is constant-time, measuring timing variance on a compiled binary, or investigating a suspected timing attack. Not for statically inspecting compiler output — the constant-time-analysis plugin covers that.\"\n---\n\n# Constant-Time Testing\n\nTiming attacks exploit variations in execution time to extract secret information from cryptographic implementations. Unlike cryptanalysis that targets theoretical weaknesses, timing attacks leverage implementation flaws - and they can affect any cryptographic code.\n\n## Background\n\nTiming attacks were introduced by [Kocher](https://paulkocher.com/doc/TimingAttacks.pdf) in 1996. Since then, researchers have demonstrated practical attacks on RSA ([Schindler](https://link.sp",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/testing-handbook-skills/skills/constant-time-testing/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/testing-handbook-skills/skills/constant-time-testing/SKILL.md"
+    },
+    {
+      "name": "tob-property-based-testing",
+      "title": "tob-property-based-testing",
+      "description": "\"Writes, reviews, and debugs property-based tests — Hypothesis, fast-check, proptest, jqwik, rapid, and Echidna or Medusa for Solidity invariants. Use whenever tests should cover a whole input domain instead of a hand-picked list of examples: encode/decode and serialize/deserialize pairs, parsers, canonicalizers and normalizers, validators, numeric and Decimal types, comparators and sort order, data structures, and smart-contract state invariants. Also use when adding cases to an existing @given, fast-check, or proptest suite, when judging whether existing property tests assert anything real, and when a generator has shrunk a counterexample and you need to tell a wrong property from a genuine bug. Not for coverage-guided binary fuzzing (libFuzzer, AFL), mutation-testing campaigns, static analysis, benchmarking, or end-to-end UI tests.\"\n---\n\n# Property-Based Testing\n\nAn example test asserts one point. A property asserts a rule over the whole input\ndomain and lets the generator hunt for the counterexample. That",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/property-based-testing/skills/property-based-testing/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/property-based-testing/skills/property-based-testing/SKILL.md"
+    },
+    {
+      "name": "tob-mutation-testing",
+      "title": "tob-mutation-testing",
+      "description": "\"Configures mewt or muton campaigns, analyzes surviving mutants, and investigates bugs exposed by testing gaps. Use when setting up mutation testing, reviewing campaign results, identifying equivalent mutants, or finding bugs from surviving mutations.\"",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/mutation-testing/skills/mutation-testing/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/mutation-testing/skills/mutation-testing/SKILL.md"
+    },
+    {
+      "name": "tob-solana-vulnerability-scanner",
+      "title": "tob-solana-vulnerability-scanner",
+      "description": "Scans Solana programs for 6 critical vulnerabilities including arbitrary CPI, improper PDA validation, missing signer/ownership checks, and sysvar spoofing. Use when auditing Solana/Anchor programs.\n---\n\n# Solana Vulnerability Scanner\n\n## 1. Purpose\n\nSystematically scan Solana programs (native and Anchor framework) for platform-specific security vulnerabilities related to cross-program invocations, account validation, and program-derived addresses. This skill encodes 6 critical vulnerability patterns unique to Solana's account model.\n\n## 2. When to Use This Skill\n\n- Auditing Solana programs (native Rust or Anchor)\n- Reviewing cross-program invocation (CPI) logic\n- Validating program-derived address (PDA) implementations\n- Pre-launch security assessment of Solana protocols\n- Reviewing account validation patterns\n- Assessing instruction introspection logic\n\n## 3. Platform Detection\n\n### File Extensions & Indicators\n- **Rust files**: `.rs`\n\n### Language/Framework Markers\n```rust\n// Native Solana program indicato",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/solana-vulnerability-scanner/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/solana-vulnerability-scanner/SKILL.md"
+    },
+    {
+      "name": "tob-ton-vulnerability-scanner",
+      "title": "tob-ton-vulnerability-scanner",
+      "description": "Scans TON (The Open Network) smart contracts for 3 critical vulnerabilities including integer-as-boolean misuse, fake Jetton contracts, and forward TON without gas checks. Use when auditing FunC contracts.\n---\n\n# TON Vulnerability Scanner\n\n## 1. Purpose\n\nSystematically scan TON blockchain smart contracts written in FunC for platform-specific security vulnerabilities related to boolean logic, Jetton token handling, and gas management. This skill encodes 3 critical vulnerability patterns unique to TON's architecture.\n\n## 2. When to Use This Skill\n\n- Auditing TON smart contracts (FunC language)\n- Reviewing Jetton token implementations\n- Validating token transfer notification handlers\n- Pre-launch security assessment of TON dApps\n- Reviewing gas forwarding logic\n- Assessing boolean condition handling\n\n## 3. Platform Detection\n\n### File Extensions & Indicators\n- **FunC files**: `.fc`, `.func`\n\n### Language/Framework Markers\n```func\n;; FunC contract indicators\n#include \"imports/stdlib.fc\";\n\n() recv_internal(int my_",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/ton-vulnerability-scanner/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/ton-vulnerability-scanner/SKILL.md"
+    },
+    {
+      "name": "tob-cosmos-vulnerability-scanner",
+      "title": "tob-cosmos-vulnerability-scanner",
+      "description": "\"Scans Cosmos SDK blockchain modules and CosmWasm contracts for consensus-critical vulnerabilities — chain halts, fund loss, state divergence. 25 core + 16 IBC + 10 EVM + 3 CosmWasm patterns. Use when auditing custom x/ modules, reviewing IBC integrations, or assessing pre-launch chain security. Updated for SDK v0.53.x.\"\n---\n\n# Cosmos Vulnerability Scanner\n\n## Purpose\n\nScan Cosmos SDK modules and CosmWasm contracts for vulnerabilities that cause chain halts, consensus failures, or fund loss. Spawns parallel scanning agents — each specializing in a vulnerability category — that return findings to the main skill, which then writes them as individual markdown files to an output directory.\n\n**Output directory**: defaults to `.bughunt_cosmos/`. If the user specifies a different directory in their prompt, use that instead.\n\n## When to Use\n\n- Auditing Cosmos SDK modules (custom `x/` modules)\n- Reviewing CosmWasm smart contracts\n- Pre-launch security assessment of Cosmos chains\n- Investigating chain halt incidents\n\n#",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/cosmos-vulnerability-scanner/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/cosmos-vulnerability-scanner/SKILL.md"
+    },
+    {
+      "name": "tob-cairo-vulnerability-scanner",
+      "title": "tob-cairo-vulnerability-scanner",
+      "description": "Scans Cairo/StarkNet smart contracts for 6 critical vulnerabilities including felt252 arithmetic overflow, L1-L2 messaging issues, address conversion problems, and signature replay. Use when auditing StarkNet projects.\n---\n\n# Cairo/StarkNet Vulnerability Scanner\n\n## 1. Purpose\n\nSystematically scan Cairo smart contracts on StarkNet for platform-specific security vulnerabilities related to arithmetic, cross-layer messaging, and cryptographic operations. This skill encodes 6 critical vulnerability patterns unique to Cairo/StarkNet ecosystem.\n\n## 2. When to Use This Skill\n\n- Auditing StarkNet smart contracts (Cairo)\n- Reviewing L1-L2 bridge implementations\n- Pre-launch security assessment of StarkNet applications\n- Validating cross-layer message handling\n- Reviewing signature verification logic\n- Assessing L1 handler functions\n\n## 3. Platform Detection\n\n### File Extensions & Indicators\n- **Cairo files**: `.cairo`\n\n### Language/Framework Markers\n```rust\n// Cairo contract indicators\n#[contract]\nmod MyContract {",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/cairo-vulnerability-scanner/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/cairo-vulnerability-scanner/SKILL.md"
+    },
+    {
+      "name": "tob-substrate-vulnerability-scanner",
+      "title": "tob-substrate-vulnerability-scanner",
+      "description": "Scans Substrate/Polkadot pallets for 7 critical vulnerabilities including arithmetic overflow, panic DoS, incorrect weights, and bad origin checks. Use when auditing Substrate runtimes or FRAME pallets.\n---\n\n# Substrate Vulnerability Scanner\n\n## 1. Purpose\n\nSystematically scan Substrate runtime modules (pallets) for platform-specific security vulnerabilities that can cause node crashes, DoS attacks, or unauthorized access. This skill encodes 7 critical vulnerability patterns unique to Substrate/FRAME-based chains.\n\n## 2. When to Use This Skill\n\n- Auditing custom Substrate pallets\n- Reviewing FRAME runtime code\n- Pre-launch security assessment of Substrate chains (Polkadot parachains, standalone chains)\n- Validating dispatchable extrinsic functions\n- Reviewing weight calculation functions\n- Assessing unsigned transaction validation logic\n\n## 3. Platform Detection\n\n### File Extensions & Indicators\n- **Rust files**: `.rs`\n\n### Language/Framework Markers\n```rust\n// Substrate/FRAME indicators\n#[pallet]\npub mod pal",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/substrate-vulnerability-scanner/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/substrate-vulnerability-scanner/SKILL.md"
+    },
+    {
+      "name": "tob-algorand-vulnerability-scanner",
+      "title": "tob-algorand-vulnerability-scanner",
+      "description": "Scans Algorand smart contracts for 11 common vulnerabilities including rekeying attacks, unchecked transaction fees, missing field validations, and access control issues. Use when auditing Algorand projects (TEAL/PyTeal).\n---\n\n# Algorand Vulnerability Scanner\n\n## 1. Purpose\n\nSystematically scan Algorand smart contracts (TEAL and PyTeal) for platform-specific security vulnerabilities documented in Trail of Bits' \"Not So Smart Contracts\" database. This skill encodes 11 critical vulnerability patterns unique to Algorand's transaction model.\n\n## 2. When to Use This Skill\n\n- Auditing Algorand smart contracts (stateful applications or smart signatures)\n- Reviewing TEAL assembly or PyTeal code\n- Pre-audit security assessment of Algorand projects\n- Validating fixes for reported Algorand vulnerabilities\n- Training team on Algorand-specific security patterns\n\n## 3. Platform Detection\n\n### File Extensions & Indicators\n- **TEAL files**: `.teal`\n- **PyTeal files**: `.py` with PyTeal imports\n\n### Language/Framework Markers",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/algorand-vulnerability-scanner/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/algorand-vulnerability-scanner/SKILL.md"
+    },
+    {
+      "name": "tob-token-integration-analyzer",
+      "title": "tob-token-integration-analyzer",
+      "description": "Token integration and implementation analyzer based on Trail of Bits' token integration checklist. Analyzes token implementations for ERC20/ERC721 conformity, checks for 20+ weird token patterns, assesses contract composition and owner privileges, performs on-chain scarcity analysis, and evaluates how protocols handle non-standard tokens. Use when integrating or accepting arbitrary ERC20/ERC721 tokens, auditing a token implementation for standards conformity, or assessing risk from weird tokens such as fee-on-transfer, rebasing, missing return values, or blocklists.\n---\n\n# Token Integration Analyzer\n\n## Purpose\n\nSystematically analyzes the codebase for token-related security concerns using Trail of Bits' token integration checklist:\n\n1. **Token Implementations**: Analyze if your token follows ERC20/ERC721 standards or has non-standard behavior\n2. **Token Integrations**: Analyze how your protocol handles arbitrary tokens, including weird/non-standard tokens\n3. **On-chain Analysis**: Query deployed contracts fo",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/token-integration-analyzer/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/token-integration-analyzer/SKILL.md"
+    },
+    {
+      "name": "tob-code-maturity-assessor",
+      "title": "tob-code-maturity-assessor",
+      "description": "Systematic code maturity assessment using Trail of Bits' 9-category framework. Analyzes codebase for arithmetic safety, auditing practices, access controls, complexity, decentralization, documentation, MEV risks, low-level code, and testing, then produces a scorecard with evidence-based ratings and a priority-ordered roadmap. Use when assessing or scoring the maturity of a smart contract or blockchain codebase, producing a maturity scorecard or evaluation, or judging how mature, well-tested, or well-documented such a project is against a rubric.\n---\n\n# Code Maturity Assessor\n\n## Purpose\n\nSystematically assesses codebase maturity using Trail of Bits' 9-category framework. Provides evidence-based ratings and actionable recommendations.\n\n**Framework**: Building Secure Contracts - Code Maturity Evaluation v0.1.0\n\n---\n\n## How This Works\n\n### Phase 1: Discovery\nExplores the codebase to understand:\n- Project structure and platform\n- Contract/module files\n- Test coverage\n- Documentation availability\n\n### Phase 2: Ana",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/code-maturity-assessor/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/code-maturity-assessor/SKILL.md"
+    },
+    {
+      "name": "tob-guidelines-advisor",
+      "title": "tob-guidelines-advisor",
+      "description": "Smart contract development advisor based on Trail of Bits' best practices. Analyzes codebase to generate documentation/specifications, review architecture, check upgradeability patterns, assess implementation quality, identify pitfalls, review dependencies, and evaluate testing. Use when asking whether a smart contract project follows development best practices, reviewing on-chain/off-chain split, upgradeability, or delegatecall proxy patterns against guidelines, or seeking recommendations on contract design, inheritance, events, documentation, dependencies, or test strategy.\n---\n\n# Guidelines Advisor\n\n## Purpose\n\nSystematically analyzes the codebase and provides guidance based on Trail of Bits' development guidelines:\n\n1. **Generate documentation and specifications** (plain English descriptions, architectural diagrams, code documentation)\n2. **Optimize on-chain/off-chain architecture** (only if applicable)\n3. **Review upgradeability patterns** (if your project has upgrades)\n4. **Check delegatecall/proxy impl",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/guidelines-advisor/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/guidelines-advisor/SKILL.md"
+    },
+    {
+      "name": "tob-secure-workflow-guide",
+      "title": "tob-secure-workflow-guide",
+      "description": "Guides through Trail of Bits' 5-step secure development workflow. Runs Slither scans, checks special features (upgradeability/ERC conformance/token integration), generates visual security diagrams, helps document security properties for fuzzing/verification, and reviews manual security areas. Use when securing a smart contract end to end rather than hunting one bug, checking a project on every check-in or before deployment, triaging a Slither report, or asking where to start on smart contract security.\n---\n\n# Secure Workflow Guide\n\n## Purpose\n\nGuides through Trail of Bits' secure development workflow - a 5-step process to enhance smart contract security throughout development.\n\n**Use this**: On every check-in, before deployment, or when you want a security review\n\n---\n\n## The 5-Step Workflow\n\nCovers a security workflow including:\n\n### Step 1: Check for Known Security Issues\nRun Slither with 70+ built-in detectors to find common vulnerabilities:\n- Parse findings by severity\n- Explain each issue with file refer",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/secure-workflow-guide/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/secure-workflow-guide/SKILL.md"
+    },
+    {
+      "name": "tob-audit-prep-assistant",
+      "title": "tob-audit-prep-assistant",
+      "description": "Prepares codebases for security review using Trail of Bits' checklist. Helps set review goals, runs static analysis tools, increases test coverage, removes dead code, ensures accessibility, and generates documentation (flowcharts, user stories, inline comments). Use when preparing your own codebase to be audited by someone else, getting a repository review-ready before an external security review, deciding what to fix before auditors start, or asking what assessors need from a project. For understanding unfamiliar code you are about to audit, use audit-context-building instead.\n---\n\n# Audit Prep Assistant\n\n## Purpose\n\nHelps prepare for a security review using Trail of Bits' checklist. A well-prepared codebase makes the review process smoother and more effective.\n\n**Use this**: 1-2 weeks before your security audit\n\n---\n\n## The Preparation Process\n\n### Step 1: Set Review Goals\n\nHelps define what you want from the review:\n\n**Key Questions**:\n- What's the overall security level you're aiming for?\n- What areas con",
+      "pack": "trailofbits",
+      "source": "trailofbits/plugins/building-secure-contracts/skills/audit-prep-assistant/SKILL.md",
+      "url": "https://github.com/trailofbits/skills/blob/main/plugins/building-secure-contracts/skills/audit-prep-assistant/SKILL.md"
+    },
+    {
+      "name": "bri-web-pentest",
+      "title": "bri-web-pentest",
+      "description": "\"Perform black-box / grey-box web application penetration testing on an authorized target — auth bypass, IDOR, session handling, business-logic flaws, parameter tampering, Burp Suite / OWASP ZAP workflows. Use when the user mentions 'web pentest,' 'web application penetration test,' 'pentesting,' 'bug bounty,' 'Burp Suite,' 'ZAP,' 'OWASP testing,' 'authentication testing,' 'session testing,' 'authorization testing,' 'web vulnerability testing,' or has explicit authorization to test a live web application.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/web-pentest/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/web-pentest/SKILL.md"
+    },
+    {
+      "name": "bri-api-audit",
+      "title": "bri-api-audit",
+      "description": "\"Audit REST, GraphQL, and RPC APIs against the OWASP API Security Top 10 (2023). Use when the user mentions 'API security,' 'API audit,' 'BOLA,' 'broken object level authorization,' 'BFLA,' 'function-level authorization,' 'mass assignment,' 'API rate limiting,' 'GraphQL security,' 'REST security,' 'API authentication,' 'API authorization,' 'excessive data exposure,' or needs to review API endpoints for security weaknesses.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/api-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/api-audit/SKILL.md"
+    },
+    {
+      "name": "bri-owasp-audit",
+      "title": "bri-owasp-audit",
+      "description": "\"Audit application source code against the OWASP Top 10:2025 categories — broken access control (incl. SSRF), security misconfiguration, software supply chain failures, cryptographic failures, injection, insecure design, authentication failures, software and data integrity, logging and alerting failures, mishandling of exceptional conditions — with recon, a coverage ledger, per-finding verification, and a findings.json report. Use when the user mentions 'OWASP,' 'OWASP Top 10,' 'security audit,' 'security review,' 'secure code review,' 'code security review,' 'vulnerability audit,' 'find vulnerabilities,' 'appsec review,' 'application security audit,' 'check for security issues,' 'review this PR for security,' 'pre-merge security check,' 'diff review,' 'broken access control,' 'IDOR,' 'SQL injection,' 'XSS,' 'SSRF,' 'webhook security,' or wants to check their codebase for common security weaknesses.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/owasp-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/owasp-audit/SKILL.md"
+    },
+    {
+      "name": "bri-recon",
+      "title": "bri-recon",
+      "description": "\"Perform structured reconnaissance and attack surface enumeration for authorized penetration tests, CTF challenges, and bug bounty programs. Use when the user mentions 'recon,' 'reconnaissance,' 'enumerate,' 'attack surface,' 'subdomain enumeration,' 'port scan,' 'fingerprint,' 'asset discovery,' or needs to map a target's external footprint.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/recon/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/recon/SKILL.md"
+    },
+    {
+      "name": "bri-osint-recon",
+      "title": "bri-osint-recon",
+      "description": "\"Gather and correlate open source intelligence from public sources for authorized investigations, threat intelligence, and attack surface assessment. Use when the user mentions 'OSINT,' 'open source intelligence,' 'digital footprint,' 'public records,' 'threat intelligence,' 'investigate a domain,' or needs to research a target using publicly available data.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/osint-recon/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/osint-recon/SKILL.md"
+    },
+    {
+      "name": "bri-prompt-injection",
+      "title": "bri-prompt-injection",
+      "description": "\"Audit applications for AI prompt injection, agent security, and LLM permission boundary vulnerabilities, including chatbots and agents hijacked by what they read: a malicious web page in a browsing agent, incoming emails, documents or tickets reaching an agent that can send replies, write files or call tools. Use when the user mentions 'prompt injection,' 'LLM security,' 'AI security,' 'jailbreak,' 'indirect prompt injection,' 'prompt leaking,' 'AI red team,' 'LLM vulnerabilities,' 'AI input validation,' 'system prompt extraction,' 'agent security,' 'MCP security,' 'AI permissions,' 'AI privilege escalation,' or needs to secure any application with AI features, AI agents, or LLM integrations.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/prompt-injection/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/prompt-injection/SKILL.md"
+    },
+    {
+      "name": "bri-business-logic-testing",
+      "title": "bri-business-logic-testing",
+      "description": "\"Test an authorized web application for business-logic flaws and race conditions — the classes scanners cannot find. Model invariants (conservation of value, uniqueness, monotonicity, exclusivity), build an Actor x Action x Resource matrix, abuse state machines (skip/reorder/replay steps, limit-slicing), find numeric bugs (float-vs-decimal rounding, cross-currency refund arbitrage, negative amounts), stale feature gates, and saga gaps; prove concurrency bugs (double-spend, lost update, idempotency-key reuse) with controlled parallel requests. Use when the user mentions 'business logic testing,' 'race condition,' 'double spend,' 'TOCTOU,' 'concurrency bug,' 'idempotency,' 'coupon reuse,' 'workflow bypass,' 'limit bypass,' 'negative amount,' 'refund arbitrage,' 'parallel request attack,' or 'logic flaw.'\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/business-logic-testing/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/business-logic-testing/SKILL.md"
+    },
+    {
+      "name": "bri-finding-triage",
+      "title": "bri-finding-triage",
+      "description": "\"Triage a single security finding — from a scanner, audit, advisory, report, or a findings.json record — to a defensible disposition with calibrated severity, a mitigation plan, false-positive justification, or accepted-risk writeup. Use when the user mentions 'triage this finding,' 'is this a real vulnerability,' 'mitigation plan,' 'false positive,' 'accept this risk,' 'compensating controls,' 'risk justification,' 'security ticket,' 'CVSS this,' 'what severity is this,' 'is this really high,' 'severity calibration,' 'needs validation,' 'hardening note,' 'findings.json,' 'should we fix this,' 'disposition,' 'sign off on,' or has a single security finding and needs to decide what to do.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/finding-triage/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/finding-triage/SKILL.md"
+    },
+    {
+      "name": "bri-cloud-audit",
+      "title": "bri-cloud-audit",
+      "description": "\"Audit cloud infrastructure (AWS, GCP, Azure) and PaaS deployment platforms (Vercel, Netlify, Heroku, Render, Railway, Fly) for misconfigurations, excessive permissions, stale or manual production deploys, and security gaps. Use when the user mentions 'cloud security,' 'cloud audit,' 'AWS security,' 'GCP security,' 'Azure security,' 'IAM audit,' 'S3 bucket,' 'cloud misconfiguration,' 'cloud hardening,' 'Vercel security,' 'Heroku audit,' 'Render audit,' 'PaaS security,' 'is production built from main,' 'old vercel.app still live,' 'preview deployments exposed,' 'Supabase RLS,' or needs to review cloud or deployment-platform security.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/cloud-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/cloud-audit/SKILL.md"
+    },
+    {
+      "name": "bri-secrets-audit",
+      "title": "bri-secrets-audit",
+      "description": "\"Find leaked secrets in source code, Git history, build artifacts, and infrastructure — and audit the secrets-management posture preventing future leaks. Use when the user mentions 'secrets audit,' 'secret scanning,' 'leaked credentials,' 'API key in code,' 'gitleaks,' 'trufflehog,' 'betterleaks,' 'git history scan,' 'secrets management,' 'vault audit,' 'rotation policy,' 'AWS Secrets Manager,' 'HashiCorp Vault,' 'Doppler,' '1Password Secrets Automation,' 'sealed-secrets,' 'External Secrets Operator,' 'secrets in MCP config,' 'API key in Claude transcript,' 'is this key public,' or needs to find or prevent credential exposure.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/secrets-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/secrets-audit/SKILL.md"
+    },
+    {
+      "name": "bri-dependency-audit",
+      "title": "bri-dependency-audit",
+      "description": "\"Audit project dependencies, frameworks, languages, and dev tools for known vulnerabilities, CVEs, and security anti-patterns. Use when the user mentions 'dependency audit,' 'npm audit,' 'CVE,' 'vulnerable packages,' 'supply chain security,' 'outdated dependencies,' 'known vulnerabilities,' 'security advisory,' 'package security,' 'framework vulnerability,' 'is this package safe,' 'pnpm audit,' 'yarn audit,' 'bundle audit,' 'patch this CVE,' 'audit fix broke,' 'lockfile diff,' 'dependency confusion,' 'registry redirection,' 'MCP server pinning,' 'release pipeline,' or needs to check whether their stack, CI, or release pipeline has known security issues.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/dependency-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/dependency-audit/SKILL.md"
+    },
+    {
+      "name": "bri-container-audit",
+      "title": "bri-container-audit",
+      "description": "\"Audit container images, Dockerfiles, and Kubernetes manifests for misconfigurations, excessive privileges, exposed secrets, and runtime risks. Use when the user mentions 'container security,' 'Docker security,' 'Dockerfile audit,' 'Kubernetes security,' 'K8s security,' 'pod security,' 'container hardening,' 'kubectl audit,' 'image scanning,' 'distroless,' 'rootless containers,' 'pod security policy,' 'pod security standards,' 'PSS,' 'network policy,' 'OPA Gatekeeper,' 'Kyverno,' 'runtime security,' or needs to review container or orchestration security.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/container-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/container-audit/SKILL.md"
+    },
+    {
+      "name": "bri-mobile-audit",
+      "title": "bri-mobile-audit",
+      "description": "\"Audit iOS and Android mobile applications against OWASP MASVS / MASTG — insecure storage, weak crypto, certificate pinning, deeplinks, IPC, jailbreak/root detection, reverse-engineering resistance. Use when the user mentions 'mobile security,' 'iOS security,' 'Android security,' 'mobile audit,' 'mobile pentest,' 'MASVS,' 'MASTG,' 'certificate pinning,' 'jailbreak detection,' 'root detection,' 'deeplink,' 'URL scheme,' 'app transport security,' 'keychain,' 'keystore,' 'mobile reverse engineering,' or has a mobile app to review.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/mobile-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/mobile-audit/SKILL.md"
+    },
+    {
+      "name": "bri-crypto-audit",
+      "title": "bri-crypto-audit",
+      "description": "\"Audit cryptography implementation — algorithm choice, key sizes, KDF parameters, IV/nonce handling, signature verification, randomness, TLS configuration, and key rotation. Deeper than owasp-audit A04. Use when the user mentions 'crypto review,' 'cryptography audit,' 'encryption review,' 'KDF,' 'PBKDF2,' 'Argon2,' 'bcrypt cost,' 'IV reuse,' 'nonce reuse,' 'AES mode,' 'AES-GCM,' 'AES-ECB,' 'signature verification,' 'TLS configuration,' 'cipher suites,' 'key rotation,' 'libsodium,' 'BoringSSL,' or 'is this crypto right.'\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/crypto-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/crypto-audit/SKILL.md"
+    },
+    {
+      "name": "bri-vuln-research",
+      "title": "bri-vuln-research",
+      "description": "\"Research a specific CVE or vulnerability disclosure end-to-end — what version is affected, is your code reachable, is there a public PoC, is there a patch, what's the exposure window, what's the mitigation if you can't patch immediately. Use when the user mentions 'CVE,' 'vulnerability research,' 'is this CVE relevant,' 'zero-day,' 'CISA KEV,' 'GitHub Security Advisory,' 'reachability analysis,' 'patch analysis,' 'exploit availability,' 'EPSS,' 'CVSS,' or 'should we drop everything and patch this.'\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/vuln-research/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/vuln-research/SKILL.md"
+    },
+    {
+      "name": "bri-variant-analysis",
+      "title": "bri-variant-analysis",
+      "description": "\"Start from a confirmed bug and hunt its siblings: generalize the root cause (source, sink, missing guard), encode it as a static-analysis query with positive and negative test cases, or a non-destructive nuclei template for variants visible only over HTTP, run it across the codebase or the whole org, close every hit with a verdict linked to the original, and keep the check in CI so the bug class stays fixed. Use when the user mentions 'variant analysis,' 'find variants,' 'where else does this bug exist,' 'are there more bugs like this,' 'same bug in other routes,' 'custom semgrep rule,' 'semgrep --test,' 'ruleid annotation,' 'CodeQL query for this bug,' 'CodeQL query test,' 'nuclei template for this bug,' 'turn this bug into a check,' 'stop this bug class coming back,' or has a known bug and wants every other instance of it.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/variant-analysis/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/variant-analysis/SKILL.md"
+    },
+    {
+      "name": "bri-cicd-security",
+      "title": "bri-cicd-security",
+      "description": "\"Audit CI/CD pipelines, GitHub Actions first and GitLab CI and CircleCI briefly, for the paths that give an outsider code execution, secrets or a write token: pull_request_target and workflow_run running untrusted code, expression injection into run steps, missing or broad workflow permissions, third-party actions not pinned to a commit SHA, OIDC trust policies with wildcard subjects, self-hosted runners on public repos, secrets reaching forks, cache and artifact trust between workflows, and AI agents in CI that read issue or PR text while holding a write token. Runs zizmor and actionlint read-only and writes findings.json. Use when the user mentions 'pull_request_target,' 'pwn request,' 'workflow injection,' 'zizmor,' 'actionlint,' 'pin actions to SHA,' 'GITHUB_TOKEN permissions,' 'self-hosted runner,' 'claude-code-action,' 'AI agent in CI,' 'GitLab CI security,' 'CircleCI security,' 'is this workflow safe,' or needs to secure a build pipeline.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/cicd-security/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/cicd-security/SKILL.md"
+    },
+    {
+      "name": "bri-iam-audit",
+      "title": "bri-iam-audit",
+      "description": "\"Audit, design, and migrate Identity and Access Management — cloud provider IAM (AWS, GCP, Azure), identity providers (Okta, Entra ID / Azure AD, Auth0, Google Workspace), application authorization (RBAC, ABAC, ReBAC), and federated identity. Use when the user mentions 'IAM,' 'identity,' 'access management,' 'least privilege,' 'role design,' 'SSO,' 'SAML,' 'OIDC,' 'OAuth,' 'JIT access,' 'just-in-time access,' 'break-glass,' 'service accounts,' 'RBAC,' 'ABAC,' 'privilege creep,' 'role explosion,' 'identity governance,' 'IAM strategy,' 'identity migration,' 'Okta,' 'Entra ID,' 'Azure AD,' 'Auth0,' 'Cognito,' or needs identity consultant-level guidance.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/iam-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/iam-audit/SKILL.md"
+    },
+    {
+      "name": "bri-agent-supply-chain-audit",
+      "title": "bri-agent-supply-chain-audit",
+      "description": "\"Audit the extensions AI coding agents load and trust (skills, plugins, marketplaces, hooks, settings, MCP servers, and instruction files like CLAUDE.md, AGENTS.md, GEMINI.md, .cursor/rules and copilot-instructions.md) across Claude Code, Cursor, Codex, Gemini CLI and GitHub Copilot. Read-only: inventories each item with its source and pin, greps for hidden instructions, exfiltration, credential reads, persistence, curl|bash and over-broad tool grants, reviews hooks and MCP pinning and tool poisoning, and gives each item a SAFE / CAUTION / DO-NOT-INSTALL verdict. Use when the user mentions 'audit my skills,' 'is this skill malicious,' 'is this skill safe,' 'is this MCP server safe,' 'review CLAUDE.md,' 'review AGENTS.md,' 'plugin security,' 'check my hooks,' 'audit my MCP servers,' 'agent supply chain,' 'SkillSpector,' 'tool poisoning,' 'rug pull,' 'audit my IDE extensions,' 'is this VS Code extension safe,' or is about to install a skill, plugin, MCP server, or IDE extension.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/agent-supply-chain-audit/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/agent-supply-chain-audit/SKILL.md"
+    },
+    {
+      "name": "bri-fuzzing-harness",
+      "title": "bri-fuzzing-harness",
+      "description": "\"Write and run a fuzzer, fuzz harnesses and property-based tests for the code that handles untrusted bytes (file and packet parsers in C, C++, Rust, Go, Python or JS, decoders, serializers, deserializers, token and header parsing, protocol state machines), then minimize, dedupe and triage the crashes into verified findings with regression tests. Covers libFuzzer, cargo-fuzz, Go native fuzzing, Atheris, Jazzer.js and Jazzer, Hypothesis, fast-check and proptest, seed corpora and dictionaries, sanitizer builds, and CI fuzzing with ClusterFuzzLite or OSS-Fuzz. Use when the user mentions 'fuzzing,' 'fuzz harness,' 'fuzz target,' 'libFuzzer,' 'cargo fuzz,' 'go test -fuzz,' 'Atheris,' 'Jazzer,' 'property-based testing,' 'Hypothesis property test,' 'fast-check,' 'proptest,' 'seed corpus,' 'fuzzing dictionary,' 'AddressSanitizer report,' 'fuzzer crash files,' 'minimize a crash input,' 'ClusterFuzzLite,' 'OSS-Fuzz,' or wants to fuzz their parser.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/fuzzing-harness/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/fuzzing-harness/SKILL.md"
+    },
+    {
+      "name": "bri-native-code-review",
+      "title": "bri-native-code-review",
+      "description": "\"Review C, C++ and Rust source for memory-safety bugs: out-of-bounds reads and writes, integer overflow or truncation that feeds a size, use-after-free and double free, format strings, uninitialized memory, Rust unsafe soundness, FFI boundaries, parsers of untrusted input, and secrets left in memory. Also checks compiler hardening flags and recommends sanitizers, and reports in the shared findings.json format. Use when the user mentions 'native code review,' 'C code review,' 'C++ security review,' 'memory safety review,' 'buffer overflow,' 'use-after-free,' 'double free,' 'format string bug,' 'integer overflow,' 'uninitialized memory,' 'unsafe Rust,' 'is this unsafe block sound,' 'FFI boundary,' 'Miri,' 'AddressSanitizer,' 'checksec,' 'FORTIFY_SOURCE,' 'hardening flags,' 'explicit_bzero,' or 'zeroize.'\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/native-code-review/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/native-code-review/SKILL.md"
+    },
+    {
+      "name": "bri-threat-modeling",
+      "title": "bri-threat-modeling",
+      "description": "\"Run a structured threat-modeling session for a new feature, system, or architecture — STRIDE, attack trees, data flow diagrams, abuse cases. Use when the user mentions 'threat model,' 'threat modeling,' 'STRIDE,' 'attack tree,' 'abuse case,' 'data flow diagram,' 'DFD,' 'security architecture review,' 'design review,' 'pre-implementation security,' 'shift left,' 'what could go wrong,' or needs strategic security thinking before code is written.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/threat-modeling/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/threat-modeling/SKILL.md"
+    },
+    {
+      "name": "bri-scanner-pipeline",
+      "title": "bri-scanner-pipeline",
+      "description": "\"Set up and run deterministic security scanners across a repo or a whole fleet of repos — gitleaks, trufflehog, semgrep, osv-scanner, trivy, checkov, Brakeman, govulncheck, Supabase advisors, and (guarded) nuclei/ZAP — then normalize their output to findings.json or SARIF, dedupe, suppress with expiry, schedule in CI, and hand findings to fix agents. Use when the user mentions 'run scanners,' 'security scanning pipeline,' 'set up gitleaks,' 'betterleaks in CI,' 'semgrep in CI,' 'osv-scanner,' 'trivy fs,' 'SARIF,' 'code scanning,' 'scan all my repos,' 'security-scan workflow,' 'weekly security scan,' 'Supabase RLS advisor,' 'dedupe scanner findings,' 'suppression file,' 'stop asking Claude to hack my app,' or wants tools, not an agent, to find the bugs.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/scanner-pipeline/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/scanner-pipeline/SKILL.md"
+    },
+    {
+      "name": "bri-patch-sweep",
+      "title": "bri-patch-sweep",
+      "description": "\"Respond to a CVE wave across a whole portfolio of apps at once: inventory every repo and the platform project and domain it actually serves, find the real production branch, spot stale manual deploys, decide which apps are affected, mitigate, patch, ship, and confirm production. Use when the user mentions 'patch sweep,' 'patch all my apps,' 'fleet-wide CVE,' 'are any of my apps affected,' 'Next.js RCE across all projects,' 'Rails CVE on all our Heroku apps,' 'patch every repo,' 'CVE wave,' 'security release across the fleet,' 'which of our sites run the vulnerable version,' 'mass dependency update,' or has more than a handful of apps to patch against the same advisories.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/patch-sweep/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/patch-sweep/SKILL.md"
+    },
+    {
+      "name": "bri-personal-opsec",
+      "title": "bri-personal-opsec",
+      "description": "\"Audit one person's own security setup — the founder or operator who holds the keys to the stack — and produce a prioritized gap report. Walks Karpathy's 15-control digital security checklist, adds account-recovery, SIM-swap, registrar, and hardware-key checks, and covers the AI-agent era: tokens your coding agents can read, MCP server trust, inbox-assistant prompt injection, clipboard exposure. Use when the user mentions 'personal opsec,' 'personal security audit,' 'secure my own accounts,' 'founder security,' 'Karpathy security checklist,' 'am I secure,' 'hardware key,' 'YubiKey,' 'SIM swap,' 'port-out PIN,' 'FileVault,' 'BitLocker,' 'password manager,' 'recovery codes,' 'registrar lock,' 'what can my AI agent see,' 'API keys on my laptop,' 'MCP trust,' or wants to harden their own accounts and machine.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/personal-opsec/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/personal-opsec/SKILL.md"
+    },
+    {
+      "name": "bri-red-team-engagement",
+      "title": "bri-red-team-engagement",
+      "description": "\"Plan, scope, and execute an authorized red-team engagement — distinct from a penetration test. Covers engagement methodology, assumed-breach scenarios, ATT&CK emulation plans, rules of engagement, deconfliction with the blue team, post-engagement debriefs, and the program-level work that makes red teams actually improve defenses. Use when the user mentions 'red team,' 'red team engagement,' 'red teaming,' 'adversary emulation,' 'ATT&CK emulation,' 'assumed breach,' 'purple team exercise,' 'tabletop with technical execution,' 'red team scope,' 'rules of engagement,' 'red team RoE,' 'deconfliction,' 'red team debrief,' or wants to design or run a red-team engagement against systems with authorization.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/red-team-engagement/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/red-team-engagement/SKILL.md"
+    },
+    {
+      "name": "bri-breach-patterns",
+      "title": "bri-breach-patterns",
+      "description": "\"Learn from public breach disclosures — extract the audit question each one implies and check your own stack. Capital One IMDS abuse, LastPass vault exfiltration, Okta Lapsus$, Snowflake credential reuse, MOVEit, SolarWinds, Equifax, Target POS, Codecov, Uber, Twilio, Polymarket's compromised DebugBear script — what would you check now if your boss said 'could that happen to us?' Use when the user mentions 'breach analysis,' 'lessons learned,' 'security postmortem,' 'breach patterns,' 'breach lessons,' 'has this happened to us,' 'apply breach lessons,' 'preempt breaches,' 'security retrospective,' 'real-world security incidents,' or wants to harden against known attacker playbooks.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/breach-patterns/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/breach-patterns/SKILL.md"
+    },
+    {
+      "name": "bri-incident-triage",
+      "title": "bri-incident-triage",
+      "description": "\"Guide rapid triage and initial response to a live security incident happening right now (ransomware hitting a file server, an attacker still in the network, a new admin user nobody created, a host compromised through a CVE) following NIST SP 800-61 Rev. 3 (CSF 2.0 Respond and Recover) — declare, validate and prioritize, contain, preserve evidence, scope, extract IOCs, start the notification clocks, and hand off to eradication, recovery and lessons learned. Use when the user mentions 'incident response,' 'security incident,' 'incident triage,' 'active incident,' 'we've been hacked,' 'we've been breached,' 'compromised,' 'ransomware,' 'contain the incident,' 'malware detected,' 'suspicious activity,' 'IOC,' 'indicators of compromise,' or needs help handling a security event.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/incident-triage/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/incident-triage/SKILL.md"
+    },
+    {
+      "name": "bri-threat-hunting",
+      "title": "bri-threat-hunting",
+      "description": "\"Conduct proactive, hypothesis-driven threat hunts — search SIEM / EDR / logs for adversaries who haven't tripped an alert yet. ATT&CK-driven, hypothesis-based methodology. Use when the user mentions 'threat hunting,' 'proactive hunt,' 'TaHiTI,' 'PEAK framework,' 'MITRE ATT&CK hunt,' 'hypothesis-driven hunt,' 'hunt hypothesis,' 'living off the land,' 'LOLBins,' 'beaconing,' 'lateral movement detection,' 'data staging,' 'persistence hunting,' or wants to find threats that have evaded existing detections.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/threat-hunting/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/threat-hunting/SKILL.md"
+    },
+    {
+      "name": "bri-malware-triage",
+      "title": "bri-malware-triage",
+      "description": "\"Triage a suspicious file statically and safely, and turn it into something defenders can use: a verdict with confidence and evidence, defanged indicators as CSV or STIX 2.1, a YARA signature tested against goodware, and ATT&CK-mapped capabilities to hand to detection and hunting. Covers safe handling, sample identity (SHA-256, ssdeep, TLSH, imphash), reputation lookup without uploading, file type, entropy and packers, strings and FLOSS, PE / ELF / Mach-O metadata, script and Office macro deobfuscation, archives, LNK and ISO, and capa. Use when the user mentions 'malware triage,' 'malware analysis,' 'analyze this sample,' 'suspicious file,' 'is this file malicious,' 'suspicious attachment,' 'malicious macro,' 'maldoc,' 'olevba,' 'capa,' 'FLOSS,' 'packed binary,' 'imphash,' 'YARA,' 'VirusTotal,' 'defang,' 'STIX,' or has a binary, script or document they want looked at without running it.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/malware-triage/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/malware-triage/SKILL.md"
+    },
+    {
+      "name": "bri-disk-forensics",
+      "title": "bri-disk-forensics",
+      "description": "\"Analyze disk images, file systems, and memory captures for digital evidence recovery in forensic investigations and CTF challenges. Use when the user mentions 'disk forensics,' 'forensic analysis,' 'disk image,' 'file carving,' 'deleted files,' 'evidence recovery,' 'timeline analysis,' 'memory forensics,' 'volatility,' 'autopsy,' 'sleuthkit,' 'plaso,' 'log2timeline,' 'artifact analysis,' 'chain of custody,' or needs to examine a forensic image.\"",
+      "pack": "briiirussell",
+      "source": "briiirussell/skills/disk-forensics/SKILL.md",
+      "url": "https://github.com/briiirussell/cybersecurity-skills/blob/main/skills/disk-forensics/SKILL.md"
+    },
+    {
+      "name": "ant-mcp-builder",
+      "title": "ant-mcp-builder",
+      "description": "Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).",
+      "pack": "anthropics-official",
+      "source": "anthropics/skills/mcp-builder/SKILL.md",
+      "url": "https://github.com/anthropics/skills/blob/main/skills/mcp-builder/SKILL.md"
+    },
+    {
+      "name": "ant-webapp-testing",
+      "title": "ant-webapp-testing",
+      "description": "Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.",
+      "pack": "anthropics-official",
+      "source": "anthropics/skills/webapp-testing/SKILL.md",
+      "url": "https://github.com/anthropics/skills/blob/main/skills/webapp-testing/SKILL.md"
+    },
+    {
+      "name": "ant-claude-api",
+      "title": "ant-claude-api",
+      "description": "|-\n  Reference for the Claude API / Anthropic SDK — model ids, pricing, params, streaming, tool use, MCP, agents, caching, token counting, model migration.\n  TRIGGER — read BEFORE opening the target file; don't skip because it \"looks like a one-liner\" — whenever: the prompt names Claude/Anthropic in any form (Claude, Anthropic, Fable, Opus, Sonnet, Haiku, `anthropic`, `@anthropic-ai`, `claude-*`, `us.anthropic.*`, `[1m]`); the user asks about an LLM (pricing/model choice/limits/caching) — never answer from memory; OR the task is LLM-shaped with provider unstated (agent/MCP/tool-definition/multi-agent/RAG/LLM-judge/computer-use; generate/summarize/extract/classify/rewrite/converse over NL; debugging refusals/cutoffs/streaming/tool-calls/tokens).\n  SKIP only when another provider is being worked on (overrides all triggers): OpenAI/GPT/Gemini/Llama/Mistral/Cohere/Ollama named in the query; OR `grep -rE 'openai|langchain_openai|google.generativeai|genai|mistralai|cohere|ollama'` over the project hits (run this gr",
+      "pack": "anthropics-official",
+      "source": "anthropics/skills/claude-api/SKILL.md",
+      "url": "https://github.com/anthropics/skills/blob/main/skills/claude-api/SKILL.md"
+    },
+    {
+      "name": "ant-pdf",
+      "title": "ant-pdf",
+      "description": "Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file or asks to produce one, use this skill.",
+      "pack": "anthropics-official",
+      "source": "anthropics/skills/pdf/SKILL.md",
+      "url": "https://github.com/anthropics/skills/blob/main/skills/pdf/SKILL.md"
+    },
+    {
+      "name": "ant-docx",
+      "title": "ant-docx",
+      "description": "\"Use this skill whenever the user wants to create, read, edit, or manipulate Word documents (.docx files) or Word templates (.dotx files). Triggers include: any mention of 'Word doc', 'word document', '.docx', '.dotx', or requests to produce professional documents with formatting like tables of contents, headings, page numbers, or letterheads. Also use when extracting or reorganizing content from .docx or .dotx files, inserting or replacing images in documents, performing find-and-replace in Word files, working with tracked changes or comments, or converting content into a polished Word document. If the user asks for a 'report', 'memo', 'letter', 'template', or similar deliverable as a Word or .docx file, use this skill. Do NOT use for PDFs, spreadsheets, Google Docs, or general coding tasks unrelated to document generation.\"",
+      "pack": "anthropics-official",
+      "source": "anthropics/skills/docx/SKILL.md",
+      "url": "https://github.com/anthropics/skills/blob/main/skills/docx/SKILL.md"
+    },
+    {
+      "name": "ant-xlsx",
+      "title": "ant-xlsx",
+      "description": "\"Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .xltx, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spreadsheet from scratch or from other data sources; or convert between tabular file formats. Trigger especially when the user references a spreadsheet file by name or path — even casually (like \\\"the xlsx in my downloads\\\") — and wants something done to it or produced from it. Also trigger for cleaning or restructuring messy tabular data files (malformed rows, misplaced headers, junk data) into proper spreadsheets. The deliverable must be a spreadsheet file. Do NOT trigger when the primary deliverable is a Word document, HTML report, standalone Python script, database pipeline, or Google Sheets API integration, even if tabular data is involved.\"",
+      "pack": "anthropics-official",
+      "source": "anthropics/skills/xlsx/SKILL.md",
+      "url": "https://github.com/anthropics/skills/blob/main/skills/xlsx/SKILL.md"
+    },
+    {
+      "name": "ant-pptx",
+      "title": "ant-pptx",
+      "description": "\"Use this skill any time a .pptx or .potx file is involved in any way — as input, output, or both. This includes: creating slide decks, pitch decks, or presentations; reading, parsing, or extracting text from any .pptx or .potx file (even if the extracted content will be used elsewhere, like in an email or summary); editing, modifying, or updating existing presentations; combining or splitting slide files; working with templates (.potx), layouts, speaker notes, or comments. Trigger whenever the user mentions \\\"deck,\\\" \\\"slides,\\\" \\\"presentation,\\\" or references a .pptx or .potx filename, regardless of what they plan to do with the content afterward. If a .pptx or .potx file needs to be opened, created, or touched, use this skill.\"",
+      "pack": "anthropics-official",
+      "source": "anthropics/skills/pptx/SKILL.md",
+      "url": "https://github.com/anthropics/skills/blob/main/skills/pptx/SKILL.md"
+    },
+    {
+      "name": "ant-skill-creator",
+      "title": "ant-skill-creator",
+      "description": "Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, edit, or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.\n---\n\n# Skill Creator\n\nA skill for creating new skills and iteratively improving them.\n\nAt a high level, the process of creating a skill goes like this:\n\n- Decide what you want the skill to do and roughly how it should do it\n- Write a draft of the skill\n- Create a few test prompts and run claude-with-access-to-the-skill on them\n- Help the user evaluate the results both qualitatively and quantitatively\n  - While the runs happen in the background, draft some quantitative evals if there aren't any (if there are some, you can either use as is or modify if you feel something needs to change about them). Then explain them to the user (or if they already existed, explain the ones that already exist)\n  -",
+      "pack": "anthropics-official",
+      "source": "anthropics/skills/skill-creator/SKILL.md",
+      "url": "https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md"
+    }
+  ],
+  "errors": []
+}

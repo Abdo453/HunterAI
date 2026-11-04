@@ -11,7 +11,7 @@ Bug Bounty GitHub Resources Loader
 
 مصادر (مستودعات مشهورة مفتوحة المصدر):
   swisskyrepo/PayloadsAllTheThings  — payloads & methodology
-  nahamsec/Resources                — bug bounty recon checklist
+  nahamsec/Resources-for-Beginner-Bug-Bounty-Hunters — bug bounty recon checklist
   danielmiessler/SecLists           — (مرجع عام للقوائم؛ لم يُسحب تلقائياً)
 """
 from __future__ import annotations
@@ -80,24 +80,24 @@ SOURCES: Dict[str, GitHubResource] = {
     "methodology_web_cache": GitHubResource(
         name="methodology_web_cache",
         category="methodology",
-        url="https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Web%20Cache%20Poisoning",
+        url="https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Web%20Cache%20Deception",
         fallback=[
             "X-Forwarded-Host: {canary}",
             "X-HTTP-Host-Override: {canary}",
             "Forwarded: host={canary}",
         ],
-        source_git="swisskyrepo/PayloadsAllTheThings (Web Cache Poisoning)",
+        source_git="swisskyrepo/PayloadsAllTheThings (Web Cache Deception/Poisoning)",
     ),
     # ── Bug bounty recon methodology checklist ────────────────────────────
     "bug_bounty_recon_checklist": GitHubResource(
         name="bug_bounty_recon_checklist",
         category="methodology",
-        url="https://github.com/nahamsec/Resources",
+        url="https://github.com/nahamsec/Resources-for-Beginner-Bug-Bounty-Hunters",
         fallback=[
             "crt.sh", "subfinder", "amass", "assetfinder", "hackertarget",
             "waybackurls", "gau", "gospider", "httpx", "nuclei", "dnsx",
         ],
-        source_git="nahamsec/Resources (Recon checklist)",
+        source_git="nahamsec/Resources-for-Beginner-Bug-Bounty-Hunters (Recon checklist)",
     ),
     # ── CRLF / response splitting vectors ─────────────────────────────────
     "crlf_payloads": GitHubResource(

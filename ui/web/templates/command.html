@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PentestAI — Command Center</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="command-center">
+
+  <!-- ─── LEFT: Settings & Target Configuration ─── -->
+  <aside id="panel-left">
+    <div class="panel-brand">
+      <span style="font-size:1.5em;">🖥️</span>
+      <div>
+        <div class="panel-brand-main">PentestAI</div>
+        <div class="panel-brand-sub">Command Center — Autonomous Agent</div>
+      </div>
+    </div>
+
+    <div class="panel-title">🎯 Target Configuration</div>
+    <div class="setting-row">
+      <label class="setting-label">Target Host / URL</label>
+      <input type="text" id="target-input" class="setting-input" placeholder="https://target.com" value="https://target.local">
+    </div>
+    <div class="setting-row">
+      <label class="setting-label">Scope (comma separated)</label>
+      <input type="text" id="scope-input" class="setting-input" placeholder="target.local, api.target.local" value="target.local">
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.78em;color:var(--text-muted);cursor:pointer;margin-top:4px;">
+      <input type="checkbox" id="authorized-chk" checked>
+      <span style="color:var(--emerald);font-weight:bold;">Red Team Authorized</span>
+    </label>
+
+    <div class="panel-title">🤖 AI Providers &amp; API Keys</div>
+    <div class="setting-row">
+      <label class="setting-label">Provider</label>
+      <select id="provider-select" class="provider-select">
+        <option value="nvidia">NVIDIA NIM</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="deepseek">DeepSeek</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label class="setting-label">API Key</label>
+      <input type="password" id="api-key-input" class="setting-input" placeholder="sk-... / nvapi-...">
+      <div class="key-hint">Persisted to .env · loaded live (no restart)</div>
+    </div>
+    <div class="setting-row">
+      <label class="setting-label">Model</label>
+      <input type="text" id="model-input" class="setting-input" placeholder="e.g. nvidia/nemotron-3-super-120b-a12b">
+    </div>
+    <button class="cyber-btn cyber-btn-launch btn-save" onclick="saveSettings()">💾 Save API Keys to .env</button>
+    <div id="save-status" style="font-size:0.72em;color:var(--emerald);margin-top:6px;min-height:16px;"></div>
+
+    <div class="panel-title">🔧 Command Execution</div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.78em;color:var(--text-muted);cursor:pointer;">
+      <input type="checkbox" id="exec-chk" checked>
+      <span>Allow AI to run terminal commands</span>
+    </label>
+    <div id="exec-status" class="status-chip ok" style="display:none;margin-top:6px;">Execution: enabled</div>
+
+    <div class="warning">
+      <strong>⚠️ Security warning</strong><br>
+      Command execution runs arbitrary shell commands on this host with your user's privileges. Only enable on isolated, authorized systems you own or have written permission to test.
+    </div>
+
+    <div class="panel-title">📡 Provider Status</div>
+    <div id="provider-status"></div>
+  </aside>
+
+  <!-- ─── MIDDLE: Interactive Chat ─── -->
+  <section id="panel-chat">
+    <header class="chat-header">
+      <div class="chat-title"><span>💬</span> PentestAI Agent</div>
+    </header>
+    <div id="chat-messages">
+      <div class="chat-msg ai">
+        <div class="chat-bubble">أهلاً — أنا PentestAI. لدي تفويض كامل لتشغيل الأوامر ضد الهدف. اكتب طلبك، وسأقوم بالتحليل وتنفيذ الأوامر (nmap, python3 pentest.py, ...) عند الحاجة.</div>
+        <div class="meta">PentestAI · ready</div>
+      </div>
+    </div>
+    <form class="chat-composer" id="chat-composer" onsubmit="return sendChat(event)">
+      <textarea id="chat-input" rows="1" placeholder="Ask PentestAI… (e.g. "Run nmap -sV on the target" or "Scan target.local for open ports")"></textarea>
+      <button type="submit" class="cyber-btn cyber-btn-launch" style="padding:10px 20px;">Send ▶</button>
+    </form>
+  </section>
+
+  <!-- ─── RIGHT: Live Terminal ─── -->
+  <aside id="panel-terminal">
+    <div class="term-header">
+      <div class="term-title">🖥️ Live Terminal</div>
+      <button onclick="clearTerminal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.8em;">Clear</button>
+    </div>
+    <div id="term-output">
+      <div class="term-line"><span class="term-prompt">pentestai></span> <span class="term-out">Terminal ready. Command output from the AI appears here.</span></div>
+    </div>
+  </aside>
+
+</div>
+<script src="/static/command.js"></script>
+</body>
+</html>

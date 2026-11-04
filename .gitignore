@@ -5,6 +5,9 @@ __pycache__/
 *.so
 .Python
 
+# Node dependencies (never commit)
+node_modules/
+
 # Virtual environments
 venv/
 .venv/

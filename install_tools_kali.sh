@@ -77,7 +77,7 @@ go_tools=(
   "github.com/tomnomnom/waybackurls@latest"
   "github.com/tomnomnom/assetfinder@latest"
   "github.com/tomnomnom/httprobe@latest"
-  "github.com/tomnomnom/hakrawler@latest"
+  "github.com/hakluke/hakrawler@latest"
   "github.com/tomnomnom/anew@latest"
   "github.com/tomnomnom/qsreplace@latest"
   "github.com/PentestPad/subzy@latest"

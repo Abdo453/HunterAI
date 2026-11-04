@@ -1,0 +1,50 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": {
+      "*": "allow"
+    }
+  },
+  "mcp": {
+    "hunter-arsenal": {
+      "type": "local",
+      "command": ["python", "pentest.py", "mcp-serve"],
+      "enabled": true,
+      "timeout": 60000
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-filesystem", "E:\\Agant\\PentestAI-Unified"],
+      "enabled": true,
+      "timeout": 60000
+    },
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true
+    },
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app",
+      "enabled": true
+    },
+    "semgrep": {
+      "type": "local",
+      "command": ["uvx", "semgrep-mcp"],
+      "enabled": false
+    },
+    "azure-mcp": {
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@azure/mcp@latest", "server", "start"],
+      "enabled": false
+    },
+    "github-mcp": {
+      "type": "local",
+      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-github"],
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "enabled": false
+    }
+  }
+}
