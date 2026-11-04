@@ -18,6 +18,11 @@ from core.arsenal.kali_catalog import (
     ToolDefinition,
     get_tool_definition,
 )
+from core.arsenal.ai_command_synthesizer import (
+    AIToolCommandSynthesizer,
+    SynthesizedCommand,
+    TargetContext,
+)
 from core.engine.real_tool_adapter import RealToolAdapter, ToolExecutionResult
 
 logger = logging.getLogger("hunter_ai.arsenal.factory")
@@ -123,12 +128,47 @@ class DynamicToolAgent:
         timeout: Optional[float] = None,
         deliberate: bool = True,
         verbose_thinking: bool = False,
+        context: Optional[Any] = None,
+        adaptive_ai: bool = True,
     ) -> ToolExecutionResult:
         """
         Executes the tool against the specified target.
+        Integrates AI Command Synthesis: dynamically shapes CLI parameters, flags,
+        and evasion strategies according to target WAF, tech stack, and active ports.
         Falls back to hermetic emulation if binary is not present or fallback is requested.
         Engages Pre-Tool Reflection and Post-Tool Self-Correction when deliberate=True.
         """
+        # Resolve target situational context
+        target_ctx: TargetContext
+        if isinstance(context, TargetContext):
+            target_ctx = context
+        elif isinstance(context, dict):
+            target_ctx = TargetContext(
+                target=context.get("target", target),
+                waf_name=context.get("waf_name"),
+                tech_stack=list(context.get("tech_stack", [])),
+                open_ports=list(context.get("open_ports", [])),
+                auth_headers=dict(context.get("auth_headers", {})),
+                cookies=dict(context.get("cookies", {})),
+                rate_limit_per_sec=context.get("rate_limit_per_sec"),
+                goal=context.get("goal", "comprehensive_safe_audit"),
+                extra=dict(context.get("extra", {})),
+            )
+        else:
+            target_ctx = TargetContext(target=target)
+
+        # AI Command Synthesis
+        synthesized: Optional[SynthesizedCommand] = None
+        if adaptive_ai:
+            try:
+                synthesized = AIToolCommandSynthesizer.synthesize_sync(self.tool_def, target_ctx)
+                if extra_args:
+                    clean_extra = AIToolCommandSynthesizer._sanitize_args(self.tool_def, extra_args, target)
+                    synthesized.args.extend(clean_extra)
+                    synthesized.command_line = f"{self.tool_def.binary_name} {' '.join(synthesized.args)}"
+            except Exception as exc:
+                logger.debug("[DynamicToolAgent] AI Synthesis note: %s", exc)
+
         delib = None
         if deliberate:
             deliberator = self.get_deliberator()
@@ -140,22 +180,42 @@ class DynamicToolAgent:
             if verbose_thinking:
                 print(deliberator.format_pre_tool_trace(delib))
 
+        if verbose_thinking and synthesized:
+            print(f"\n[AI COMMAND SYNTHESIS: {self.tool_def.name}]")
+            print(f"  Command:  {synthesized.command_line}")
+            print(f"  Strategy: {synthesized.evasion_strategy}")
+            print(f"  Signals:  {', '.join(synthesized.context_signals_used) if synthesized.context_signals_used else 'Baseline'}")
+            print(f"  Reason:   {synthesized.ai_reasoning}\n")
+
         start = time.time()
         timeout_to_use = timeout or self.tool_def.timeout_secs
         use_fallback = force_fallback or self.adapter.force_fallback or not self.adapter.is_tool_available(self.tool_def.binary_name)
 
         if not use_fallback:
             # Construct command
-            cmd = [self.tool_def.binary_name]
-            for arg in self.tool_def.default_args:
-                if "{target}" in arg:
-                    cmd.append(arg.replace("{target}", target))
-                else:
-                    cmd.append(arg)
-            if extra_args:
-                cmd.extend(extra_args)
+            if synthesized and synthesized.args:
+                cmd = [self.tool_def.binary_name] + list(synthesized.args)
+            else:
+                cmd = [self.tool_def.binary_name]
+                for arg in self.tool_def.default_args:
+                    if "{target}" in arg:
+                        cmd.append(arg.replace("{target}", target))
+                    else:
+                        cmd.append(arg)
+                if extra_args:
+                    cmd.extend(extra_args)
 
-            logger.info("[DynamicToolAgent] Executing real tool binary: %s", " ".join(cmd))
+            if synthesized:
+                logger.info(
+                    "[DynamicToolAgent] [AI SYNTHESIS] Tool=%s -> %s | Evasion: %s | Reason: %s",
+                    self.tool_def.name,
+                    " ".join(cmd),
+                    synthesized.evasion_strategy,
+                    synthesized.ai_reasoning,
+                )
+            else:
+                logger.info("[DynamicToolAgent] Executing real tool binary: %s", " ".join(cmd))
+
             exit_code, stdout, stderr = self.adapter._run_subprocess(cmd, timeout=timeout_to_use)
             duration = time.time() - start
 
@@ -179,6 +239,9 @@ class DynamicToolAgent:
                 lines = [l.strip() for l in stdout.splitlines() if l.strip()]
                 structured_data = {"lines": lines, "count": len(lines)}
 
+            if synthesized:
+                structured_data["ai_command_synthesis"] = synthesized.to_dict()
+
             result = ToolExecutionResult(
                 tool_name=self.tool_def.name,
                 target=target,
@@ -194,6 +257,8 @@ class DynamicToolAgent:
             # Fallback execution (hermetic & safe)
             duration = time.time() - start
             result = self._generate_fallback_result(target, duration)
+            if synthesized:
+                result.structured_data["ai_command_synthesis"] = synthesized.to_dict()
 
         if deliberate:
             deliberator = self.get_deliberator()

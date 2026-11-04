@@ -125,7 +125,11 @@ class CognitiveDeliberator:
         """
         surface = surface or {}
         current_findings = current_findings or []
-        obs_signals = [f"Asset {k}: {len(v)} items" for k, v in surface.items()]
+        obs_signals = [
+            f"Asset {k}: {len(v)} items" if isinstance(v, (list, set, dict, tuple)) else f"Signal {k}: {v}"
+            for k, v in surface.items()
+            if v is not None
+        ]
         obs_signals.extend([f"Finding: {f.get('title', 'Unknown')}" for f in current_findings[:5]])
 
         # Assess complexity via Hybrid Core

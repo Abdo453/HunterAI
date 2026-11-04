@@ -20,6 +20,11 @@ from core.arsenal.universal_mcp_bridge import (
     MCPServerRunner,
     UniversalMCPBridge,
 )
+from core.arsenal.ai_command_synthesizer import (
+    AIToolCommandSynthesizer,
+    TargetContext,
+    SynthesizedCommand,
+)
 
 __all__ = [
     "KALI_TOOL_CATALOG",
@@ -33,4 +38,7 @@ __all__ = [
     "ToolSkillDescriptor",
     "UniversalMCPBridge",
     "MCPServerRunner",
+    "AIToolCommandSynthesizer",
+    "TargetContext",
+    "SynthesizedCommand",
 ]

@@ -79,5 +79,13 @@ data/*_sched_state.json
 .DS_Store
 Thumbs.db
 
+# OpenCode skills integration — cloned external libraries (never commit)
+skills_library/
+tmp_skills_install.log
+
 # Local scratch artifacts
 .tmp_*
+
+data/state_*.json
+data/tasks_*.json
+snapshots/

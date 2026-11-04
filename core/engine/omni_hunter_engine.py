@@ -242,18 +242,41 @@ class OmniHunterEngine:
         self.poc_generator = PoCBundleGenerator(output_base_dir="findings") if config.generate_poc_bundles else None
 
         # Dynamic attack surface inventory
-        self.surface: Dict[str, List[str]] = {
+        self.surface: Dict[str, Any] = {
             "domains": list(config.scope_domains),
             "live_hosts": [],
             "endpoints": [],
             "apis": [],
             "js_files": [],
             "services": [],
+            "open_ports": [],
+            "tech_stack": [],
+            "waf_name": None,
         }
         self.confirmed_findings: List[Dict[str, Any]] = []
         self.exploit_chains: List[Dict[str, Any]] = []
         self.current_phase = AssessmentPhase.INIT
         self._start_time: float = 0.0
+
+    def get_target_context(self, target: Optional[str] = None) -> Any:
+        """Constructs rich situational TargetContext from live discovered surface."""
+        from core.arsenal.ai_command_synthesizer import TargetContext
+        tgt = target or self.config.target_url
+        ports: List[int] = []
+        for p in self.surface.get("open_ports", []):
+            try:
+                ports.append(int(str(p).split(":")[-1]))
+            except Exception:
+                pass
+        return TargetContext(
+            target=tgt,
+            waf_name=self.surface.get("waf_name"),
+            tech_stack=list(self.surface.get("tech_stack", [])),
+            open_ports=sorted(list(set(ports))),
+            auth_headers=dict(self.config.auth_headers),
+            cookies=dict(self.config.session_cookies),
+            goal="autonomous_security_assessment",
+        )
 
     # ── Scope Enforcement ──────────────────────────────────────────────────────
 
@@ -343,7 +366,10 @@ class OmniHunterEngine:
 
             if result.success and result.normalized_data:
                 for port_entry in result.normalized_data.get("open_ports", []):
-                    self.ledger.record_discovery(AssetType.PORT, f"{host}:{port_entry}")
+                    port_str = f"{host}:{port_entry}"
+                    self.ledger.record_discovery(AssetType.PORT, port_str)
+                    if port_str not in self.surface["open_ports"]:
+                        self.surface["open_ports"].append(port_str)
 
             reviewer = NetworkReviewAgent()
             reviewer.review(task, self.ledger)
@@ -375,6 +401,18 @@ class OmniHunterEngine:
                     if ep_url and ep_url not in self.surface["endpoints"]:
                         self.surface["endpoints"].append(ep_url)
                         self.ledger.record_discovery(AssetType.ENDPOINT, ep_url)
+                # Inspect response headers for WAF & tech
+                hdrs = result.normalized_data.get("headers", {})
+                server_hdr = hdrs.get("Server", "")
+                if "cloudflare" in server_hdr.lower() and not self.surface.get("waf_name"):
+                    self.surface["waf_name"] = "Cloudflare"
+                elif "nginx" in server_hdr.lower() and "nginx" not in self.surface["tech_stack"]:
+                    self.surface["tech_stack"].append("nginx")
+                elif "apache" in server_hdr.lower() and "apache" not in self.surface["tech_stack"]:
+                    self.surface["tech_stack"].append("apache")
+                pby = hdrs.get("X-Powered-By", "")
+                if "php" in pby.lower() and "php" not in self.surface["tech_stack"]:
+                    self.surface["tech_stack"].append("php")
 
             # Content Discovery
             cd_task = self.scheduler.add_task(
