@@ -13,7 +13,16 @@ pip install -r requirements.txt
 # Setup AI provider (Ollama recommended, free + local)
 python pentest.py setup --provider ollama --model qwen2.5:14b
 
-# ONE-COMMAND-FOR-EVERYTHING (All 149 Skills, AI Browser, Burp, Exploit Chaining, Reports)
+# ── TWO MASTER COMMANDS (Launch everything with your preferred interface) ──
+# Command 1: All Skills + Unified Web Control Center (:8000)
+python pentest.py web target.com
+# (Or using alias: python pentest.py ui target.com or python pentest.py all target.com --web)
+
+# Command 2: All 217 Skills + OpenCode Studio Hub & MCP Arsenal (:8000/opencode)
+python pentest.py opencode target.com
+# (Or using alias: python pentest.py opencode-ui target.com or python pentest.py all target.com --opencode)
+
+# Headless CLI Master (All 169 Skills, AI Browser, Burp, Exploit Chaining, Reports)
 python pentest.py all target.com
 # (Or using alias: python pentest.py run target.com)
 
@@ -28,7 +37,9 @@ python pentest.py report target.com "finding" --platform hackerone
 
 | Command | Usage |
 |---------|-------|
-| `/all target.com` | One-Command-For-Everything: All 149 skills + AI Browser + Burp + Report |
+| `/web [target]` | Dual Master 1: All skills + Unified Web Control Center (`http://127.0.0.1:8000`) |
+| `/opencode [target]` | Dual Master 2: All 217 skills + OpenCode Studio Hub (`http://127.0.0.1:8000/opencode`) |
+| `/all target.com` | Headless Master: All skills + AI Browser + Burp + Report |
 | `/burp-logs <file_or_live>` | Professional Burp Suite log & HTTP history inspector (XML/JSON/HAR/live) |
 | `/recon target.com` | Subdomain enum · live host discovery · URL crawl |
 | `/hunt target.com` | IDOR · auth bypass · SSRF · XSS · SQLi · logic flaws |
