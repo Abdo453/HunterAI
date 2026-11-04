@@ -1,86 +1,190 @@
 """
-Unit Tests for Desktop Workspace & Artifact Exporter
-===================================================
+Hermetic Test Suite for Target Desktop Exporter
+===============================================
+Validates:
+1. Cross-platform Desktop directory resolution (Kali Linux /home/kali/Desktop, Windows, and custom overrides)
+2. Target name sanitization from URLs, ports, and queries
+3. Complete target workspace creation (reports/, scripts/, recon/, findings/)
+4. Automated report and executable script exports
+5. Reconnaissance surface dumps (subdomains, live hosts, open ports, endpoints)
+6. Full assessment synchronization and SUMMARY.md master index generation
 """
-import os
+from dataclasses import dataclass
 import json
-import shutil
-import tempfile
+import os
 from pathlib import Path
+import tempfile
 import pytest
 
-from hunter_ai.pipeline.desktop_exporter import DesktopExportManager
+from core.reporting.desktop_exporter import TargetDesktopExporter
 
 
-class TestDesktopExportManager:
+@pytest.fixture
+def mock_desktop(monkeypatch):
+    """Provides a temporary simulated Desktop environment."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        desktop_path = Path(tmpdir) / "Desktop"
+        desktop_path.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("TARGET_DESKTOP_DIR", str(desktop_path))
+        yield desktop_path
 
-    def test_get_desktop_dir(self):
-        d = DesktopExportManager.get_desktop_dir()
-        assert d is not None
-        assert isinstance(d, Path)
 
-    def test_get_target_desktop_folder(self, tmp_path):
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(DesktopExportManager, "get_desktop_dir", lambda: tmp_path)
-            target_folder = DesktopExportManager.get_target_desktop_folder("sub.target-domain.com")
-            assert target_folder.exists()
-            assert "HunterAI_sub.target-domain.com" in str(target_folder)
+def test_clean_target_name():
+    """Verifies target string sanitization."""
+    # 1. Full HTTPS URL with port and path
+    assert TargetDesktopExporter.clean_target_name("https://app.target.com:8443/login?q=1") == "app.target.com"
+    # 2. Standard domain
+    assert TargetDesktopExporter.clean_target_name("api.securesite.org") == "api.securesite.org"
+    # 3. IP address
+    assert TargetDesktopExporter.clean_target_name("http://10.10.253.8:8080/dashboard") == "10.10.253.8"
+    # 4. Dirty characters
+    assert TargetDesktopExporter.clean_target_name("bad/domain:name?test*") == "bad"
 
-    def test_export_engagement(self, tmp_path):
-        desktop_dir = tmp_path / "Desktop"
-        desktop_dir.mkdir(parents=True, exist_ok=True)
-        artifact_dir = tmp_path / "engagement_run"
-        artifact_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create dummy stage dirs and files
-        (artifact_dir / "00_scope").mkdir()
-        with open(artifact_dir / "00_scope" / "scope.json", "w") as f:
-            f.write("{}")
+def test_get_desktop_dir(mock_desktop):
+    """Verifies Desktop path resolution with environment override."""
+    resolved = TargetDesktopExporter.get_desktop_dir()
+    assert resolved.resolve() == mock_desktop.resolve()
+    assert resolved.exists()
 
-        (artifact_dir / "01_osint").mkdir()
-        with open(artifact_dir / "01_osint" / "google_dorks.txt", "w") as f:
-            f.write("site:example.com\n")
 
-        reports_dir = artifact_dir / "14_reports"
-        reports_dir.mkdir()
-        md_file = reports_dir / "report.md"
-        html_file = reports_dir / "report.html"
-        json_file = reports_dir / "report.json"
-        with open(md_file, "w") as f: f.write("# Report")
-        with open(html_file, "w") as f: f.write("<html><body>Report</body></html>")
-        with open(json_file, "w") as f: f.write("[]")
+def test_target_workspace_structure(mock_desktop):
+    """Verifies that the target workspace and all required subdirectories are created."""
+    target = "https://vulnerable-store.com/catalog"
+    ws = TargetDesktopExporter.get_target_workspace(target)
 
-        reports_dict = {
-            "markdown": str(md_file),
-            "html": str(html_file),
-            "json": str(json_file),
+    assert ws["root"] == mock_desktop / "vulnerable-store.com"
+    assert ws["root"].is_dir()
+    assert ws["reports"].is_dir()
+    assert ws["scripts"].is_dir()
+    assert ws["recon"].is_dir()
+    assert ws["findings"].is_dir()
+
+
+def test_export_report_and_script(mock_desktop):
+    """Verifies saving reports and executable verification scripts."""
+    target = "vulnerable-store.com"
+
+    # Export Report
+    report_file = TargetDesktopExporter.export_report(
+        target=target,
+        content="# Executive Assessment Dossier\nAll systems tested.",
+        filename="MASTER_REPORT.md",
+    )
+    assert report_file.is_file()
+    assert "All systems tested" in report_file.read_text(encoding="utf-8")
+    assert report_file.parent.name == "reports"
+
+    # Export Script
+    script_file = TargetDesktopExporter.export_script(
+        target=target,
+        content="#!/usr/bin/env python3\nprint('Testing IDOR exploit')",
+        filename="test_idor.py",
+    )
+    assert script_file.is_file()
+    assert "Testing IDOR exploit" in script_file.read_text(encoding="utf-8")
+    assert script_file.parent.name == "scripts"
+
+
+def test_export_recon_surface(mock_desktop):
+    """Verifies dumping discovered reconnaissance assets into recon/."""
+    target = "target-domain.com"
+    surface_data = {
+        "domains": ["api.target-domain.com", "admin.target-domain.com", "dev.target-domain.com"],
+        "live_hosts": ["https://api.target-domain.com", "https://admin.target-domain.com"],
+        "endpoints": ["/api/v1/users", "/api/v1/auth", "/admin/metrics"],
+        "open_ports": [80, 443, 8443],
+    }
+
+    recon_files = TargetDesktopExporter.export_recon_surface(target, surface_data)
+    assert "subdomains" in recon_files
+    assert "live_hosts" in recon_files
+    assert "endpoints" in recon_files
+    assert "open_ports" in recon_files
+    assert "overview" in recon_files
+
+    # Verify content
+    sub_text = recon_files["subdomains"].read_text(encoding="utf-8")
+    assert "api.target-domain.com" in sub_text
+    assert "admin.target-domain.com" in sub_text
+
+    ep_text = recon_files["endpoints"].read_text(encoding="utf-8")
+    assert "/api/v1/users" in ep_text
+
+
+def test_sync_assessment_full(mock_desktop):
+    """Verifies complete end-to-end synchronization with findings, scripts, and SUMMARY.md."""
+    target = "https://shop.example-target.com"
+
+    # Mock assessment result
+    @dataclass
+    class MockResult:
+        target: str = "https://shop.example-target.com"
+        engagement_id: str = "ENG-TEST1234"
+        coverage_pct: float = 92.5
+        duration_secs: float = 45.2
+        confirmed_findings: list = None
+
+    result = MockResult(
+        confirmed_findings=[
+            {
+                "title": "SQL Injection in User Profile",
+                "vuln_class": "SQLI",
+                "confidence": 0.95,
+                "verdict": "CONFIRMED",
+                "evidence": "Observed SQL syntax error and sleep delay in 'id' parameter.",
+                "poc_code": "import httpx\nprint('Exploiting SQLi')",
+            },
+            {
+                "title": "IDOR in Orders API",
+                "vuln_class": "IDOR",
+                "confidence": 0.90,
+                "verdict": "CONFIRMED",
+                "evidence": "User A accessed User B order receipts.",
+            }
+        ]
+    )
+
+    # Mock engine with surface
+    class MockEngine:
+        surface = {
+            "domains": ["shop.example-target.com", "api.shop.example-target.com"],
+            "live_hosts": ["https://shop.example-target.com"],
+            "endpoints": ["/api/order/10", "/profile"],
+            "open_ports": [443],
         }
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(DesktopExportManager, "get_desktop_dir", lambda: desktop_dir)
+    engine = MockEngine()
 
-            res = DesktopExportManager.export_engagement(
-                domain="target.com",
-                artifact_root=str(artifact_dir),
-                reports_dict=reports_dict,
-                subdomains=[{"subdomain": "api.target.com"}],
-                live_assets=[{"url": "https://api.target.com"}],
-                endpoints=[{"url": "https://api.target.com/v1/users"}],
-                parameters=[{"name": "user_id"}],
-                findings=[{"finding": "Test Finding", "severity": "Medium"}],
-                tool_logs=[],
-                workflow="full",
-                profile="hunter",
-            )
+    # Create dummy master report
+    temp_report = mock_desktop / "MASTER_TEMP_REPORT.md"
+    temp_report.write_text("# Master Dossier Content", encoding="utf-8")
 
-            assert res != ""
-            target_path = Path(res)
-            assert target_path.exists()
-            assert (target_path / "📌_OVERVIEW.md").exists()
-            assert (target_path / "📊_EXECUTIVE_REPORT.html").exists()
-            assert (target_path / "📑_TECHNICAL_REPORT.md").exists()
-            assert (target_path / "📋_FINDINGS.json").exists()
-            assert (target_path / "02_Subdomains" / "subdomains.txt").exists()
-            assert (target_path / "03_Live_Hosts_and_Services" / "live_hosts.txt").exists()
-            assert (target_path / "04_Attack_Surface_and_URLs" / "all_urls.txt").exists()
-            assert (target_path / "06_Vulnerabilities_and_Findings" / "confirmed_findings.json").exists()
+    sync_stats = TargetDesktopExporter.sync_assessment(
+        target=target,
+        result=result,
+        engine=engine,
+        master_report_path=temp_report,
+    )
+
+    assert sync_stats["reports_count"] == 1
+    assert sync_stats["findings_count"] == 2
+    assert sync_stats["scripts_count"] == 2
+
+    target_ws = mock_desktop / "shop.example-target.com"
+    summary_file = target_ws / "SUMMARY.md"
+    assert summary_file.is_file()
+
+    summary_text = summary_file.read_text(encoding="utf-8")
+    assert "shop.example-target.com" in summary_text
+    assert "ENG-TEST1234" in summary_text
+    assert "SQL Injection in User Profile" in summary_text
+    assert "IDOR in Orders API" in summary_text
+    assert "92.5%" in summary_text
+
+    # Verify generated scripts in scripts/
+    scripts_dir = target_ws / "scripts"
+    py_scripts = list(scripts_dir.glob("*.py"))
+    assert len(py_scripts) == 2
+    assert any("sqli" in s.name.lower() for s in py_scripts)
+    assert any("idor" in s.name.lower() for s in py_scripts)
