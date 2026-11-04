@@ -1,0 +1,12 @@
+{
+  "mcp": {
+    "bughunter": {
+      "type": "local",
+      "enabled": true,
+      "command": ["bughunter", "mcp", "serve"],
+      "environment": {
+        "BBHUNT_MCP_APPROVE": "0"
+      }
+    }
+  }
+}

@@ -5,13 +5,14 @@
     "core"
   ],
   "cap": 200,
-  "count": 198,
+  "count": 217,
   "library_inventory": {
     "acs": 818,
     "tob": 95,
     "bri": 42,
     "ant": 20,
-    "ms": 211
+    "ms": 211,
+    "abh": 19
   },
   "skills": [
     {
@@ -1597,6 +1598,158 @@
       "pack": "anthropics-official",
       "source": "anthropics/skills/skill-creator/SKILL.md",
       "url": "https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md"
+    },
+    {
+      "name": "abh-agentic-app-audit",
+      "title": "abh-agentic-app-audit",
+      "description": "Black-box security audit of a DEPLOYED AI agent (not the MCP server behind it) — tool-call hijacking, cross-session memory poisoning, confused-deputy via connected tools, agent-to-agent IDOR, excessive agency / unconfirmed destructive actions, and privilege compromise where the agent holds broader perms than the user. Use when the target is a live assistant/agent product with tool access (bookings, email, payments, file/RAG, browsing) rather than a raw LLM chat box or an MCP server you can read.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/agentic-app-audit/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/agentic-app-audit/SKILL.md"
+    },
+    {
+      "name": "abh-argus",
+      "title": "abh-argus",
+      "description": "Argus — the all-seeing scanner suite. Six automated scanners for high-value web + LLM bug classes — CORS misconfiguration (origin reflection / null / credentialed read), CRLF & host-header injection, NoSQL injection (operator auth-bypass / $where blind), JWT attacks (alg:none / RS256→HS256 confusion / secret crack), out-of-band confirmation of blind SSRF/XXE/SQLi/RCE/Log4Shell via interactsh, and an LLM red-team corpus (prompt-injection / jailbreak / system-prompt leak / exfil / indirect injection). Use when a target exposes a JSON API, a login endpoint, JWT auth, a parameter that might reach the server, a chatbot/agent, or any endpoint suspected of a blind/out-of-band bug.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/argus/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/argus/SKILL.md"
+    },
+    {
+      "name": "abh-bb-methodology",
+      "title": "abh-bb-methodology",
+      "description": "Use at the START of any bug bounty hunting session, when switching targets, or when feeling lost about what to do next. Master orchestrator that combines the 5-phase non-linear hunting workflow with the critical thinking framework (developer psychology, anomaly detection, What-If experiments). Routes to all other skills based on current hunting phase. Also use when asking \"what should I do next\" or \"where am I in the process.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/bb-methodology/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/bb-methodology/SKILL.md"
+    },
+    {
+      "name": "abh-bug-bounty",
+      "title": "abh-bug-bounty",
+      "description": "Complete bug bounty workflow — recon, pre-hunt learning, vulnerability hunting (IDOR, SSRF, XSS, auth bypass, CSRF, race conditions, SQLi, XXE, file upload, business logic, GraphQL, HTTP smuggling, cache poisoning, OAuth, OIDC, SSTI, subdomain takeover, cloud misconfig, ATO chains, agentic AI), LLM/AI security testing (ASI01-ASI10), A-to-B bug chaining, bypass tables, language-specific grep patterns, and reporting (7-Question Gate, 4 validation gates, CVSS 3.1, PoC generation, submission checklist). Use for ANY bug bounty task — recon, hunting specific vulns, auditing source code, testing AI features, validating findings, or writing reports.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/bug-bounty/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/bug-bounty/SKILL.md"
+    },
+    {
+      "name": "abh-cicd-security",
+      "title": "abh-cicd-security",
+      "description": "CI/CD pipeline security hunting — GitHub Actions workflow injection, secret exfiltration, self-hosted runner poisoning, dependency confusion, OIDC token theft, and supply chain attacks. Covers sisakulint scanning, manual workflow analysis, and chaining CI/CD bugs into critical findings. Use when a target has public repos, GitHub Actions, CircleCI, Jenkins, or GitLab CI.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/cicd-security/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/cicd-security/SKILL.md"
+    },
+    {
+      "name": "abh-client-reverse",
+      "title": "abh-client-reverse",
+      "description": "Client-side request-signing and anti-bot token reversal for bug bounty — when a request carries a sign/sig/hmac/token/nonce/timestamp/X-Sensor header that Burp Repeater cannot replay, recover the signer just enough to reproduce the request outside the client. Packet-first staging (capture real request → prove replay works → only reverse if replay fails) across the locate→recover→runtime→validation→replay spine. Covers tracing backward from the signature field (writer→builder→entry→source), isolating user-mutable sign inputs (timestamp/nonce/deviceId/body) vs constants (secret key), hooking fetch/XHR in DevTools, JS deobfuscation basics (webpack/wasm/JSVMP), and the bounty payoff: reach the protected API to then hunt IDOR/auth/business-logic. Use when Burp/mitmproxy replay of a signed or anti-bot-gated request fails and you suspect a client-computed field is blocking you.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/client-reverse/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/client-reverse/SKILL.md"
+    },
+    {
+      "name": "abh-cloud-pentest",
+      "title": "abh-cloud-pentest",
+      "description": "Post-access cloud exploitation for AWS, GCP, and Azure — what to do AFTER you obtain credentials or reach a metadata endpoint. Covers IAM enumeration and privilege escalation (iam:PassRole, CreatePolicyVersion, AssumeRole chains, GCP service-account impersonation, Azure managed-identity abuse), IMDSv1/v2 metadata credential theft, STS token abuse, S3/GCS/Blob bucket takeover and object exfil, Lambda/Cloud Functions env-var secrets, cross-account and cross-service pivoting, and turning leaked keys into demonstrated impact (read PII, assume admin, exfil data). Assumes authorized scope only. Use when you have AWS/GCP/Azure keys, an SSRF hitting 169.254.169.254 / metadata.google.internal, a leaked service-account JSON, or a token, and need to escalate and prove impact. For finding buckets/origins first, use cloud-recon; for the SSRF entry point, see web2-vuln-classes. 中文触发词：云渗透、AWS提权、IAM枚举、元数据凭证、云安全审计",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/cloud-pentest/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/cloud-pentest/SKILL.md"
+    },
+    {
+      "name": "abh-credential-attack",
+      "title": "abh-credential-attack",
+      "description": "Password spray methodology for bug bounty — when to do it vs web-vuln hunting, the wordlist-gen + breach-check + osint-employees + spray pipeline, mode selection (http-form / oauth / o365 / okta), rate-limit + lockout tactics, BBP legal guardrails, success detection, and the spray → authenticated /hunt chain pattern. Use when assessing whether credential attack is worth running on a target, picking the right mode, or recovering from common pitfalls.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/credential-attack/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/credential-attack/SKILL.md"
+    },
+    {
+      "name": "abh-graphql-audit",
+      "title": "abh-graphql-audit",
+      "description": "GraphQL security hunting — introspection abuse, field suggestion enumeration (clairvoyance), batching DoS, IDOR via aliasing, auth bypass, injection via arguments, subscription abuse, depth/complexity bombs, and WAF bypass. Covers graphw00f fingerprinting, GraphQLmap, graphql-cop, and inql. Use when a target exposes a /graphql, /api/graphql, or GQL-over-HTTP endpoint.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/graphql-audit/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/graphql-audit/SKILL.md"
+    },
+    {
+      "name": "abh-llm-redteam",
+      "title": "abh-llm-redteam",
+      "description": "LLM application red-teaming — prompt injection (direct + indirect), jailbreak, system-prompt leak, data exfiltration, guardrail bypass, multi-turn crescendo, cross-lingual + cipher + invisible-unicode token smuggling, excessive agency / tool abuse, insecure output handling. Canonical OWASP LLM Top 10 + ASI01-ASI10 mapping. Use when a target exposes a chat/completions/assistant/copilot endpoint, an AI feature that consumes user text or documents, or any /v1/chat, /api/chat, /mcp surface.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/llm-redteam/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/llm-redteam/SKILL.md"
+    },
+    {
+      "name": "abh-mcp-server-audit",
+      "title": "abh-mcp-server-audit",
+      "description": "Security audit of Model Context Protocol (MCP) servers — tool poisoning, prompt injection via tool descriptions and results, unscoped/over-privileged tools, path traversal in file tools, command injection in shell/exec tools, SSRF in fetch tools, secret leakage through tool output, missing approval gates on state-changing actions, confused-deputy and rug-pull tool redefinition, token passthrough, and unsafe stdio/HTTP transport config. Covers auditing both first-party and third-party MCP servers (Python FastMCP, Node MCP SDK) and their client configs (Claude Desktop, Cursor, Cline, Windsurf, Zed). Use when reviewing, hardening, or hunting bugs in an MCP server, an agent's tool integrations, or a mcpServers config block. 中文触发词：MCP审计、工具投毒、提示注入、智能体安全、MCP服务器漏洞",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/mcp-server-audit/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/mcp-server-audit/SKILL.md"
+    },
+    {
+      "name": "abh-meme-coin-audit",
+      "title": "abh-meme-coin-audit",
+      "description": "Meme coin and token security audit — rug pull detection (honeypot, hidden mint, fee manipulation, LP lock bypass), Solana SPL token analysis (freeze authority, mint authority, metadata mutability), Token-2022 extension risks (transfer hooks, permanent delegate), DEX liquidity pool attacks (sandwich amplification, LP drain, bonding curve exploits), pump.fun/Raydium/Jupiter integration risks, token_scanner.py automation, and real exploit examples from 2024-2025. Use for any token audit, rug pull assessment, meme coin security review, or pre-investment due diligence.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/meme-coin-audit/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/meme-coin-audit/SKILL.md"
+    },
+    {
+      "name": "abh-mobile-pentest",
+      "title": "abh-mobile-pentest",
+      "description": "Mobile app pentest for bug bounty (Android APK + iOS IPA) — runtime-first workflow: install app, proxy through Burp/mitmproxy, drive the UI, capture packets, then test the API exactly like a web target; escalate to decompile (apktool/jadx) and Frida/objection only when traffic is SSL-pinned, encrypted, or absent. Covers APK/IPA decompile for hardcoded secrets + hidden API endpoints + base URLs the web app never exposes, exported-activity and deeplink intent injection, WebView addJavascriptInterface bridge abuse, SSL pinning bypass (objection patchapk / Frida CertificatePinner + checkServerTrusted hooks), OkHttp interceptor chain to recover request signing, JNI native-lib triage, and the quick apktool/grep secret + endpoint sweep. Use when the program scope includes a mobile app, when web recon dries up and you need a fresh attack surface, or when traffic is pinned and you must MitM it.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/mobile-pentest/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/mobile-pentest/SKILL.md"
+    },
+    {
+      "name": "abh-report-writing",
+      "title": "abh-report-writing",
+      "description": "Bug bounty report writing for H1/Bugcrowd/Intigriti/Immunefi — report templates, human tone guidelines, impact-first writing, CVSS 3.1 scoring, title formula, impact statement formula, severity decision guide, downgrade counters, pre-submit checklist. Use after validating a finding and before submitting. Never use \"could potentially\" — prove it or don't report.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/report-writing/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/report-writing/SKILL.md"
+    },
+    {
+      "name": "abh-security-arsenal",
+      "title": "abh-security-arsenal",
+      "description": "Security payloads, bypass tables, wordlists, gf pattern names, always-rejected bug list, and conditionally-valid-with-chain table. Use when you need specific payloads for XSS/SSRF/SQLi/XXE/NoSQLi/command injection/SSTI/IDOR/path-traversal/HTTP smuggling/WebSocket/MFA bypass, bypass techniques, or to check if a finding is submittable. Also use when asked about what NOT to submit.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/security-arsenal/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/security-arsenal/SKILL.md"
+    },
+    {
+      "name": "abh-triage-validation",
+      "title": "abh-triage-validation",
+      "description": "Finding validation before writing any report — 7-Question Gate (all 7 questions), 4 pre-submission gates, always-rejected list, conditionally valid with chain table, CVSS 3.1 quick reference, severity decision guide, report title formula, 60-second pre-submit checklist. Use BEFORE writing any report. One wrong answer = kill the finding and move on. Saves N/A ratio.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/triage-validation/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/triage-validation/SKILL.md"
+    },
+    {
+      "name": "abh-web2-recon",
+      "title": "abh-web2-recon",
+      "description": "Web2 recon pipeline — subdomain enumeration (subfinder, Chaos API, assetfinder), live host discovery (dnsx, httpx), URL crawling (katana, waybackurls, gau), directory fuzzing (ffuf), JS analysis (LinkFinder, SecretFinder), continuous monitoring (new subdomain alerts, JS change detection, GitHub commit watch). Use when starting recon on any web2 target or when asked about asset discovery, subdomain enum, or attack surface mapping.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/web2-recon/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/web2-recon/SKILL.md"
+    },
+    {
+      "name": "abh-web2-vuln-classes",
+      "title": "abh-web2-vuln-classes",
+      "description": "Complete reference for 26 web2 bug classes with root causes, detection patterns, bypass tables, exploit techniques, and real paid examples. Covers IDOR, auth bypass, XSS (postMessage), SSRF (11 IP bypass techniques), SQLi, business logic, race conditions, OAuth/OIDC, file upload (10 bypass techniques), GraphQL, LLM/AI (ASI01-ASI10, MCP/RAG attacks), API misconfig (mass assignment, JWT, prototype pollution, CORS), ATO (9 paths), SSTI, subdomain takeover, cloud misconfig, HTTP smuggling, cache poisoning, MFA bypass (7 patterns), SAML attacks, error disclosure, CSS injection, LFI/RCE, insecure deserialization, dependency confusion, padding oracle. Use when hunting a specific vuln class or studying what makes bugs pay.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/web2-vuln-classes/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/web2-vuln-classes/SKILL.md"
+    },
+    {
+      "name": "abh-web3-audit",
+      "title": "abh-web3-audit",
+      "description": "Smart contract security audit — 10 DeFi bug classes (accounting desync, access control, incomplete path, off-by-one, oracle, ERC4626, reentrancy, flash loan, signature replay, proxy), pre-dive kill signals (TVL < $500K etc), Foundry PoC template, grep patterns for each class, and real Immunefi paid examples. Use for any Solidity/Rust contract audit or when deciding whether a DeFi target is worth hunting.",
+      "pack": "agentic-bug-hunter",
+      "source": "skills_library/agentic-bug-hunter/skills/web3-audit/SKILL.md",
+      "url": "https://github.com/Awarexone/Agentic-Bug-Hunter/blob/main/skills/web3-audit/SKILL.md"
     }
   ],
   "errors": []

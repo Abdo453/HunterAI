@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+    <items>
+      <item>
+        <url>https://test.com/api/user?id=10</url>
+        <method>GET</method>
+        <status>200</status>
+        <response base64="false">HTTP/1.1 200 OK
+
+{"secret": "AKIA1122334455667788"}</response>
+      </item>
+    </items>

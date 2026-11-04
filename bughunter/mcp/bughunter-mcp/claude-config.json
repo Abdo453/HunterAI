@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "bughunter": {
+      "command": "bughunter",
+      "args": ["mcp", "serve"],
+      "env": {
+        "BBHUNT_MCP_APPROVE": "0"
+      }
+    }
+  }
+}

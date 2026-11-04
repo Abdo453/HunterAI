@@ -100,6 +100,6 @@ python pentest.py report target.com "finding" --platform hackerone
 
 ## OpenCode Integration (Active)
 
-- Skills: 198 curated cyber skills installed in `.opencode/skills/` from `skills_library/` — see `.opencode/skills/MANIFEST.json` and `docs/OPENCODE_INTEGRATION.md`
+- Skills: 217 curated cyber skills installed in `.opencode/skills/` from `skills_library/` (including 19 Agentic Bug Hunter skills: `abh-agentic-app-audit`, `abh-argus`, `abh-bb-methodology`, `abh-bug-bounty`, `abh-cicd-security`, `abh-client-reverse`, `abh-cloud-pentest`, `abh-credential-attack`, `abh-graphql-audit`, `abh-llm-redteam`, `abh-mcp-server-audit`, `abh-meme-coin-audit`, `abh-mobile-pentest`, `abh-report-writing`, `abh-security-arsenal`, `abh-triage-validation`, `abh-web2-recon`, `abh-web2-vuln-classes`, `abh-web3-audit`) — see `.opencode/skills/MANIFEST.json` and `docs/OPENCODE_INTEGRATION.md`
 - MCP: `opencode.json` — `hunter-arsenal` (63 Kali tools) + `filesystem` + `context7` + `gh_grep` enabled; offensive MCP servers are MANUAL-gated (README first, never guess commands)
 - Install/refresh everything: `.\install_agent.ps1` (one file: deps، uv، skill packs، skills، MCP validation) — flags `-CheckOnly` `-Full` `-Profiles` `-KaliTools`

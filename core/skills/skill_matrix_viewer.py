@@ -70,6 +70,35 @@ class SkillMatrixViewer:
             })
         return sorted(results, key=lambda x: (x["category"], x["name"]))
 
+    @staticmethod
+    def get_agentic_bug_hunter_skills() -> List[Dict[str, Any]]:
+        """Retrieves all 19 Agentic Bug Hunter specialized skills."""
+        results = []
+        base_dir = "skills_library/agentic-bug-hunter/skills"
+        if not os.path.exists(base_dir):
+            return results
+        for item in sorted(os.listdir(base_dir)):
+            md_path = os.path.join(base_dir, item, "SKILL.md")
+            if os.path.isfile(md_path):
+                desc = f"Agentic Bug Hunter specialized skill: {item}"
+                try:
+                    with open(md_path, "r", encoding="utf-8", errors="ignore") as f:
+                        lines = f.readlines()
+                    for line in lines[:25]:
+                        if line.startswith("description:"):
+                            desc = line.replace("description:", "").strip().strip("'\"")
+                            break
+                except Exception:
+                    pass
+                results.append({
+                    "name": f"abh-{item}",
+                    "layer": "agentic_bug_hunter",
+                    "category": "bug_hunter",
+                    "description": desc,
+                    "filepath": md_path,
+                })
+        return results
+
     @classmethod
     def list_all_skills(
         cls,
@@ -85,6 +114,8 @@ class SkillMatrixViewer:
             all_skills.extend(cls.get_hunter_skills())
         if not layer or layer == "kali_arsenal":
             all_skills.extend(cls.get_kali_tool_skills())
+        if not layer or layer == "agentic_bug_hunter":
+            all_skills.extend(cls.get_agentic_bug_hunter_skills())
 
         if category:
             cat_lower = category.lower()
@@ -110,6 +141,7 @@ class SkillMatrixViewer:
         dir_skills = cls.get_directory_skills()
         hunter_skills = cls.get_hunter_skills()
         kali_skills = cls.get_kali_tool_skills()
+        abh_skills = cls.get_agentic_bug_hunter_skills()
 
         dir_cats: Dict[str, int] = {}
         for s in dir_skills:
@@ -122,10 +154,11 @@ class SkillMatrixViewer:
             kali_cats[cat] = kali_cats.get(cat, 0) + 1
 
         return {
-            "total_skills": len(dir_skills) + len(hunter_skills) + len(kali_skills),
+            "total_skills": len(dir_skills) + len(hunter_skills) + len(kali_skills) + len(abh_skills),
             "directory_skills_count": len(dir_skills),
             "directory_categories": dir_cats,
             "hunter_vuln_skills_count": len(hunter_skills),
             "kali_tool_skills_count": len(kali_skills),
             "kali_categories": kali_cats,
+            "agentic_bug_hunter_skills_count": len(abh_skills),
         }

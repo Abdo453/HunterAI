@@ -1,0 +1,49 @@
+# ================================================================
+# CTF Lab (MySQL) — two-service lab: vulnerable app + MySQL 8.
+#   up:      docker compose up -d --build
+#   reset:   docker compose down && docker compose up -d --build
+# Everything is loopback-only from the host's perspective:
+#   - the app is published to 127.0.0.1:5354 only
+#   - MySQL has NO host port mapping at all: it is reachable only
+#     inside the compose network, just like a real deployment where
+#     the web tier is the sole attack surface.
+# ================================================================
+services:
+
+  mysql-lab:
+    image: mysql:8.0
+    container_name: ctf_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: labroot        # throwaway lab credentials
+      MYSQL_DATABASE: ctf_lab
+      MYSQL_USER: labuser
+      MYSQL_PASSWORD: labpass
+    # MySQL 8's default auth plugin (caching_sha2_password) needs the
+    # `cryptography` package with pymysql; pinning the older default plugin
+    # keeps the lab dependency-light. (Upstream removed this flag in 8.4.)
+    command: --default-authentication-plugin=mysql_native_password
+    # No `ports:` block on purpose — see header comment.
+    # ports:
+    #   - "127.0.0.1:3306:3306"   # enable only if you want to shell into the DB
+    volumes:
+      - ./setup.sql:/docker-entrypoint-initdb.d/01-setup.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-plabroot"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app-lab:
+    build: .
+    container_name: ctf_app
+    environment:
+      DB_HOST: mysql-lab
+      DB_PORT: "3306"
+      DB_USER: labuser
+      DB_PASSWORD: labpass
+      DB_NAME: ctf_lab
+    ports:
+      - "127.0.0.1:5354:5354"
+    depends_on:
+      mysql-lab:
+        condition: service_healthy
