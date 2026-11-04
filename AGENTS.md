@@ -13,9 +13,13 @@ pip install -r requirements.txt
 # Setup AI provider (Ollama recommended, free + local)
 python pentest.py setup --provider ollama --model qwen2.5:14b
 
-# Full hunt workflow
+# ONE-COMMAND-FOR-EVERYTHING (All 149 Skills, AI Browser, Burp, Exploit Chaining, Reports)
+python pentest.py all target.com
+# (Or using alias: python pentest.py run target.com)
+
+# Individual workflows (if needed)
 python pentest.py recon target.com
-python pentest.py hunt target.com --authorized
+python pentest.py hunt target.com
 python pentest.py validate "finding"
 python pentest.py report target.com "finding" --platform hackerone
 ```
@@ -24,6 +28,7 @@ python pentest.py report target.com "finding" --platform hackerone
 
 | Command | Usage |
 |---------|-------|
+| `/all target.com` | One-Command-For-Everything: All 149 skills + AI Browser + Burp + Report |
 | `/recon target.com` | Subdomain enum · live host discovery · URL crawl |
 | `/hunt target.com` | IDOR · auth bypass · SSRF · XSS · SQLi · logic flaws |
 | `/validate` | 7-Question Gate — kills weak findings |
