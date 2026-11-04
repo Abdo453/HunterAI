@@ -25,6 +25,12 @@ from core.auth.identity_matrix import DualIdentityMatrix, IdentityContext
 from core.oob.oob_engine import OOBEngine
 from core.engine.poc_bundle_generator import PoCBundleGenerator, FindingContext
 from core.cognitive.cognitive_deliberator import CognitiveDeliberator, StrategicDeliberation
+from core.cognitive.mission_critic import (
+    MissionCritic,
+    PhaseCritique,
+    format_phase_trace,
+    format_retrospective_trace,
+)
 
 
 import asyncio
@@ -126,6 +132,11 @@ class AssessmentConfig:
     enable_burp: bool = True
     enable_elite_skills: bool = True
     notes: str = ""
+    # Autonomy: when True, high-risk actions that are cryptographically
+    # verified IN-SCOPE by the RedTeamPolicyEngine are auto-approved instead of
+    # pausing for interactive confirmation. The fail-closed scope firewall
+    # (authorization grant + _scope_check) remains the active perimeter.
+    self_operate: bool = False
 
 
 @dataclass
@@ -236,6 +247,22 @@ class OmniHunterEngine:
         )
         self.planner = InformationGainPlanner()
         self.deliberator = CognitiveDeliberator()
+
+        # Metacognitive mission critic (deterministic, fail-soft)
+        self.critic = MissionCritic()
+        self._phase_critiques: List[PhaseCritique] = []
+        self._last_directives: List[str] = []
+        self._retrospective: Optional[Any] = None
+
+        # Approval gate: in self-operate mode, scope-verified high-risk actions
+        # are auto-approved; the scope verifier callback IS the crypto-signed
+        # policy engine itself, so every auto-approval is still scope-audited.
+        from core.execution_modes import HumanApprovalGate
+        self.approval_gate = HumanApprovalGate(
+            interactive=False,
+            self_operate=config.self_operate,
+            scope_verifier=lambda target: self._scope_check(target),
+        )
         self.tool_adapter = RealToolAdapter(force_fallback=config.force_tool_fallback)
         self.identity_matrix = DualIdentityMatrix(user_attacker=config.auth_user_a, user_victim=config.auth_user_b)
         self.oob_engine = OOBEngine(callback_domain=config.oob_callback_domain) if config.enable_oob else None
@@ -761,6 +788,12 @@ class OmniHunterEngine:
             failed_tasks=failed,
             duration_secs=duration,
             snapshot_id=None,
+            metadata={
+                "mission_retrospective": (
+                    self._retrospective.to_dict() if getattr(self, "_retrospective", None) else None
+                ),
+                "phase_critiques": [c.to_dict() for c in getattr(self, "_phase_critiques", [])],
+            },
         )
         return result
 
@@ -829,9 +862,12 @@ class OmniHunterEngine:
 
             # Cognitive Multi-Hypothesis Deliberation before Phase execution
             if self.deliberator:
+                objective = f"Advance Phase {phase.value} and discover actionable leads"
+                if self._last_directives:
+                    objective += " | Critic directives: " + "; ".join(self._last_directives[:3])
                 delib = self.deliberator.deliberate_strategy(
                     target=self.config.target_url,
-                    objective=f"Advance Phase {phase.value} and discover actionable leads",
+                    objective=objective,
                     surface=self.surface,
                     current_findings=self.confirmed_findings,
                 )
@@ -850,9 +886,66 @@ class OmniHunterEngine:
                 except Exception as exc:
                     logger.exception("[OmniHunter] Error in phase %s: %s — continuing loop.", phase, exc)
 
+            # ── Metacognitive Phase Critic (self-review after every phase) ──
+            try:
+                critique = self.critic.critique_phase(
+                    phase=phase.value,
+                    surface=self.surface,
+                    findings=self.confirmed_findings,
+                    task_stats=self._task_stats_snapshot(),
+                    prior_directives=self._last_directives,
+                )
+                self._phase_critiques.append(critique)
+                self._last_directives = list(critique.directives)
+                if self.config.enable_thinking:
+                    print(format_phase_trace(critique))
+            except Exception:
+                logger.debug("MissionCritic phase critique skipped.", exc_info=True)
+
             # Check termination criteria
             if not self.planner.should_continue(self.ledger, self.config.coverage_threshold, cycle, self.config.max_cycles):
                 break
 
+        # ── End-of-Mission Retrospective ──────────────────────────────────────
+        try:
+            self._retrospective = self.critic.retrospective(
+                target=self.config.target_url,
+                surface=self.surface,
+                findings=self.confirmed_findings,
+                critiques=self._phase_critiques,
+                coverage_pct=_get_coverage_pct(self.ledger),
+                duration_secs=time.time() - self._start_time,
+                failed_tasks=self._count_tasks("failed"),
+                completed_tasks=self._count_tasks("done"),
+            )
+            if self.config.enable_thinking:
+                print(format_retrospective_trace(self._retrospective))
+        except Exception:
+            logger.debug("MissionCritic retrospective skipped.", exc_info=True)
+
         self.current_phase = AssessmentPhase.REPORT
         return self._run_report_phase()
+
+    # ── Critic helpers ──────────────────────────────────────────────────────────
+
+    def _task_stats_snapshot(self) -> Dict[str, int]:
+        """Lightweight task status counters for the MissionCritic."""
+        try:
+            tasks = self.scheduler.list_tasks()
+            items = (tasks.values() if isinstance(tasks, dict) else tasks) or []
+            done = failed = pending = 0
+            for t in items:
+                raw = t.status if hasattr(t, "status") else (t.get("status") if isinstance(t, dict) else "")
+                sv = str(getattr(raw, "value", raw)).upper()
+                if sv in ("DONE", "COMPLETED"):
+                    done += 1
+                elif sv in ("FAILED", "ERROR"):
+                    failed += 1
+                elif sv:
+                    pending += 1
+            return {"done": done, "failed": failed, "pending": pending}
+        except Exception:
+            return {"done": 0, "failed": 0, "pending": 0}
+
+    def _count_tasks(self, kind: str) -> int:
+        return self._task_stats_snapshot().get(kind, 0)

@@ -113,11 +113,24 @@ class HumanApprovalGate:
         self,
         interactive: bool = False,
         auto_approved_categories: Optional[List[HighRiskActionType]] = None,
-        approval_callback: Optional[Callable[[Dict[str, Any]], bool]] = None
+        approval_callback: Optional[Callable[[Dict[str, Any]], bool]] = None,
+        self_operate: bool = False,
+        scope_verifier: Optional[Callable[[str], bool]] = None,
     ):
+        """
+        self_operate + scope_verifier: autonomous-within-authorization mode.
+        When self_operate is True AND scope_verifier(target) returns True
+        (fail-closed — any exception counts as out-of-scope), high-risk actions
+        are auto-approved without an interactive pause. The verifier is
+        expected to be the cryptographically-signed RedTeamPolicyEngine, so
+        every auto-approval remains scope-audited. Without BOTH, behavior is
+        unchanged.
+        """
         self.interactive = interactive
         self.auto_approved = set(auto_approved_categories or [])
         self.approval_callback = approval_callback
+        self.self_operate = self_operate
+        self.scope_verifier = scope_verifier
         self.audit_log: List[Dict[str, Any]] = []
 
     def request_approval(
@@ -162,6 +175,25 @@ class HumanApprovalGate:
             if not approved:
                 raise HumanApprovalDeniedError(f"High-risk action '{action_type.value}' on '{target}' was rejected by callback.")
             return True
+
+        # Self-operate autonomy: approve ONLY targets the external fail-closed
+        # scope verifier (crypto-signed policy engine) confirms as in-scope.
+        if self.self_operate and self.scope_verifier is not None:
+            try:
+                in_scope = bool(self.scope_verifier(target))
+            except Exception:
+                in_scope = False
+            request_record["status"] = (
+                "APPROVED_SELF_OPERATE_SCOPE_VERIFIED" if in_scope
+                else "DENIED_SELF_OPERATE_OUT_OF_SCOPE"
+            )
+            self.audit_log.append(request_record)
+            if in_scope:
+                return True
+            raise HumanApprovalDeniedError(
+                f"SELF-OPERATE DENIED: '{action_type.value}' on '{target}' "
+                f"is outside the verified authorization scope."
+            )
 
         # Non-interactive fallback: If not whitelisted and no callback, reject high risk for safety
         if not self.interactive:
