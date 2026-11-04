@@ -128,3 +128,115 @@ def test_api_omni_mission_lifecycle(client):
     assert resp_findings.status_code == 200
     findings_data = resp_findings.json()
     assert "findings" in findings_data
+
+
+# ── 5. Enhanced Web Control Center API Tests ─────────────────────────────────
+
+def test_api_enhanced_launch_all_and_status(client):
+    """Verify master launch-all and status polling endpoint."""
+    payload = {
+        "target": "https://enhanced-target.local",
+        "platform": "hackerone",
+        "proxy": "http://127.0.0.1:8080",
+        "force_fallback": True,
+        "max_cycles": 2,
+    }
+    resp = client.post("/api/enhanced/omni/launch-all", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "LAUNCHED"
+    mission_id = data["mission_id"]
+
+    resp_st = client.get(f"/api/enhanced/omni/status/{mission_id}")
+    assert resp_st.status_code == 200
+    st_data = resp_st.json()
+    assert st_data["mission_id"] == mission_id
+    assert "current_phase" in st_data
+
+
+def test_api_enhanced_burp_inspect(client):
+    """Verify Burp log inspector API with pasted XML payload."""
+    xml_sample = """<?xml version="1.0"?>
+    <items>
+      <item>
+        <url>https://test.com/api/user?id=10</url>
+        <method>GET</method>
+        <status>200</status>
+        <response base64="false">HTTP/1.1 200 OK\r\n\r\n{"secret": "AKIA1122334455667788"}</response>
+      </item>
+    </items>"""
+    payload = {
+        "source": "live",
+        "content_text": xml_sample,
+        "target": "https://test.com",
+    }
+    resp = client.post("/api/enhanced/burp/inspect", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["total_findings"] >= 1
+    assert any("AWS Access Key" in f["title"] for f in data["findings"])
+
+
+def test_api_enhanced_browser_explore(client):
+    """Verify AI browser exploration API."""
+    payload = {
+        "target_url": "https://browser-test.local",
+        "max_pages": 1,
+        "headless": True,
+    }
+    resp = client.post("/api/enhanced/browser/explore", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "target" in data
+    assert "actions_performed" in data
+
+
+def test_api_enhanced_arsenal_synthesize(client):
+    """Verify dynamic AI command synthesis API with WAF and proxy."""
+    payload = {
+        "tool_name": "nuclei",
+        "target": "https://synth-test.local",
+        "waf_name": "Cloudflare",
+        "proxy": "http://127.0.0.1:8080",
+    }
+    resp = client.post("/api/enhanced/arsenal/synthesize", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "synthesized_command" in data
+    assert "nuclei" in data["synthesized_command"]
+    assert "-proxy" in data["synthesized_command"]
+    assert data["waf_evasion_applied"] is True
+
+
+def test_api_enhanced_skills_catalog(client):
+    """Verify skills catalog aggregation API."""
+    resp = client.get("/api/enhanced/skills/catalog")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] >= 100
+    assert "stats" in data
+
+
+def test_api_enhanced_elite_run(client):
+    """Verify direct elite exploit skill execution API."""
+    payload = {
+        "skill_name": "http_smuggling",
+        "target_url": "https://elite-test.local",
+    }
+    resp = client.post("/api/enhanced/skills/elite-run", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["skill_name"] == "http_smuggling"
+    assert "verified" in data
+
+
+def test_api_enhanced_reports_and_snapshots(client):
+    """Verify reports and snapshots listing APIs."""
+    resp_rep = client.get("/api/enhanced/reports")
+    assert resp_rep.status_code == 200
+    assert "reports" in resp_rep.json()
+
+    resp_snap = client.get("/api/enhanced/snapshots")
+    assert resp_snap.status_code == 200
+    assert "snapshots" in resp_snap.json()

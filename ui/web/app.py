@@ -1639,6 +1639,10 @@ app.include_router(runs_api_router)
 from ui.web.phase_g_api import router as phase_g_api_router
 app.include_router(phase_g_api_router)
 
+# ── Enhanced Master Control Center API (One-Command, Burp Inspector, AI Browser, Skills Matrix) ──
+from ui.web.enhanced_control_api import router as enhanced_control_router
+app.include_router(enhanced_control_router)
+
 # ── V27.2 METAMORPHIC TRIAD, ATTACK SURFACE GRAPH & LEDGER ENDPOINTS ──
 @app.get("/api/v27/attack-surface")
 async def get_v27_attack_surface():
