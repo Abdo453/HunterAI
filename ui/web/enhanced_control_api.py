@@ -318,7 +318,10 @@ async def explore_with_ai_browser(req: BrowserExploreRequest):
             "pages_visited": report.pages_visited if report else [],
             "actions_performed": report.actions_performed if report else [],
             "intercepted_api_endpoints": report.intercepted_api_endpoints if report else [],
-            "dom_xss_signals": getattr(report, "dom_xss_signals", []),
+            "dom_xss_signals": getattr(report, "dom_xss_candidates", []) or getattr(report, "dom_xss_signals", []),
+            "state_graph_summary": getattr(report, "state_graph_summary", None),
+            "intercepted_websockets": getattr(report, "intercepted_websockets", []),
+            "dual_session_idor_candidates": getattr(report, "dual_session_idor_candidates", []),
         }
     except Exception as e:
         logger.error("AI Browser execution error: %s", e)

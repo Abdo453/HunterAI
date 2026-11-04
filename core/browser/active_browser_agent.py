@@ -61,6 +61,9 @@ class ActiveBrowserReport:
     screenshot_path: Optional[str] = None
     success: bool = True
     error: Optional[str] = None
+    state_graph_summary: Optional[Dict[str, Any]] = None
+    intercepted_websockets: List[Dict[str, Any]] = field(default_factory=list)
+    dual_session_idor_candidates: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

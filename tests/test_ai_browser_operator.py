@@ -157,3 +157,82 @@ def test_web_ui_browser_ai_endpoint():
     assert "target_url" in data
     assert "actions_performed" in data
     assert len(data["actions_performed"]) > 0
+
+
+# ── 5. Elite Browser Capabilities Tests (DOM Taint, Shadow DOM, State Graph, IDOR) ────
+
+def test_dom_affordance_shadow_dom():
+    """Verify affordance captures and displays shadow DOM membership."""
+    aff = DOMAffordance(
+        index=2,
+        tag="button",
+        element_type="submit",
+        name_or_id="auth-btn",
+        text_content="Sign In With Web3",
+        selector="button#auth-btn",
+        in_shadow=True,
+    )
+    summary = aff.to_summary()
+    assert "[ShadowDOM]" in summary
+    assert "Sign In With Web3" in summary
+    assert aff.in_shadow is True
+
+
+def test_dom_hash_and_state_graph_integration():
+    """Verify structural DOM hashing and state graph tracking."""
+    operator = AIBrowserOperator()
+    affordances = [
+        DOMAffordance(index=1, tag="input", element_type="text", name_or_id="q", text_content="", selector="input[name='q']"),
+        DOMAffordance(index=2, tag="button", element_type="submit", name_or_id="btn", text_content="Search", selector="button#btn"),
+    ]
+    hash1 = operator._compute_dom_hash(affordances, "Search Page")
+    hash2 = operator._compute_dom_hash(affordances, "Search Page")
+    assert hash1 == hash2
+    assert len(hash1) == 16
+
+    # Changing title or elements changes state hash
+    hash3 = operator._compute_dom_hash(affordances, "Admin Dashboard")
+    assert hash1 != hash3
+
+
+def test_loop_detection_and_unvisited_affordance_selection():
+    """Verify operator avoids repetitive cycles by selecting unexplored affordances."""
+    from core.browser.state_graph import ApplicationStateGraph
+
+    operator = AIBrowserOperator()
+    operator.state_graph = ApplicationStateGraph("target.corp")
+    state = operator.state_graph.register_state(
+        url="https://target.corp/app",
+        dom_hash="abc123state",
+        title="App Dashboard",
+    )
+
+    affordances = [
+        DOMAffordance(index=1, tag="button", element_type="button", name_or_id="tab1", text_content="Tab 1", selector="button#tab1"),
+        DOMAffordance(index=2, tag="button", element_type="button", name_or_id="tab2", text_content="Tab 2", selector="button#tab2"),
+    ]
+
+    # Simulate loop on tab1
+    operator.state_graph.record_transition(state.state_id, state.state_id, "click on button#tab1")
+    operator.state_graph.record_transition(state.state_id, state.state_id, "click on button#tab1")
+
+    assert operator.state_graph.is_loop(state.state_id, "click on button#tab1", max_repeats=2) is True
+
+    # Find alternative affordance
+    alt = operator._find_unvisited_affordance(affordances, state.state_id)
+    assert alt is not None
+    assert alt.selector == "button#tab2"
+
+
+def test_synthetic_exploration_includes_advanced_telemetry():
+    """Verify report contains DOM XSS candidates, State Graph summary, and WebSockets."""
+    operator = AIBrowserOperator()
+    report = operator._synthetic_ai_exploration("https://elite-target.corp", "Autonomous hunt")
+
+    assert report.state_graph_summary is not None
+    assert report.state_graph_summary["total_states"] >= 2
+    assert len(report.dom_xss_candidates) > 0
+    assert report.dom_xss_candidates[0]["sink"] == "Element.innerHTML"
+    assert len(report.intercepted_websockets) > 0
+    assert "wss://" in report.intercepted_websockets[0]["url"]
+
