@@ -218,7 +218,7 @@ class InformationGainPlanner:
         filtered = []
         for p in candidates:
             pname = p.value.lower()
-            if any(pname in k for k in dead_lessons):
+            if any(any(m in k for m in (f"skip {pname}", f"abandon {pname}", f"dead {pname}", f"{pname} untestable")) for k in dead_lessons):
                 continue
             filtered.append(p)
 
@@ -549,6 +549,41 @@ class OmniHunterEngine:
                         if p_url and p_url not in self.surface["endpoints"]:
                             self.surface["endpoints"].append(p_url)
                             self.ledger.record_discovery(AssetType.ENDPOINT, p_url)
+
+                    # Ingest WebSocket endpoints
+                    for ws_item in getattr(b_report, "intercepted_websockets", []):
+                        ws_url = ws_item.get("url", "")
+                        if ws_url and ws_url not in self.surface["endpoints"]:
+                            self.surface["endpoints"].append(ws_url)
+                            self.ledger.record_discovery(AssetType.ENDPOINT, ws_url)
+
+                    # Ingest DOM XSS Findings directly from the V8 Taint Engine
+                    for dx in getattr(b_report, "dom_xss_candidates", []):
+                        sink_name = dx.get("sink", "DOM_Sink")
+                        canary_val = dx.get("canary", "canary_probe")
+                        self.confirmed_findings.append({
+                            "vuln_class": "DOM_XSS",
+                            "target": dx.get("target_url", self.config.target_url),
+                            "verdict": "CONFIRMED",
+                            "confidence": 0.95,
+                            "title": f"DOM XSS Reflection via {sink_name}",
+                            "evidence": f"Sink: {sink_name}\nCanary: {canary_val}\nSnippet: {dx.get('snippet', '')}\nCall Stack:\n{dx.get('stack', '')[:250]}",
+                            "timestamp": dx.get("timestamp", time.time()),
+                        })
+                        logger.info("[OmniHunter] [!] Verified DOM Taint Finding: %s -> %s", sink_name, canary_val)
+
+                    # Ingest Dual-Session IDOR Findings from Multi-Identity testing
+                    for idor in getattr(b_report, "dual_session_idor_candidates", []):
+                        self.confirmed_findings.append({
+                            "vuln_class": "IDOR_BOLA",
+                            "target": idor.get("url", self.config.target_url),
+                            "verdict": "CONFIRMED",
+                            "confidence": 0.95,
+                            "title": f"Cross-Session BOLA / IDOR on {idor.get('url')}",
+                            "evidence": f"Unauthorized User B accessed User A resource with HTTP {idor.get('status', 200)}.\nResponse Snippet: {idor.get('response_snippet', '')}",
+                            "timestamp": idor.get("timestamp", time.time()),
+                        })
+                        logger.info("[OmniHunter] [!] Verified Cross-Session IDOR Finding: %s", idor.get("url"))
 
                 # Automated DOM XSS Exploration against candidate endpoints
                 try:
