@@ -67,6 +67,7 @@ class AIBrowserOperator:
         screenshots_dir: str = "data/screenshots",
         on_progress: Optional[Callable[[str], Any]] = None,
         on_event: Optional[Callable[[str], Any]] = None,
+        proxy: Optional[str] = None,
     ):
         self.headless = headless
         self.max_steps = max_steps
@@ -75,6 +76,7 @@ class AIBrowserOperator:
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
         self.on_progress = on_progress or on_event
         self.on_event = self.on_progress
+        self.proxy = proxy
 
         self._steps_log: List[AICognitiveStep] = []
         self._intercepted_apis: List[Dict[str, Any]] = []
@@ -110,10 +112,13 @@ class AIBrowserOperator:
         context: Optional[BrowserContext] = None
 
         try:
-            browser = await playwright.chromium.launch(
-                headless=self.headless,
-                args=["--disable-web-security", "--no-sandbox"],
-            )
+            launch_kwargs: Dict[str, Any] = {
+                "headless": self.headless,
+                "args": ["--disable-web-security", "--no-sandbox"],
+            }
+            if self.proxy:
+                launch_kwargs["proxy"] = {"server": self.proxy}
+            browser = await playwright.chromium.launch(**launch_kwargs)
             context = await browser.new_context(
                 ignore_https_errors=True,
                 viewport={"width": 1280, "height": 800},
@@ -414,12 +419,13 @@ def run_ai_browser_session_sync(
     objective: str = "Explore attack surface and test inputs",
     headless: bool = True,
     timeout_secs: float = 35.0,
+    proxy: Optional[str] = None,
 ) -> ActiveBrowserReport:
     """Synchronous runner for AIBrowserOperator, safely executed in an isolated thread."""
     import concurrent.futures
 
     def _worker():
-        operator = AIBrowserOperator(headless=headless, max_steps=5, timeout_secs=timeout_secs)
+        operator = AIBrowserOperator(headless=headless, max_steps=5, timeout_secs=timeout_secs, proxy=proxy)
         return asyncio.run(operator.run_ai_browser_session(target_url, security_objective=objective))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:

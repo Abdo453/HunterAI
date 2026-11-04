@@ -151,6 +151,7 @@ class DynamicToolAgent:
                 auth_headers=dict(context.get("auth_headers", {})),
                 cookies=dict(context.get("cookies", {})),
                 rate_limit_per_sec=context.get("rate_limit_per_sec"),
+                proxy=context.get("proxy"),
                 goal=context.get("goal", "comprehensive_safe_audit"),
                 extra=dict(context.get("extra", {})),
             )

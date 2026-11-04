@@ -131,6 +131,8 @@ class AssessmentConfig:
     enable_browser: bool = True
     enable_burp: bool = True
     enable_elite_skills: bool = True
+    proxy: Optional[str] = None
+    resume_engagement_id: Optional[str] = None
     notes: str = ""
     # Autonomy: when True, high-risk actions that are cryptographically
     # verified IN-SCOPE by the RedTeamPolicyEngine are auto-approved instead of
@@ -285,6 +287,29 @@ class OmniHunterEngine:
         self.current_phase = AssessmentPhase.INIT
         self._start_time: float = 0.0
 
+        # Check for resume checkpoint
+        if self.config.resume_engagement_id:
+            self._load_resume_state(self.config.resume_engagement_id)
+
+    def _load_resume_state(self, engagement_id: str) -> bool:
+        """Restores assessment state from persistent snapshot or state file."""
+        try:
+            snap = self.watchdog.resume_from_checkpoint(engagement_id)
+            if snap:
+                if snap.discovered_assets:
+                    self.surface.update(snap.discovered_assets)
+                if snap.confirmed_findings:
+                    self.confirmed_findings = list(snap.confirmed_findings)
+                try:
+                    self.current_phase = AssessmentPhase(snap.phase)
+                except Exception:
+                    pass
+                logger.info("[OmniHunter] Successfully resumed engagement %s from phase %s", engagement_id, snap.phase)
+                return True
+        except Exception as exc:
+            logger.warning("[OmniHunter] Could not resume engagement %s: %s", engagement_id, exc)
+        return False
+
     def get_target_context(self, target: Optional[str] = None) -> Any:
         """Constructs rich situational TargetContext from live discovered surface."""
         from core.arsenal.ai_command_synthesizer import TargetContext
@@ -302,6 +327,7 @@ class OmniHunterEngine:
             open_ports=sorted(list(set(ports))),
             auth_headers=dict(self.config.auth_headers),
             cookies=dict(self.config.session_cookies),
+            proxy=self.config.proxy,
             goal="autonomous_security_assessment",
         )
 
@@ -462,6 +488,7 @@ class OmniHunterEngine:
                     self.config.target_url,
                     objective=f"Deep SPA surface exploration on {self.config.target_url}",
                     headless=True,
+                    proxy=self.config.proxy,
                 )
                 if b_report and b_report.success:
                     logger.info("[OmniHunter] Active browser executed %d actions, visited %d pages, intercepted %d APIs",
@@ -798,7 +825,11 @@ class OmniHunterEngine:
         return result
 
     def _save_checkpoint(self) -> None:
+        snap_id = self.config.engagement_id or f"SNAP-{uuid.uuid4().hex[:8].upper()}"
+        if not snap_id.startswith("SNAP-"):
+            snap_id = f"SNAP-{snap_id}"
         snap = AssessmentSnapshot(
+            snapshot_id=snap_id,
             target=self.config.target_url,
             phase=self.current_phase.value,
             discovered_assets=self.surface,

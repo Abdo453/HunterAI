@@ -13,15 +13,84 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shlex
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from core.arsenal.kali_catalog import ToolCategory, ToolDefinition
 
 logger = logging.getLogger("hunter_ai.arsenal.synthesizer")
+
+
+def resolve_kali_wordlist(category: str = "web_content") -> str:
+    """
+    Intelligently discovers existing wordlists on Kali Linux, Debian, or local repository.
+    Falls back to auto-generating a minimal seed list so fuzzers never crash.
+    """
+    candidates = [
+        # Standard Kali / SecLists paths
+        "/usr/share/seclists/Discovery/Web-Content/common.txt",
+        "/usr/share/wordlists/dirb/common.txt",
+        "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt",
+        "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt",
+        "/usr/share/wordlists/wfuzz/general/common.txt",
+        # Local repository path
+        "data/wordlists/common.txt",
+        "wordlists/common.txt",
+    ]
+    for p in candidates:
+        if Path(p).is_file():
+            return p
+
+    # Ensure local directory & seed fallback wordlist
+    fallback_dir = Path("data") / "wordlists"
+    fallback_file = fallback_dir / "common.txt"
+    try:
+        if not fallback_file.is_file():
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            seeds = [
+                "admin", "api", "v1", "v2", "v3", "login", "dashboard", "portal",
+                "auth", "users", "profile", "config", "backup", "db", "test",
+                ".env", ".git", ".well-known", "swagger", "openapi.json", "graphql",
+                "internal", "private", "metrics", "health", "status", "server-status",
+                "upload", "uploads", "files", "static", "assets", "debug", "actuator",
+            ]
+            fallback_file.write_text("\n".join(seeds) + "\n", encoding="utf-8")
+        return str(fallback_file)
+    except Exception:
+        return "common.txt"
+
+
+def resolve_kali_params_wordlist() -> str:
+    """Discovers parameter discovery wordlists on Kali Linux."""
+    candidates = [
+        "/usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt",
+        "/usr/share/seclists/Discovery/Web-Content/api/objects.txt",
+        "data/wordlists/params.txt",
+    ]
+    for p in candidates:
+        if Path(p).is_file():
+            return p
+    fallback = Path("data") / "wordlists" / "params.txt"
+    try:
+        if not fallback.is_file():
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            fallback.write_text("id\nuser\nadmin\nfile\npath\nurl\nredirect\ntoken\nkey\ncmd\nexec\n", encoding="utf-8")
+        return str(fallback)
+    except Exception:
+        return "params.txt"
+
+
+def is_root_privileged() -> bool:
+    """Returns True if running as root/UID 0 on POSIX systems."""
+    try:
+        return os.geteuid() == 0
+    except (AttributeError, Exception):
+        return False
 
 
 @dataclass
@@ -34,6 +103,7 @@ class TargetContext:
     auth_headers: Dict[str, str] = field(default_factory=dict)
     cookies: Dict[str, str] = field(default_factory=dict)
     rate_limit_per_sec: Optional[int] = None
+    proxy: Optional[str] = None
     goal: str = "comprehensive_safe_audit"
     extra: Dict[str, Any] = field(default_factory=dict)
 
@@ -226,6 +296,17 @@ class AIToolCommandSynthesizer:
             # Service Version detection
             args.extend(["-sV", "--version-light"])
 
+            # Privilege-aware scanning (Kali / POSIX)
+            if hasattr(os, "geteuid"):
+                if not is_root_privileged():
+                    args.append("-sT")
+                    reasoning_points.append("Non-root environment: using TCP Connect scan (-sT)")
+                    signals.append("NonRoot:sT")
+                else:
+                    args.append("-sS")
+                    reasoning_points.append("Root privilege active: engaging high-speed SYN scan (-sS)")
+                    signals.append("Root:sS")
+
         # ── NUCLEI ────────────────────────────────────────────────────────────
         elif name == "nuclei":
             args.extend(["-u", target if context.is_url else f"https://{target}"])
@@ -273,9 +354,10 @@ class AIToolCommandSynthesizer:
         # ── FFUF / GOBUSTER / FEROXBUSTER / DIRSEARCH ─────────────────────────
         elif name in ["ffuf", "gobuster", "feroxbuster", "dirsearch"]:
             target_url = target if context.is_url else f"https://{target}"
+            wl_path = resolve_kali_wordlist()
             if name == "ffuf":
                 args.extend(["-u", f"{target_url.rstrip('/')}/FUZZ"])
-                args.extend(["-w", "wordlists/common.txt"])
+                args.extend(["-w", wl_path])
                 args.extend(["-mc", "200,204,301,302,307,401,403"])
 
                 # Extension tailoring based on tech stack
@@ -304,8 +386,8 @@ class AIToolCommandSynthesizer:
                     args.extend(["-rate", "40"])
             else:
                 args.extend(["-u", target_url])
-                args.extend(["-w", "wordlists/common.txt"])
-                reasoning_points.append("Standard directory enumeration profile")
+                args.extend(["-w", wl_path])
+                reasoning_points.append(f"Directory enumeration using wordlist: {wl_path}")
 
         # ── SQLMAP ────────────────────────────────────────────────────────────
         elif name == "sqlmap":
@@ -368,7 +450,10 @@ class AIToolCommandSynthesizer:
         # ── ARJUN / X8 ────────────────────────────────────────────────────────
         elif name in ["arjun", "x8"]:
             target_url = target if context.is_url else f"https://{target}"
-            args.extend(["-u", target_url, "--passive"])
+            if name == "x8":
+                args.extend(["-u", target_url, "-w", resolve_kali_params_wordlist()])
+            else:
+                args.extend(["-u", target_url, "--passive"])
             reasoning_points.append("Hidden HTTP parameter discovery")
 
         # ── DEFAULT / FALLBACK FOR ANY OTHER KALI TOOL ────────────────────────
@@ -379,6 +464,24 @@ class AIToolCommandSynthesizer:
                 else:
                     args.append(da)
             reasoning_points.append("Standard calibrated default flags applied")
+
+        # Upstream Burp / HTTP Proxy integration
+        if context.proxy:
+            proxy_url = context.proxy
+            if name == "nuclei":
+                args.extend(["-proxy", proxy_url])
+            elif name == "ffuf":
+                args.extend(["-x", proxy_url])
+            elif name == "sqlmap":
+                args.extend([f"--proxy={proxy_url}"])
+            elif name == "httpx":
+                args.extend(["-http-proxy", proxy_url])
+            elif name == "dalfox":
+                args.extend(["--proxy", proxy_url])
+            elif name in ["katana", "gospider"]:
+                args.extend(["-proxy", proxy_url])
+            reasoning_points.append(f"Routing traffic through proxy: {proxy_url}")
+            signals.append(f"Proxy:{proxy_url}")
 
         # Ingest auth headers/cookies if tool supports headers
         if context.auth_headers and name in ["nuclei", "ffuf", "httpx", "dalfox", "katana"]:

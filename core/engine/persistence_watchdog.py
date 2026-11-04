@@ -148,6 +148,20 @@ class ProgressSnapshot:
     def load(self, snapshot_id: str) -> Optional[AssessmentSnapshot]:
         path = self.snapshot_dir / f"{snapshot_id}.json"
         if not path.exists():
+            # Check by wildcard pattern or matching target/id inside snapshots
+            for p in sorted(self.snapshot_dir.glob("*.json"), reverse=True):
+                if snapshot_id in p.name:
+                    path = p
+                    break
+        if not path.exists():
+            for p in sorted(self.snapshot_dir.glob("*.json"), reverse=True):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if data.get("snapshot_id") == snapshot_id or data.get("target") == snapshot_id:
+                        return AssessmentSnapshot(**data)
+                except Exception:
+                    pass
             logger.error("[Watchdog] Snapshot not found: %s", path)
             return None
         with open(path, "r", encoding="utf-8") as f:
