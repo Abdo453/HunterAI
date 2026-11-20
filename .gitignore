@@ -92,3 +92,12 @@ tmp_skills_install.log
 data/state_*.json
 data/tasks_*.json
 snapshots/
+
+# Node & Next.js build artifacts
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Go binaries
+backend/bin/
+backend/*.exe

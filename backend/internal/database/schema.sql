@@ -1,0 +1,75 @@
+-- ====================================================================
+-- ARTEX-Pro Enterprise Database Schema (PostgreSQL 16+)
+-- ====================================================================
+
+CREATE TABLE IF NOT EXISTS engagements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code VARCHAR(32) NOT NULL UNIQUE,
+    target_url TEXT NOT NULL,
+    authorized_scope TEXT NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'ACTIVE',
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS targets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    engagement_id UUID REFERENCES engagements(id) ON DELETE CASCADE,
+    domain VARCHAR(255) NOT NULL,
+    root_url TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS asset_nodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    target_id UUID REFERENCES targets(id) ON DELETE CASCADE,
+    kind VARCHAR(48) NOT NULL, -- SUBDOMAIN, IP, PORT, ENDPOINT, API, TECH
+    value TEXT NOT NULL,
+    attributes JSONB DEFAULT '{}'::jsonb,
+    first_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(target_id, kind, value)
+);
+
+CREATE TABLE IF NOT EXISTS asset_edges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_id UUID REFERENCES asset_nodes(id) ON DELETE CASCADE,
+    target_id UUID REFERENCES asset_nodes(id) ON DELETE CASCADE,
+    relation VARCHAR(48) NOT NULL, -- RESOLVES_TO, LISTENS_ON, EXPOSES, ROUTES_TO
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    engagement_id UUID REFERENCES engagements(id) ON DELETE CASCADE,
+    agent_role VARCHAR(32) NOT NULL, -- PLANNER, RECON, WEB, NETWORK, ADJUDICATOR
+    title TEXT NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'PENDING', -- PENDING, RUNNING, COMPLETED, FAILED
+    priority INT DEFAULT 5,
+    input_context JSONB DEFAULT '{}'::jsonb,
+    output_summary JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS findings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    engagement_id UUID REFERENCES engagements(id) ON DELETE CASCADE,
+    vuln_class VARCHAR(64) NOT NULL,
+    severity VARCHAR(24) NOT NULL, -- CRITICAL, HIGH, MEDIUM, LOW, INFO
+    confidence NUMERIC(4, 2) DEFAULT 0.0,
+    title TEXT NOT NULL,
+    evidence TEXT,
+    poc_script TEXT,
+    status VARCHAR(24) DEFAULT 'CONFIRMED',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    engagement_id UUID REFERENCES engagements(id) ON DELETE CASCADE,
+    actor VARCHAR(64) NOT NULL,
+    action TEXT NOT NULL,
+    details JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
