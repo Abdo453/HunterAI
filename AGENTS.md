@@ -13,7 +13,11 @@ pip install -r requirements.txt
 # Setup AI provider (Ollama recommended, free + local)
 python pentest.py setup --provider ollama --model qwen2.5:14b
 
-# ── TWO MASTER COMMANDS (Launch everything with your preferred interface) ──
+# ── MASTER COMMAND: ARTEX-Pro UNIFIED (All Skills + Go Core + Next.js UI + PostgreSQL) ──
+python pentest.py artex target.com
+# (Or using alias: python pentest.py unified target.com or ./artex.sh target.com or artex.bat target.com)
+
+# ── ALTERNATIVE LAUNCHERS (Launch with specific UI if preferred) ──
 # Command 1: All Skills + Unified Web Control Center (:8000)
 python pentest.py web target.com
 # (Or using alias: python pentest.py ui target.com or python pentest.py all target.com --web)
@@ -37,6 +41,7 @@ python pentest.py report target.com "finding" --platform hackerone
 
 | Command | Usage |
 |---------|-------|
+| `/evolve [topic]` | Autonomous Multi-Model Self-Evolution & Permanent Knowledge Storing |
 | `/web [target]` | Dual Master 1: All skills + Unified Web Control Center (`http://127.0.0.1:8000`) |
 | `/opencode [target]` | Dual Master 2: All 217 skills + OpenCode Studio Hub (`http://127.0.0.1:8000/opencode`) |
 | `/all target.com` | Headless Master: All skills + AI Browser + Burp + Report |
@@ -49,6 +54,11 @@ python pentest.py report target.com "finding" --platform hackerone
 | `/autopilot target.com` | Full autonomous loop |
 | `/surface target.com` | Ranked attack surface |
 | `/scope <asset>` | Verify asset is in scope |
+| `/monitor target.com` | Continuous monitor mode — surface + JS bundle deltas |
+| `/pattern-db` | Cross-target pattern memory (add/query/verify, hash-chained) |
+| `/score` | Deterministic finding scorer (P1..P4 + downgrade-risk flags) |
+| `/oss-bounty` | GitHub OSS bounty sweep + acceptance-path triage |
+| `/waf-encoder` | Payload encoding matrix + response-pair classification |
 | `/triage` | Quick 2-minute go/no-go |
 | `/pickup target.com` | Resume previous hunt |
 | `/remember <target> <note>` | Log finding to hunt memory |
@@ -100,6 +110,20 @@ python pentest.py report target.com "finding" --platform hackerone
 - `token-auditor` — token rug pull scan
 - `credential-hunter` — credential attack pipeline
 
+## Authorized Full-Power Mode
+
+`pentest authorize` — one command: scope + authorization → signed red_team grant → fully autonomous.
+
+```powershell
+# Operator provides scope + authorization ONCE, then the agent runs itself:
+python scripts/authorize_full_power.py issue --scope "example.com,10.10.0.0/24" --authorized-by "<authorized_by / SOW>" --days 7
+python scripts/authorize_full_power.py check --target <asset>   # verify in/out of scope
+python pentest.py autopilot <domain>                            # launch the loop
+
+python scripts/authorize_full_power.py revoke                   # end the engagement
+```
+Inside scope → all capabilities (read_only, active_test, exploit_proof) allowed under the red_team profile. Outside scope → hard DENIED by the HMAC-signed policy engine. The agent only stops you at destruction/persistence/exfil law lines — it hunts everything else on its own (`abh-network-killchain` skill).
+
 ## Critical Rules (Always Active)
 
 1. READ FULL SCOPE before touching any asset
@@ -112,6 +136,6 @@ python pentest.py report target.com "finding" --platform hackerone
 
 ## OpenCode Integration (Active)
 
-- Skills: 217 curated cyber skills installed in `.opencode/skills/` from `skills_library/` (including 19 Agentic Bug Hunter skills: `abh-agentic-app-audit`, `abh-argus`, `abh-bb-methodology`, `abh-bug-bounty`, `abh-cicd-security`, `abh-client-reverse`, `abh-cloud-pentest`, `abh-credential-attack`, `abh-graphql-audit`, `abh-llm-redteam`, `abh-mcp-server-audit`, `abh-meme-coin-audit`, `abh-mobile-pentest`, `abh-report-writing`, `abh-security-arsenal`, `abh-triage-validation`, `abh-web2-recon`, `abh-web2-vuln-classes`, `abh-web3-audit`) — see `.opencode/skills/MANIFEST.json` and `docs/OPENCODE_INTEGRATION.md`
+- Skills: 217 curated cyber skills installed in `.opencode/skills/` from `skills_library/` (including 19 Agentic Bug Hunter skills: `abh-agent-ops`, `abh-agentic-app-audit`, `abh-argus`, `abh-bb-methodology`, `abh-bug-bounty`, `abh-cicd-security`, `abh-client-reverse`, `abh-cloud-pentest`, `abh-credential-attack`, `abh-graphql-audit`, `abh-llm-redteam`, `abh-mcp-server-audit`, `abh-meme-coin-audit`, `abh-mobile-pentest`, `abh-network-killchain`, `abh-report-writing`, `abh-script-forge`, `abh-security-arsenal`, `abh-triage-validation`, `abh-web2-recon`, `abh-web2-vuln-classes`, `abh-web3-audit`) — see `.opencode/skills/MANIFEST.json` and `docs/OPENCODE_INTEGRATION.md`
 - MCP: `opencode.json` — `hunter-arsenal` (63 Kali tools) + `filesystem` + `context7` + `gh_grep` enabled; offensive MCP servers are MANUAL-gated (README first, never guess commands)
 - Install/refresh everything: `.\install_agent.ps1` (one file: deps، uv، skill packs، skills، MCP validation) — flags `-CheckOnly` `-Full` `-Profiles` `-KaliTools`
