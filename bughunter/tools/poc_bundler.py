@@ -454,10 +454,11 @@ def capture(url: str, method: str, headers: list[tuple[str, str]],
 def try_screenshot(url: str, outdir: str) -> str | None:
     """Best-effort screenshot via httpx. Returns 'screenshot.png' on success,
     None otherwise — never fatal (evidence is still valid without it)."""
-    if not shutil.which("httpx"):
+    bin_name = "httpx-toolkit" if shutil.which("httpx-toolkit") else ("httpx" if shutil.which("httpx") else None)
+    if not bin_name:
         return None
     try:
-        subprocess.run(["httpx", "-u", url, "-screenshot", "-srd", outdir,
+        subprocess.run([bin_name, "-u", url, "-screenshot", "-srd", outdir,
                         "-silent", "-timeout", "20"],
                        capture_output=True, timeout=60, check=False)
     except (OSError, subprocess.SubprocessError):

@@ -341,6 +341,16 @@ class ToolManager:
             command_str = str(command)
             tool = command_str.split()[0] if command_str else "unknown"
 
+        # Resolve binary path (e.g. resolve httpx -> httpx-toolkit to prevent Kali collisions)
+        resolved_tool = self.resolve_binary(tool)
+        if resolved_tool != tool:
+            if isinstance(command, list):
+                command = [resolved_tool] + list(command[1:])
+                command_str = " ".join(str(c) for c in command)
+            else:
+                command_str = resolved_tool + command_str[len(tool):]
+            tool = resolved_tool
+
         # Handle flexible args (e.g. execute("wafw00f", [url]) or execute("arjun", ["-u", url]))
         if args:
             first = args[0]

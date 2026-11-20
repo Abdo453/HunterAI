@@ -180,6 +180,7 @@ fi
 _resolve_pd_httpx() {
     local cand
     for cand in \
+        "$(command -v httpx-toolkit 2>/dev/null)" \
         "$HOME/go/bin/httpx" \
         "/opt/homebrew/bin/httpx" \
         "/usr/local/bin/httpx" \

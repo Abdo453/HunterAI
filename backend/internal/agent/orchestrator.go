@@ -40,8 +40,8 @@ func (o *Orchestrator) RunAutonomousMission(ctx context.Context, targetDomain st
 
 	// Step 1: Reconnaissance
 	reconRes, err := o.recon.Execute(ctx, targetDomain)
-	if err != nil {
-		return nil, fmt.Errorf("recon stage failed: %w", err)
+	if err != nil || reconRes == nil {
+		return nil, fmt.Errorf("recon stage failed: %v", err)
 	}
 
 	// Step 2: Network / Live Host Probing
@@ -78,7 +78,7 @@ func (o *Orchestrator) RunAutonomousMission(ctx context.Context, targetDomain st
 		var engID string
 		_ = o.db.QueryRowContext(ctx, `SELECT engagement_id FROM targets WHERE id = $1`, reconRes.TargetID).Scan(&engID)
 		vulnRes, err := o.vuln.Execute(ctx, engID, reconRes.TargetID, liveURLs)
-		if err == nil {
+		if err == nil && vulnRes != nil {
 			totalFindings = vulnRes.FindingsCount
 		} else {
 			log.Printf("[Orchestrator] Vuln scan note: %v", err)

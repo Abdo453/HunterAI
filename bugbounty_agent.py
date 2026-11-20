@@ -400,11 +400,12 @@ class BugBountyAgent:
         alive = []
         self.log(f"جاري فحص {len(subdomains)} مضيف ...", "info")
 
-        if tool_exists("httpx"):
+        httpx_bin = "httpx-toolkit" if tool_exists("httpx-toolkit") else ("httpx" if tool_exists("httpx") else None)
+        if httpx_bin:
             try:
                 hosts_input = "\n".join([self.domain] + subdomains)
                 result = subprocess.run(
-                    ["httpx", "-silent", "-status-code"],
+                    [httpx_bin, "-silent", "-status-code"],
                     input=hosts_input, text=True, capture_output=True, timeout=120
                 )
                 for line in result.stdout.splitlines():

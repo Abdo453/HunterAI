@@ -68,13 +68,28 @@ class RealToolAdapter:
         self.tools_dir = tools_dir
         self.force_fallback = force_fallback
 
+    def resolve_binary(self, tool_name: str) -> str:
+        """Resolves tool path defensively, prioritizing Kali toolkits and ~/go/bin."""
+        t = tool_name.strip()
+        if t in ("httpx", "httpx-toolkit"):
+            if shutil.which("httpx-toolkit"):
+                return "httpx-toolkit"
+            go_httpx = Path.home() / "go" / "bin" / "httpx"
+            if go_httpx.is_file() and os.access(go_httpx, os.X_OK):
+                return str(go_httpx)
+        go_bin = Path.home() / "go" / "bin" / t
+        if go_bin.is_file() and os.access(go_bin, os.X_OK):
+            return str(go_bin)
+        return t
+
     def is_tool_available(self, tool_name: str) -> bool:
         """Checks if tool executable is found in PATH or configured directory."""
         if self.force_fallback:
             return False
-        if self.tools_dir and (self.tools_dir / tool_name).exists():
+        resolved = self.resolve_binary(tool_name)
+        if self.tools_dir and (self.tools_dir / resolved).exists():
             return True
-        return shutil.which(tool_name) is not None
+        return shutil.which(resolved) is not None or os.path.exists(resolved)
 
     def execute_subfinder(self, domain: str, timeout: Optional[float] = None) -> ToolExecutionResult:
         """Runs subfinder or falls back to native DNS probe."""
@@ -157,7 +172,8 @@ class RealToolAdapter:
         if not self.is_tool_available(tool):
             return self._fallback_httpx(urls, time.time() - start)
 
-        cmd = [tool, "-silent", "-status-code", "-title", "-tech-detect", "-json"]
+        resolved_tool = self.resolve_binary(tool)
+        cmd = [resolved_tool, "-silent", "-status-code", "-title", "-tech-detect", "-json"]
         # Supply input via stdin
         input_data = "\n".join(urls)
         exit_code, stdout, stderr = self._run_subprocess_with_input(cmd, input_data, t_limit)
