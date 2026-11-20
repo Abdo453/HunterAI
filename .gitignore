@@ -101,3 +101,9 @@ frontend/out/
 # Go binaries
 backend/bin/
 backend/*.exe
+
+# Task graphs and local artifacts
+data/task_graphs/
+artifacts/127.0.0.1/
+artifacts/192.168.1.14/
+ctf_lab.db
