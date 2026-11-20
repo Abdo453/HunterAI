@@ -205,8 +205,13 @@ func (s *APIServer) handleScan(w http.ResponseWriter, r *http.Request) {
 		"message": "Autonomous ARTEX-Pro pipeline dispatched in background Goroutine",
 	})
 
-	// Dispatch background Goroutine
+	// Dispatch background Goroutine with panic recovery
 	go func(target string) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[-] [API] Recovered from background mission panic: %v", r)
+			}
+		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
 		_, _ = s.orchestrator.RunAutonomousMission(ctx, target)

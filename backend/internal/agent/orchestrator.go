@@ -45,9 +45,12 @@ func (o *Orchestrator) RunAutonomousMission(ctx context.Context, targetDomain st
 	}
 
 	// Step 2: Network / Live Host Probing
+	liveEndpointsCount := 0
 	netRes, err := o.network.Execute(ctx, reconRes.TargetID, 50)
 	if err != nil {
 		log.Printf("[Orchestrator] Network probe warning: %v", err)
+	} else if netRes != nil {
+		liveEndpointsCount = netRes.LiveEndpoints
 	}
 
 	// Step 3: Get live URLs for vulnerability scanning
@@ -90,7 +93,7 @@ func (o *Orchestrator) RunAutonomousMission(ctx context.Context, targetDomain st
 	summary := &MissionSummary{
 		TargetDomain:  targetDomain,
 		TotalAssets:   totalAssets,
-		LiveEndpoints: netRes.LiveEndpoints,
+		LiveEndpoints: liveEndpointsCount,
 		TotalFindings: totalFindings,
 		DurationSec:   duration,
 	}

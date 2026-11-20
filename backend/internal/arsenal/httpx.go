@@ -30,9 +30,13 @@ type HTTPXRunner struct {
 }
 
 func NewHTTPXRunner() *HTTPXRunner {
-	path, err := exec.LookPath("httpx")
+	// In Kali Linux / Debian, ProjectDiscovery's httpx is packaged as httpx-toolkit
+	path, err := exec.LookPath("httpx-toolkit")
 	if err != nil {
-		path = "/usr/bin/httpx"
+		path, err = exec.LookPath("httpx")
+		if err != nil {
+			path = "/usr/bin/httpx-toolkit"
+		}
 	}
 	return &HTTPXRunner{
 		BinaryPath: path,
