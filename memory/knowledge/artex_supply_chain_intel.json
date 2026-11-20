@@ -1,0 +1,72 @@
+{
+  "title": "ARTEX Ecosystem Threat Intelligence & Supply Chain Vulnerability Registry",
+  "version": "1.0.0",
+  "updated_at": "2026-11-20T20:29:00Z",
+  "description": "Curated threat intel documenting backdoors, malicious Docker images, unconstrained runners, and scope-bypass weaknesses in open-source ARTEX forks.",
+  "threat_classifications": [
+    {
+      "rank": 1,
+      "name": "trhhubsd/ARTEX",
+      "risk_level": "CRITICAL_CONFIRMED_BACKDOOR",
+      "threat_type": "Malicious Docker Container & C2 Credential Exfiltration",
+      "reference_urls": [
+        "https://archive.softwareheritage.org/swh:1:cnt:4116a80d046acf8c31c1b1fde26e8011bde9176c;origin=https://github.com/trhhubsd/ARTEX",
+        "https://badbyte.io/artex-backdoor-docker-image/"
+      ],
+      "technical_details": "Pre-built Docker image contained embedded reverse shells and telemetry beacons transmitting system environment variables and credentials to unauthorized endpoints.",
+      "mitigation_in_hunterai": "Hard blocked in container policy. Zero third-party Docker images permitted; pure native local Go binary execution only."
+    },
+    {
+      "rank": 2,
+      "name": "mrjohnnyyang/artex-pro",
+      "risk_level": "HIGH_UNCONSTRAINED_EXECUTION",
+      "threat_type": "Dangerous Unrestricted Worker Execution & Custom Tool Injection",
+      "reference_urls": [
+        "https://github.com/mrjohnnyyang/artex-pro",
+        "https://github.com/mrjohnnyyang/artex-pro/blob/c2342d4de591f99d270d1283c826c21f11666325/agent/worker.go",
+        "https://github.com/mrjohnnyyang/artex-pro/blob/c2342d4de591f99d270d1283c826c21f11666325/server/customtool.go"
+      ],
+      "technical_details": "Worker engine operates without sandboxing, allowing remote command injection and unconstrained subshell execution via customtool handlers.",
+      "mitigation_in_hunterai": "Strict process boundary, timeout contexts, and parameter sanitization enforced via Go exec.CommandContext and Python ToolInterceptorGate."
+    },
+    {
+      "rank": 3,
+      "name": "wpsec/ARTEX-Pro",
+      "risk_level": "MEDIUM_INCOMPLETE_SCOPE_CONTROL",
+      "threat_type": "Flawed Scope Boundary Enforcement",
+      "reference_urls": [
+        "https://github.com/wpsec/ARTEX-Pro"
+      ],
+      "technical_details": "Code review revealed leaky regex and missing domain boundary checks in asset spidering, causing out-of-scope targets and cloud infrastructures to be actively probed.",
+      "mitigation_in_hunterai": "Deterministic ScopePolicyGuard with ThirdPartyDependencyFirewall; all non-scope domains hard-classified as EXTERNAL_DEPENDENCY and barred from active probe."
+    },
+    {
+      "rank": 4,
+      "name": "drush012/ARTEX-pro",
+      "risk_level": "MEDIUM_LIMITED_SCOPE_GUARD",
+      "threat_type": "Shallow Scope Filtering",
+      "reference_urls": [
+        "https://github.com/drush012/ARTEX-pro"
+      ],
+      "technical_details": "Scope filtering applied only at initial URL parse, failing to propagate across redirects and chained SSRF payloads.",
+      "mitigation_in_hunterai": "Stateful per-request evaluation before every single tool invocation and HTTP request in Go and Python."
+    },
+    {
+      "rank": 5,
+      "name": "Adyanming/ARTEX-Pro",
+      "risk_level": "LOW_OPTIONAL_GATE",
+      "threat_type": "Optional Scope Verification & Dual-Use Ambiguity",
+      "reference_urls": [
+        "https://github.com/Adyanming/ARTEX-Pro"
+      ],
+      "technical_details": "Scope gate exists but is optional (opt-in flag), enabling accidental out-of-scope engagement if flag is omitted.",
+      "mitigation_in_hunterai": "Mandatory scope enforcement by default. No active test executes without cryptographically or explicitly verified scope."
+    }
+  ],
+  "unvetted_mirrors_and_watch_list": [
+    {"repo": "xsywl945/ARTEX-mirror", "status": "UNVETTED_MIRROR"},
+    {"repo": "RuoJi6/ARTEX", "status": "UNVETTED_MIRROR"},
+    {"repo": "jiwoochris/artex-global", "status": "UNVETTED_MIRROR"},
+    {"repo": "cskwork/scopeweaver", "status": "UNVETTED_MIRROR"}
+  ]
+}
