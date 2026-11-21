@@ -1,31 +1,11 @@
 ---
-name: acs-performing-web-cache-poisoning-attack
-description: Exploiting web cache mechanisms to serve malicious content to other users
-  by poisoning cached responses through unkeyed headers and parameters during authorized
-  security tests.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- cache-poisoning
-- web-security
-- cdn
-- burpsuite
-- owasp
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
+name: "acs-performing-web-cache-poisoning-attack"
+description: "Exploiting web cache mechanisms to serve malicious content to other users"
 ---
+
+# Acs Performing Web Cache Poisoning Attack
+
+*Sourced from abdo453-hunterai*
 
 # Performing Web Cache Poisoning Attack
 
@@ -325,3 +305,4 @@ Multiple applications are behind the same CDN. Manipulating the Host header caus
 4. Use application-level hardcoded base URLs instead of deriving from headers
 5. Implement cache key normalization to prevent key manipulation
 ```
+

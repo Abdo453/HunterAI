@@ -1,38 +1,11 @@
 ---
-name: acs-auditing-foundry-smart-contract-security
-description: >-
-  Pre-deployment security audit of Solidity smart contracts in a Foundry project.
-  Combines static analysis (Slither, Aderyn), symbolic execution (Mythril), and
-  property-based testing (forge fuzz + invariant tests with handlers) to catch
-  reentrancy, access-control, oracle/price manipulation, and arithmetic bugs
-  BEFORE deploying to an EVM chain. Also enforces key hygiene (no plaintext
-  private keys, encrypted cast keystore) and a secure deploy workflow. Use when
-  writing, reviewing, testing, or deploying Solidity/Foundry contracts, building
-  a dApp, or working with forge/cast/anvil, MetaMask, or Web3/DeFi code.
-domain: cybersecurity
-subdomain: blockchain-security
-tags:
-  - solidity
-  - foundry
-  - forge
-  - smart-contract
-  - slither
-  - aderyn
-  - mythril
-  - reentrancy
-  - defi
-  - web3
-  - invariant-testing
-  - audit
-version: "1.0"
-author: devredious
-license: Apache-2.0
-based_on: mukul975/analyzing-ethereum-smart-contract-vulnerabilities
-swc_registry: https://swcregistry.io/
-mitre_attack:
-  - T1190
-  - T1059
+name: "acs-auditing-foundry-smart-contract-security"
+description: ">-"
 ---
+
+# Acs Auditing Foundry Smart Contract Security
+
+*Sourced from abdo453-hunterai*
 
 # Auditing Foundry Smart Contract Security
 
@@ -168,3 +141,4 @@ A JSON audit report listing findings with **SWC identifiers**, severity, tool so
 affected contract/function/line, and remediation; plus the test/coverage summary and a
 single **PASS / FAIL** deploy gate. FAIL on any high/critical static finding, failing
 test, leaked secret, or coverage below the configured threshold on value-moving code.
+

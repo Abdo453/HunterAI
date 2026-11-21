@@ -42,15 +42,15 @@ class AIReasoningCore:
             except Exception as e:
                 log.debug(f"OpenRouter reasoning error: {e}")
 
-        # 3. Local Ollama (Qwen Coder / WhiteRabbitNeo)
+        # 3. Local Ollama (Keep model warm in memory)
         try:
             from models.ollama_manager import OllamaManager
             mgr = OllamaManager()
-            for model_cand in ["qwen2.5-coder:14b", "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest", "xploiter/pentester:latest"]:
+            for model_cand in ["qwen2.5-coder:14b", "redteam-pro:8b", "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest"]:
                 ans = await mgr.chat(model_cand, [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
-                ], keep_alive=0)
+                ], keep_alive=-1)
                 if ans and len(ans.strip()) > 10:
                     return ans
         except Exception as e:

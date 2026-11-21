@@ -1,9 +1,11 @@
 ---
-name: tob-mutation-testing
+name: "tob-mutation-testing"
 description: "Configures mewt or muton campaigns, analyzes surviving mutants, and investigates bugs exposed by testing gaps. Use when setting up mutation testing, reviewing campaign results, identifying equivalent mutants, or finding bugs from surviving mutations."
-allowed-tools: Read Write Bash Grep
-
 ---
+
+# Tob Mutation Testing
+
+*Sourced from abdo453-hunterai*
 
 # Mutation Testing (mewt/muton)
 
@@ -107,3 +109,4 @@ Language labels are canonical `family` or `family/dialect` values in mewt 4.x â€
 | Low | Operator shuffles (`AOS`, `COS`, `LOS`, `BOS`, shift/assignment variants), `BL`, `AS`, `LC`, `WF` | Check boundary inputs, arithmetic assertions, and semantic equivalence. The mutation result alone does not establish whether the code executed. |
 
 Severity ranks the *mutation*, not the risk. A low-severity survivor in a fee calculation matters more than a high-severity survivor in a log line â€” weigh what the mutated code does. Filter with `--severity` to work through the results in priority order.
+

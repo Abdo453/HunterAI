@@ -1,7 +1,11 @@
 ---
-name: tob-code-maturity-assessor
-description: Systematic code maturity assessment using Trail of Bits' 9-category framework. Analyzes codebase for arithmetic safety, auditing practices, access controls, complexity, decentralization, documentation, MEV risks, low-level code, and testing, then produces a scorecard with evidence-based ratings and a priority-ordered roadmap. Use when assessing or scoring the maturity of a smart contract or blockchain codebase, producing a maturity scorecard or evaluation, or judging how mature, well-tested, or well-documented such a project is against a rubric.
+name: "tob-code-maturity-assessor"
+description: "Systematic code maturity assessment using Trail of Bits' 9-category framework. Analyzes codebase for arithmetic safety, auditing practices, access controls, complexity, decentralization, documentation, MEV risks, low-level code, and testing, then produces a scorecard with evidence-based ratings a..."
 ---
+
+# Tob Code Maturity Assessor
+
+*Sourced from abdo453-hunterai*
 
 # Code Maturity Assessor
 
@@ -216,3 +220,4 @@ For detailed report structure and templates, see [REPORT_FORMAT.md](resources/RE
 - Context about the project (DeFi, NFT, infrastructure, etc.)
 
 Let's assess this codebase!
+

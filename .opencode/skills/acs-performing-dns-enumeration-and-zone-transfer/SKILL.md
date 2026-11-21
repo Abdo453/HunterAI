@@ -1,33 +1,12 @@
 ---
-name: acs-performing-dns-enumeration-and-zone-transfer
-description: 'Enumerates DNS records, attempts zone transfers, brute-forces subdomains,
-  and maps DNS infrastructure during authorized reconnaissance to identify attack
-  surface, misconfigurations, and information disclosure in target domains.
-
-  '
-domain: cybersecurity
-subdomain: network-security
-tags:
-- network-security
-- dns
-- enumeration
-- zone-transfer
-- reconnaissance
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.IR-01
-- DE.CM-01
-- ID.AM-03
-- PR.DS-02
-mitre_attack:
-- T1046
-- T1040
-- T1557
-- T1071
-- T1595
+name: "acs-performing-dns-enumeration-and-zone-transfer"
+description: "Enumerates DNS records, attempts zone transfers, brute-forces subdomains,"
 ---
+
+# Acs Performing Dns Enumeration And Zone Transfer
+
+*Sourced from abdo453-hunterai*
+
 # Performing DNS Enumeration and Zone Transfer
 
 ## When to Use
@@ -273,3 +252,4 @@ cat all_subdomains.txt | httpx -screenshot -o screenshots/
 4. **Missing DMARC Policy** (Medium): No DMARC record found, enabling email spoofing
 5. **Weak SPF Record** (Low): SPF uses ~all (soft fail) instead of -all (hard fail)
 ```
+

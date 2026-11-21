@@ -1,32 +1,12 @@
 ---
-name: acs-performing-open-source-intelligence-gathering
-description: Open Source Intelligence (OSINT) gathering is the first active phase
-  of a red team engagement, where operators collect publicly available information
-  about the target organization to identify attack s
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- adversary-simulation
-- mitre-attack
-- exploitation
-- post-exploitation
-- osint
-- reconnaissance
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
-- T1592
+name: "acs-performing-open-source-intelligence-gathering"
+description: "Open Source Intelligence (OSINT) gathering is the first active phase"
 ---
+
+# Acs Performing Open Source Intelligence Gathering
+
+*Sourced from abdo453-hunterai*
+
 # Performing Open Source Intelligence Gathering
 
 
@@ -140,3 +120,4 @@ Open Source Intelligence (OSINT) gathering is the first active phase of a red te
 - [ ] Credential leak assessment completed
 - [ ] Attack surface map documented
 - [ ] OSINT report compiled for engagement team
+

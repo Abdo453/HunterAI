@@ -24,7 +24,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urlparse
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    from ruamel.yaml import YAML
+    class _YamlShim:
+        @staticmethod
+        def safe_load(stream):
+            return YAML(typ="safe").load(stream)
+    yaml = _YamlShim()
 from pydantic import BaseModel, Field
 
 from core.security_mode import unrestricted_mode

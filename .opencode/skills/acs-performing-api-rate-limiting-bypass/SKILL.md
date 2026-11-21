@@ -1,37 +1,12 @@
 ---
-name: acs-performing-api-rate-limiting-bypass
-description: 'Tests API rate limiting for bypass vulnerabilities using Python (requests/aiohttp)
-  and Burp Suite Turbo Intruder to manipulate headers (e.g. X-Forwarded-For spoofing),
-  IPs, HTTP methods, API versions, and encodings, mapping findings to OWASP API4:2023
-  Unrestricted Resource Consumption. Use when assessing, under written authorization,
-  whether rate limits can be bypassed to enable brute force or resource-exhaustion
-  attacks.
-
-  '
-domain: cybersecurity
-subdomain: api-security
-tags:
-- api-security
-- owasp
-- rate-limiting
-- throttling
-- brute-force
-- dos-prevention
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1552.001
-- T1027
-- T1055
+name: "acs-performing-api-rate-limiting-bypass"
+description: "Tests API rate limiting for bypass vulnerabilities using Python (requests/aiohttp)"
 ---
+
+# Acs Performing Api Rate Limiting Bypass
+
+*Sourced from abdo453-hunterai*
+
 # Performing API Rate Limiting Bypass
 
 ## When to Use
@@ -418,3 +393,4 @@ At 1000 attempts per minute, a 6-digit PIN can be brute-forced in under
 5. Use atomic rate limit counters (Redis INCR) to prevent race conditions
 6. Implement progressive delays (exponential backoff) in addition to hard limits
 ```
+

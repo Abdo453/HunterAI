@@ -21,6 +21,20 @@ def normalize_ollama_host(h: str) -> str:
     return h
 
 
+def _wsl_gateway_host() -> Optional[str]:
+    """Detect Windows host IP from inside WSL2 if available."""
+    try:
+        import platform, subprocess
+        if "microsoft" in platform.release().lower():
+            out = subprocess.check_output(["ip", "route", "show", "default"], text=True, timeout=2)
+            parts = out.split()
+            if "via" in parts:
+                return f"http://{parts[parts.index('via') + 1]}:11434"
+    except Exception:
+        pass
+    return None
+
+
 OLLAMA_HOST = normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
 
 
@@ -33,15 +47,22 @@ class OllamaManager:
     """
 
     def __init__(self, host: str = None):
-        self.host = normalize_ollama_host(host or OLLAMA_HOST)
+        if host:
+            self.host = normalize_ollama_host(host)
+        elif os.getenv("OLLAMA_HOST"):
+            self.host = normalize_ollama_host(os.getenv("OLLAMA_HOST"))
+        else:
+            wsl_host = _wsl_gateway_host()
+            self.host = wsl_host or normalize_ollama_host(OLLAMA_HOST)
         self._current_loaded: Optional[str] = None
 
     async def get_active_host(self) -> str:
-        """فحص واكتشاف عنوان Ollama النشط تلقائياً (سواء IP الشبكة أو 127.0.0.1)"""
+        """فحص واكتشاف عنوان Ollama النشط تلقائياً (سواء IP الشبكة أو WSL2 أو 127.0.0.1)"""
         candidates = [
             self.host,
             "http://127.0.0.1:11434",
             "http://localhost:11434",
+            _wsl_gateway_host(),
             "http://10.0.2.2:11434"
         ]
         for cand in dict.fromkeys(candidates):
@@ -83,9 +104,10 @@ class OllamaManager:
             "keep_alive": 0,
             "stream": False
         }
+        host = await self.get_active_host()
         try:
             async with httpx.AsyncClient(timeout=10, trust_env=False) as c:
-                await c.post(f"{self.host}/api/generate", json=payload)
+                await c.post(f"{host}/api/generate", json=payload)
             self._current_loaded = None
             log.info(f"[UNLOAD] Done: {model_name}")
             return True
@@ -112,9 +134,10 @@ class OllamaManager:
             "keep_alive": -1,
             "stream": False
         }
+        host = await self.get_active_host()
         try:
             async with httpx.AsyncClient(timeout=60, trust_env=False) as c:
-                r = await c.post(f"{self.host}/api/generate", json=payload)
+                r = await c.post(f"{host}/api/generate", json=payload)
                 if r.status_code == 200:
                     self._current_loaded = model_name
                     log.info(f"[PRELOAD] Ready: {model_name}")
@@ -138,9 +161,10 @@ class OllamaManager:
                 "num_ctx": num_ctx
             }
         }
+        host = await self.get_active_host()
         try:
             async with httpx.AsyncClient(timeout=180, trust_env=False) as c:
-                r = await c.post(f"{self.host}/api/chat", json=payload)
+                r = await c.post(f"{host}/api/chat", json=payload)
                 r.raise_for_status()
                 content = r.json().get("message", {}).get("content", "")
                 if keep_alive == 0:

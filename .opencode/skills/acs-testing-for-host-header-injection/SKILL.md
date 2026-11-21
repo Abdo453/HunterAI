@@ -1,33 +1,11 @@
 ---
-name: acs-testing-for-host-header-injection
-description: Test web applications for HTTP Host header injection vulnerabilities
-  to identify password reset poisoning, web cache poisoning, SSRF, and virtual host
-  routing manipulation risks.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- host-header-injection
-- password-reset-poisoning
-- cache-poisoning
-- virtual-host
-- web-security
-- header-manipulation
-- ssrf
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1055
+name: "acs-testing-for-host-header-injection"
+description: "Test web applications for HTTP Host header injection vulnerabilities"
 ---
+
+# Acs Testing For Host Header Injection
+
+*Sourced from abdo453-hunterai*
 
 # Testing for Host Header Injection
 
@@ -234,3 +212,4 @@ curl -H "Host: management.internal" http://target.com/
 - Configure web server to reject requests with unrecognized Host values
 - Set absolute URLs in application configuration instead of deriving from Host
 ```
+

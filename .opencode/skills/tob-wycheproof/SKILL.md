@@ -1,8 +1,11 @@
 ---
-name: tob-wycheproof
-type: domain
-description: "Validates cryptographic implementations against Project Wycheproof's test vectors, which encode known attacks and edge cases across AES, RSA, ECDSA, ECDH, and more. Covers loading test vectors, mapping result flags onto pass and fail expectations, and reading a failure. Use when testing a crypto implementation against known attacks, checking a library against standard test vectors, or investigating why two implementations disagree on the same input."
+name: "tob-wycheproof"
+description: "Validates cryptographic implementations against Project Wycheproof's test vectors, which encode known attacks and edge cases across AES, RSA, ECDSA, ECDH, and more. Covers loading test vectors, mapping result flags onto pass and fail expectations, and reading a failure. Use when testing a crypto ..."
 ---
+
+# Tob Wycheproof
+
+*Sourced from abdo453-hunterai*
 
 # Wycheproof
 
@@ -529,3 +532,4 @@ Wycheproof is an essential tool for validating cryptographic implementations aga
 5. Protect against known cryptographic vulnerabilities
 
 The investment in writing a reusable testing harness pays dividends through continuous validation as new test vectors are added to the Wycheproof repository.
+

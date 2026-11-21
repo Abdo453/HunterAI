@@ -1,74 +1,12 @@
 ---
-name: acs-monitoring-darkweb-sources
-description: 'Monitors dark web forums, marketplaces, paste sites, and ransomware
-  leak sites for mentions of organizational assets, leaked credentials, threatened
-  attacks, and threat actor communications to provide early warning intelligence.
-  Use when establishing dark web monitoring coverage, investigating specific data
-  breach claims, or enriching incident investigations with dark web context. Activates
-  for requests involving dark web OSINT, leak site monitoring, credential exposure,
-  Recorded Future dark web, or Tor hidden service intelligence.
-
-  '
-domain: cybersecurity
-subdomain: threat-intelligence
-tags:
-- dark-web
-- OSINT
-- credential-monitoring
-- ransomware-leaks
-- Recorded-Future
-- SpiderFoot
-- CTI
-version: 1.0.0
-author: team-cybersecurity
-license: Apache-2.0
-nist_ai_rmf:
-- MEASURE-2.7
-- MAP-5.1
-- MANAGE-2.4
-atlas_techniques:
-- AML.T0070
-- AML.T0066
-- AML.T0082
-nist_csf:
-- ID.RA-01
-- ID.RA-05
-- DE.CM-01
-- DE.AE-02
-mitre_attack:
-- T1591
-- T1592
-- T1593
-- T1589
-- T1003
-mitre_f3:
-  version: '1.1'
-  tactics:
-  - reconnaissance
-  - resource-development
-  - initial-access
-  techniques:
-  - id: T1593
-    name: Search Open Websites/Domains
-    tactic: reconnaissance
-    source: attack
-  - id: T1650
-    name: Acquire Access
-    tactic: resource-development
-    source: attack
-  - id: T1555.003
-    name: 'Credentials from Password Stores: Credentials from Web Browsers'
-    tactic: reconnaissance
-    source: attack
-  - id: F1029
-    name: Gather Customer Information
-    tactic: reconnaissance
-    source: f3
-  - id: T1110.004
-    name: 'Brute Force:  Credential Stuffing'
-    tactic: initial-access
-    source: attack
+name: "acs-monitoring-darkweb-sources"
+description: "Monitors dark web forums, marketplaces, paste sites, and ransomware"
 ---
+
+# Acs Monitoring Darkweb Sources
+
+*Sourced from abdo453-hunterai*
+
 # Monitoring Dark Web Sources
 
 ## When to Use
@@ -177,3 +115,4 @@ For each dark web finding:
 - **Missing clearnet sources**: Most dark web intelligence programs miss Telegram channels, Discord servers, and paste sites which operate on the clearnet and host significant criminal activity.
 - **Inadequate legal review**: Dark web monitoring must be reviewed by legal counsel — passive monitoring is generally lawful but active participation in criminal markets is not.
 - **No evidence preservation**: Dark web content disappears rapidly. Capture timestamped evidence immediately upon discovery using commercial service exports.
+

@@ -111,13 +111,13 @@ class TaskDependencyGraph:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def save(self) -> None:
-        """حفظ متزامن."""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(self._save_state_async())
-        finally:
-            loop.close()
+        """حفظ متزامن آمن داخل وخارج حلقة الأحداث (Event Loop)."""
+        path = self.storage_path / f"{self.graph_id}.json"
+        data = {
+            "nodes": {tid: node.to_dict() for tid, node in self._nodes.items()},
+            "edges": {tid: list(deps) for tid, deps in self._edges.items()},
+        }
+        self._write_json(path, data)
 
     async def add_task_async(
         self,
@@ -160,7 +160,7 @@ class TaskDependencyGraph:
 
         # التحقق من الدورات (cycle detection)
         if self._would_create_cycle(tid, deps):
-            raise TDGError(f"إضافة المهمة '{tid}' ست创建 دورة في الرسم البياني", task_id=tid)
+            raise TDGError(f"إضافة المهمة '{tid}' ستخلق دورة في الرسم البياني", task_id=tid)
 
         node = TaskNode(
             task_id=tid,
@@ -223,7 +223,7 @@ class TaskDependencyGraph:
         if evidence:
             node.evidence = evidence
         node.updated_at = time.time()
-        logger.info(f"[TDG]任务 '{task_id}' مكتملة: {node.name}")
+        logger.info(f"[TDG] المهمة '{task_id}' مكتملة: {node.name}")
 
     def mark_failed(self, task_id: str, reason: str, retry: bool = True) -> bool:
         """تحديد مهمة كفاشلة مع إمكانية إعادة المحاولة."""
@@ -260,7 +260,7 @@ class TaskDependencyGraph:
         node.status = TaskStatus.BYPASSED
         node.evidence["bypass_method"] = bypass_method
         node.updated_at = time.time()
-        logger.info(f"[TDG]任务 '{task_id}' تجاوزت عبر: {bypass_method}")
+        logger.info(f"[TDG] المهمة '{task_id}' تجاوزت عبر: {bypass_method}")
 
     def get_path_to_target(self, target_technique: str) -> List[TaskNode]:
         """إرجاع سلسلة المهام التي تؤدي إلى تقنية الهدف."""

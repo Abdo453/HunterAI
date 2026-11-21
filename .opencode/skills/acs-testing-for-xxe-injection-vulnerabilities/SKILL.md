@@ -1,32 +1,11 @@
 ---
-name: acs-testing-for-xxe-injection-vulnerabilities
-description: Discovering and exploiting XML External Entity injection vulnerabilities
-  to read server files, perform SSRF, and exfiltrate data during authorized penetration
-  tests.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- xxe
-- xml-injection
-- owasp
-- web-security
-- burpsuite
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1048
+name: "acs-testing-for-xxe-injection-vulnerabilities"
+description: "Discovering and exploiting XML External Entity injection vulnerabilities"
 ---
+
+# Acs Testing For Xxe Injection Vulnerabilities
+
+*Sourced from abdo453-hunterai*
 
 # Testing for XXE Injection Vulnerabilities
 
@@ -356,3 +335,4 @@ A resume upload feature processes DOCX files. Injecting XXE into the `[Content_T
 4. Implement input validation to reject DTD declarations in XML input
 5. Apply least-privilege file system permissions for the web server user
 ```
+

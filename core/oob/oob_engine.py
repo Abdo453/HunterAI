@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core.contracts.task_contracts import EvidenceArtifact, EvidenceSignificance
 from core.evidence_court import EvidenceCourt
+from core.oob.embedded_oob_server import EmbeddedOOBServer
 from core.oob.oob_client import OOBInteraction, OOBInteractionClient, OOBProbeContext
 
 logger = logging.getLogger("hunter_ai.oob_engine")
@@ -44,6 +45,19 @@ class OOBEngine:
     def __init__(self, callback_domain: str = "oob.hunterai.internal"):
         self.client = OOBInteractionClient(base_callback_domain=callback_domain)
         self.court = EvidenceCourt()
+        self._embedded_server: Optional[EmbeddedOOBServer] = None
+
+    def start_local_listener(self, host: str = "0.0.0.0", port: int = 0) -> Tuple[str, int]:
+        """Starts an embedded local OOB HTTP server for intranet/local-lab blind SSRF."""
+        if not self._embedded_server:
+            self._embedded_server = EmbeddedOOBServer(self.client, host=host, port=port)
+        return self._embedded_server.start()
+
+    def stop_local_listener(self):
+        """Stops the embedded local OOB server."""
+        if self._embedded_server:
+            self._embedded_server.stop()
+            self._embedded_server = None
 
     def create_probe(
         self,

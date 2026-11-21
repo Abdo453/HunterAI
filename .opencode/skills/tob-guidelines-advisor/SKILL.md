@@ -1,7 +1,11 @@
 ---
-name: tob-guidelines-advisor
-description: Smart contract development advisor based on Trail of Bits' best practices. Analyzes codebase to generate documentation/specifications, review architecture, check upgradeability patterns, assess implementation quality, identify pitfalls, review dependencies, and evaluate testing. Use when asking whether a smart contract project follows development best practices, reviewing on-chain/off-chain split, upgradeability, or delegatecall proxy patterns against guidelines, or seeking recommendations on contract design, inheritance, events, documentation, dependencies, or test strategy.
+name: "tob-guidelines-advisor"
+description: "Smart contract development advisor based on Trail of Bits' best practices. Analyzes codebase to generate documentation/specifications, review architecture, check upgradeability patterns, assess implementation quality, identify pitfalls, review dependencies, and evaluate testing. Use when asking w..."
 ---
+
+# Tob Guidelines Advisor
+
+*Sourced from abdo453-hunterai*
 
 # Guidelines Advisor
 
@@ -250,3 +254,4 @@ When invoked, I will:
 - Information about deployment plans
 
 Let's analyze your codebase and improve it using Trail of Bits' best practices!
+

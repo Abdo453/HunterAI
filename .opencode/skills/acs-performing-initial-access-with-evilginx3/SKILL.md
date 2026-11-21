@@ -1,73 +1,12 @@
 ---
-name: acs-performing-initial-access-with-evilginx3
-description: Perform authorized initial access using EvilGinx3 adversary-in-the-middle
-  phishing framework to capture session tokens and bypass multi-factor authentication
-  during red team engagements.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- initial-access
-- phishing
-- evilginx
-- mfa-bypass
-- adversary-in-the-middle
-- credential-theft
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-d3fend_techniques:
-- File Metadata Consistency Validation
-- Application Protocol Command Analysis
-- Identifier Analysis
-- Content Format Conversion
-- Message Analysis
-nist_csf:
-- ID.RA-01
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
-- T1003
-mitre_f3:
-  version: '1.1'
-  tactics:
-  - resource-development
-  - initial-access
-  - positioning
-  techniques:
-  - id: T1583.001
-    name: 'Acquire Infrastructure: Domains'
-    tactic: resource-development
-    source: attack
-  - id: T1660
-    name: Phishing
-    tactic: initial-access
-    source: attack
-  - id: T1557
-    name: Adversary-in-the-Middle
-    tactic: initial-access
-    source: attack
-  - id: T1539
-    name: Steal Web Session Cookie
-    tactic: positioning
-    source: attack
-  - id: T1111
-    name: Multi-Factor Authentication Interception
-    tactic: initial-access
-    source: attack
-  - id: F1004
-    name: Access with Stolen Session Cookie
-    tactic: initial-access
-    source: f3
-  - id: F1006
-    name: Account Takeover
-    tactic: initial-access
-    source: f3
+name: "acs-performing-initial-access-with-evilginx3"
+description: "Perform authorized initial access using EvilGinx3 adversary-in-the-middle"
 ---
+
+# Acs Performing Initial Access With Evilginx3
+
+*Sourced from abdo453-hunterai*
+
 # Performing Initial Access with EvilGinx3
 
 ## Overview
@@ -222,3 +161,4 @@ EvilGinx3 is a man-in-the-middle attack framework used for phishing login creden
 - [ ] Session hijack demonstrated in browser with stolen cookies
 - [ ] Post-authentication access to target service confirmed
 - [ ] Evidence documented with screenshots and session logs
+

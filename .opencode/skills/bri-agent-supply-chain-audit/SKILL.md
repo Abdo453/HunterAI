@@ -1,8 +1,11 @@
 ---
-name: bri-agent-supply-chain-audit
-description: "Audit the extensions AI coding agents load and trust (skills, plugins, marketplaces, hooks, settings, MCP servers, and instruction files like CLAUDE.md, AGENTS.md, GEMINI.md, .cursor/rules and copilot-instructions.md) across Claude Code, Cursor, Codex, Gemini CLI and GitHub Copilot. Read-only: inventories each item with its source and pin, greps for hidden instructions, exfiltration, credential reads, persistence, curl|bash and over-broad tool grants, reviews hooks and MCP pinning and tool poisoning, and gives each item a SAFE / CAUTION / DO-NOT-INSTALL verdict. Use when the user mentions 'audit my skills,' 'is this skill malicious,' 'is this skill safe,' 'is this MCP server safe,' 'review CLAUDE.md,' 'review AGENTS.md,' 'plugin security,' 'check my hooks,' 'audit my MCP servers,' 'agent supply chain,' 'SkillSpector,' 'tool poisoning,' 'rug pull,' 'audit my IDE extensions,' 'is this VS Code extension safe,' or is about to install a skill, plugin, MCP server, or IDE extension."
-allowed-tools: Read, Grep, Glob, Bash(skillspector scan --no-llm:*)
+name: "bri-agent-supply-chain-audit"
+description: "Audit the extensions AI coding agents load and trust (skills, plugins, marketplaces, hooks, settings, MCP servers, and instruction files like CLAUDE.md, AGENTS.md, GEMINI.md, .cursor/rules and copilot-instructions.md) across Claude Code, Cursor, Codex, Gemini CLI and GitHub Copilot. Read-only: in..."
 ---
+
+# Bri Agent Supply Chain Audit
+
+*Sourced from abdo453-hunterai*
 
 # Agent Supply-Chain Audit — Skills, Plugins, Hooks, MCP Servers, Instruction Files
 
@@ -339,3 +342,4 @@ Write the machine-readable findings first, validate them, then render the markdo
 - Claude Code documentation — settings, hooks, permissions, MCP, plugins
 - [references/locations.md](references/locations.md), [references/content-checks.md](references/content-checks.md),
   [references/findings-format.md](references/findings-format.md), [references/severity-calibration.md](references/severity-calibration.md)
+

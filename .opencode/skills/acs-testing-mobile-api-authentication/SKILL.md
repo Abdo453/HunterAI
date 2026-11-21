@@ -1,38 +1,12 @@
 ---
-name: acs-testing-mobile-api-authentication
-description: 'Tests authentication and authorization mechanisms in mobile application
-  APIs to identify broken authentication, insecure token management, session fixation,
-  privilege escalation, and IDOR vulnerabilities. Use when performing API security
-  assessments against mobile app backends, testing JWT implementations, evaluating
-  OAuth flows, or assessing session management. Activates for requests involving mobile
-  API auth testing, token security assessment, OAuth mobile flow testing, or API authorization
-  bypass.
-
-  '
-domain: cybersecurity
-subdomain: mobile-security
-author: mahipal
-tags:
-- mobile-security
-- android
-- ios
-- api-security
-- authentication
-- penetration-testing
-version: 1.0.0
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- PR.AA-05
-- ID.RA-01
-- DE.CM-09
-mitre_attack:
-- T1059
-- T1056
-- T1036
-- T1078
-- T1068
+name: "acs-testing-mobile-api-authentication"
+description: "Tests authentication and authorization mechanisms in mobile application"
 ---
+
+# Acs Testing Mobile Api Authentication
+
+*Sourced from abdo453-hunterai*
+
 # Testing Mobile API Authentication
 
 ## When to Use
@@ -201,3 +175,4 @@ curl -X GET https://api.target.com/api/v1/users/me \
 - **Token in URL**: Some mobile APIs pass tokens in URL query parameters, exposing them in server logs and browser history. Flag as finding even if authorization works correctly.
 - **Refresh token rotation**: Some APIs rotate refresh tokens on each use. If your test invalidates the refresh token, you may lock out your test account.
 - **Mobile-specific OAuth**: Mobile apps use custom URI schemes for OAuth redirects, which can be intercepted by malicious apps registered for the same scheme.
+

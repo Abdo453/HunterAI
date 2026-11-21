@@ -1,17 +1,11 @@
 ---
-name: tob-codeql
-description: >-
-  Scans a codebase for security vulnerabilities using CodeQL's interprocedural data flow and
-  taint tracking analysis. Triggers on "run codeql", "codeql scan", "build codeql database",
-  "SAST scan", "taint analysis", "dataflow analysis", or "find vulnerabilities in this repo".
-  Covers Python, JavaScript/TypeScript, Go, Java/Kotlin, C/C++, C#, Ruby, and Swift. Supports
-  "run all" (security-and-quality + security-experimental) and "important only"
-  (high-precision) scan modes, and creates data extension models for project-specific sources
-  and sinks. For fast single-file pattern matching, or when no build is available for a
-  compiled language, use the semgrep skill; to parse SARIF that already exists rather than
-  produce it, use the sarif-parsing skill.
-allowed-tools: Bash Read Write Edit Glob Grep AskUserQuestion TaskCreate TaskList TaskUpdate TaskGet
+name: "tob-codeql"
+description: ">-"
 ---
+
+# Tob Codeql
+
+*Sourced from abdo453-hunterai*
 
 # CodeQL Analysis
 
@@ -293,3 +287,4 @@ A complete CodeQL analysis run should satisfy:
 - [ ] Final results in `$OUTPUT_DIR/results/results.sarif` (filtered for important-only, copied for run-all)
 - [ ] Zero-finding results investigated (database quality, model coverage, suite selection)
 - [ ] Build log preserved at `$OUTPUT_DIR/build.log` with all commands, fixes, and quality assessments
+

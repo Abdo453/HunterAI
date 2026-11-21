@@ -1,0 +1,75 @@
+# ==============================================================================
+# PentestAI-Unified / OmniHunter — Complete Cyber Arsenal Dependencies
+# ==============================================================================
+# This file provides the full spectrum of Python security, offensive testing,
+# networking, reversing, cloud auditing, AI red-teaming, and crypto packages.
+# ==============================================================================
+
+# ── 1. Web, HTTP/2, Async & Protocol Testing ─────────────────────────────────
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.5.0
+python-multipart>=0.0.9
+aiofiles>=23.2.0
+jinja2>=3.1.3
+httpx[http2]>=0.27.0
+aiohttp>=3.9.0
+requests>=2.31.0
+websockets>=12.0
+urllib3>=2.2.0
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
+tldextract>=5.1.0
+dnspython>=2.6.0
+publicsuffix2>=2.20191221
+python-whois>=0.9.4
+waybackpy>=3.0.6
+python-wappalyzer>=0.3.1
+
+# ── 2. Network, Packet Manipulation & Raw Sockets ─────────────────────────────
+scapy>=2.5.0
+impacket>=0.11.0
+python-nmap>=0.7.1
+netifaces>=0.11.0
+dpkt>=1.9.8
+paramiko>=3.4.0
+
+# ── 3. Cryptography, JWT, Tokens & Password Cracking ──────────────────────────
+cryptography>=42.0.0
+pycryptodome>=3.20.0
+pyjwt[crypto]>=2.8.0
+jwcrypto>=1.5.0
+authlib>=1.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.1.0
+
+# ── 4. Binary Analysis, Disassembly & Reverse Engineering ─────────────────────
+# Note: On Windows, some binary packages require C++ build tools or WSL
+pwntools>=4.12.0; sys_platform != "win32"
+capstone>=5.0.1
+ropper>=1.13.8
+
+# ── 5. Cloud & Infrastructure Security Audit ──────────────────────────────────
+boto3>=1.34.0
+botocore>=1.34.0
+azure-mgmt-resource>=23.1.0
+google-cloud-storage>=2.14.0
+kubernetes>=29.0.0
+
+# ── 6. AI, LLM Red-Teaming & Cognitive Vector Search ─────────────────────────
+ollama>=0.1.7
+openai>=1.14.0
+anthropic>=0.19.0
+networkx>=3.2.0
+chromadb>=0.4.24
+sentence-transformers>=2.5.0
+
+# ── 7. Reporting, TUI & Data Visualization ────────────────────────────────────
+rich>=13.7.0
+textual>=0.52.0
+reportlab>=4.1.0
+fpdf2>=2.7.8
+matplotlib>=3.8.0
+tabulate>=0.9.0
+colorama>=0.4.6
+psutil>=5.9.8

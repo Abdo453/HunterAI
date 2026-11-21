@@ -1,44 +1,11 @@
 ---
-name: acs-building-red-team-c2-infrastructure-with-havoc
-description: Deploy and configure the Havoc C2 framework (teamserver, HTTPS/HTTP/SMB
-  listeners, Nginx redirectors, and Demon agents) with malleable traffic profiles and
-  OPSEC-hardened infrastructure for authorized red team operations. Use when standing
-  up or hardening Havoc C2 infrastructure for a written, authorized adversary emulation
-  engagement.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- havoc-c2
-- command-and-control
-- red-team-infrastructure
-- post-exploitation
-- adversary-emulation
-- demon-agent
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_ai_rmf:
-- GOVERN-1.1
-- MEASURE-2.7
-- MANAGE-3.1
-d3fend_techniques:
-- File Metadata Consistency Validation
-- Certificate Analysis
-- Application Protocol Command Analysis
-- Content Format Conversion
-- File Content Analysis
-nist_csf:
-- ID.RA-01
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1071.001
-- T1573.002
-- T1583.001
-- T1090.002
-- T1105
-- T1055
+name: "acs-building-red-team-c2-infrastructure-with-havoc"
+description: "Deploy and configure the Havoc C2 framework (teamserver, HTTPS/HTTP/SMB"
 ---
+
+# Acs Building Red Team C2 Infrastructure With Havoc
+
+*Sourced from abdo453-hunterai*
 
 # Building Red Team C2 Infrastructure with Havoc
 
@@ -321,3 +288,4 @@ demon> rportfwd start 8080 TARGET_INTERNAL 80
 - Havoc Wiki: https://github.com/HavocFramework/Havoc/blob/main/WIKI.MD
 - RedTeamOps Havoc 101: https://github.com/WesleyWong420/RedTeamOps-Havoc-101
 - Deploying Havoc C2 via Terraform: https://www.100daysofredteam.com/p/red-team-infrastructure-deploying-havoc-c2-via-terraform
+

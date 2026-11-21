@@ -1,8 +1,11 @@
 ---
-name: tob-audit-context-building
-description: Understand a codebase before looking for bugs in it - what each function assumes, what it guarantees, and what it depends on elsewhere. Use when starting an audit, threat model, or architecture review on unfamiliar code, and before any vulnerability-hunting pass.
-allowed-tools: Workflow Task Read Grep Glob
+name: "tob-audit-context-building"
+description: "Understand a codebase before looking for bugs in it - what each function assumes, what it guarantees, and what it depends on elsewhere. Use when starting an audit, threat model, or architecture review on unfamiliar code, and before any vulnerability-hunting pass."
 ---
+
+# Tob Audit Context Building
+
+*Sourced from abdo453-hunterai*
 
 # Audit Context Building
 
@@ -70,3 +73,4 @@ another function does, and you cannot see that from the caller alone. A limit lo
 value came back from a function whose name suggests it was checked. So read the function being called, follow
 every path through it rather than only the one that succeeds, and say what makes each assumption true. When
 nothing does, use those words: `nothing found`. Every claim cites a line, or becomes an open question.
+

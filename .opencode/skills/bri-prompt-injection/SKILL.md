@@ -1,8 +1,11 @@
 ---
-name: bri-prompt-injection
-description: "Audit applications for AI prompt injection, agent security, and LLM permission boundary vulnerabilities, including chatbots and agents hijacked by what they read: a malicious web page in a browsing agent, incoming emails, documents or tickets reaching an agent that can send replies, write files or call tools. Use when the user mentions 'prompt injection,' 'LLM security,' 'AI security,' 'jailbreak,' 'indirect prompt injection,' 'prompt leaking,' 'AI red team,' 'LLM vulnerabilities,' 'AI input validation,' 'system prompt extraction,' 'agent security,' 'MCP security,' 'AI permissions,' 'AI privilege escalation,' or needs to secure any application with AI features, AI agents, or LLM integrations."
-allowed-tools: Read, Grep, Glob, WebSearch
+name: "bri-prompt-injection"
+description: "Audit applications for AI prompt injection, agent security, and LLM permission boundary vulnerabilities, including chatbots and agents hijacked by what they read: a malicious web page in a browsing agent, incoming emails, documents or tickets reaching an agent that can send replies, write files o..."
 ---
+
+# Bri Prompt Injection
+
+*Sourced from abdo453-hunterai*
 
 # Prompt Injection — AI/LLM Security Audit
 
@@ -446,3 +449,4 @@ the JSON doesn't already say.
 - Unicode Technical Standard #39 (security mechanisms: confusables, mixed-script detection)
 - Shared references (copied into `references/` at build time): findings-format.md, findings.schema.json,
   validate-findings.mjs, to-sarif.mjs, severity-calibration.md, verification.md
+

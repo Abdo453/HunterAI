@@ -1,35 +1,11 @@
 ---
-name: acs-performing-http-parameter-pollution-attack
-description: Executes HTTP Parameter Pollution attacks that inject duplicate request
-  parameters to bypass input validation, WAF rules, and other security controls when
-  front-end and back-end systems parse duplicate parameters differently. Use during
-  web application penetration testing to test for parameter parsing inconsistencies
-  or WAF/validation bypass.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- http-parameter-pollution
-- hpp
-- waf-bypass
-- input-validation
-- web-security
-- parameter-injection
-- server-parsing
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1055
+name: "acs-performing-http-parameter-pollution-attack"
+description: "Executes HTTP Parameter Pollution attacks that inject duplicate request"
 ---
+
+# Acs Performing Http Parameter Pollution Attack
+
+*Sourced from abdo453-hunterai*
 
 # Performing HTTP Parameter Pollution Attack
 
@@ -209,3 +185,4 @@ python3 hpp_tester.py --url http://target.com/api/action \
 - Apply WAF rules that detect duplicate parameter patterns
 - Validate all parameters server-side regardless of client-side checks
 ```
+

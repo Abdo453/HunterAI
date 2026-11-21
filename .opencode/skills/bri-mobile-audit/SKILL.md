@@ -1,8 +1,11 @@
 ---
-name: bri-mobile-audit
-description: "Audit iOS and Android mobile applications against OWASP MASVS / MASTG — insecure storage, weak crypto, certificate pinning, deeplinks, IPC, jailbreak/root detection, reverse-engineering resistance. Use when the user mentions 'mobile security,' 'iOS security,' 'Android security,' 'mobile audit,' 'mobile pentest,' 'MASVS,' 'MASTG,' 'certificate pinning,' 'jailbreak detection,' 'root detection,' 'deeplink,' 'URL scheme,' 'app transport security,' 'keychain,' 'keystore,' 'mobile reverse engineering,' or has a mobile app to review."
-allowed-tools: Read, Grep, Glob, WebSearch
+name: "bri-mobile-audit"
+description: "Audit iOS and Android mobile applications against OWASP MASVS / MASTG \u2014 insecure storage, weak crypto, certificate pinning, deeplinks, IPC, jailbreak/root detection, reverse-engineering resistance. Use when the user mentions 'mobile security,' 'iOS security,' 'Android security,' 'mobile audit,' '..."
 ---
+
+# Bri Mobile Audit
+
+*Sourced from abdo453-hunterai*
 
 # Mobile Audit — iOS & Android Application Security Review
 
@@ -212,3 +215,4 @@ Write `findings.json` first and validate it; the markdown report is rendered fro
 - iOS App Programming Guide — Security
 - "iOS Application Security" — David Thiel
 - "Android Hacker's Handbook"
+

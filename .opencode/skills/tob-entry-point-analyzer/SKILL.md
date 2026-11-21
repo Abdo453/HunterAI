@@ -1,7 +1,11 @@
 ---
-name: tob-entry-point-analyzer
-description: Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level (public, admin, role-restricted, contract-only), and generates structured audit reports. Excludes view/pure/read-only functions. Use when auditing smart contracts (Solidity, Vyper, Solana/Rust, Move, TON, CosmWasm) or when asked to find entry points, audit flows, external functions, access control patterns, or privileged operations.
+name: "tob-entry-point-analyzer"
+description: "Analyzes smart contract codebases to identify state-changing entry points for security auditing. Detects externally callable functions that modify state, categorizes them by access level (public, admin, role-restricted, contract-only), and generates structured audit reports. Excludes view/pure/re..."
 ---
+
+# Tob Entry Point Analyzer
+
+*Sourced from abdo453-hunterai*
 
 # Entry Point Analyzer
 
@@ -262,3 +266,4 @@ If a file cannot be parsed:
 1. Note it in the report under "Analysis Warnings"
 2. Continue with remaining files
 3. Suggest manual review for unparsable files
+

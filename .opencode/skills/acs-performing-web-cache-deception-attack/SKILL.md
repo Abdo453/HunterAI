@@ -1,36 +1,11 @@
 ---
-name: acs-performing-web-cache-deception-attack
-description: Executes web cache deception attacks by exploiting path normalization
-  discrepancies between CDN/reverse-proxy caching layers (Cloudflare, Akamai, Varnish,
-  Nginx) and origin servers to cache and retrieve sensitive authenticated content.
-  Use when testing applications behind CDNs for cache-key misconfigurations, during
-  bug bounty hunting on aggressively cached sites, or when assessing sensitive data
-  exposure through cache layer misconfiguration.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- web-cache-deception
-- cdn-attack
-- cache-poisoning
-- path-normalization
-- cloudflare
-- cache-key
-- static-resource
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1078.004
+name: "acs-performing-web-cache-deception-attack"
+description: "Executes web cache deception attacks by exploiting path normalization"
 ---
+
+# Acs Performing Web Cache Deception Attack
+
+*Sourced from abdo453-hunterai*
 
 # Performing Web Cache Deception Attack
 
@@ -226,3 +201,4 @@ curl -s "http://target.com/account/profile/x.css" | grep -i "email\|name\|token\
 - Use path-based routing rules that reject unexpected extensions
 - Enable consistent path normalization between CDN and origin
 ```
+

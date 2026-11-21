@@ -1,25 +1,12 @@
 ---
-name: acs-coercing-authentication-with-coercer-petitpotam
-description: Trigger machine account authentication with PetitPotam (MS-EFSR) and Coercer (MS-RPRN, MS-DFSNM, MS-FSRVP, MS-EVEN) via Coercer's scan/coerce/fuzz modes, feeding the coerced NTLM auth into a relay against AD CS Web Enrollment (ESC8), LDAP (RBCD), or SMB. Use in authorized engagements to complete a coercion-relay chain against a Domain Controller, or to validate coercion detections and signing/EPA mitigations.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- active-directory
-- coercion
-- petitpotam
-- coercer
-- ntlm-relay
-- esc8
-- forced-authentication
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- DE.CM-01
-mitre_attack:
-- T1187
+name: "acs-coercing-authentication-with-coercer-petitpotam"
+description: "Trigger machine account authentication with PetitPotam (MS-EFSR) and Coercer (MS-RPRN, MS-DFSNM, MS-FSRVP, MS-EVEN) via Coercer's scan/coerce/fuzz modes, feeding the coerced NTLM auth into a relay against AD CS Web Enrollment (ESC8), LDAP (RBCD), or SMB. Use in authorized engagements to complete ..."
 ---
+
+# Acs Coercing Authentication With Coercer Petitpotam
+
+*Sourced from abdo453-hunterai*
+
 # Coercing Authentication with Coercer and PetitPotam
 
 > **Legal Notice:** This skill is for authorized security testing and educational purposes only. Authentication coercion combined with NTLM relay can yield domain compromise. Use only against systems you own or have explicit written authorization to test. Unauthorized use is illegal.
@@ -173,3 +160,4 @@ coercer fuzz -u 'attacker' -p 'Passw0rd!' -d corp.local \
 - [ ] (ESC8) DC certificate used to authenticate and DCSync demonstrated
 - [ ] Coercible methods documented with affected host and patch recommendation
 - [ ] Relay mitigations (SMB/LDAP signing, EPA, RPC filters) validated or flagged
+

@@ -1,31 +1,11 @@
 ---
-name: acs-performing-security-headers-audit
-description: Auditing HTTP security headers including CSP, HSTS, X-Frame-Options,
-  and cookie attributes to identify missing or misconfigured browser-level protections.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- security-headers
-- csp
-- hsts
-- owasp
-- web-security
-- hardening
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
+name: "acs-performing-security-headers-audit"
+description: "Auditing HTTP security headers including CSP, HSTS, X-Frame-Options,"
 ---
+
+# Acs Performing Security Headers Audit
+
+*Sourced from abdo453-hunterai*
 
 # Performing Security Headers Audit
 
@@ -323,3 +303,4 @@ No HSTS header is present. An attacker on the network can perform an SSL strippi
 6. **Low**: Remove Server and X-Powered-By version information
 7. **Low**: Add Permissions-Policy to restrict unused browser features
 ```
+

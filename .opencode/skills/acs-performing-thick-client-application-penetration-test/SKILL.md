@@ -1,41 +1,11 @@
 ---
-name: acs-performing-thick-client-application-penetration-test
-description: Conduct a thick client application penetration test to identify insecure
-  local storage, hardcoded credentials, DLL hijacking, memory manipulation, and insecure
-  API communication in desktop applications using dnSpy, Procmon, and Burp Suite.
-domain: cybersecurity
-subdomain: penetration-testing
-tags:
-- thick-client
-- desktop-application
-- dnSpy
-- Procmon
-- DLL-hijacking
-- binary-analysis
-- API-interception
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_ai_rmf:
-- MEASURE-2.7
-- MAP-5.1
-- MANAGE-2.4
-atlas_techniques:
-- AML.T0070
-- AML.T0066
-- AML.T0082
-nist_csf:
-- ID.RA-01
-- ID.RA-06
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
-- T1003
+name: "acs-performing-thick-client-application-penetration-test"
+description: "Conduct a thick client application penetration test to identify insecure"
 ---
+
+# Acs Performing Thick Client Application Penetration Test
+
+*Sourced from abdo453-hunterai*
 
 # Performing Thick Client Application Penetration Test
 
@@ -269,3 +239,4 @@ strings process_dump.dmp | findstr -i "password\|token\|session\|bearer"
 - OWASP Thick Client Testing Guide: https://owasp.org/www-project-thick-client-top-10/
 - Ghidra: https://ghidra-sre.org/
 - Echo Mirage: https://sourceforge.net/projects/echomirage/
+

@@ -1,13 +1,11 @@
 ---
-name: tob-post-patch-validation
-description: >
-  Validates security patches with reproducible baseline-versus-patched evidence, including
-  original exploits, root-cause variants, behavior preservation, regressions, and newly
-  introduced security failures. Use after a patch exists and before accepting, merging, or
-  reporting it as fixed; also use when an AI-generated patch, remediation commit, pull request,
-  or proposed upstream fix needs adversarial post-patch validation across any language.
-allowed-tools: Read Write Edit Grep Glob Bash Workflow
+name: "tob-post-patch-validation"
+description: ">"
 ---
+
+# Tob Post Patch Validation
+
+*Sourced from abdo453-hunterai*
 
 # Post-Patch Validation
 
@@ -259,3 +257,4 @@ The workflow cannot ask questions after launch, so pass every input up front.
 | "All supplied checks passed" | Preserve artifacts and require human review |
 | "A flaky rerun passed" | Keep the first pinned result; fix nondeterminism before retrying |
 | "There is no obvious variant" | Inspect sibling sites and boundaries; otherwise report the missing coverage |
+

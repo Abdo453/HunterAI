@@ -1,34 +1,11 @@
 ---
-name: acs-performing-aws-privilege-escalation-assessment
-description: 'Performing authorized privilege escalation assessments in AWS environments
-  to identify IAM misconfigurations that allow users or roles to elevate their permissions
-  using Pacu, CloudFox, Principal Mapper, and manual IAM policy analysis techniques.
-
-  '
-domain: cybersecurity
-subdomain: cloud-security
-tags:
-- cloud-security
-- aws
-- privilege-escalation
-- iam
-- pacu
-- offensive-security
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.IR-01
-- ID.AM-08
-- GV.SC-06
-- DE.CM-01
-mitre_attack:
-- T1078.004
-- T1530
-- T1537
-- T1580
-- T1068
+name: "acs-performing-aws-privilege-escalation-assessment"
+description: "Performing authorized privilege escalation assessments in AWS environments"
 ---
+
+# Acs Performing Aws Privilege Escalation Assessment
+
+*Sourced from abdo453-hunterai*
 
 # Performing AWS Privilege Escalation Assessment
 
@@ -289,3 +266,4 @@ TOTAL ESCALATION PATHS: 4 (2 Critical, 1 High, 1 Medium)
 PERMISSION BOUNDARIES IN PLACE: 0 / 47 IAM principals
 SCP GUARDRAILS BLOCKING ESCALATION: 0 / 3 tested vectors
 ```
+

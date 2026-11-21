@@ -1,36 +1,12 @@
 ---
-name: acs-scanning-network-with-nmap-advanced
-description: 'Performs advanced network recon using Nmap''s Scripting Engine (NSE),
-  timing controls, firewall/IDS evasion, and structured output parsing to discover
-  hosts, enumerate service versions, detect vulnerabilities, and fingerprint OSes.
-  Use during authorized penetration tests or enterprise asset-discovery assessments
-  needing scan evasion, NSE vulnerability checks, or output fed into a vulnerability
-  management pipeline.
-
-  '
-domain: cybersecurity
-subdomain: network-security
-tags:
-- network-security
-- nmap
-- port-scanning
-- service-enumeration
-- reconnaissance
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.IR-01
-- DE.CM-01
-- ID.AM-03
-- PR.DS-02
-mitre_attack:
-- T1046
-- T1040
-- T1557
-- T1071
-- T1595
+name: "acs-scanning-network-with-nmap-advanced"
+description: "Performs advanced network recon using Nmap''s Scripting Engine (NSE),"
 ---
+
+# Acs Scanning Network With Nmap Advanced
+
+*Sourced from abdo453-hunterai*
+
 # Scanning Network with Nmap Advanced Techniques
 
 ## When to Use
@@ -213,3 +189,4 @@ nmap-parse-output full_tcp_scan.xml csv > scan_results.csv
 3. Upgrade MySQL to 8.0.x on 10.10.12.5 and restrict bind address
 4. Change SNMP community strings from "public" on 10.10.3.77
 ```
+

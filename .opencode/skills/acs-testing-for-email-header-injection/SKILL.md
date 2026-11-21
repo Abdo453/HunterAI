@@ -1,35 +1,11 @@
 ---
-name: acs-testing-for-email-header-injection
-description: Tests web application email functionality (contact forms, password reset,
-  newsletter subscriptions) for CRLF/SMTP header injection using Burp Suite and OWASP ZAP,
-  checking whether attackers can inject headers, modify recipients, or abuse forms for
-  spam relay. Use when testing any user-input-driven email-sending feature during a
-  penetration test.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- email-injection
-- smtp-injection
-- crlf-injection
-- header-injection
-- spam-relay
-- contact-form
-- email-security
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1055
+name: "acs-testing-for-email-header-injection"
+description: "Tests web application email functionality (contact forms, password reset,"
 ---
+
+# Acs Testing For Email Header Injection
+
+*Sourced from abdo453-hunterai*
 
 # Testing for Email Header Injection
 
@@ -232,3 +208,4 @@ curl -X POST http://target.com/api/send-email \
 - Use parameterized email APIs that separate headers from data
 - Implement rate limiting on email-sending functionality
 ```
+

@@ -168,3 +168,127 @@ class WebSocketSecurityAgent:
             vulnerability_detected=is_vuln,
             details="; ".join(details_list) if details_list else "Frame authorization verified."
         )
+
+
+class BinaryFramedProtocolCodec:
+    """
+    Stateful Binary WebSocket Framing Codec (Pomelo / Pinus / Custom Binary Framing).
+    Enables the agent to understand, reassemble, encode, and decode binary-framed
+    WebSocket streams:
+      - 4-byte outer framing: [1-byte pkg_type][3-byte big-endian payload length]
+      - Partial stream buffer reassembly across fragmented TCP/WS reads
+      - Inner message framing: [1-byte flag (msg_type << 1 | compress)][varint req_id][route][JSON/binary body]
+      - Identity claim correlation (JWT subject vs external UID parameter)
+    """
+
+    PKG_HANDSHAKE = 1
+    PKG_HANDSHAKE_ACK = 2
+    PKG_HEARTBEAT = 3
+    PKG_DATA = 4
+    PKG_KICK = 5
+
+    MSG_REQUEST = 0
+    MSG_NOTIFY = 1
+    MSG_RESPONSE = 2
+    MSG_PUSH = 3
+    MSG_NAMES = {0: "request", 1: "notify", 2: "response", 3: "push"}
+
+    @staticmethod
+    def encode_package(pkg_type: int, body: bytes = b"") -> bytes:
+        n = len(body)
+        return bytes([pkg_type & 0xFF, (n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF]) + body
+
+    @staticmethod
+    def encode_varint(n: int) -> bytes:
+        out = bytearray()
+        while True:
+            b = n & 0x7F
+            n >>= 7
+            if n > 0:
+                b |= 0x80
+            out.append(b)
+            if n == 0:
+                return bytes(out)
+
+    @staticmethod
+    def decode_varint(buf: bytes, offset: int) -> Tuple[int, int]:
+        n = 0
+        shift = 0
+        while offset < len(buf):
+            b = buf[offset]
+            offset += 1
+            n |= (b & 0x7F) << shift
+            if b < 0x80:
+                return n, offset
+            shift += 7
+            if shift > 63:
+                raise ValueError("varint overflow")
+        raise ValueError("truncated varint")
+
+    @classmethod
+    def encode_request(cls, req_id: int, route: str, payload: Dict[str, Any]) -> bytes:
+        route_b = route.encode("utf-8")
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        head = bytes([cls.MSG_REQUEST << 1]) + cls.encode_varint(req_id) + bytes([len(route_b)]) + route_b
+        return cls.encode_package(cls.PKG_DATA, head + body)
+
+    @staticmethod
+    def decode_packages_from_buffer(buf: bytearray) -> Tuple[List[Tuple[int, bytes]], int]:
+        out: List[Tuple[int, bytes]] = []
+        i = 0
+        while i + 4 <= len(buf):
+            pkg_type = buf[i]
+            n = (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3]
+            end = i + 4 + n
+            if end > len(buf):
+                break
+            out.append((pkg_type, bytes(buf[i + 4:end])))
+            i = end
+        return out, i
+
+    @classmethod
+    def decode_message(cls, buf: bytes) -> Dict[str, Any]:
+        if not buf:
+            return {"type": "empty", "req_id": None, "route": None, "body": None}
+        flag = buf[0]
+        msg_type = (flag >> 1) & 0x7
+        compress = flag & 0x1
+        offset = 1
+        req_id: Optional[int] = None
+        route: Optional[str] = None
+
+        if msg_type in (cls.MSG_REQUEST, cls.MSG_RESPONSE):
+            req_id, offset = cls.decode_varint(buf, offset)
+
+        if msg_type in (cls.MSG_REQUEST, cls.MSG_NOTIFY, cls.MSG_PUSH):
+            if compress:
+                if offset + 2 > len(buf):
+                    raise ValueError("truncated compressed route")
+                route = str((buf[offset] << 8) | buf[offset + 1])
+                offset += 2
+            else:
+                if offset >= len(buf):
+                    raise ValueError("truncated route length")
+                rlen = buf[offset]
+                offset += 1
+                if offset + rlen > len(buf):
+                    raise ValueError("truncated route bytes")
+                route = buf[offset:offset + rlen].decode("utf-8", "replace")
+                offset += rlen
+
+        body_bytes = buf[offset:]
+        if not body_bytes:
+            body: Any = None
+        else:
+            try:
+                body = json.loads(body_bytes.decode("utf-8"))
+            except Exception:
+                body = {"_raw_hex": body_bytes.hex(), "_len": len(body_bytes)}
+
+        return {
+            "type": cls.MSG_NAMES.get(msg_type, f"msg_{msg_type}"),
+            "req_id": req_id,
+            "route": route,
+            "body": body,
+        }
+

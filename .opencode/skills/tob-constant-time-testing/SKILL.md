@@ -1,8 +1,11 @@
 ---
-name: tob-constant-time-testing
-type: domain
-description: "Measures timing side channels in cryptographic implementations by running them, using dudect for statistical analysis and Timecop over Valgrind for dynamic tracing. Covers the formal, symbolic, dynamic, and statistical tool categories and how to read a result. Use when testing whether a running implementation is constant-time, measuring timing variance on a compiled binary, or investigating a suspected timing attack. Not for statically inspecting compiler output — the constant-time-analysis plugin covers that."
+name: "tob-constant-time-testing"
+description: "Measures timing side channels in cryptographic implementations by running them, using dudect for statistical analysis and Timecop over Valgrind for dynamic tracing. Covers the formal, symbolic, dynamic, and statistical tool categories and how to read a result. Use when testing whether a running i..."
 ---
+
+# Tob Constant Time Testing
+
+*Sourced from abdo453-hunterai*
 
 # Constant-Time Testing
 
@@ -503,3 +506,4 @@ Recent discovery of timing vulnerabilities in Kyber (NIST post-quantum standard)
 ### Video Resources
 
 - [Trail of Bits: Constant-Time Programming](https://www.youtube.com/watch?v=vW6wqTzfz5g) - Overview of constant-time programming principles and tools
+

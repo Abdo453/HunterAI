@@ -1,0 +1,12 @@
+{
+  "name": "arsenal",
+  "pulled": [
+    "nuclei(14.5k templates)",
+    "payloads(all classes)",
+    "waf-bypass"
+  ],
+  "kali_builtins": [
+    "/usr/share/exploitdb (290MB full public exploit archive)",
+    "/usr/share/wordlists (seclists, rockyou, metasploit, wfuzz, dirb)"
+  ]
+}

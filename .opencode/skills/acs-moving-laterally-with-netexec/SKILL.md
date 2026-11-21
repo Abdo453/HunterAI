@@ -1,25 +1,12 @@
 ---
-name: acs-moving-laterally-with-netexec
-description: Use NetExec (nxc) to validate credentials, enumerate SMB shares/users/policy, password-spray safely across lockout thresholds, execute commands, and dump SAM/LSA/NTDS credentials across SMB, WinRM, LDAP, MSSQL, SSH, and other protocol modules. Use during authorized internal penetration tests to find lateral-movement paths after obtaining credentials or hashes, or to conduct controlled password spraying and post-exploitation on in-scope hosts.
-domain: cybersecurity
-subdomain: penetration-testing
-tags:
-- netexec
-- lateral-movement
-- smb
-- password-spraying
-- credential-access
-- active-directory
-- winrm
-- post-exploitation
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- DE.CM-01
-mitre_attack:
-- T1021.002
+name: "acs-moving-laterally-with-netexec"
+description: "Use NetExec (nxc) to validate credentials, enumerate SMB shares/users/policy, password-spray safely across lockout thresholds, execute commands, and dump SAM/LSA/NTDS credentials across SMB, WinRM, LDAP, MSSQL, SSH, and other protocol modules. Use during authorized internal penetration tests to f..."
 ---
+
+# Acs Moving Laterally With Netexec
+
+*Sourced from abdo453-hunterai*
+
 # Moving Laterally with NetExec
 
 > **Authorized Use Only:** This skill is for authorized penetration testing, red-team engagements, and educational labs only. NetExec authenticates to, executes code on, and extracts credentials from remote hosts. Running it against systems you do not own or lack explicit written authorization to test is illegal under computer-misuse laws (e.g. the US CFAA, UK Computer Misuse Act). Confirm scope and rules of engagement before use.
@@ -197,3 +184,4 @@ nxc smb 192.168.1.0/24 -u jsmith -p 'Summer2025!' --shares --log spray_results.l
 - [ ] Credential dumping (`--sam`/`--lsa`/`--ntds`) performed only on authorized targets.
 - [ ] LDAP attacks (Kerberoasting/ASREPRoast/LAPS/BloodHound) executed where in scope.
 - [ ] Workspace results exported and included in the engagement report.
+

@@ -1,8 +1,11 @@
 ---
-name: bri-scanner-pipeline
-description: "Set up and run deterministic security scanners across a repo or a whole fleet of repos — gitleaks, trufflehog, semgrep, osv-scanner, trivy, checkov, Brakeman, govulncheck, Supabase advisors, and (guarded) nuclei/ZAP — then normalize their output to findings.json or SARIF, dedupe, suppress with expiry, schedule in CI, and hand findings to fix agents. Use when the user mentions 'run scanners,' 'security scanning pipeline,' 'set up gitleaks,' 'betterleaks in CI,' 'semgrep in CI,' 'osv-scanner,' 'trivy fs,' 'SARIF,' 'code scanning,' 'scan all my repos,' 'security-scan workflow,' 'weekly security scan,' 'Supabase RLS advisor,' 'dedupe scanner findings,' 'suppression file,' 'stop asking Claude to hack my app,' or wants tools, not an agent, to find the bugs."
-allowed-tools: Read, Grep, Glob, Write, Bash(gitleaks:*), Bash(betterleaks version), Bash(betterleaks git . --validate=false --analyze=false --redact --silent -o .security/out/betterleaks.json), Bash(osv-scanner scan:*), Bash(trivy fs:*), Bash(trivy image:*), Bash(trivy config:*), Bash(checkov:*), Bash(bundle-audit:*), Bash(brakeman:*), Bash(gosec:*), Bash(govulncheck:*), Bash(gh repo list:*)
+name: "bri-scanner-pipeline"
+description: "Set up and run deterministic security scanners across a repo or a whole fleet of repos \u2014 gitleaks, trufflehog, semgrep, osv-scanner, trivy, checkov, Brakeman, govulncheck, Supabase advisors, and (guarded) nuclei/ZAP \u2014 then normalize their output to findings.json or SARIF, dedupe, suppress with ex..."
 ---
+
+# Bri Scanner Pipeline
+
+*Sourced from abdo453-hunterai*
 
 # Scanner Pipeline — Run the Real Tools, Normalize, Hand Off
 
@@ -233,3 +236,4 @@ Optional scaffolds: `.github/workflows/security-scan.yml`, `.gitleaks.toml` (ext
 - [Supabase database advisors](https://supabase.com/docs/guides/database/database-advisors) and [Splinter](https://github.com/supabase/splinter); [`supabase db lint`](https://supabase.com/docs/reference/cli/supabase-db-lint)
 - [GitHub — uploading SARIF](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github)
 - Idea source: @neilsuperduper, 2026-10-25 (paraphrased) — run real tools per layer and hand their findings to agents to fix; issue #84
+

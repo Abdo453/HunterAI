@@ -1,37 +1,12 @@
 ---
-name: acs-performing-ssl-tls-security-assessment
-description: >-
-  Assess SSL/TLS server configurations using the sslyze Python scanning
-  library to evaluate supported protocol versions, cipher suite strength,
-  certificate chain validation, HSTS enforcement, OCSP stapling, and known
-  vulnerabilities such as Heartbleed and ROBOT. Use when conducting a security
-  assessment of a server's TLS configuration or verifying remediation of
-  cipher/certificate weaknesses.
-domain: cybersecurity
-subdomain: network-security
-tags:
-- network-security
-- ssl
-- tls
-- sslyze
-- certificate
-- cipher-suites
-- vulnerability-assessment
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.IR-01
-- DE.CM-01
-- ID.AM-03
-- PR.DS-02
-mitre_attack:
-- T1046
-- T1040
-- T1557
-- T1071
-- T1553
+name: "acs-performing-ssl-tls-security-assessment"
+description: ">-"
 ---
+
+# Acs Performing Ssl Tls Security Assessment
+
+*Sourced from abdo453-hunterai*
+
 # Performing SSL/TLS Security Assessment
 
 ## Overview
@@ -69,3 +44,4 @@ Produce a JSON report with compliance findings and remediation recommendations.
 ## Expected Output
 
 JSON report with supported protocols, accepted cipher suites, certificate details, vulnerability results (Heartbleed, ROBOT), and HSTS status.
+

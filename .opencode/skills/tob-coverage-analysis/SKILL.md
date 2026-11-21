@@ -1,8 +1,11 @@
 ---
-name: tob-coverage-analysis
-type: technique
-description: "Measures and interprets what a fuzzing campaign actually reaches, using llvm-cov, lcov, or a fuzzer's own coverage output. Covers baselining a new campaign, reading coverage reports, and turning uncovered regions into harness, seed, or dictionary work. Use when a fuzzer plateaus, when judging whether a harness is effective, after changing a harness, or when asking why some code is never reached."
+name: "tob-coverage-analysis"
+description: "Measures and interprets what a fuzzing campaign actually reaches, using llvm-cov, lcov, or a fuzzer's own coverage output. Covers baselining a new campaign, reading coverage reports, and turning uncovered regions into harness, seed, or dictionary work. Use when a fuzzer plateaus, when judging whe..."
 ---
+
+# Tob Coverage Analysis
+
+*Sourced from abdo453-hunterai*
 
 # Coverage Analysis
 
@@ -602,3 +605,4 @@ Research paper examining limitations of coverage as a fuzzing performance metric
 ### Video Resources
 
 Not applicable - coverage analysis is primarily a tooling and workflow topic best learned through documentation and hands-on practice.
+

@@ -1,36 +1,11 @@
 ---
-name: acs-performing-active-directory-penetration-test
-description: Conduct a focused Active Directory penetration test using BloodHound,
-  Impacket, Certipy, Rubeus, and NetExec to enumerate domain objects, discover attack
-  paths, exploit Kerberos weaknesses, escalate privileges via ADCS/DCSync, and demonstrate
-  domain compromise. Use when running an authorized AD pentest from a standard domain
-  user foothold toward Domain Admin or Enterprise Admin.
-domain: cybersecurity
-subdomain: penetration-testing
-tags:
-- active-directory
-- BloodHound
-- Kerberoasting
-- Impacket
-- DCSync
-- ADCS
-- domain-compromise
-- privilege-escalation
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- ID.RA-06
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
-- T1068
+name: "acs-performing-active-directory-penetration-test"
+description: "Conduct a focused Active Directory penetration test using BloodHound,"
 ---
+
+# Acs Performing Active Directory Penetration Test
+
+*Sourced from abdo453-hunterai*
 
 # Performing Active Directory Penetration Test
 
@@ -288,3 +263,4 @@ mimikatz# misc::skeleton
 - HackTricks AD: https://book.hacktricks.wiki/en/windows-hardening/active-directory-methodology/index.html
 - SpecterOps AD Security: https://specterops.io/blog/
 - MITRE ATT&CK: https://attack.mitre.org/
+

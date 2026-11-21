@@ -1,33 +1,12 @@
 ---
-name: acs-testing-for-xss-vulnerabilities
-description: Tests web applications for reflected, stored, and DOM-based Cross-Site
-  Scripting by injecting JavaScript payloads with Burp Suite (XSS extensions, Active
-  Scan++) and browser tools, then bypassing sanitization and CSP to demonstrate session
-  hijacking and user impersonation. Use for OWASP WSTG client-side injection testing or
-  when evaluating input sanitization and output encoding coverage.
-domain: cybersecurity
-subdomain: penetration-testing
-tags:
-- XSS
-- cross-site-scripting
-- client-side-security
-- OWASP-A03
-- JavaScript-injection
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- ID.RA-06
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
-- T1055
+name: "acs-testing-for-xss-vulnerabilities"
+description: "Tests web applications for reflected, stored, and DOM-based Cross-Site"
 ---
+
+# Acs Testing For Xss Vulnerabilities
+
+*Sourced from abdo453-hunterai*
+
 # Testing for XSS Vulnerabilities
 
 ## When to Use
@@ -199,3 +178,4 @@ refunds, and modify orders. Affects all 23 support agents who view customer tick
 3. Set HttpOnly flag on session cookies to prevent JavaScript access
 4. Sanitize HTML input server-side using a whitelist approach (allow only safe tags)
 ```
+

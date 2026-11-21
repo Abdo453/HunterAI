@@ -1,7 +1,11 @@
 ---
-name: abh-web2-recon
-description: Web2 recon pipeline — subdomain enumeration (subfinder, Chaos API, assetfinder), live host discovery (dnsx, httpx), URL crawling (katana, waybackurls, gau), directory fuzzing (ffuf), JS analysis (LinkFinder, SecretFinder), continuous monitoring (new subdomain alerts, JS change detection, GitHub commit watch). Use when starting recon on any web2 target or when asked about asset discovery, subdomain enum, or attack surface mapping.
+name: "abh-web2-recon"
+description: "Web2 recon pipeline \u2014 subdomain enumeration (subfinder, Chaos API, assetfinder), live host discovery (dnsx, httpx), URL crawling (katana, waybackurls, gau), directory fuzzing (ffuf), JS analysis (LinkFinder, SecretFinder), continuous monitoring (new subdomain alerts, JS change detection, GitHub c..."
 ---
+
+# Abh Web2 Recon
+
+*Sourced from abdo453-hunterai*
 
 # WEB2 RECON PIPELINE
 
@@ -624,3 +628,4 @@ Priority 3: OAuth/SSO flows → auth bypass candidates
 Priority 4: Search/filter with user input → SQLi/SSRF/SSTI candidates
 Priority 5: Admin/debug endpoints → auth bypass candidates
 ```
+

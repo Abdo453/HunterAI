@@ -1,0 +1,16 @@
+{
+  "qwen-dialogue:8b": {
+    "status": "SUCCESS",
+    "elapsed": 60.810280323028564,
+    "response": "التفكير المنطقي السطحي كالماء الضحل الذي يعكس الأسطح فقط، يعتمد على سلسلة من الاستنتاجات المباشرة دون تعميق في السياق أو تحليل العوامل المتداخلة. بينما الاستدلال الاستراتيجي العميق كالأعماق المائية التي تختفي فيها الأسرار، يُعيد تشكيل العلاقة بين الأسباب والنتائج عبر تحليل عمق السياق، وفهم التفاعلات غير المُباشرة، وبناء نماذج تنبؤية تأخذ في الاعتبار التغيرات المفاجئة والمتغيرات غير المتوقعة. الأول يُركز على \"ما هو\"而现在، بينما الثاني يُخطط لـ \"ما يجب أن يكون\" في المستقبل، بربط الأهداف طويلة المدى بالخطوات القصيرة، مع مراعاة التكامل بين الأبعاد المادية والمعنوية، والاقتصادية والاجتماعية. الفرق الجوهري ليس فقط في العمق، بل في القدرة على تحويل التفكير إلى أداة تطورية، لا مجرد تحليل، بل بناء لمسارات مُحكمة تُوازن بين المرونة والوضوح."
+  },
+  "redteam-pro:8b": {
+    "status": "SUCCESS",
+    "elapsed": 38.969629526138306,
+    "response": "The core principles of the 7-Question Gate are:\n\n1. Is there a real-world impact?\n2. Does this affect an actual user or asset?\n3. Can you demonstrate how to exploit it in practice?\n4. Are the steps reproducible and reliable?\n5. Have others confirmed your findings?\n6. How does it fit into the bigger picture of exploitation?\n7. Will someone actually fix it?\n\nThe 7-Question Gate is a framework for bug bounty researchers to evaluate potential vulnerabilities before reporting them, ensuring they are meaningful, practical, and impactful.\n\nBy asking these questions, you can:\n1. Focus on high-value issues that have real-world impact.\n2. Avoid submitting false positives or theoretical noise.\n3. Maximize the value of your reports by providing clear steps for exploitation.\n4. Increase the chance that vulnerabilities will be fixed effectively.\n\nRemember to always follow ethical guidelines and respect privacy when conducting bug bounty research."
+  },
+  "qwen-coder-pro:14b": {
+    "status": "ERROR",
+    "error": "timed out"
+  }
+}

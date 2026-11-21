@@ -1,8 +1,11 @@
 ---
-name: tob-ossfuzz
-type: technique
-description: "Enrolls a project in OSS-Fuzz, Google's free continuous fuzzing service for open source, and drives it locally. Covers project.yaml, Dockerfile and build.sh setup, the helper scripts, reproducing OSS-Fuzz crash reports, and the acceptance criteria. Use when setting up continuous fuzzing for an open-source project, reproducing an OSS-Fuzz bug report, or testing an OSS-Fuzz build before submitting it."
+name: "tob-ossfuzz"
+description: "Enrolls a project in OSS-Fuzz, Google's free continuous fuzzing service for open source, and drives it locally. Covers project.yaml, Dockerfile and build.sh setup, the helper scripts, reproducing OSS-Fuzz crash reports, and the acceptance criteria. Use when setting up continuous fuzzing for an op..."
 ---
+
+# Tob Ossfuzz
+
+*Sourced from abdo453-hunterai*
 
 # OSS-Fuzz
 
@@ -423,3 +426,4 @@ Examples and explanations of using Fuzz Introspector to analyze coverage and ide
 ### Video Resources
 
 Check OSS-Fuzz documentation for workshop recordings and tutorials on enrollment and harness development.
+

@@ -1,25 +1,12 @@
 ---
-name: acs-operating-sliver-c2
-description: Stand up a Sliver C2 server and mTLS listeners, generate cross-platform implants and beacons, and run post-exploitation, pivoting, and BOF/.NET tooling via the Armory for adversary emulation. Use during authorized, rules-of-engagement-bound red-team engagements that need a full open-source C2 lifecycle spanning server setup, implant generation, and post-exploitation tradecraft.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- command-and-control
-- sliver
-- adversary-emulation
-- implant
-- post-exploitation
-- pivoting
-- mtls
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- DE.CM-01
-mitre_attack:
-- T1071.001
+name: "acs-operating-sliver-c2"
+description: "Stand up a Sliver C2 server and mTLS listeners, generate cross-platform implants and beacons, and run post-exploitation, pivoting, and BOF/.NET tooling via the Armory for adversary emulation. Use during authorized, rules-of-engagement-bound red-team engagements that need a full open-source C2 lif..."
 ---
+
+# Acs Operating Sliver C2
+
+*Sourced from abdo453-hunterai*
+
 # Operating Sliver C2
 
 > **Legal Notice:** This skill is for authorized security testing, red-team engagements, and educational purposes only. Operating a command-and-control framework against systems you do not own or lack explicit written authorization to test is illegal and may violate computer fraud, wiretap, and abuse statutes. Always work within a signed rules-of-engagement document.
@@ -302,3 +289,4 @@ sliver > implants rm IMPLANT_NAME
 - [ ] An armory extension is installed and executed in-memory
 - [ ] A SOCKS proxy or port-forward is established for pivoting
 - [ ] Implants killed, listeners stopped, and artifacts removed at cleanup
+

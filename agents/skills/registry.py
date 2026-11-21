@@ -350,6 +350,12 @@ def bootstrap_builtin_skills() -> SkillRegistry:
     from agents.skills.prototype_pollution_skill import PrototypePollutionSkill
     from agents.skills.path_traversal_skill import PathTraversalSkill
     from agents.skills.jwt_advanced_skill import JWTAdvancedSkill
+    from agents.skills.deserialization_skill import DeserializationSkill
+    from agents.skills.subdomain_takeover_skill import SubdomainTakeoverSkill
+    from agents.skills.mass_assignment_skill import MassAssignmentSkill
+    from agents.skills.bfla_auth_bypass_skill import BFLAAuthBypassSkill
+    from agents.skills.web_cache_deception_skill import WebCacheDeceptionSkill
+    from agents.skills.llm_prompt_injection_skill import LLMPromptInjectionSkill
 
     reg.register_class(HTTPSmugglingSkill, param_keywords=["api", "endpoint", "v1", "v2", "service"])
     reg.register_class(CachePoisoningSkill, param_keywords=["host", "url", "path", "page", "resource"])
@@ -357,6 +363,12 @@ def bootstrap_builtin_skills() -> SkillRegistry:
     reg.register_class(PrototypePollutionSkill, param_keywords=["config", "options", "data", "settings", "json", "__proto__"])
     reg.register_class(PathTraversalSkill, param_keywords=["file", "path", "doc", "document", "page", "include", "template", "view", "read", "dir", "filename"])
     reg.register_class(JWTAdvancedSkill, param_keywords=["token", "jwt", "access_token", "auth", "authorization", "bearer"])
+    reg.register_class(DeserializationSkill, param_keywords=["state", "viewstate", "data", "payload", "serialized", "obj", "session_data", "yaml"])
+    reg.register_class(SubdomainTakeoverSkill, param_keywords=["subdomain", "domain", "cname", "host", "origin"])
+    reg.register_class(MassAssignmentSkill, param_keywords=["role", "admin", "is_admin", "isadmin", "permission", "profile", "account", "plan"])
+    reg.register_class(BFLAAuthBypassSkill, param_keywords=["action", "method", "admin", "cmd", "op", "function"])
+    reg.register_class(WebCacheDeceptionSkill, param_keywords=["cache", "format", "ext", "type"])
+    reg.register_class(LLMPromptInjectionSkill, param_keywords=["prompt", "instruction", "system_prompt", "assistant", "completion", "chat", "message"])
 
     return reg
 

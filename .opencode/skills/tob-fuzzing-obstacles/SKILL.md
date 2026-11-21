@@ -1,8 +1,11 @@
 ---
-name: tob-fuzzing-obstacles
-type: technique
-description: "Patches past the barriers that stop a fuzzer making progress — checksum and hash verification, magic-value validation, time-based seeds, and other non-deterministic global state. Covers locating the blocking check, neutering it behind a fuzzing build flag, and avoiding the false positives a patch can introduce. Use when a fuzzer is stuck at validation, when coverage shows large regions behind a checksum, or when valid inputs are impractical to generate."
+name: "tob-fuzzing-obstacles"
+description: "Patches past the barriers that stop a fuzzer making progress \u2014 checksum and hash verification, magic-value validation, time-based seeds, and other non-deterministic global state. Covers locating the blocking check, neutering it behind a fuzzing build flag, and avoiding the false positives a patch..."
 ---
+
+# Tob Fuzzing Obstacles
+
+*Sourced from abdo453-hunterai*
 
 # Overcoming Fuzzing Obstacles
 
@@ -422,3 +425,4 @@ Official LLVM documentation for libFuzzer, including how the fuzzer defines comp
 
 **[Rust cfg Attribute Reference](https://doc.rust-lang.org/reference/conditional-compilation.html)**
 Complete reference for Rust conditional compilation, including `cfg!(fuzzing)` and `cfg!(test)`. Explains compile-time vs. runtime conditional compilation and best practices.
+

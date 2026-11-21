@@ -1,30 +1,11 @@
 ---
-name: acs-analyzing-ethereum-smart-contract-vulnerabilities
-description: Perform static and symbolic analysis of Solidity smart contracts using
-  Slither and Mythril to detect reentrancy, integer overflow, access control, and
-  other vulnerability classes before deployment to Ethereum mainnet.
-domain: cybersecurity
-subdomain: blockchain-security
-tags:
-- ethereum
-- solidity
-- smart-contract
-- slither
-- mythril
-- blockchain
-- defi
-- audit
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.DS-01
-- PR.DS-02
-- ID.RA-01
-mitre_attack:
-- T1190
-- T1059
+name: "acs-analyzing-ethereum-smart-contract-vulnerabilities"
+description: "Perform static and symbolic analysis of Solidity smart contracts using"
 ---
+
+# Acs Analyzing Ethereum Smart Contract Vulnerabilities
+
+*Sourced from abdo453-hunterai*
 
 # Analyzing Ethereum Smart Contract Vulnerabilities
 
@@ -69,3 +50,4 @@ Produce a structured audit report with vulnerability descriptions, affected code
 ## Expected Output
 
 JSON report listing vulnerabilities with SWC (Smart Contract Weakness Classification) identifiers, severity ratings, affected functions, and suggested fixes.
+

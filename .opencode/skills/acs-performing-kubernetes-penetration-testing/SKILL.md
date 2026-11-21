@@ -1,35 +1,12 @@
 ---
-name: acs-performing-kubernetes-penetration-testing
-description: >-
-  Evaluates Kubernetes cluster security by actively simulating attacker techniques against the
-  API server, kubelet, etcd, pods, RBAC, network policy, and secrets, using kube-hunter,
-  Kubescape, peirates, and manual kubectl exploitation to find paths to cluster compromise.
-  Use for an authorized penetration test or hands-on validation that controls actually stop an
-  attacker. Keywords: kube-hunter, Kubescape, peirates, kubelet 10250, anonymous auth, token
-  theft, lateral movement, cluster takeover. Do not use for a configuration-only compliance
-  audit - use performing-kubernetes-cis-benchmark-with-kube-bench.
-domain: cybersecurity
-subdomain: container-security
-tags:
-- containers
-- kubernetes
-- security
-- penetration-testing
-- offensive-security
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- PR.IR-01
-- ID.AM-08
-- DE.CM-01
-mitre_attack:
-- T1610
-- T1611
-- T1609
-- T1525
+name: "acs-performing-kubernetes-penetration-testing"
+description: ">-"
 ---
+
+# Acs Performing Kubernetes Penetration Testing
+
+*Sourced from abdo453-hunterai*
+
 # Performing Kubernetes Penetration Testing
 
 ## Overview
@@ -284,3 +261,4 @@ kubectl delete pod test-netpol test-egress test-metadata
 - [kube-bench - CIS Benchmark](https://github.com/aquasecurity/kube-bench)
 - [MITRE ATT&CK Containers Matrix](https://attack.mitre.org/matrices/enterprise/containers/)
 - [Kubernetes Threat Matrix - Microsoft](https://microsoft.github.io/Threat-Matrix-for-Kubernetes/)
+

@@ -1,7 +1,11 @@
 ---
-name: tob-validate-bug
-description: Use when a bug PoC package needs an independent rerun and judgment before patching.
+name: "tob-validate-bug"
+description: "Use when a bug PoC package needs an independent rerun and judgment before patching."
 ---
+
+# Tob Validate Bug
+
+*Sourced from abdo453-hunterai*
 
 # Validate Bug
 
@@ -49,3 +53,4 @@ reproducer's narrative.
 | --- | --- |
 | Fix the PoC to make the claim work. | Mark it inconclusive and explain why. |
 | Trust the reproducer's conclusion. | Rerun the unchanged package independently. |
+

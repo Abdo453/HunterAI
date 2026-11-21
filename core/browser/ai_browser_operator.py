@@ -336,7 +336,7 @@ class AIBrowserOperator:
         try:
             launch_kwargs: Dict[str, Any] = {
                 "headless": self.headless,
-                "args": ["--disable-web-security", "--no-sandbox"],
+                "args": ["--disable-web-security", "--no-sandbox", "--dns-result-order=ipv4first"],
             }
             if self.proxy:
                 launch_kwargs["proxy"] = {"server": self.proxy}
@@ -976,15 +976,16 @@ def run_ai_browser_session_sync(
     target_url: str,
     objective: str = "Explore attack surface and test inputs",
     headless: bool = True,
-    timeout_secs: float = 35.0,
+    timeout_secs: float = 120.0,
     proxy: Optional[str] = None,
-    max_steps: int = 8,
+    max_steps: int = 5,
     auth_context_a: Optional[Dict[str, Any]] = None,
     auth_context_b: Optional[Dict[str, Any]] = None,
     session_storage_file: Optional[str] = None,
 ) -> ActiveBrowserReport:
     """Synchronous runner for AIBrowserOperator, safely executed in an isolated thread."""
     import concurrent.futures
+    import traceback
 
     def _worker():
         operator = AIBrowserOperator(
@@ -998,11 +999,20 @@ def run_ai_browser_session_sync(
         )
         return asyncio.run(operator.run_ai_browser_session(target_url, security_objective=objective))
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_worker)
+    try:
+        loop = None
         try:
-            return future.result(timeout=timeout_secs + 5.0)
-        except Exception as exc:
-            logger.warning("[AIBrowserSync] Session error: %s", exc)
-            op = AIBrowserOperator()
-            return op._synthetic_ai_exploration(target_url, objective)
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+
+        if loop is None:
+            return _worker()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_worker)
+            return future.result(timeout=max(timeout_secs * 2, 240.0))
+    except Exception as exc:
+        logger.warning("[AIBrowserSync] Session error (%s): %s\n%s", type(exc).__name__, exc, traceback.format_exc())
+        op = AIBrowserOperator()
+        return op._synthetic_ai_exploration(target_url, objective)

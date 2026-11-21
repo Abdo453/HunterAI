@@ -1,49 +1,11 @@
 ---
-name: acs-conducting-cloud-penetration-testing
-description: 'This skill outlines methodologies for performing authorized penetration
-  testing against AWS, Azure, and GCP cloud environments. It covers understanding
-  the shared responsibility model for testing scope, leveraging cloud-specific attack
-  tools like Pacu and ScoutSuite, exploiting IAM misconfigurations, testing for SSRF
-  to cloud metadata services, and reporting findings aligned to MITRE ATT&CK Cloud
-  matrix.
-
-  '
-domain: cybersecurity
-subdomain: cloud-security
-tags:
-- cloud-pentesting
-- offensive-security
-- aws-exploitation
-- shared-responsibility
-- mitre-attack-cloud
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-nist_ai_rmf:
-- MEASURE-2.7
-- MAP-5.1
-- MANAGE-2.4
-atlas_techniques:
-- AML.T0070
-- AML.T0066
-- AML.T0082
-d3fend_techniques:
-- Token Binding
-- Restore Access
-- Application Protocol Command Analysis
-- Reissue Credential
-- Network Isolation
-nist_csf:
-- PR.IR-01
-- ID.AM-08
-- GV.SC-06
-- DE.CM-01
-mitre_attack:
-- T1078.004
-- T1580
-- T1530
-- T1538
+name: "acs-conducting-cloud-penetration-testing"
+description: "This skill outlines methodologies for performing authorized penetration"
 ---
+
+# Acs Conducting Cloud Penetration Testing
+
+*Sourced from abdo453-hunterai*
 
 # Conducting Cloud Penetration Testing
 
@@ -300,3 +262,4 @@ FINDING SUMMARY BY MITRE ATT&CK TACTIC:
   Discovery:           14 findings
   Total:               47 findings
 ```
+

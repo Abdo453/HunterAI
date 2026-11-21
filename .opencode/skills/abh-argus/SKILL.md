@@ -1,7 +1,11 @@
 ---
-name: abh-argus
-description: Argus — the all-seeing scanner suite. Six automated scanners for high-value web + LLM bug classes — CORS misconfiguration (origin reflection / null / credentialed read), CRLF & host-header injection, NoSQL injection (operator auth-bypass / $where blind), JWT attacks (alg:none / RS256→HS256 confusion / secret crack), out-of-band confirmation of blind SSRF/XXE/SQLi/RCE/Log4Shell via interactsh, and an LLM red-team corpus (prompt-injection / jailbreak / system-prompt leak / exfil / indirect injection). Use when a target exposes a JSON API, a login endpoint, JWT auth, a parameter that might reach the server, a chatbot/agent, or any endpoint suspected of a blind/out-of-band bug.
+name: "abh-argus"
+description: "Argus \u2014 the all-seeing scanner suite. Six automated scanners for high-value web + LLM bug classes \u2014 CORS misconfiguration (origin reflection / null / credentialed read), CRLF & host-header injection, NoSQL injection (operator auth-bypass / $where blind), JWT attacks (alg:none / RS256\u2192HS256 confus..."
 ---
+
+# Abh Argus
+
+*Sourced from abdo453-hunterai*
 
 # ARGUS — THE ALL-SEEING SCANNER SUITE
 
@@ -140,3 +144,4 @@ and uses a **canary token** (`RT_PWNED_xxxx`) for reliable hit detection.
 - JWT forge (`--alg-none`/`--confuse` + `--set role=admin`) → privesc → IDOR sweep.
 - Blind SSRF (confirmed via `/oob`) → cloud metadata → credential theft.
 - LLM indirect injection → chatbot IDOR / exfil channel.
+

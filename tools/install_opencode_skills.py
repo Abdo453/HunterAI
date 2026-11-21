@@ -43,6 +43,7 @@ NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 # Pack registry: prefix, library subpath, SKILL.md glob style
 PACKS = {
+    "abh": {"name": "agentic-bug-hunter", "dir": LIBRARY / "agentic-bug-hunter", "url": "https://github.com/agentic-bug-hunter/skills"},
     "acs": {"name": "anthropic-cyber", "dir": LIBRARY / "anthropic-cyber", "url": "https://github.com/mukul975/Anthropic-Cybersecurity-Skills"},
     "tob": {"name": "trailofbits", "dir": LIBRARY / "trailofbits", "url": "https://github.com/trailofbits/skills"},
     "bri": {"name": "briiirussell", "dir": LIBRARY / "briiirussell", "url": "https://github.com/briiirussell/cybersecurity-skills"},
@@ -175,7 +176,17 @@ ANT_CORE = [
     "pdf", "docx", "xlsx", "pptx", "skill-creator",
 ]
 
+# [ABH] Agentic Bug Hunter — 19 specialized bug bounty skills
+ABH_CORE = [
+    "agentic-app-audit", "argus", "bb-methodology", "bug-bounty", "cicd-security",
+    "client-reverse", "cloud-pentest", "credential-attack", "graphql-audit",
+    "llm-redteam", "mcp-server-audit", "meme-coin-audit", "mobile-pentest",
+    "report-writing", "security-arsenal", "triage-validation", "web2-recon",
+    "web2-vuln-classes", "web3-audit",
+]
+
 CORE_LISTS = {
+    "abh": ABH_CORE,
     "acs": ACS_CORE,
     "tob": TOB_CORE,
     "bri": BRI_CORE,
@@ -427,9 +438,9 @@ def select(profiles: list[str], idx) -> list[tuple[str, Path, Path, str]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Install curated cyber skills into .opencode/skills")
-    ap.add_argument("--profiles", default="core",
+    ap.add_argument("--profiles", default="core,redteam,ai-sec,cloud,web3,malware-re,forensics",
                     help="comma list: core,redteam,blueteam,forensics,cloud,malware-re,iot-ot,web3,ai-sec,grc,full")
-    ap.add_argument("--cap", type=int, default=200, help="max active skills (context-rot guard)")
+    ap.add_argument("--cap", type=int, default=600, help="max active skills (context-rot guard)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--clean", action="store_true", help="remove installed skills first")
     args = ap.parse_args()

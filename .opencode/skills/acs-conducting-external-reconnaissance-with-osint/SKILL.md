@@ -1,28 +1,12 @@
 ---
-name: acs-conducting-external-reconnaissance-with-osint
-description: Conduct external recon using OSINT techniques to map an organization's external attack surface without touching target systems, gathering DNS records, certificate transparency logs, search results, social media, code repositories, and breach databases into a target profile. Use for the passive info-gathering phase of a pentest, external footprinting, or collecting employee/email intel for a social engineering campaign.
-domain: cybersecurity
-subdomain: penetration-testing
-tags:
-- OSINT
-- reconnaissance
-- attack-surface
-- footprinting
-- passive-recon
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- ID.RA-06
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1592
-- T1589
-- T1590
+name: "acs-conducting-external-reconnaissance-with-osint"
+description: "Conduct external recon using OSINT techniques to map an organization's external attack surface without touching target systems, gathering DNS records, certificate transparency logs, search results, social media, code repositories, and breach databases into a target profile. Use for the passive in..."
 ---
+
+# Acs Conducting External Reconnaissance With Osint
+
+*Sourced from abdo453-hunterai*
+
 # Conducting External Reconnaissance with OSINT
 
 ## When to Use
@@ -181,3 +165,4 @@ Identify the technologies, frameworks, and services used by the target:
 3. Disable directory listings on docs.techcorp.io and audit all web servers
 4. Implement GitHub secret scanning across all organization repositories
 ```
+

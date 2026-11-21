@@ -1,8 +1,11 @@
 ---
-name: bri-secrets-audit
-description: "Find leaked secrets in source code, Git history, build artifacts, and infrastructure — and audit the secrets-management posture preventing future leaks. Use when the user mentions 'secrets audit,' 'secret scanning,' 'leaked credentials,' 'API key in code,' 'gitleaks,' 'trufflehog,' 'betterleaks,' 'git history scan,' 'secrets management,' 'vault audit,' 'rotation policy,' 'AWS Secrets Manager,' 'HashiCorp Vault,' 'Doppler,' '1Password Secrets Automation,' 'sealed-secrets,' 'External Secrets Operator,' 'secrets in MCP config,' 'API key in Claude transcript,' 'is this key public,' or needs to find or prevent credential exposure."
-allowed-tools: Read, Grep, Glob, WebSearch, Bash(betterleaks version), Bash(betterleaks git . --validate=false --analyze=false --redact --silent -o .security/out/betterleaks.json), Bash(betterleaks config show ids --validation), Bash(betterleaks config show ids --analysis)
+name: "bri-secrets-audit"
+description: "Find leaked secrets in source code, Git history, build artifacts, and infrastructure \u2014 and audit the secrets-management posture preventing future leaks. Use when the user mentions 'secrets audit,' 'secret scanning,' 'leaked credentials,' 'API key in code,' 'gitleaks,' 'trufflehog,' 'betterleaks,'..."
 ---
+
+# Bri Secrets Audit
+
+*Sourced from abdo453-hunterai*
 
 # Secrets Audit — Credential Exposure and Secrets-Management Review
 
@@ -345,3 +348,4 @@ Dispositions for confirmed findings: Fixed / Deferred / Accepted Risk / Mitigate
 - AWS Secrets Manager Best Practices
 - "Twelve-Factor App" — Config principles
 - NVIDIA SkillSpector (Apache-2.0) — agent-config access (AS2) and command-running settings keys (BH4) rules, and its credential-exfiltration webhook signatures: [repo](https://github.com/NVIDIA/SkillSpector)
+

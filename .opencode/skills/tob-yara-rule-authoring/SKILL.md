@@ -1,12 +1,11 @@
 ---
-name: tob-yara-rule-authoring
-description: >
-  Guides authoring of high-quality YARA-X detection rules for malware identification.
-  Use when writing, reviewing, or optimizing YARA rules. Covers naming conventions,
-  string selection, performance optimization, migration from legacy YARA, and false
-  positive reduction. Triggers on: YARA, YARA-X, malware detection, threat hunting,
-  IOC, signature, crx module, dex module.
+name: "tob-yara-rule-authoring"
+description: ">"
 ---
+
+# Tob Yara Rule Authoring
+
+*Sourced from abdo453-hunterai*
 
 # YARA-X Rule Authoring
 
@@ -449,3 +448,4 @@ The `examples/` directory holds real, attributed rules worth reading before writ
 **Guides:** [YARA Style Guide](https://github.com/Neo23x0/YARA-Style-Guide) and [YARA Performance Guidelines](https://github.com/Neo23x0/YARA-Performance-Guidelines) (Neo23x0), [YARA-X documentation](https://virustotal.github.io/yara-x/).
 
 **macOS specifics:** Apple's own production rules ship at `/System/Library/CoreServices/XProtect.bundle/`; [objective-see](https://objective-see.org/) publishes macOS malware research and samples.
+

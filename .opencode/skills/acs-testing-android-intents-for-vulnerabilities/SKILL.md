@@ -1,37 +1,12 @@
 ---
-name: acs-testing-android-intents-for-vulnerabilities
-description: 'Tests Android inter-process communication (IPC) through intents for
-  vulnerabilities including intent injection, unauthorized component access, broadcast
-  sniffing, pending intent hijacking, and content provider data leakage. Use when
-  assessing Android app attack surface through exported components, testing intent-based
-  data flows, or evaluating IPC security. Activates for requests involving Android
-  intent security, IPC testing, exported component analysis, or Drozer assessment.
-
-  '
-domain: cybersecurity
-subdomain: mobile-security
-author: mahipal
-tags:
-- mobile-security
-- android
-- intents
-- ipc-security
-- owasp-mobile
-- penetration-testing
-version: 1.0.0
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- PR.AA-05
-- ID.RA-01
-- DE.CM-09
-mitre_attack:
-- T1059
-- T1056
-- T1036
-- T1078
-- T1055
+name: "acs-testing-android-intents-for-vulnerabilities"
+description: "Tests Android inter-process communication (IPC) through intents for"
 ---
+
+# Acs Testing Android Intents For Vulnerabilities
+
+*Sourced from abdo453-hunterai*
+
 # Testing Android Intents for Vulnerabilities
 
 ## When to Use
@@ -192,3 +167,4 @@ run app.service.send com.target.app com.target.app.MessengerService \
 - **Permission-protected components**: An exported component may still require a permission. Test with and without the required permission.
 - **Implicit intents vs explicit**: Only implicit intents (action-based) are interceptable by other apps. Explicit intents (specifying target) are secure.
 - **Custom permissions**: Apps can define custom permissions with different protection levels (normal, dangerous, signature). Signature-level permissions are only grantable to apps signed with the same certificate.
+

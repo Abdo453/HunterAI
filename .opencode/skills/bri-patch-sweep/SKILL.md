@@ -1,8 +1,11 @@
 ---
-name: bri-patch-sweep
-description: "Respond to a CVE wave across a whole portfolio of apps at once: inventory every repo and the platform project and domain it actually serves, find the real production branch, spot stale manual deploys, decide which apps are affected, mitigate, patch, ship, and confirm production. Use when the user mentions 'patch sweep,' 'patch all my apps,' 'fleet-wide CVE,' 'are any of my apps affected,' 'Next.js RCE across all projects,' 'Rails CVE on all our Heroku apps,' 'patch every repo,' 'CVE wave,' 'security release across the fleet,' 'which of our sites run the vulnerable version,' 'mass dependency update,' or has more than a handful of apps to patch against the same advisories."
-allowed-tools: Read, Grep, Glob, WebFetch, Bash(gh repo list:*), Bash(gh repo view:*), Bash(git log:*), Bash(git ls-remote:*), Bash(vercel project ls:*), Bash(vercel project inspect:*), Bash(vercel ls:*), Bash(vercel inspect:*), Bash(vercel domains ls:*), Bash(heroku apps --all --json), Bash(heroku apps:info:*), Bash(heroku domains -a:*), Bash(heroku releases -a:*), Bash(heroku releases:info:*), Bash(heroku pipelines:info:*), Bash(aws ec2 describe-instances:*), Bash(doctl compute droplet list:*), Bash(hcloud server list:*), Bash(gcloud compute instances list:*)
+name: "bri-patch-sweep"
+description: "Respond to a CVE wave across a whole portfolio of apps at once: inventory every repo and the platform project and domain it actually serves, find the real production branch, spot stale manual deploys, decide which apps are affected, mitigate, patch, ship, and confirm production. Use when the user..."
 ---
+
+# Bri Patch Sweep
+
+*Sourced from abdo453-hunterai*
 
 # Patch Sweep — Fleet-Wide CVE Response
 
@@ -244,3 +247,4 @@ Dispositions on the board use the shared set: `Fixed`, `Deferred`, `Accepted Ris
 - [Render API — list services](https://api-docs.render.com/reference/list-services)
 - [GitHub REST — vulnerability alerts](https://docs.github.com/en/rest/repos/repos#check-if-vulnerability-alerts-are-enabled-for-a-repository)
 - Field source: a ~45-app sweep, October 2026 (5 Heroku Rails apps, 1 Render app, ~39 Vercel Next.js apps), issue #80
+

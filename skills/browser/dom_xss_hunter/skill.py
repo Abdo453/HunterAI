@@ -96,6 +96,10 @@ class DOMXSSHunterSkill(BaseSkill):
             all_sink_hits.extend(browser_hits)
             all_sink_hits.extend(js_hits)
 
+        # If real (non-fallback) hits exist or fallback is disabled, strip synthetic fallback hits
+        if any(h.get("source") != "fallback" for h in all_sink_hits) or ctx.extra.get("disable_fallback"):
+            all_sink_hits = [h for h in all_sink_hits if h.get("source") != "fallback"]
+
         # Deduplicate by sink+snippet
         seen = set()
         unique_hits: List[Dict[str, Any]] = []
@@ -256,22 +260,56 @@ class DOMXSSHunterSkill(BaseSkill):
     ) -> List[Dict[str, Any]]:
         """
         Scan JS/HTML text for dangerous DOM sinks.
+        Filters out commented-out lines, read-only property accesses (e.g. reading
+        location.href), and safe function-reference timers (setTimeout(() => ...)).
         Returns list of {sink, line, snippet, url, source}.
         """
         hits: List[Dict[str, Any]] = []
         lines = js_content.splitlines()
         for line_no, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+                continue
+            # Strip trailing inline single-line comment (ignoring http:// or https://)
+            code_part = re.sub(r"(?<!:)//.*$", "", line)
             for sink in DOM_SINKS:
-                if sink in line:
-                    # Only flag if there's some indication of variable/dynamic input near it
-                    snippet = line.strip()[:300]
-                    hits.append({
-                        "url": url,
-                        "sink": sink,
-                        "line": line_no,
-                        "snippet": snippet,
-                        "source": source,
-                    })
+                pos = code_part.find(sink)
+                if pos == -1:
+                    continue
+                window = code_part[max(0, pos - 60): min(len(code_part), pos + 180)].strip()
+
+                # 1. location.href is a SOURCE when read; only a SINK when assigned to
+                if sink == "location.href":
+                    if not re.search(r"location\.href\s*\+?=(?!=)", window):
+                        continue
+
+                # 2. innerHTML / outerHTML: must be an assignment, not a read or empty reset
+                elif sink in ("innerHTML", "outerHTML"):
+                    m = re.search(rf"{re.escape(sink)}\s*\+?=(?!=)\s*(.+)", window)
+                    if not m:
+                        continue
+                    rhs = m.group(1).strip()
+                    if rhs.startswith(('""', "''", "``")):
+                        continue
+
+                # 3. setTimeout / setInterval: safe when first arg is a function or arrow callback
+                elif sink in ("setTimeout(", "setInterval("):
+                    after_sink = code_part[pos + len(sink): pos + len(sink) + 120].lstrip()
+                    if (
+                        not after_sink
+                        or after_sink.startswith(("function", "(", "async"))
+                        or re.match(r"^[a-zA-Z_$][\w$]*\s*=>", after_sink)
+                        or re.match(r"^[a-zA-Z_$][\w$.]*\s*,", after_sink)
+                    ):
+                        continue
+
+                hits.append({
+                    "url": url,
+                    "sink": sink,
+                    "line": line_no,
+                    "snippet": window[:300],
+                    "source": source,
+                })
         return hits
 
     # ------------------------------------------------------------------

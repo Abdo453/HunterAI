@@ -317,6 +317,41 @@ class OmniHunterEngine:
         self.oob_engine = OOBEngine(callback_domain=config.oob_callback_domain) if config.enable_oob else None
         self.poc_generator = PoCBundleGenerator(output_base_dir="findings") if config.generate_poc_bundles else None
 
+        # 3-Pillar Anti-Context-Collapse Memory Architecture (Trinity + MazeRunner + COAPT)
+        from core.graph.knowledge_graph import KnowledgeGraph
+        from agents.security_intelligence.task_clue_cache import TaskClueCache
+        from hunter_ai.orchestration.triple_agents import TripleAgentSystem
+        from hunter_ai.hypo_engine.rag_hypo import RAGHypothesisEngine
+
+        self.knowledge_graph = KnowledgeGraph(root_asset=config.target_url)
+        self.knowledge_graph.load()
+        self.clue_cache = TaskClueCache(persist=True)
+        self.triple_agents = TripleAgentSystem(
+            graph_id=f"tdg_{config.engagement_id}",
+            clue_cache=self.clue_cache,
+            persist_cache=True,
+        )
+        self.rag_hypo = RAGHypothesisEngine()
+        from core.architecture.deterministic_planes import DeterministicControlPlane
+        self.control_plane = DeterministicControlPlane(
+            target=config.target_url,
+            scope_domains=config.scope_domains,
+            secret=config.policy_secret,
+        )
+
+        # ARTEX-Grade Subsystems: Dual-Graph, Worker Trace Exchange, Traffic Recorder, Interceptor Gate
+        from core.architecture.dual_graph import DualGraphManager, AssetKind
+        from core.memory.worker_trace_exchange import WorkerTraceStore
+        from core.traffic.traffic_recorder import TrafficRecorder
+        from core.guard.interceptor_gate import ToolInterceptorGate
+        from core.task_planner.dependency_chain_planner import DependencyChainPlanner
+
+        self.dual_graph = DualGraphManager(storage_dir=config.snapshot_dir)
+        self.trace_store = WorkerTraceStore()
+        self.traffic_recorder = TrafficRecorder()
+        self.interceptor_gate = ToolInterceptorGate(allowed_scope=config.scope_domains)
+        self.dependency_planner = DependencyChainPlanner(task_id=config.engagement_id, graph=self.dual_graph)
+
         # Dynamic attack surface inventory
         self.surface: Dict[str, Any] = {
             "domains": list(config.scope_domains),
@@ -496,7 +531,11 @@ class OmniHunterEngine:
 
             if result.success and result.normalized_data:
                 for port_entry in result.normalized_data.get("open_ports", []):
-                    port_str = f"{host}:{port_entry}"
+                    if isinstance(port_entry, dict):
+                        port_num = port_entry.get("port", "")
+                        port_str = f"{host}:{port_num}" if port_num else str(port_entry)
+                    else:
+                        port_str = f"{host}:{port_entry}"
                     self.ledger.record_discovery(AssetType.PORT, port_str)
                     if port_str not in self.surface["open_ports"]:
                         self.surface["open_ports"].append(port_str)
@@ -508,12 +547,14 @@ class OmniHunterEngine:
 
     def _run_web_phase(self) -> None:
         logger.info("[OmniHunter] ── Phase 3: WEB ENDPOINT DISCOVERY & DOM ──")
+        default_scheme = "http" if self.config.target_url.startswith("http://") else "https"
         hosts = self.surface["live_hosts"][:5] or [
             self.config.target_url.replace("https://", "").replace("http://", "").split("/")[0]
         ]
         for host in hosts:
-            target_url = f"https://{host}"
-            if not self._scope_check(host, ActionClass.ACTIVE_TEST):
+            target_url = host if host.startswith("http") else f"{default_scheme}://{host}"
+            clean_host = host.replace("https://", "").replace("http://", "").split("/")[0]
+            if not self._scope_check(clean_host, ActionClass.ACTIVE_TEST):
                 continue
 
             # HTTP Analysis
@@ -531,16 +572,18 @@ class OmniHunterEngine:
                     if ep_url and ep_url not in self.surface["endpoints"]:
                         self.surface["endpoints"].append(ep_url)
                         self.ledger.record_discovery(AssetType.ENDPOINT, ep_url)
+                        from core.architecture.dual_graph import AssetKind
+                        self.dual_graph.upsert_asset(kind=AssetKind.ENDPOINT, value=ep_url)
                 # Inspect response headers for WAF & tech
                 hdrs = result.normalized_data.get("headers", {})
-                server_hdr = hdrs.get("Server", "")
+                server_hdr = next((str(v) for k, v in hdrs.items() if k.lower() == "server"), "")
                 if "cloudflare" in server_hdr.lower() and not self.surface.get("waf_name"):
                     self.surface["waf_name"] = "Cloudflare"
                 elif "nginx" in server_hdr.lower() and "nginx" not in self.surface["tech_stack"]:
                     self.surface["tech_stack"].append("nginx")
                 elif "apache" in server_hdr.lower() and "apache" not in self.surface["tech_stack"]:
                     self.surface["tech_stack"].append("apache")
-                pby = hdrs.get("X-Powered-By", "")
+                pby = next((str(v) for k, v in hdrs.items() if k.lower() == "x-powered-by"), "")
                 if "php" in pby.lower() and "php" not in self.surface["tech_stack"]:
                     self.surface["tech_stack"].append("php")
 
@@ -567,7 +610,8 @@ class OmniHunterEngine:
                     headless=True,
                     proxy=self.config.proxy,
                 )
-                if b_report and b_report.success:
+                is_synthetic_browser = b_report is not None and "Synthetic Fallback" in str(getattr(b_report, "title", ""))
+                if b_report and b_report.success and (not is_synthetic_browser or self.config.force_tool_fallback):
                     logger.info("[OmniHunter] Active browser executed %d actions, visited %d pages, intercepted %d APIs",
                                 len(b_report.actions_performed), len(b_report.pages_visited), len(b_report.intercepted_api_endpoints))
                     for ep_item in b_report.intercepted_api_endpoints:
@@ -627,12 +671,17 @@ class OmniHunterEngine:
                         session_id=self.config.engagement_id,
                         workspace=WorkspaceManager(self.config.snapshot_dir),
                         tool_manager=ToolManager(),
-                        extra={"urls": self.surface["endpoints"][:10]}
+                        extra={
+                            "urls": self.surface["endpoints"][:10],
+                            "disable_fallback": not self.config.force_tool_fallback,
+                        }
                     )
                     dom_skill = DOMXSSHunterSkill()
                     dom_res = asyncio.run(dom_skill.execute(dom_ctx))
                     if dom_res.findings:
                         for df in dom_res.findings:
+                            if "FALLBACK SYNTHETIC" in str(df.get("evidence", "")) and not self.config.force_tool_fallback:
+                                continue
                             self.confirmed_findings.append({
                                 "vuln_class": "DOM_XSS",
                                 "target": df.get("endpoint", self.config.target_url),
@@ -690,6 +739,12 @@ class OmniHunterEngine:
                 from agents.skills.prototype_pollution_skill import PrototypePollutionSkill
                 from agents.skills.path_traversal_skill import PathTraversalSkill
                 from agents.skills.jwt_advanced_skill import JWTAdvancedSkill
+                from agents.skills.deserialization_skill import DeserializationSkill
+                from agents.skills.subdomain_takeover_skill import SubdomainTakeoverSkill
+                from agents.skills.mass_assignment_skill import MassAssignmentSkill
+                from agents.skills.bfla_auth_bypass_skill import BFLAAuthBypassSkill
+                from agents.skills.web_cache_deception_skill import WebCacheDeceptionSkill
+                from agents.skills.llm_prompt_injection_skill import LLMPromptInjectionSkill
                 from skills.burp.request_mutator.skill import RequestMutatorSkill
                 from skills.base_skill import SkillContext
                 from core.workspace_manager import WorkspaceManager
@@ -710,7 +765,9 @@ class OmniHunterEngine:
                     )
                     insp_skill = BurpLogInspectorSkill()
                     insp_res = asyncio.run(insp_skill.execute(insp_ctx))
-                    if insp_res.success:
+                    if insp_res.success and (
+                        not insp_res.metadata.get("synthetic_fallback") or self.config.force_tool_fallback
+                    ):
                         for new_ep in insp_res.metadata.get("discovered_endpoints", []):
                             if new_ep not in self.surface["endpoints"]:
                                 self.surface["endpoints"].append(new_ep)
@@ -759,7 +816,7 @@ class OmniHunterEngine:
                 except Exception as mut_err:
                     logger.debug("[OmniHunter] RequestMutator note: %s", mut_err)
 
-                # 2. Elite Vulnerability Autonomous Probers
+                # 2. Elite Vulnerability Autonomous Probers (11 endpoint skills + Subdomain Takeover)
                 elite_skills = [
                     HTTPSmugglingSkill(),
                     CachePoisoningSkill(),
@@ -767,13 +824,21 @@ class OmniHunterEngine:
                     PrototypePollutionSkill(),
                     PathTraversalSkill(),
                     JWTAdvancedSkill(),
+                    DeserializationSkill(),
+                    MassAssignmentSkill(),
+                    BFLAAuthBypassSkill(),
+                    WebCacheDeceptionSkill(),
+                    LLMPromptInjectionSkill(),
                 ]
                 endpoints_to_probe = self.surface["endpoints"][:6] or [self.config.target_url]
                 for ep_url in endpoints_to_probe:
                     for sk in elite_skills:
                         try:
                             sk_res = asyncio.run(sk.run(ep_url, param_name=""))
-                            if sk_res.verified:
+                            is_fallback = bool(getattr(sk_res, "fallback_used", False)) or (
+                                "Synthetic/Offline" in str(getattr(sk_res, "title", ""))
+                            )
+                            if sk_res.verified and (not is_fallback or self.config.force_tool_fallback):
                                 self.confirmed_findings.append({
                                     "vuln_class": sk_res.vuln_type.upper(),
                                     "target": ep_url,
@@ -788,6 +853,74 @@ class OmniHunterEngine:
                                 logger.info("[OmniHunter] [!] Verified Elite Vulnerability: %s on %s", sk_res.vuln_type, ep_url)
                         except Exception:
                             pass
+
+                # 3. Subdomain Takeover Verification on discovered subdomains
+                takeover_skill = SubdomainTakeoverSkill()
+                for sub_host in (self.surface.get("subdomains") or [])[:6]:
+                    try:
+                        to_res = asyncio.run(takeover_skill.run(sub_host, param_name="host"))
+                        if to_res.verified:
+                            self.confirmed_findings.append({
+                                "vuln_class": "SUBDOMAIN_TAKEOVER",
+                                "target": sub_host,
+                                "verdict": "CONFIRMED",
+                                "confidence": to_res.confidence,
+                                "title": to_res.title,
+                                "evidence": to_res.evidence,
+                                "payload": to_res.payload_used,
+                                "cwe": to_res.cwe,
+                                "timestamp": time.time(),
+                            })
+                    except Exception:
+                        pass
+
+                # 4. High-Precision Concurrency & Race Condition Prober
+                from core.business_logic.race_condition_engine import RaceConditionEngine
+                race_engine = RaceConditionEngine()
+                for ep_url in endpoints_to_probe:
+                    if any(kw in ep_url.lower() for kw in ["redeem", "cart", "coupon", "transfer", "like", "vote", "apply", "checkout", "login", "register", "order"]):
+                        try:
+                            race_res = asyncio.run(race_engine.run_synchronized_race(ep_url, method="POST", concurrency=8))
+                            if race_res.is_vulnerable and race_res.violation_report:
+                                self.confirmed_findings.append({
+                                    "vuln_class": "RACE_CONDITION",
+                                    "target": ep_url,
+                                    "verdict": "CONFIRMED",
+                                    "confidence": 0.95,
+                                    "title": race_res.violation_report.invariant_name,
+                                    "evidence": race_res.evidence,
+                                    "payload": race_res.violation_report.payload_mutation,
+                                    "cwe": "CWE-362",
+                                    "timestamp": time.time(),
+                                })
+                        except Exception:
+                            pass
+
+                # 5. Mass Assignment & Privilege Escalation Prober
+                from core.business_logic.privilege_escalation_engine import PrivilegeEscalationEngine, AuthContext
+                pe_engine = PrivilegeEscalationEngine()
+                for ep_url in endpoints_to_probe:
+                    try:
+                        ma_verdicts = pe_engine.test_mass_assignment(
+                            endpoint=ep_url,
+                            user=AuthContext(user_id="hunter_probe", role="user"),
+                            base_payload={"test": "probe"},
+                        )
+                        for mv in ma_verdicts:
+                            if mv.is_vulnerable and mv.violation_report:
+                                self.confirmed_findings.append({
+                                    "vuln_class": "MASS_ASSIGNMENT",
+                                    "target": ep_url,
+                                    "verdict": "CONFIRMED",
+                                    "confidence": 0.90,
+                                    "title": mv.violation_report.invariant_name,
+                                    "evidence": mv.evidence,
+                                    "payload": mv.tested_payload,
+                                    "cwe": "CWE-915",
+                                    "timestamp": time.time(),
+                                })
+                    except Exception:
+                        pass
             except Exception as elite_err:
                 logger.warning("[OmniHunter] Elite skills execution note: %s", elite_err)
 
@@ -843,19 +976,53 @@ class OmniHunterEngine:
             reviewer = JSReviewAgent()
             reviewer.review(task, self.ledger)
 
-        # Parameter classification across discovered endpoints
+        # Parameter classification across discovered endpoints + Auto-Routing to all 41 SkillRegistry skills
         pm = ParamMiner()
         param_targets = pm.extract_from_urls(self.surface["endpoints"])
         if param_targets:
             self.surface.setdefault("parameter_targets", []).extend([t.to_dict() for t in param_targets])
             logger.info("[OmniHunter] ParamMiner classified %d candidate parameter targets", len(param_targets))
+            if getattr(self.config, "enable_elite_skills", True) and bool(self.config.authorized_by):
+                try:
+                    from agents.skills.registry import bootstrap_builtin_skills
+                    reg = bootstrap_builtin_skills()
+                    for pt in param_targets[:10]:
+                        pt_dict = pt.to_dict() if hasattr(pt, "to_dict") else (pt if isinstance(pt, dict) else {})
+                        p_url = pt_dict.get("url") or pt_dict.get("endpoint") or self.config.target_url
+                        p_name = pt_dict.get("param") or pt_dict.get("name") or ""
+                        if not p_name:
+                            continue
+                        sk_res = asyncio.run(reg.run_best(p_url, p_name, proxy=self.config.proxy))
+                        if sk_res and getattr(sk_res, "verified", False):
+                            is_fb = bool(getattr(sk_res, "fallback_used", False)) or (
+                                "Synthetic/Offline" in str(getattr(sk_res, "title", ""))
+                            )
+                            if not is_fb or self.config.force_tool_fallback:
+                                self.confirmed_findings.append({
+                                    "vuln_class": str(getattr(sk_res, "vuln_type", "PARAM_VULN")).upper(),
+                                    "target": p_url,
+                                    "verdict": "CONFIRMED",
+                                    "confidence": float(getattr(sk_res, "confidence", 0.90) or 0.90),
+                                    "title": getattr(sk_res, "title", f"Verified {p_name} vulnerability on {p_url}"),
+                                    "evidence": getattr(sk_res, "evidence", ""),
+                                    "payload": getattr(sk_res, "payload_used", ""),
+                                    "cwe": getattr(sk_res, "cwe", "CWE-000"),
+                                    "timestamp": time.time(),
+                                })
+                                logger.info("[OmniHunter] [!] SkillRegistry verified %s on %s (%s)",
+                                            getattr(sk_res, "vuln_type", "vuln"), p_url, p_name)
+                except Exception as reg_err:
+                    logger.debug("[OmniHunter] SkillRegistry parameter routing note: %s", reg_err)
 
         self._save_checkpoint()
 
     def _run_verification_phase(self) -> None:
         logger.info("[OmniHunter] ── Phase 6: ADVERSARIAL VERIFICATION & REFUTATION ──")
-        all_sched_tasks = self.scheduler.list_tasks()
-        task_list = list(all_sched_tasks.values()) if isinstance(all_sched_tasks, dict) else list(all_sched_tasks)
+        if hasattr(self.scheduler, "_tasks") and isinstance(self.scheduler._tasks, dict):
+            task_list = list(self.scheduler._tasks.values())
+        else:
+            all_sched_tasks = self.scheduler.list_tasks()
+            task_list = list(all_sched_tasks.values()) if isinstance(all_sched_tasks, dict) else list(all_sched_tasks)
         tasks_to_verify = []
         for t in task_list:
             st = t.get("status") if isinstance(t, dict) else getattr(t, "status", None)
@@ -863,7 +1030,12 @@ class OmniHunterEngine:
                 tasks_to_verify.append(t)
 
         for task in tasks_to_verify:
-            if not task.result:
+            if isinstance(task, dict):
+                task_obj = getattr(self.scheduler, "_tasks", {}).get(task.get("task_id"))
+                if not task_obj:
+                    continue
+                task = task_obj
+            if not getattr(task, "result", None):
                 continue
             res_data = task.result.normalized_data or {}
             vuln_class = res_data.get("vuln_class", "UNKNOWN")
@@ -1005,6 +1177,10 @@ class OmniHunterEngine:
                     self._retrospective.to_dict() if getattr(self, "_retrospective", None) else None
                 ),
                 "phase_critiques": [c.to_dict() for c in getattr(self, "_phase_critiques", [])],
+                "context_memory_summary": {
+                    "verified_facts": self.knowledge_graph.export_verified_facts_context(max_facts=20),
+                    "triple_agents_stats": self.triple_agents.stats(),
+                },
             },
         )
         return result
@@ -1118,6 +1294,49 @@ class OmniHunterEngine:
                 except Exception as exc:
                     logger.exception("[OmniHunter] Error in phase %s: %s — continuing loop.", phase, exc)
 
+            # ── 7-Stage Cognitive Agent Cycle (Observe → Think → Plan → Act → Parse → Update Graph → Decide) ──
+            try:
+                from skills.agent_core.reasoning_loop.skill import ReasoningLoopSkill
+                from skills.base_skill import SkillContext
+                from core.workspace_manager import WorkspaceManager
+                from tools.tool_manager import ToolManager
+
+                rl_ctx = SkillContext(
+                    target=self.config.target_url,
+                    session_id=self.config.engagement_id,
+                    workspace=WorkspaceManager(self.config.snapshot_dir),
+                    tool_manager=ToolManager(),
+                    extra={
+                        "phase": phase.value.lower(),
+                        "findings_so_far": self.confirmed_findings,
+                        "surface": self.surface,
+                        "scope_authorized": bool(self.config.authorized_by),
+                        "goal": f"Complete phase {phase.value} and maximize verified findings",
+                        "knowledge_graph": self.knowledge_graph,
+                        "clue_cache": self.clue_cache,
+                        "triple_agents": self.triple_agents,
+                        "control_plane": self.control_plane,
+                        "scope_domains": self.config.scope_domains,
+                    },
+                )
+                rl_skill = ReasoningLoopSkill()
+                rl_res = asyncio.run(rl_skill.execute(rl_ctx))
+                if rl_res.raw_output.get("target_graph"):
+                    self.surface["target_graph"] = json.loads(rl_res.raw_output["target_graph"])
+                if rl_res.raw_output.get("decision"):
+                    dec_obj = json.loads(rl_res.raw_output["decision"])
+                    self.surface.setdefault("cognitive_decisions", []).append(dec_obj)
+                    logger.info(
+                        "[OmniHunter] [Observe→Think→Plan→Act→Parse→UpdateGraph→Decide] Phase=%s | Graph(nodes=%s, edges=%s) | Decision=%s (%s)",
+                        phase.value,
+                        rl_res.metadata.get("graph_summary", {}).get("nodes", 0),
+                        rl_res.metadata.get("graph_summary", {}).get("edges", 0),
+                        dec_obj.get("decision"),
+                        dec_obj.get("arabic_decision"),
+                    )
+            except Exception as rl_err:
+                logger.debug("[OmniHunter] 7-stage reasoning loop trace skipped: %s", rl_err)
+
             # ── Metacognitive Phase Critic (self-review after every phase) ──
             try:
                 critique = self.critic.critique_phase(
@@ -1164,13 +1383,11 @@ class OmniHunterEngine:
             if self.config.enable_thinking:
                 print(format_retrospective_trace(self._retrospective))
 
-            # Persist lessons for next run (merge + cap)
-            new_lessons: List[str] = list(self._retrospective.lessons)
-            for c in self._phase_critiques:
-                for d in c.directives:
-                    new_lessons.append(f"[{c.phase}] {d}")
-            merged = merge_lessons(self._persistent_lessons, new_lessons)
-            save_persistent_lessons(merged)
+            # Persist lessons for next run (merge + cap) when using default snapshot dir
+            if self.config.snapshot_dir == "snapshots":
+                new_lessons: List[str] = list(self._retrospective.lessons)
+                merged = merge_lessons(self._persistent_lessons, new_lessons)
+                save_persistent_lessons(merged)
         except Exception:
             logger.debug("MissionCritic retrospective skipped.", exc_info=True)
 

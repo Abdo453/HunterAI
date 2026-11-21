@@ -1,8 +1,11 @@
 ---
-name: bri-owasp-audit
-description: "Audit application source code against the OWASP Top 10:2025 categories — broken access control (incl. SSRF), security misconfiguration, software supply chain failures, cryptographic failures, injection, insecure design, authentication failures, software and data integrity, logging and alerting failures, mishandling of exceptional conditions — with recon, a coverage ledger, per-finding verification, and a findings.json report. Use when the user mentions 'OWASP,' 'OWASP Top 10,' 'security audit,' 'security review,' 'secure code review,' 'code security review,' 'vulnerability audit,' 'find vulnerabilities,' 'appsec review,' 'application security audit,' 'check for security issues,' 'review this PR for security,' 'pre-merge security check,' 'diff review,' 'broken access control,' 'IDOR,' 'SQL injection,' 'XSS,' 'SSRF,' 'webhook security,' or wants to check their codebase for common security weaknesses."
-allowed-tools: Read, Grep, Glob, Bash(npm audit), Bash(npm audit --omit=dev)
+name: "bri-owasp-audit"
+description: "Audit application source code against the OWASP Top 10:2025 categories \u2014 broken access control (incl. SSRF), security misconfiguration, software supply chain failures, cryptographic failures, injection, insecure design, authentication failures, software and data integrity, logging and alerting fa..."
 ---
+
+# Bri Owasp Audit
+
+*Sourced from abdo453-hunterai*
 
 # OWASP Audit — Source Code Security Review
 
@@ -460,3 +463,4 @@ False Positive is not a disposition. It's a `rejected` verdict with the control 
 - Shared workflow references (copied into `references/` at build time): verification.md, recon-and-coverage.md, orchestration.md, diff-review.md, findings-format.md, severity-calibration.md
 - Framework playbooks in [references/frameworks/](references/frameworks/README.md), each citing its own sources and licenses
 - Workflow ideas paraphrased from [Cloudflare security-audit-skill](https://github.com/cloudflare/security-audit-skill) (MIT) — recon, coverage ledger, independent verifier, run profiles, findings schema — and [Strix](https://github.com/usestrix/strix) (Apache-2.0) — counterevidence, diff mode, severity calibration. Specific source files are cited in each shared reference.
+

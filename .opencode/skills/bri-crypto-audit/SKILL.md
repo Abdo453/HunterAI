@@ -1,8 +1,11 @@
 ---
-name: bri-crypto-audit
-description: "Audit cryptography implementation — algorithm choice, key sizes, KDF parameters, IV/nonce handling, signature verification, randomness, TLS configuration, and key rotation. Deeper than owasp-audit A04. Use when the user mentions 'crypto review,' 'cryptography audit,' 'encryption review,' 'KDF,' 'PBKDF2,' 'Argon2,' 'bcrypt cost,' 'IV reuse,' 'nonce reuse,' 'AES mode,' 'AES-GCM,' 'AES-ECB,' 'signature verification,' 'TLS configuration,' 'cipher suites,' 'key rotation,' 'libsodium,' 'BoringSSL,' or 'is this crypto right.'"
-allowed-tools: Read, Grep, Glob, WebSearch
+name: "bri-crypto-audit"
+description: "Audit cryptography implementation \u2014 algorithm choice, key sizes, KDF parameters, IV/nonce handling, signature verification, randomness, TLS configuration, and key rotation. Deeper than owasp-audit A04. Use when the user mentions 'crypto review,' 'cryptography audit,' 'encryption review,' 'KDF,' '..."
 ---
+
+# Bri Crypto Audit
+
+*Sourced from abdo453-hunterai*
 
 # Crypto Audit — Cryptography Implementation Review
 
@@ -225,3 +228,4 @@ Dispositions for confirmed findings (set later, usually by `finding-triage`): Fi
 - "Real-World Cryptography" — David Wong
 - libsodium / Tink / BoringSSL documentation
 - Shared references (copied into `references/` at build time): [findings-format.md](references/findings-format.md), [severity-calibration.md](references/severity-calibration.md), [verification.md](references/verification.md), [validate-findings.mjs](references/validate-findings.mjs), [to-sarif.mjs](references/to-sarif.mjs), [findings.schema.json](references/findings.schema.json)
+

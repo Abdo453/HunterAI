@@ -1,8 +1,11 @@
 ---
-name: tob-supply-chain-risk-auditor
-description: "Audits a project's dependencies for supply-chain risk: version-matched advisories for direct dependencies and the full lockfile tree, abandoned or archived upstreams, npm publisher concentration, and install-time script execution. Use when asked to audit dependencies, assess supply-chain or third-party package risk, or review a dependency tree before an engagement."
-allowed-tools: Read Write Bash Glob Grep
+name: "tob-supply-chain-risk-auditor"
+description: "Audits a project's dependencies for supply-chain risk: version-matched advisories for direct dependencies and the full lockfile tree, abandoned or archived upstreams, npm publisher concentration, and install-time script execution. Use when asked to audit dependencies, assess supply-chain or third..."
 ---
+
+# Tob Supply Chain Risk Auditor
+
+*Sourced from abdo453-hunterai*
 
 # Supply Chain Risk Auditor
 
@@ -120,3 +123,4 @@ or framing.
   scope, and worth saying so if the user seems to expect them.
 - Ecosystems other than npm, PyPI, and Go; say the ecosystem is unsupported rather than
   improvising an audit for it.
+

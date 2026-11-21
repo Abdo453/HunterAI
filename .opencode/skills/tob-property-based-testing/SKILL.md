@@ -1,8 +1,11 @@
 ---
-name: tob-property-based-testing
-effort: low
-description: "Writes, reviews, and debugs property-based tests — Hypothesis, fast-check, proptest, jqwik, rapid, and Echidna or Medusa for Solidity invariants. Use whenever tests should cover a whole input domain instead of a hand-picked list of examples: encode/decode and serialize/deserialize pairs, parsers, canonicalizers and normalizers, validators, numeric and Decimal types, comparators and sort order, data structures, and smart-contract state invariants. Also use when adding cases to an existing @given, fast-check, or proptest suite, when judging whether existing property tests assert anything real, and when a generator has shrunk a counterexample and you need to tell a wrong property from a genuine bug. Not for coverage-guided binary fuzzing (libFuzzer, AFL), mutation-testing campaigns, static analysis, benchmarking, or end-to-end UI tests."
+name: "tob-property-based-testing"
+description: "Writes, reviews, and debugs property-based tests \u2014 Hypothesis, fast-check, proptest, jqwik, rapid, and Echidna or Medusa for Solidity invariants. Use whenever tests should cover a whole input domain instead of a hand-picked list of examples: encode/decode and serialize/deserialize pairs, parsers,..."
 ---
+
+# Tob Property Based Testing
+
+*Sourced from abdo453-hunterai*
 
 # Property-Based Testing
 
@@ -66,3 +69,4 @@ Load the one that matches the task in front of you:
 If the project already uses a PBT library, just write the tests in it. If it does not,
 adding one is a dependency decision that belongs to the user — offer it once with the
 specific property you would write, and take the answer either way.
+

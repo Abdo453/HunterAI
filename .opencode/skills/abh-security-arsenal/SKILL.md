@@ -1,7 +1,11 @@
 ---
-name: abh-security-arsenal
-description: Security payloads, bypass tables, wordlists, gf pattern names, always-rejected bug list, and conditionally-valid-with-chain table. Use when you need specific payloads for XSS/SSRF/SQLi/XXE/NoSQLi/command injection/SSTI/IDOR/path-traversal/HTTP smuggling/WebSocket/MFA bypass, bypass techniques, or to check if a finding is submittable. Also use when asked about what NOT to submit.
+name: "abh-security-arsenal"
+description: "Security payloads, bypass tables, wordlists, gf pattern names, always-rejected bug list, and conditionally-valid-with-chain table. Use when you need specific payloads for XSS/SSRF/SQLi/XXE/NoSQLi/command injection/SSTI/IDOR/path-traversal/HTTP smuggling/WebSocket/MFA bypass, bypass techniques, or..."
 ---
+
+# Abh Security Arsenal
+
+*Sourced from abdo453-hunterai*
 
 # SECURITY ARSENAL
 
@@ -1666,3 +1670,4 @@ curl -sk -D - -o /dev/null "https://target.com/%24%7B%28%23a%3D%40org.apache.com
 ---
 
 > **Chain note:** these often escalate — Spring heapdump -> AWS keys -> see SSRF class / cloud-metadata pivot; Tomcat/Confluence/OFBiz shell -> internal network -> SSRF and IDOR on adjacent services. Pull the secret or land the shell first, then map what it unlocks before writing the report.
+

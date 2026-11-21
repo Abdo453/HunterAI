@@ -1,8 +1,11 @@
 ---
-name: tob-libafl
-type: fuzzer
-description: "Builds custom fuzzers with LibAFL, the modular Rust fuzzing library. Covers composing observers, feedbacks, mutators, schedulers, and executors into a fuzzer for targets the standard tools do not fit. Use when writing a bespoke fuzzer or mutator, fuzzing a non-standard target or architecture, implementing a fuzzing research idea, or when libFuzzer and AFL++ lack the control you need."
+name: "tob-libafl"
+description: "Builds custom fuzzers with LibAFL, the modular Rust fuzzing library. Covers composing observers, feedbacks, mutators, schedulers, and executors into a fuzzer for targets the standard tools do not fit. Use when writing a bespoke fuzzer or mutator, fuzzing a non-standard target or architecture, imp..."
 ---
+
+# Tob Libafl
+
+*Sourced from abdo453-hunterai*
 
 # LibAFL
 
@@ -621,3 +624,4 @@ cmake --build . --target fuzz
 - [LibAFL Examples](https://github.com/AFLplusplus/LibAFL/tree/main/fuzzers) - Collection of example fuzzers
 - [cargo-fuzz with LibAFL](https://github.com/AFLplusplus/LibAFL/tree/main/fuzzers/fuzz_anything/cargo_fuzz) - Using LibAFL as cargo-fuzz backend
 - [Testing Handbook LibAFL Examples](https://github.com/trailofbits/testing-handbook/tree/main/materials/fuzzing/libafl) - Complete working examples from this handbook
+

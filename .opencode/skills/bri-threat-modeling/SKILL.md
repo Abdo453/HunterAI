@@ -1,8 +1,11 @@
 ---
-name: bri-threat-modeling
-description: "Run a structured threat-modeling session for a new feature, system, or architecture — STRIDE, attack trees, data flow diagrams, abuse cases. Use when the user mentions 'threat model,' 'threat modeling,' 'STRIDE,' 'attack tree,' 'abuse case,' 'data flow diagram,' 'DFD,' 'security architecture review,' 'design review,' 'pre-implementation security,' 'shift left,' 'what could go wrong,' or needs strategic security thinking before code is written."
-allowed-tools: Read, Grep, Glob, WebSearch
+name: "bri-threat-modeling"
+description: "Run a structured threat-modeling session for a new feature, system, or architecture \u2014 STRIDE, attack trees, data flow diagrams, abuse cases. Use when the user mentions 'threat model,' 'threat modeling,' 'STRIDE,' 'attack tree,' 'abuse case,' 'data flow diagram,' 'DFD,' 'security architecture revi..."
 ---
+
+# Bri Threat Modeling
+
+*Sourced from abdo453-hunterai*
 
 # Threat Modeling — Pre-Implementation Security Design
 
@@ -212,3 +215,4 @@ Keep this in the repo alongside the design doc, not in a separate security track
 - "Threat Modeling Manifesto" (threatmodelingmanifesto.org)
 - Mozilla Rapid Risk Assessment (RRA) framework
 - NIST SP 800-154 (Guide to Data-Centric System Threat Modeling)
+

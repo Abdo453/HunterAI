@@ -1,7 +1,11 @@
 ---
-name: abh-graphql-audit
-description: GraphQL security hunting — introspection abuse, field suggestion enumeration (clairvoyance), batching DoS, IDOR via aliasing, auth bypass, injection via arguments, subscription abuse, depth/complexity bombs, and WAF bypass. Covers graphw00f fingerprinting, GraphQLmap, graphql-cop, and inql. Use when a target exposes a /graphql, /api/graphql, or GQL-over-HTTP endpoint.
+name: "abh-graphql-audit"
+description: "GraphQL security hunting \u2014 introspection abuse, field suggestion enumeration (clairvoyance), batching DoS, IDOR via aliasing, auth bypass, injection via arguments, subscription abuse, depth/complexity bombs, and WAF bypass. Covers graphw00f fingerprinting, GraphQLmap, graphql-cop, and inql. Use w..."
 ---
+
+# Abh Graphql Audit
+
+*Sourced from abdo453-hunterai*
 
 # GRAPHQL SECURITY AUDIT
 
@@ -525,3 +529,4 @@ Remediation:
 | `inql` | Burp Suite extension — schema + IDOR | Burp BApp Store |
 | `graphql-voyager` | Visual schema explorer | browser tool |
 | `wscat` | WebSocket subscription testing | `npm i -g wscat` |
+

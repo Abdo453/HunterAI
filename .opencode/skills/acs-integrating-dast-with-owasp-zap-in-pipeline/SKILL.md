@@ -1,28 +1,11 @@
 ---
-name: acs-integrating-dast-with-owasp-zap-in-pipeline
-description: Integrates OWASP ZAP (Zed Attack Proxy) into GitHub Actions and GitLab CI pipelines, covering baseline, full, and API scan configuration against running applications, ZAP finding interpretation, scan policy tuning, and DAST quality gates. Use when testing running web apps or REST/GraphQL APIs for XSS, SQLi, CSRF, and auth/authz flaws, or when SAST alone is insufficient and runtime DAST is required for compliance or release gating.
-domain: cybersecurity
-subdomain: devsecops
-tags:
-- devsecops
-- cicd
-- dast
-- owasp-zap
-- dynamic-testing
-- secure-sdlc
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- GV.SC-07
-- ID.IM-04
-- PR.PS-04
-mitre_attack:
-- T1195
-- T1554
-- T1059.004
+name: "acs-integrating-dast-with-owasp-zap-in-pipeline"
+description: "Integrates OWASP ZAP (Zed Attack Proxy) into GitHub Actions and GitLab CI pipelines, covering baseline, full, and API scan configuration against running applications, ZAP finding interpretation, scan policy tuning, and DAST quality gates. Use when testing running web apps or REST/GraphQL APIs for..."
 ---
+
+# Acs Integrating Dast With Owasp Zap In Pipeline
+
+*Sourced from abdo453-hunterai*
 
 # Integrating DAST with OWASP ZAP in Pipeline
 
@@ -254,3 +237,4 @@ FAILING ALERTS:
 
 QUALITY GATE: FAILED (1 HIGH, 2 MEDIUM findings)
 ```
+

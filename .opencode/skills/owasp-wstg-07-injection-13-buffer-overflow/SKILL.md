@@ -1,0 +1,20 @@
+---
+name: "owasp-wstg-07-injection-13-buffer-overflow"
+description: "layout: col-document title: WSTG - Latest tags: WSTG"
+---
+
+# Owasp Wstg 07 Injection 13 Buffer Overflow
+
+*Integrated from owasp-wstg-07-Injection*
+
+{% include breadcrumb.html %}
+<link rel="stylesheet" href="{{ site.baseurl }}/assets/css/wstg-nav.css">
+<script src="{{ site.baseurl }}/assets/js/wstg-nav.js" defer></script>
+# Buffer Overflow
+
+|ID          |
+|------------|
+|WSTG-INJT-13|
+
+This content has been removed
+

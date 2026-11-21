@@ -1,33 +1,12 @@
 ---
-name: acs-performing-web-application-scanning-with-nikto
-description: Runs Nikto, an open-source web server and web application scanner,
-  to test over 7,000 potentially dangerous files/programs, check for outdated versions
-  across 1,250+ servers, and identify XSS, SQL injection, misconfigurations, default
-  credentials, and vulnerable CGI scripts. Use when performing web application vulnerability
-  scanning, security assessments, scheduled security testing, or validating web
-  server security controls.
-domain: cybersecurity
-subdomain: vulnerability-management
-tags:
-- vulnerability-management
-- cve
-- nikto
-- web-scanning
-- owasp
-- risk
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- ID.RA-02
-- ID.IM-02
-- ID.RA-06
-mitre_attack:
-- T1190
-- T1203
-- T1068
+name: "acs-performing-web-application-scanning-with-nikto"
+description: "Runs Nikto, an open-source web server and web application scanner,"
 ---
+
+# Acs Performing Web Application Scanning With Nikto
+
+*Sourced from abdo453-hunterai*
+
 # Performing Web Application Scanning with Nikto
 
 ## Overview
@@ -245,3 +224,4 @@ for item in tree.findall('.//item'):
 - scanning-infrastructure-with-nessus
 - scanning-apis-for-security-vulnerabilities
 - performing-network-vulnerability-assessment
+

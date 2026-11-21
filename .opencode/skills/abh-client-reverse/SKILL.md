@@ -1,7 +1,11 @@
 ---
-name: abh-client-reverse
-description: 'Client-side request-signing and anti-bot token reversal for bug bounty — when a request carries a sign/sig/hmac/token/nonce/timestamp/X-Sensor header that Burp Repeater cannot replay, recover the signer just enough to reproduce the request outside the client. Packet-first staging (capture real request → prove replay works → only reverse if replay fails) across the locate→recover→runtime→validation→replay spine. Covers tracing backward from the signature field (writer→builder→entry→source), isolating user-mutable sign inputs (timestamp/nonce/deviceId/body) vs constants (secret key), hooking fetch/XHR in DevTools, JS deobfuscation basics (webpack/wasm/JSVMP), and the bounty payoff: reach the protected API to then hunt IDOR/auth/business-logic. Use when Burp/mitmproxy replay of a signed or anti-bot-gated request fails and you suspect a client-computed field is blocking you.'
+name: "abh-client-reverse"
+description: "Client-side request-signing and anti-bot token reversal for bug bounty \u2014 when a request carries a sign/sig/hmac/token/nonce/timestamp/X-Sensor header that Burp Repeater cannot replay, recover the signer just enough to reproduce the request outside the client. Packet-first staging (capture real re..."
 ---
+
+# Abh Client Reverse
+
+*Sourced from abdo453-hunterai*
 
 # CLIENT-SIDE REQUEST-SIGNING / ANTI-BOT TOKEN REVERSAL
 
@@ -290,3 +294,4 @@ Same spine, harder shell. These ship an SDK that emits an opaque sensor blob (`X
 > Cross-reference: once you're through the signature, run **IDOR**, **Broken Auth / Access Control**, **Mass Assignment**, and **Business Logic** from `web2-vuln-classes`; use `web2-recon` for hidden-endpoint and sibling-host discovery; validate with the 7-Question Gate before reporting.
 
 See `references/browser-js-signing.md` for the full browser-JS staging detail, the boundary model, and handoff-card discipline.
+

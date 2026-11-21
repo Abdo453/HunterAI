@@ -1,8 +1,11 @@
 ---
-name: tob-agentic-actions-auditor
-description: "Audits GitHub Actions workflows for security vulnerabilities in AI agent integrations including Claude Code Action, Gemini CLI, OpenAI Codex, and GitHub AI Inference. Detects attack vectors where attacker-controlled input reaches AI agents running in CI/CD pipelines, including env var intermediary patterns, direct expression injection, dangerous sandbox configurations, and wildcard user allowlists. Use when reviewing workflow files that invoke AI coding agents, auditing CI/CD pipeline security for prompt injection risks, or evaluating agentic action configurations."
-allowed-tools: Read Grep Glob Bash
+name: "tob-agentic-actions-auditor"
+description: "Audits GitHub Actions workflows for security vulnerabilities in AI agent integrations including Claude Code Action, Gemini CLI, OpenAI Codex, and GitHub AI Inference. Detects attack vectors where attacker-controlled input reaches AI agents running in CI/CD pipelines, including env var intermediar..."
 ---
+
+# Tob Agentic Actions Auditor
+
+*Sourced from abdo453-hunterai*
 
 # Agentic Actions Auditor
 
@@ -323,3 +326,4 @@ For complete documentation beyond this methodology overview:
 - **Action Security Profiles:** See [{baseDir}/references/action-profiles.md]({baseDir}/references/action-profiles.md) for per-action security field documentation, default configurations, and dangerous configuration patterns.
 - **Detection Vectors:** See [{baseDir}/references/foundations.md]({baseDir}/references/foundations.md) for the shared attacker-controlled input model, and individual vector files `{baseDir}/references/vector-{a..i}-*.md` for per-vector detection heuristics.
 - **Cross-File Resolution:** See [{baseDir}/references/cross-file-resolution.md]({baseDir}/references/cross-file-resolution.md) for `uses:` reference classification, composite action and reusable workflow resolution procedures, input mapping traces, and depth-1 limit.
+

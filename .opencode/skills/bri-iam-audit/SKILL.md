@@ -1,8 +1,11 @@
 ---
-name: bri-iam-audit
-description: "Audit, design, and migrate Identity and Access Management — cloud provider IAM (AWS, GCP, Azure), identity providers (Okta, Entra ID / Azure AD, Auth0, Google Workspace), application authorization (RBAC, ABAC, ReBAC), and federated identity. Use when the user mentions 'IAM,' 'identity,' 'access management,' 'least privilege,' 'role design,' 'SSO,' 'SAML,' 'OIDC,' 'OAuth,' 'JIT access,' 'just-in-time access,' 'break-glass,' 'service accounts,' 'RBAC,' 'ABAC,' 'privilege creep,' 'role explosion,' 'identity governance,' 'IAM strategy,' 'identity migration,' 'Okta,' 'Entra ID,' 'Azure AD,' 'Auth0,' 'Cognito,' or needs identity consultant-level guidance."
-allowed-tools: Read, Grep, Glob, WebSearch, Bash(aws accessanalyzer list-findings:*), Bash(aws iam get-account-authorization-details:*), Bash(gcloud asset analyze-iam-policy:*), Bash(gcloud policy-intelligence query-activity:*), Bash(az role assignment list:*)
+name: "bri-iam-audit"
+description: "Audit, design, and migrate Identity and Access Management \u2014 cloud provider IAM (AWS, GCP, Azure), identity providers (Okta, Entra ID / Azure AD, Auth0, Google Workspace), application authorization (RBAC, ABAC, ReBAC), and federated identity. Use when the user mentions 'IAM,' 'identity,' 'access m..."
 ---
+
+# Bri Iam Audit
+
+*Sourced from abdo453-hunterai*
 
 # IAM Audit — Identity & Access Management Review and Design
 
@@ -263,3 +266,4 @@ Write `findings.json` first (Audit mode). The report is rendered from it and nev
 - AWS Permission Boundary documentation
 - "Just enough access" / JIT access patterns
 - Shared references (copied into `references/` at build time): [findings-format.md](references/findings-format.md), [findings.schema.json](references/findings.schema.json), [validate-findings.mjs](references/validate-findings.mjs), [to-sarif.mjs](references/to-sarif.mjs), [severity-calibration.md](references/severity-calibration.md), [verification.md](references/verification.md)
+

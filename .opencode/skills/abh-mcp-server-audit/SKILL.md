@@ -1,7 +1,11 @@
 ---
-name: abh-mcp-server-audit
-description: Security audit of Model Context Protocol (MCP) servers — tool poisoning, prompt injection via tool descriptions and results, unscoped/over-privileged tools, path traversal in file tools, command injection in shell/exec tools, SSRF in fetch tools, secret leakage through tool output, missing approval gates on state-changing actions, confused-deputy and rug-pull tool redefinition, token passthrough, and unsafe stdio/HTTP transport config. Covers auditing both first-party and third-party MCP servers (Python FastMCP, Node MCP SDK) and their client configs (Claude Desktop, Cursor, Cline, Windsurf, Zed). Use when reviewing, hardening, or hunting bugs in an MCP server, an agent's tool integrations, or a mcpServers config block. 中文触发词：MCP审计、工具投毒、提示注入、智能体安全、MCP服务器漏洞
+name: "abh-mcp-server-audit"
+description: "Security audit of Model Context Protocol (MCP) servers \u2014 tool poisoning, prompt injection via tool descriptions and results, unscoped/over-privileged tools, path traversal in file tools, command injection in shell/exec tools, SSRF in fetch tools, secret leakage through tool output, missing approv..."
 ---
+
+# Abh Mcp Server Audit
+
+*Sourced from abdo453-hunterai*
 
 # MCP SERVER SECURITY AUDIT
 
@@ -161,3 +165,4 @@ Fix: <allowlist | arg array | approval gate | redact | pin>
 ```
 
 Kill anything you can't prove with a concrete call. "Could be abused" is not a bug — show the call that abuses it.
+

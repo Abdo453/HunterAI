@@ -1,7 +1,11 @@
 ---
-name: abh-llm-redteam
-description: LLM application red-teaming — prompt injection (direct + indirect), jailbreak, system-prompt leak, data exfiltration, guardrail bypass, multi-turn crescendo, cross-lingual + cipher + invisible-unicode token smuggling, excessive agency / tool abuse, insecure output handling. Canonical OWASP LLM Top 10 + ASI01-ASI10 mapping. Use when a target exposes a chat/completions/assistant/copilot endpoint, an AI feature that consumes user text or documents, or any /v1/chat, /api/chat, /mcp surface.
+name: "abh-llm-redteam"
+description: "LLM application red-teaming \u2014 prompt injection (direct + indirect), jailbreak, system-prompt leak, data exfiltration, guardrail bypass, multi-turn crescendo, cross-lingual + cipher + invisible-unicode token smuggling, excessive agency / tool abuse, insecure output handling. Canonical OWASP LLM To..."
 ---
+
+# Abh Llm Redteam
+
+*Sourced from abdo453-hunterai*
 
 # LLM Red-Team
 
@@ -83,3 +87,4 @@ This table is the ONE authoritative ASI mapping for the whole toolkit — `skill
 - For blind exfil, require a correlated out-of-band callback (`bughunter/tools/oob_listener.py`), not just a rendered beacon tag.
 - For insecure-output XSS, confirm execution at the **downstream sink** with the XSS verifier (`tools/verifiers/xss.py` / `bughunter/tools/dom_xss_harness.py`), not in the chat reply.
 - Record the exact payload + response excerpt; the report must be reproducible verbatim.
+

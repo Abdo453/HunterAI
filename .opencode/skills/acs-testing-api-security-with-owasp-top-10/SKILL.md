@@ -1,33 +1,11 @@
 ---
-name: acs-testing-api-security-with-owasp-top-10
-description: Systematically assesses REST, GraphQL, and gRPC API endpoints against the OWASP
-  API Security Top 10 (2023) using Burp Suite and Postman for automated and manual testing.
-  Use during authorized API penetration tests, before deploying new endpoints to production,
-  or when validating API gateway controls and rate limiting.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- api-security
-- owasp
-- rest-api
-- graphql
-- burpsuite
-- postman
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
+name: "acs-testing-api-security-with-owasp-top-10"
+description: "Systematically assesses REST, GraphQL, and gRPC API endpoints against the OWASP"
 ---
+
+# Acs Testing Api Security With Owasp Top 10
+
+*Sourced from abdo453-hunterai*
 
 # Testing API Security with OWASP Top 10
 
@@ -353,3 +331,4 @@ Authenticated users can access any order by iterating order IDs.
 Tested range: 1-1000, 847 valid orders accessible.
 PII exposure: names, addresses, payment details.
 ```
+

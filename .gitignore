@@ -46,6 +46,8 @@ data/*.db
 data/engagements/
 data/traffic.db*
 data/*.log
+logs/*.log
+*.log
 data/**/*.sqlite*
 data/readiness/readiness_report.json
 data/evidence_store/tool_execution.jsonl

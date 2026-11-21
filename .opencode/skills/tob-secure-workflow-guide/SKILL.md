@@ -1,7 +1,11 @@
 ---
-name: tob-secure-workflow-guide
-description: Guides through Trail of Bits' 5-step secure development workflow. Runs Slither scans, checks special features (upgradeability/ERC conformance/token integration), generates visual security diagrams, helps document security properties for fuzzing/verification, and reviews manual security areas. Use when securing a smart contract end to end rather than hunting one bug, checking a project on every check-in or before deployment, triaging a Slither report, or asking where to start on smart contract security.
+name: "tob-secure-workflow-guide"
+description: "Guides through Trail of Bits' 5-step secure development workflow. Runs Slither scans, checks special features (upgradeability/ERC conformance/token integration), generates visual security diagrams, helps document security properties for fuzzing/verification, and reviews manual security areas. Use..."
 ---
+
+# Tob Secure Workflow Guide
+
+*Sourced from abdo453-hunterai*
 
 # Secure Workflow Guide
 
@@ -159,3 +163,4 @@ For a complete example workflow report, see [EXAMPLE_REPORT.md](resources/EXAMPL
 ## Ready to Start
 
 Let me know when you're ready and I'll run through the workflow with your codebase!
+

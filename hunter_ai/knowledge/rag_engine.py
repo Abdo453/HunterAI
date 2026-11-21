@@ -14,10 +14,117 @@ from __future__ import annotations
 import json
 import math
 import re
+import shlex
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+
+class PreExecutionSyntaxValidator:
+    """
+    مدقق بناء الجملة والمعاملات قبل التنفيذ (COAPT-inspired):
+    يتحقق من صحة تركيب أوامر الأدوات أو الاستعلامات قبل مرحلة التنفيذ (Act)
+    لمنع الأوامر المشوهة أو غير المكتملة من التعطل أو تلويث الذاكرة.
+    """
+
+    PLACEHOLDER_PATTERNS = [
+        r"<target>", r"<url>", r"<host>", r"<port>", r"\{target\}", r"\{url\}",
+        r"TODO", r"CHANGEME", r"YOUR_API_KEY",
+    ]
+
+    @classmethod
+    def validate_command_syntax(
+        cls,
+        command: str,
+        allowed_tools: Optional[List[str]] = None,
+        target: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if not command or not str(command).strip():
+            return {
+                "valid": False,
+                "repaired_command": "",
+                "tool": None,
+                "reason": "Empty command string",
+            }
+
+        repaired = str(command).strip()
+        # Auto-replace leftover target placeholders if target is provided
+        if target:
+            for ph in ("<target>", "{target}", "<host>", "{url}", "<url>"):
+                if ph in repaired:
+                    repaired = repaired.replace(ph, target)
+
+        # Check null bytes or control characters
+        if "\x00" in repaired or "\r" in repaired:
+            repaired = repaired.replace("\x00", "").replace("\r", " ").strip()
+
+        # Check unresolved placeholders
+        for pat in cls.PLACEHOLDER_PATTERNS:
+            if re.search(pat, repaired, re.I):
+                return {
+                    "valid": False,
+                    "repaired_command": repaired,
+                    "tool": None,
+                    "reason": f"Unresolved template placeholder matching '{pat}'",
+                }
+
+        # Check balanced quotes and shell tokenization
+        try:
+            tokens = shlex.split(repaired, posix=True)
+        except ValueError as exc:
+            # Attempt automatic quote repair if a trailing quote was omitted
+            for q in ('"', "'"):
+                if repaired.count(q) % 2 == 1:
+                    candidate = repaired + q
+                    try:
+                        tokens = shlex.split(candidate, posix=True)
+                        repaired = candidate
+                        break
+                    except ValueError:
+                        tokens = []
+            else:
+                return {
+                    "valid": False,
+                    "repaired_command": repaired,
+                    "tool": None,
+                    "reason": f"Shell syntax error: {exc}",
+                }
+
+        if not tokens:
+            return {
+                "valid": False,
+                "repaired_command": repaired,
+                "tool": None,
+                "reason": "No executable tokens parsed",
+            }
+
+        # Check malformed flags like '---'
+        for tok in tokens[1:]:
+            if tok.startswith("---") and not tok.startswith("----"):
+                return {
+                    "valid": False,
+                    "repaired_command": repaired,
+                    "tool": tokens[0],
+                    "reason": f"Malformed flag syntax: {tok}",
+                }
+
+        binary = Path(tokens[0]).name
+        if allowed_tools and binary not in allowed_tools:
+            return {
+                "valid": False,
+                "repaired_command": repaired,
+                "tool": binary,
+                "reason": f"Tool '{binary}' is not in allowed_tools list",
+            }
+
+        return {
+            "valid": True,
+            "repaired_command": repaired,
+            "tool": binary,
+            "tokens_count": len(tokens),
+            "reason": "Syntax verified",
+        }
 
 
 @dataclass
@@ -86,6 +193,7 @@ class RAGEngine:
         self.vocab: List[str] = []
         self._vectors: List[List[float]] = []
         self._built = False
+        self._outcome_stats: Dict[str, Dict[str, int]] = {}
         self._load_knowledge()
 
     def _load_knowledge(self) -> None:
@@ -254,6 +362,68 @@ class RAGEngine:
         for sim, idx in scored[:top_k]:
             item = self.items[idx]
             item.score = sim
+            results.append(item)
+
+        return results
+
+    def _compute_statistical_score(self, item: KnowledgeItem, semantic_similarity: float) -> Tuple[float, Dict[str, float]]:
+        """
+        COAPT-style statistical ranking:
+        FinalScore = 0.55 * SemanticSimilarity + 0.25 * PrevalenceWeight + 0.20 * HistoricalSuccessRate
+        """
+        prevalence = float(item.metadata.get("prevalence_weight", 0.78))
+        stats = self._outcome_stats.get(item.item_id) or self._outcome_stats.get(item.title, {"success": 2, "total": 3})
+        total = max(1, stats.get("total", 3))
+        success_rate = float(stats.get("success", 2)) / float(total)
+        final_score = round(0.55 * semantic_similarity + 0.25 * prevalence + 0.20 * success_rate, 4)
+        breakdown = {
+            "semantic_similarity": round(semantic_similarity, 4),
+            "prevalence_weight": round(prevalence, 4),
+            "historical_success_rate": round(success_rate, 4),
+            "final_score": final_score,
+        }
+        return final_score, breakdown
+
+    def record_technique_outcome(self, item_id_or_title: str, success: bool) -> Dict[str, int]:
+        """تسجيل نتيجة محاولة استخدام تقنية لتحديث معدل النجاح التاريخي إحصائياً."""
+        entry = self._outcome_stats.setdefault(item_id_or_title, {"success": 2, "total": 3})
+        entry["total"] += 1
+        if success:
+            entry["success"] += 1
+        return dict(entry)
+
+    def retrieve_statistically(
+        self,
+        query: str,
+        top_k: int = 5,
+        source_filter: Optional[str] = None,
+        min_score: float = 0.1,
+    ) -> List[KnowledgeItem]:
+        """
+        استرجاع معزز إحصائياً (COAPT pattern):
+        يرتب العناصر بدمج التشابه الدلالي مع إحصائيات الانتشار ومعدل النجاح التاريخي.
+        """
+        if not self._built or not self.items:
+            return []
+
+        query_tokens = _tokenize(query)
+        query_vec = _tfidf_query(query_tokens, self.vocab)
+
+        scored: List[Tuple[float, int, Dict[str, float]]] = []
+        for idx, item in enumerate(self.items):
+            if source_filter and item.source != source_filter:
+                continue
+            sim = _cosine_similarity(query_vec, self._vectors[idx])
+            if sim >= min_score:
+                stat_score, breakdown = self._compute_statistical_score(item, sim)
+                scored.append((stat_score, idx, breakdown))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        results: List[KnowledgeItem] = []
+        for stat_score, idx, breakdown in scored[:top_k]:
+            item = self.items[idx]
+            item.score = stat_score
+            item.metadata["statistical_breakdown"] = breakdown
             results.append(item)
 
         return results

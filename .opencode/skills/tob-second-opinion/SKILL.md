@@ -1,8 +1,11 @@
 ---
-name: tob-second-opinion
+name: "tob-second-opinion"
 description: "Gets independent code reviews from Codex or Antigravity for uncommitted changes, branch diffs, and commits. Use when the user requests an external review, a second opinion on code, a codex review, a gemini review, an antigravity review, or /second-opinion."
-allowed-tools: Bash Read Glob Grep AskUserQuestion
 ---
+
+# Tob Second Opinion
+
+*Sourced from abdo453-hunterai*
 
 # Second Opinion
 
@@ -99,3 +102,4 @@ do not cycle through providers after authentication or quota failures.
   sends the same branch patch to both and compares their findings.
 - `/second-opinion:second-opinion use Gemini CLI to review commit abc1234 for security issues`
   preserves the requested CLI and reviews that commit.
+

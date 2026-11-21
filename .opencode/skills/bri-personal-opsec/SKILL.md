@@ -1,8 +1,11 @@
 ---
-name: bri-personal-opsec
-description: "Audit one person's own security setup — the founder or operator who holds the keys to the stack — and produce a prioritized gap report. Walks Karpathy's 15-control digital security checklist, adds account-recovery, SIM-swap, registrar, and hardware-key checks, and covers the AI-agent era: tokens your coding agents can read, MCP server trust, inbox-assistant prompt injection, clipboard exposure. Use when the user mentions 'personal opsec,' 'personal security audit,' 'secure my own accounts,' 'founder security,' 'Karpathy security checklist,' 'am I secure,' 'hardware key,' 'YubiKey,' 'SIM swap,' 'port-out PIN,' 'FileVault,' 'BitLocker,' 'password manager,' 'recovery codes,' 'registrar lock,' 'what can my AI agent see,' 'API keys on my laptop,' 'MCP trust,' or wants to harden their own accounts and machine."
-allowed-tools: Read, Grep, Glob, Bash(fdesetup status:*), Bash(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate:*), Bash(/usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode:*), Bash(scutil --dns:*), Bash(spctl --status:*), Bash(csrutil status:*), Bash(sw_vers:*), Bash(which:*), Bash(ls -l:*), Bash(gh auth status:*), Bash(whois:*), Bash(manage-bde -status:*), Bash(lsblk:*), Bash(resolvectl status:*), Bash(defaults read:*), Bash(pgrep -fl:*)
+name: "bri-personal-opsec"
+description: "Audit one person's own security setup \u2014 the founder or operator who holds the keys to the stack \u2014 and produce a prioritized gap report. Walks Karpathy's 15-control digital security checklist, adds account-recovery, SIM-swap, registrar, and hardware-key checks, and covers the AI-agent era: tokens ..."
 ---
+
+# Bri Personal Opsec
+
+*Sourced from abdo453-hunterai*
 
 # Personal OpSec — Audit One Operator's Own Security Setup
 
@@ -190,3 +193,4 @@ Dispositions use the shared vocabulary: `Fixed`, `Deferred`, `Accepted Risk`, `M
 - FTC / FCC consumer guidance on SIM-swap and port-out fraud
 - ICANN — EPP status codes (`clientTransferProhibited`, registry lock)
 - OWASP Top 10 for LLM Applications — LLM01 Prompt Injection, LLM06 Excessive Agency
+

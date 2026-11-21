@@ -1,0 +1,452 @@
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (3 مهمة)
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-5b7af758, orch-af71d709, orch-ee20586b
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [TDG]任务 'orch-af71d709' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-af71d709': bfla_auth_bypass_skill
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-af71d709' بواسطة Executor: completed
+2026-11-09 01:53:22 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 01:53:22 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-ee20586b' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 01:53:22 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-ee20586b' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-ee20586b' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'loop_test'
+2026-11-09 01:53:22 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (6 مهمة)
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-10154d10, orch-06d7ada9, orch-818487cf
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-06d7ada9' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-06d7ada9': bfla_auth_bypass_skill
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-06d7ada9' بواسطة Executor: completed
+2026-11-09 01:55:31 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 01:55:31 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-818487cf' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 01:55:31 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-818487cf' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-818487cf' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'loop_test'
+2026-11-09 01:55:31 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 01:55:32 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-63d2d00c, orch-c00c99ed, orch-0bcbdebe
+2026-11-09 01:55:32 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-c00c99ed' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 01:55:32 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-c00c99ed': idor_tester
+2026-11-09 01:55:32 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-c00c99ed' بواسطة Executor: completed
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (9 مهمة)
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-a88d0014, orch-0ee9723e, orch-1c54033d
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-0ee9723e' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-0ee9723e': bfla_auth_bypass_skill
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-0ee9723e' بواسطة Executor: completed
+2026-11-09 02:01:08 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 02:01:08 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-1c54033d' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 02:01:08 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-1c54033d' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-1c54033d' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (3 مهمة)
+2026-11-09 02:01:08 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 02:01:09 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-f78406d3, orch-0a6c38a1, orch-977beb4f
+2026-11-09 02:01:09 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-0a6c38a1' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 02:01:09 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-0a6c38a1': idor_tester
+2026-11-09 02:01:09 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-0a6c38a1' بواسطة Executor: completed
+2026-11-09 02:01:38 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (12 مهمة)
+2026-11-09 02:01:38 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 02:01:38 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-d258900f, orch-a70d3e19, orch-9a9e7e66
+2026-11-09 02:01:38 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-a70d3e19' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 02:01:38 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-a70d3e19': bfla_auth_bypass_skill
+2026-11-09 02:01:38 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-a70d3e19' بواسطة Executor: completed
+2026-11-09 02:01:38 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 02:01:38 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-9a9e7e66' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 02:01:38 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-9a9e7e66' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 02:01:38 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-9a9e7e66' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 02:01:39 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (6 مهمة)
+2026-11-09 02:01:39 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 02:01:39 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-b50b1e03, orch-7a74023f, orch-20c53cbf
+2026-11-09 02:01:39 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-7a74023f' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 02:01:39 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-7a74023f': idor_tester
+2026-11-09 02:01:39 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-7a74023f' بواسطة Executor: completed
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (15 مهمة)
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-4216e345, orch-605715e5, orch-1c41b024
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-605715e5' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-605715e5': bfla_auth_bypass_skill
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-605715e5' بواسطة Executor: completed
+2026-11-09 02:05:28 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 02:05:28 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-1c41b024' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 02:05:28 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-1c41b024' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-1c41b024' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (9 مهمة)
+2026-11-09 02:05:28 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 02:05:29 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-99b7e919, orch-e69bdb76, orch-cbef233c
+2026-11-09 02:05:29 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-e69bdb76' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 02:05:29 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-e69bdb76': idor_tester
+2026-11-09 02:05:29 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-e69bdb76' بواسطة Executor: completed
+2026-11-09 02:22:11 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-E315ECBD'
+2026-11-09 02:22:11 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-E315ECBD
+2026-11-09 02:22:12 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف http://192.168.43.128: التقنية=attack_surface_ranker, المهام=orch-b1ac694f, orch-3a823343, orch-c3fd8e97
+2026-11-09 02:22:12 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-3a823343' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-09 02:22:12 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-3a823343': attack_surface_ranker
+2026-11-09 02:22:12 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-3a823343' بواسطة Executor: completed
+2026-11-09 02:23:03 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف http://192.168.43.128: التقنية=subdomain_enum, المهام=orch-7111e60a, orch-98d22255, orch-47443aa1
+2026-11-09 02:23:03 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-98d22255' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-09 02:23:03 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-98d22255': subdomain_enum
+2026-11-09 02:23:03 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-98d22255' بواسطة Executor: completed
+2026-11-09 02:31:43 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف http://192.168.43.128: التقنية=attack_surface_ranker, المهام=orch-8929aa76, orch-a0384bb6, orch-85a775fd
+2026-11-09 02:31:43 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-a0384bb6' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-09 02:31:43 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-a0384bb6': attack_surface_ranker
+2026-11-09 02:31:43 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-a0384bb6' بواسطة Executor: completed
+2026-11-09 02:32:59 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف http://192.168.43.128: التقنية=attack_surface_ranker, المهام=orch-9f4feb20, orch-4d0ec805, orch-9b887dd6
+2026-11-09 02:32:59 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-4d0ec805' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-09 02:32:59 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-4d0ec805': attack_surface_ranker
+2026-11-09 02:32:59 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-4d0ec805' بواسطة Executor: completed
+2026-11-09 02:33:00 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف http://192.168.43.128: التقنية=attack_surface_ranker, المهام=orch-e964f07e, orch-06dba960, orch-525197b1
+2026-11-09 02:33:00 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-06dba960' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=CORS Misconfiguration & Trust Verification Methodology (score=0.41)
+2026-11-09 02:33:00 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-06dba960': attack_surface_ranker
+2026-11-09 02:33:00 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-06dba960' بواسطة Executor: completed
+2026-11-09 02:33:00 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف http://192.168.43.128: التقنية=attack_surface_ranker, المهام=orch-e5222e7d, orch-26ede744, orch-a969b5f5
+2026-11-09 02:33:00 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-26ede744' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=NoSQL Injection (MongoDB, Document Stores) Methodology (score=0.43)
+2026-11-09 02:33:00 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-26ede744': attack_surface_ranker
+2026-11-09 02:33:00 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-26ede744' بواسطة Executor: completed
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (18 مهمة)
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-11807005, orch-3858b8d2, orch-bc11f6ae
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-3858b8d2' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-3858b8d2': bfla_auth_bypass_skill
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-3858b8d2' بواسطة Executor: completed
+2026-11-09 02:39:17 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 02:39:17 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-bc11f6ae' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 02:39:17 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-bc11f6ae' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-bc11f6ae' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (12 مهمة)
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-d619c3be, orch-3a247b7f, orch-b39503cf
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-3a247b7f' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-3a247b7f': idor_tester
+2026-11-09 02:39:17 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-3a247b7f' بواسطة Executor: completed
+2026-11-09 02:39:18 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-3FD0DF77'
+2026-11-09 02:39:18 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-3FD0DF77
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (21 مهمة)
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-082dc930, orch-a6723983, orch-aa6f8cd4
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-a6723983' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-a6723983': bfla_auth_bypass_skill
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-a6723983' بواسطة Executor: completed
+2026-11-09 13:51:30 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 13:51:30 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-aa6f8cd4' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 13:51:30 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-aa6f8cd4' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-aa6f8cd4' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (15 مهمة)
+2026-11-09 13:51:30 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 13:51:31 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-493d4bc9, orch-38a32418, orch-dfc19aa9
+2026-11-09 13:51:31 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-38a32418' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 13:51:31 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-38a32418': idor_tester
+2026-11-09 13:51:31 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-38a32418' بواسطة Executor: completed
+2026-11-09 13:51:31 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-600436A2'
+2026-11-09 13:51:31 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-600436A2
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (24 مهمة)
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-f5151ff3, orch-53289687, orch-9c4ba35b
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-53289687' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-53289687': bfla_auth_bypass_skill
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-53289687' بواسطة Executor: completed
+2026-11-09 15:22:17 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 15:22:17 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-9c4ba35b' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 15:22:17 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-9c4ba35b' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-9c4ba35b' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (18 مهمة)
+2026-11-09 15:22:17 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 15:22:18 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-6eda1205, orch-34f5c46e, orch-8d1624c3
+2026-11-09 15:22:18 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-34f5c46e' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 15:22:18 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-34f5c46e': idor_tester
+2026-11-09 15:22:18 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-34f5c46e' بواسطة Executor: completed
+2026-11-09 15:22:18 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-12CAE973'
+2026-11-09 15:22:18 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-12CAE973
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (27 مهمة)
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-ff2ea050, orch-3bf34659, orch-7ece1e1c
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-3bf34659' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-3bf34659': bfla_auth_bypass_skill
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-3bf34659' بواسطة Executor: completed
+2026-11-09 15:24:47 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 15:24:47 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-7ece1e1c' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 15:24:47 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-7ece1e1c' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-7ece1e1c' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (21 مهمة)
+2026-11-09 15:24:47 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 15:24:48 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-3eae0233, orch-535126fb, orch-4b0a4759
+2026-11-09 15:24:48 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-535126fb' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 15:24:48 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-535126fb': idor_tester
+2026-11-09 15:24:48 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-535126fb' بواسطة Executor: completed
+2026-11-09 15:24:48 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-F8542C3C'
+2026-11-09 15:24:48 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-F8542C3C
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (30 مهمة)
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-4b08b762, orch-8ebc1637, orch-41e7b824
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-8ebc1637' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-8ebc1637': bfla_auth_bypass_skill
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-8ebc1637' بواسطة Executor: completed
+2026-11-09 15:26:15 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 15:26:15 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-41e7b824' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 15:26:15 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-41e7b824' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-41e7b824' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (24 مهمة)
+2026-11-09 15:26:15 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 15:26:16 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-119297f4, orch-a8282fb7, orch-82339cac
+2026-11-09 15:26:16 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-a8282fb7' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 15:26:16 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-a8282fb7': idor_tester
+2026-11-09 15:26:16 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-a8282fb7' بواسطة Executor: completed
+2026-11-09 15:26:16 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-78F78F2C'
+2026-11-09 15:26:16 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-78F78F2C
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'test_tdg' (33 مهمة)
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: test_tdg
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف api.example.com: التقنية=bfla_auth_bypass_skill, المهام=orch-292f8be0, orch-c26a8313, orch-810482c0
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-c26a8313' مكتملة: Execute: Test privileged admin endpoint /api/v1/admin/export
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-c26a8313': bfla_auth_bypass_skill
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-c26a8313' بواسطة Executor: completed
+2026-11-09 15:56:43 | [33mWARNING[0m | hunterai | [Memory] سجل فشل: الهدف=api.example.com, التقنية=bfla_auth_bypass_skill, السبب=Court verdict: blocked
+2026-11-09 15:56:43 | [33mWARNING[0m | hunterai | [TDG] مهمة 'orch-810482c0' فشلت (محاولة 1/3): Court verdict: blocked
+2026-11-09 15:56:43 | [33mWARNING[0m | hunterai | [Orchestrator] مهمة 'orch-810482c0' فشلت: Court verdict: blocked, إعادة المحاولة=True
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [Triple] مراجعة مهمة 'orch-810482c0' بواسطة Reviewer: الحكم=blocked, الرسالة=Finding blocked by Evidence Court
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [TDG] تم تحميل الرسم البياني 'loop_test' (27 مهمة)
+2026-11-09 15:56:43 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: loop_test
+2026-11-09 15:56:44 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف example.com: التقنية=idor_tester, المهام=orch-2bf1215d, orch-213e64a0, orch-af706cf4
+2026-11-09 15:56:44 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-213e64a0' مكتملة: Execute: Object identifier parameters classified → prioritize IDOR / BOLA matrix testing | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=
+2026-11-09 15:56:44 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-213e64a0': idor_tester
+2026-11-09 15:56:44 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-213e64a0' بواسطة Executor: completed
+2026-11-09 15:56:44 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-1728D3E8'
+2026-11-09 15:56:44 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-1728D3E8
+2026-11-19 19:48:20 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-BB0F909C'
+2026-11-19 19:48:20 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-BB0F909C
+2026-11-19 19:48:24 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-418d26cf, orch-e3d6fe56, orch-8bf4505f
+2026-11-19 19:48:24 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-e3d6fe56' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-19 19:48:24 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-e3d6fe56': attack_surface_ranker
+2026-11-19 19:48:24 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-e3d6fe56' بواسطة Executor: completed
+2026-11-19 19:49:06 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=subdomain_enum, المهام=orch-1ae0e541, orch-570ac6e0, orch-9ced27a2
+2026-11-19 19:49:06 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-570ac6e0' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-19 19:49:06 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-570ac6e0': subdomain_enum
+2026-11-19 19:49:06 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-570ac6e0' بواسطة Executor: completed
+2026-11-19 19:49:36 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-b2264785, orch-ac23e772, orch-898092e8
+2026-11-19 19:49:36 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-ac23e772' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 19:49:36 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-ac23e772': attack_surface_ranker
+2026-11-19 19:49:36 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-ac23e772' بواسطة Executor: completed
+2026-11-19 19:49:48 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-73352078, orch-92f33d37, orch-f3e9836f
+2026-11-19 19:49:48 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-92f33d37' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 19:49:48 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-92f33d37': attack_surface_ranker
+2026-11-19 19:49:48 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-92f33d37' بواسطة Executor: completed
+2026-11-19 19:49:49 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-28858e42, orch-1d6bc16c, orch-0b978817
+2026-11-19 19:49:49 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-1d6bc16c' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=CORS Misconfiguration & Trust Verification Methodology (score=0.41)
+2026-11-19 19:49:49 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-1d6bc16c': attack_surface_ranker
+2026-11-19 19:49:49 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-1d6bc16c' بواسطة Executor: completed
+2026-11-19 19:49:50 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-954a8c5d, orch-e0bdf0a0, orch-f9134a18
+2026-11-19 19:49:50 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-e0bdf0a0' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=NoSQL Injection (MongoDB, Document Stores) Methodology (score=0.43)
+2026-11-19 19:49:50 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-e0bdf0a0': attack_surface_ranker
+2026-11-19 19:49:50 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-e0bdf0a0' بواسطة Executor: completed
+2026-11-19 19:49:51 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-0d44c462, orch-5ca21188, orch-87dcdd4d
+2026-11-19 19:49:51 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-5ca21188' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 19:49:51 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-5ca21188': attack_surface_ranker
+2026-11-19 19:49:51 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-5ca21188' بواسطة Executor: completed
+2026-11-19 19:49:52 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-278e1d98, orch-88271577, orch-afe06a13
+2026-11-19 19:49:52 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-88271577' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 19:49:52 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-88271577': attack_surface_ranker
+2026-11-19 19:49:52 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-88271577' بواسطة Executor: completed
+2026-11-19 21:10:45 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-F87DB85D'
+2026-11-19 21:10:45 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-F87DB85D
+2026-11-19 21:10:49 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-771a9cfd, orch-99f180f8, orch-940415ff
+2026-11-19 21:10:49 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-99f180f8' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-19 21:10:49 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-99f180f8': attack_surface_ranker
+2026-11-19 21:10:49 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-99f180f8' بواسطة Executor: completed
+2026-11-19 21:11:22 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=subdomain_enum, المهام=orch-aa86f0c0, orch-df0d9de5, orch-647ec243
+2026-11-19 21:11:22 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-df0d9de5' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-19 21:11:22 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-df0d9de5': subdomain_enum
+2026-11-19 21:11:22 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-df0d9de5' بواسطة Executor: completed
+2026-11-19 21:11:58 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-407880ac, orch-6cce20ea, orch-fcbb7ccc
+2026-11-19 21:11:58 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-6cce20ea' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 21:11:58 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-6cce20ea': attack_surface_ranker
+2026-11-19 21:11:58 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-6cce20ea' بواسطة Executor: completed
+2026-11-19 21:48:42 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-CC301F4F'
+2026-11-19 21:48:42 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-CC301F4F
+2026-11-19 21:48:47 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-40f425eb, orch-b86f39ed, orch-40604e34
+2026-11-19 21:48:47 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-b86f39ed' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-19 21:48:47 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-b86f39ed': attack_surface_ranker
+2026-11-19 21:48:47 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-b86f39ed' بواسطة Executor: completed
+2026-11-19 21:49:47 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=subdomain_enum, المهام=orch-2a1058f8, orch-efb36dc4, orch-0c43d835
+2026-11-19 21:49:47 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-efb36dc4' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-19 21:49:47 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-efb36dc4': subdomain_enum
+2026-11-19 21:49:48 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-efb36dc4' بواسطة Executor: completed
+2026-11-19 21:50:16 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-05793b7c, orch-13648c71, orch-60a990fb
+2026-11-19 21:50:16 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-13648c71' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 21:50:16 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-13648c71': attack_surface_ranker
+2026-11-19 21:50:16 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-13648c71' بواسطة Executor: completed
+2026-11-19 22:41:15 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-E4A928E3'
+2026-11-19 22:41:15 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-E4A928E3
+2026-11-19 22:41:26 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-edcf0c34, orch-e033dfaa, orch-a6513aa8
+2026-11-19 22:41:26 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-e033dfaa' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-19 22:41:26 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-e033dfaa': attack_surface_ranker
+2026-11-19 22:41:26 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-e033dfaa' بواسطة Executor: completed
+2026-11-19 22:42:28 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=subdomain_enum, المهام=orch-e63d2b4f, orch-468e421e, orch-d8df8199
+2026-11-19 22:42:28 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-468e421e' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-19 22:42:28 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-468e421e': subdomain_enum
+2026-11-19 22:42:28 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-468e421e' بواسطة Executor: completed
+2026-11-19 22:43:57 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-b4dad3bc, orch-05ff1be1, orch-57de67a2
+2026-11-19 22:43:57 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-05ff1be1' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 22:43:57 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-05ff1be1': attack_surface_ranker
+2026-11-19 22:43:57 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-05ff1be1' بواسطة Executor: completed
+2026-11-19 23:30:33 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-9f491ff2, orch-6857314b, orch-24c4600a
+2026-11-19 23:30:33 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-6857314b' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 23:30:33 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-6857314b': attack_surface_ranker
+2026-11-19 23:30:33 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-6857314b' بواسطة Executor: completed
+2026-11-19 23:30:34 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-b66624b0, orch-a0fa5f89, orch-006d9ba2
+2026-11-19 23:30:34 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-a0fa5f89' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=CORS Misconfiguration & Trust Verification Methodology (score=0.41)
+2026-11-19 23:30:34 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-a0fa5f89': attack_surface_ranker
+2026-11-19 23:30:34 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-a0fa5f89' بواسطة Executor: completed
+2026-11-19 23:30:36 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-908e95e7, orch-0e5fedc3, orch-a2e0fb6d
+2026-11-19 23:30:36 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-0e5fedc3' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=NoSQL Injection (MongoDB, Document Stores) Methodology (score=0.43)
+2026-11-19 23:30:36 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-0e5fedc3': attack_surface_ranker
+2026-11-19 23:30:36 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-0e5fedc3' بواسطة Executor: completed
+2026-11-19 23:30:37 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-9aeb4a77, orch-4082d5c4, orch-8968f704
+2026-11-19 23:30:37 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-4082d5c4' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 23:30:37 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-4082d5c4': attack_surface_ranker
+2026-11-19 23:30:37 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-4082d5c4' بواسطة Executor: completed
+2026-11-19 23:30:38 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-bdef5c19, orch-605e1c68, orch-3419347b
+2026-11-19 23:30:38 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-605e1c68' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-19 23:30:38 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-605e1c68': attack_surface_ranker
+2026-11-19 23:30:38 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-605e1c68' بواسطة Executor: completed
+2026-11-20 01:04:57 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-5CAE1535'
+2026-11-20 01:04:57 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-5CAE1535
+2026-11-20 01:52:30 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-11158F8E'
+2026-11-20 01:52:30 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-11158F8E
+2026-11-20 17:06:03 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-70FA708F'
+2026-11-20 17:06:03 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-70FA708F
+2026-11-20 17:06:04 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-3bb26025, orch-e07935b2, orch-9295c244
+2026-11-20 17:06:04 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-e07935b2' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-20 17:06:04 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-e07935b2': attack_surface_ranker
+2026-11-20 17:06:04 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-e07935b2' بواسطة Executor: completed
+2026-11-20 17:06:08 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=subdomain_enum, المهام=orch-e361f5db, orch-515c9be6, orch-cab54eea
+2026-11-20 17:06:08 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-515c9be6' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-20 17:06:08 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-515c9be6': subdomain_enum
+2026-11-20 17:06:08 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-515c9be6' بواسطة Executor: completed
+2026-11-20 17:06:11 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-1ad90730, orch-aabddc34, orch-2b593306
+2026-11-20 17:06:11 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-aabddc34' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 17:06:11 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-aabddc34': attack_surface_ranker
+2026-11-20 17:06:11 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-aabddc34' بواسطة Executor: completed
+2026-11-20 17:06:15 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-b0470204, orch-1eeb4673, orch-696943e5
+2026-11-20 17:06:15 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-1eeb4673' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 17:06:15 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-1eeb4673': attack_surface_ranker
+2026-11-20 17:06:15 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-1eeb4673' بواسطة Executor: completed
+2026-11-20 17:06:16 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-29ad4dc6, orch-0184b2d4, orch-d5057046
+2026-11-20 17:06:16 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-0184b2d4' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=CORS Misconfiguration & Trust Verification Methodology (score=0.41)
+2026-11-20 17:06:16 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-0184b2d4': attack_surface_ranker
+2026-11-20 17:06:16 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-0184b2d4' بواسطة Executor: completed
+2026-11-20 17:06:17 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-c4ee6830, orch-9f751f85, orch-95edb4be
+2026-11-20 17:06:17 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-9f751f85' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=NoSQL Injection (MongoDB, Document Stores) Methodology (score=0.43)
+2026-11-20 17:06:17 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-9f751f85': attack_surface_ranker
+2026-11-20 17:06:17 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-9f751f85' بواسطة Executor: completed
+2026-11-20 17:06:18 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-664e7abe, orch-48b74c2d, orch-b03ffb27
+2026-11-20 17:06:18 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-48b74c2d' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 17:06:18 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-48b74c2d': attack_surface_ranker
+2026-11-20 17:06:18 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-48b74c2d' بواسطة Executor: completed
+2026-11-20 17:06:19 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-8b1484e1, orch-032550f8, orch-ecd5a377
+2026-11-20 17:06:19 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-032550f8' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 17:06:19 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-032550f8': attack_surface_ranker
+2026-11-20 17:06:19 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-032550f8' بواسطة Executor: completed
+2026-11-20 19:16:02 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-120C4A1C'
+2026-11-20 19:16:02 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-120C4A1C
+2026-11-20 19:16:08 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-58beefb4, orch-f8bc5b49, orch-2deee958
+2026-11-20 19:16:08 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-f8bc5b49' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-20 19:16:08 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-f8bc5b49': attack_surface_ranker
+2026-11-20 19:16:08 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-f8bc5b49' بواسطة Executor: completed
+2026-11-20 19:16:46 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=subdomain_enum, المهام=orch-7de8c289, orch-1ec3211b, orch-6b7abf0a
+2026-11-20 19:16:46 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-1ec3211b' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-20 19:16:46 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-1ec3211b': subdomain_enum
+2026-11-20 19:16:46 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-1ec3211b' بواسطة Executor: completed
+2026-11-20 19:18:45 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-fc7b6c98, orch-f22375c4, orch-0df69b99
+2026-11-20 19:18:45 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-f22375c4' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 19:18:45 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-f22375c4': attack_surface_ranker
+2026-11-20 19:18:45 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-f22375c4' بواسطة Executor: completed
+2026-11-20 20:05:22 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-3acc50e6, orch-d6305f65, orch-bec70110
+2026-11-20 20:05:22 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-d6305f65' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 20:05:22 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-d6305f65': attack_surface_ranker
+2026-11-20 20:05:22 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-d6305f65' بواسطة Executor: completed
+2026-11-20 20:05:24 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-3a9d867c, orch-36941138, orch-cc723e27
+2026-11-20 20:05:24 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-36941138' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=CORS Misconfiguration & Trust Verification Methodology (score=0.41)
+2026-11-20 20:05:24 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-36941138': attack_surface_ranker
+2026-11-20 20:05:24 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-36941138' بواسطة Executor: completed
+2026-11-20 20:05:26 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-b1ca959f, orch-31185297, orch-ccd3ffde
+2026-11-20 20:05:26 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-31185297' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=NoSQL Injection (MongoDB, Document Stores) Methodology (score=0.43)
+2026-11-20 20:05:26 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-31185297': attack_surface_ranker
+2026-11-20 20:05:26 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-31185297' بواسطة Executor: completed
+2026-11-20 20:05:29 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-c5af2124, orch-8eea0182, orch-684e7fe8
+2026-11-20 20:05:29 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-8eea0182' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 20:05:29 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-8eea0182': attack_surface_ranker
+2026-11-20 20:05:29 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-8eea0182' بواسطة Executor: completed
+2026-11-20 20:05:31 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-e124d20e, orch-2c3090f7, orch-45bdad8e
+2026-11-20 20:05:31 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-2c3090f7' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 20:05:31 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-2c3090f7': attack_surface_ranker
+2026-11-20 20:05:31 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-2c3090f7' بواسطة Executor: completed
+2026-11-20 20:20:12 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-C03B1A01'
+2026-11-20 20:20:12 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-C03B1A01
+2026-11-20 20:20:22 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-15bdfd95, orch-dd39c2c2, orch-4999b9bf
+2026-11-20 20:20:22 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-dd39c2c2' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-20 20:20:22 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-dd39c2c2': attack_surface_ranker
+2026-11-20 20:20:22 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-dd39c2c2' بواسطة Executor: completed
+2026-11-20 20:21:16 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=subdomain_enum, المهام=orch-f8af5d99, orch-f366e15c, orch-199487ee
+2026-11-20 20:21:16 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-f366e15c' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-20 20:21:16 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-f366e15c': subdomain_enum
+2026-11-20 20:21:16 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-f366e15c' بواسطة Executor: completed
+2026-11-20 20:22:02 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-35aaa706, orch-9805c80e, orch-359badc0
+2026-11-20 20:22:02 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-9805c80e' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 20:22:02 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-9805c80e': attack_surface_ranker
+2026-11-20 20:22:02 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-9805c80e' بواسطة Executor: completed
+2026-11-20 20:53:04 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-ADV-TEST'
+2026-11-20 20:53:04 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-ADV-TEST
+2026-11-20 20:53:05 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://corp.example.com: التقنية=attack_surface_ranker, المهام=orch-9b9241cf, orch-203334d8, orch-6669074c
+2026-11-20 20:53:05 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-203334d8' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-20 20:53:05 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-203334d8': attack_surface_ranker
+2026-11-20 20:53:05 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-203334d8' بواسطة Executor: completed
+2026-11-20 20:53:09 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://corp.example.com: التقنية=subdomain_enum, المهام=orch-05fd6857, orch-622ae07d, orch-b6163712
+2026-11-20 20:53:09 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-622ae07d' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-20 20:53:09 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-622ae07d': subdomain_enum
+2026-11-20 20:53:09 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-622ae07d' بواسطة Executor: completed
+2026-11-20 20:53:38 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-C4AA3DD2'
+2026-11-20 20:53:38 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-C4AA3DD2
+2026-11-20 20:53:45 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://site-one.internal: التقنية=attack_surface_ranker, المهام=orch-964380fd, orch-0fa35c92, orch-45cbfad1
+2026-11-20 20:53:45 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-0fa35c92' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-20 20:53:45 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-0fa35c92': attack_surface_ranker
+2026-11-20 20:53:45 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-0fa35c92' بواسطة Executor: completed
+2026-11-20 20:53:47 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-10D84471'
+2026-11-20 20:53:47 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-10D84471
+2026-11-20 20:53:49 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://site-two.internal: التقنية=attack_surface_ranker, المهام=orch-96fa8a4a, orch-9326be13, orch-63205aa5
+2026-11-20 20:53:49 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-9326be13' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-20 20:53:49 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-9326be13': attack_surface_ranker
+2026-11-20 20:53:49 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-9326be13' بواسطة Executor: completed
+2026-11-20 20:53:50 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-CHECKPOINT-1'
+2026-11-20 20:53:50 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-CHECKPOINT-1
+2026-11-20 20:53:50 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-998DF5B0'
+2026-11-20 20:53:50 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-998DF5B0
+2026-11-20 20:57:53 | [32mINFO[0m | hunterai | [TDG] إنشاء رسم بياني جديد: 'tdg_ENG-8BEE24DE'
+2026-11-20 20:57:53 | [32mINFO[0m | hunterai | [Orchestrator] تم تهيئة المنسق: tdg_ENG-8BEE24DE
+2026-11-20 20:57:58 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-1bf30f77, orch-8c33a748, orch-61380e5e
+2026-11-20 20:57:58 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-8c33a748' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=OS Command Injection & Safe Time-Delay Verification Methodology (score=0.41)
+2026-11-20 20:57:58 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-8c33a748': attack_surface_ranker
+2026-11-20 20:57:58 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-8c33a748' بواسطة Executor: completed
+2026-11-20 20:58:31 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=subdomain_enum, المهام=orch-51afc0e5, orch-31df5e53, orch-be60e76c
+2026-11-20 20:58:31 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-31df5e53' مكتملة: Execute: Early recon phase → start with passive subdomain enumeration | RAG-top=Historical URL Mining & Web Crawling Architecture (score=0.42)
+2026-11-20 20:58:31 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-31df5e53': subdomain_enum
+2026-11-20 20:58:31 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-31df5e53' بواسطة Executor: completed
+2026-11-20 20:59:22 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-c822c2a2, orch-c282ddaf, orch-d5ba41f5
+2026-11-20 20:59:22 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-c282ddaf' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 20:59:22 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-c282ddaf': attack_surface_ranker
+2026-11-20 20:59:22 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-c282ddaf' بواسطة Executor: completed
+2026-11-20 21:47:07 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-145d1d8a, orch-0a1ac277, orch-f6347ad2
+2026-11-20 21:47:07 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-0a1ac277' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 21:47:07 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-0a1ac277': attack_surface_ranker
+2026-11-20 21:47:07 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-0a1ac277' بواسطة Executor: completed
+2026-11-20 21:47:12 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-e374ba61, orch-ef89d016, orch-f1a201d6
+2026-11-20 21:47:12 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-ef89d016' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=CORS Misconfiguration & Trust Verification Methodology (score=0.41)
+2026-11-20 21:47:12 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-ef89d016': attack_surface_ranker
+2026-11-20 21:47:12 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-ef89d016' بواسطة Executor: completed
+2026-11-20 21:47:15 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-66f39e95, orch-6d7cdf69, orch-185265aa
+2026-11-20 21:47:15 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-6d7cdf69' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=NoSQL Injection (MongoDB, Document Stores) Methodology (score=0.43)
+2026-11-20 21:47:15 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-6d7cdf69': attack_surface_ranker
+2026-11-20 21:47:15 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-6d7cdf69' بواسطة Executor: completed
+2026-11-20 21:47:18 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-b0fd4b2e, orch-10e26592, orch-76cb505e
+2026-11-20 21:47:18 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-10e26592' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 21:47:18 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-10e26592': attack_surface_ranker
+2026-11-20 21:47:18 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-10e26592' بواسطة Executor: completed
+2026-11-20 21:47:21 | [32mINFO[0m | hunterai | [Triple] خطة جديدة للهدف https://wolt.com: التقنية=attack_surface_ranker, المهام=orch-71aec0fc, orch-7359d798, orch-baba86b2
+2026-11-20 21:47:21 | [32mINFO[0m | hunterai | [TDG] المهمة 'orch-7359d798' مكتملة: Execute: General surface → rank discovered assets by exploitability | RAG-top=Web Cache Deception via Path & Delimiter Confusion Methodology (score=0.42)
+2026-11-20 21:47:21 | [32mINFO[0m | hunterai | [Orchestrator] أكملت مهمة 'orch-7359d798': attack_surface_ranker
+2026-11-20 21:47:21 | [32mINFO[0m | hunterai | [Triple] تنفيذ مهمة 'orch-7359d798' بواسطة Executor: completed

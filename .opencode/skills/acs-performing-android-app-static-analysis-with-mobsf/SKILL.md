@@ -1,37 +1,12 @@
 ---
-name: acs-performing-android-app-static-analysis-with-mobsf
-description: 'Performs automated static analysis of Android applications using Mobile
-  Security Framework (MobSF) to identify hardcoded secrets, insecure permissions,
-  vulnerable components, weak cryptography, and code-level security flaws without
-  executing the application. Use when assessing Android APK/AAB files for security
-  vulnerabilities before deployment, during penetration testing, or as part of CI/CD
-  security gates. Activates for requests involving Android static analysis, MobSF
-  scanning, APK security assessment, or mobile application code review.
-
-  '
-domain: cybersecurity
-subdomain: mobile-security
-author: mahipal
-tags:
-- mobile-security
-- android
-- mobsf
-- static-analysis
-- owasp-mobile
-- penetration-testing
-version: 1.0.0
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- PR.AA-05
-- ID.RA-01
-- DE.CM-09
-mitre_attack:
-- T1059
-- T1056
-- T1036
-- T1078
+name: "acs-performing-android-app-static-analysis-with-mobsf"
+description: "Performs automated static analysis of Android applications using Mobile"
 ---
+
+# Acs Performing Android App Static Analysis With Mobsf
+
+*Sourced from abdo453-hunterai*
+
 # Performing Android App Static Analysis with MobSF
 
 ## When to Use
@@ -175,3 +150,4 @@ Add MobSF scanning as a build gate:
 - **Missing obfuscated code**: Static analysis accuracy drops significantly against obfuscated apps. Supplement with dynamic analysis for apps using DexGuard or custom packers.
 - **Outdated MobSF rules**: Security rules evolve with Android API levels. Ensure MobSF is updated to match the target app's `targetSdkVersion`.
 - **Skipping native code analysis**: MobSF analyzes Java/Kotlin but has limited coverage of native C/C++ libraries. Use `checksec` and manual review for `.so` files.
+

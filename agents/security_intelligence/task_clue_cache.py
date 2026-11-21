@@ -303,6 +303,102 @@ class TaskClueCache:
     def get_pending_tasks(self) -> List[TaskExecutionState]:
         return [s for s in self.task_states.values() if s.status == "pending"]
 
+    def recover_missing_prerequisites(self, task_id: str, target: str) -> Dict[str, Any]:
+        """
+        MazeRunner-style Failure-Oriented Review & Prerequisite Recovery:
+        Inspects a failed task's failure_reason and searches distant clues
+        in the persistent cache to recover missing prerequisites (e.g. tokens,
+        parameters, endpoints, ports) and reschedule the task.
+        """
+        state = self.task_states.get(task_id)
+        if not state:
+            return {"recovered": False, "task_id": task_id, "reason": "Task not found"}
+
+        reason_lower = (state.failure_reason or "").lower()
+        needed_types: List[str] = []
+        if any(k in reason_lower for k in ("401", "403", "auth", "token", "cookie", "credential", "session")):
+            needed_types.extend(["credential", "token", "header", "technology"])
+        if any(k in reason_lower for k in ("param", "400", "missing", "input", "field")):
+            needed_types.extend(["parameter", "endpoint"])
+        if any(k in reason_lower for k in ("404", "route", "path", "endpoint")):
+            needed_types.extend(["endpoint", "open_port"])
+        if not needed_types:
+            needed_types = ["credential", "parameter", "endpoint", "technology", "open_port", "misconfig"]
+
+        matching_clues = self.find_related_clues(target=target, clue_types=needed_types, min_confidence=0.2)
+        if not matching_clues:
+            # Also check all clues in cache if target string varied (e.g. URL vs hostname)
+            for c in self.clues.values():
+                if c.clue_type in needed_types and (target in c.target or c.target in target):
+                    matching_clues.append(c)
+
+        if not matching_clues:
+            return {
+                "recovered": False,
+                "task_id": task_id,
+                "needed_types": needed_types,
+                "matched_clues": [],
+            }
+
+        recovered_clue_ids = []
+        for clue in matching_clues[:5]:
+            self.link_clue_to_task(clue.id, task_id)
+            if clue.id not in state.clue_ids:
+                state.clue_ids.append(clue.id)
+            recovered_clue_ids.append(clue.id)
+
+        state.status = "pending"
+        state.notes.append(
+            f"[RECOVERED_BY_REVIEWER] Linked {len(recovered_clue_ids)} distant clues ({', '.join(recovered_clue_ids)}) "
+            f"to resolve failure: {state.failure_reason}"
+        )
+        state.last_updated = time.time()
+        self._save()
+
+        return {
+            "recovered": True,
+            "task_id": task_id,
+            "needed_types": needed_types,
+            "matched_clues": [c.to_dict() for c in matching_clues[:5]],
+            "new_status": state.status,
+        }
+
+    def link_distant_clues(self, target: str) -> List[Dict[str, Any]]:
+        """
+        Connects distant clues across phases for the same target (e.g., linking
+        discovered credentials/tokens or parameters to discovered endpoints/ports).
+        """
+        target_entries = self.get_clues_for_target(target)
+        if not target_entries:
+            target_entries = [c for c in self.clues.values() if target in c.target or c.target in target]
+
+        endpoints = [c for c in target_entries if c.clue_type in ("endpoint", "open_port")]
+        enablers = [c for c in target_entries if c.clue_type in ("credential", "token", "parameter", "cve", "misconfig")]
+
+        links: List[Dict[str, Any]] = []
+        for ep in endpoints:
+            for en in enablers:
+                if ep.id == en.id:
+                    continue
+                links.append({
+                    "target": target,
+                    "surface_clue_id": ep.id,
+                    "surface_type": ep.clue_type,
+                    "surface_content": ep.content,
+                    "enabler_clue_id": en.id,
+                    "enabler_type": en.clue_type,
+                    "enabler_content": en.content,
+                    "combined_confidence": round((ep.confidence + en.confidence) / 2.0, 3),
+                })
+        return links
+
+    def save(self) -> None:
+        """Explicitly persist cache to storage_file."""
+        prev = self.persist
+        self.persist = True
+        self._save()
+        self.persist = prev
+
     # ------------------------------------------------------------------ #
     # تصدير
     # ------------------------------------------------------------------ #

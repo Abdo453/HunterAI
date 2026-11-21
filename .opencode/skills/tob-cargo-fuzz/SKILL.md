@@ -1,8 +1,11 @@
 ---
-name: tob-cargo-fuzz
-type: fuzzer
-description: "Sets up and runs cargo-fuzz, the standard fuzzing tool for Cargo-based Rust projects. Covers cargo fuzz init, the nightly toolchain requirement, fuzz_target! harnesses, Arbitrary-derived structured inputs, sanitizer options, cargo fuzz coverage, and reproducing a crash artifact. Use when fuzzing a Rust crate, writing a fuzz_target!, exercising unsafe blocks or FFI in Rust, or triaging a cargo fuzz crash."
+name: "tob-cargo-fuzz"
+description: "Sets up and runs cargo-fuzz, the standard fuzzing tool for Cargo-based Rust projects. Covers cargo fuzz init, the nightly toolchain requirement, fuzz_target! harnesses, Arbitrary-derived structured inputs, sanitizer options, cargo fuzz coverage, and reproducing a crash artifact. Use when fuzzing ..."
 ---
+
+# Tob Cargo Fuzz
+
+*Sourced from abdo453-hunterai*
 
 # cargo-fuzz
 
@@ -450,3 +453,4 @@ Guide to structure-aware fuzzing with automatic derivation for Rust types.
 
 **[cargo-fuzz GitHub Repository](https://github.com/rust-fuzz/cargo-fuzz)**
 Source code, issue tracker, and examples for cargo-fuzz.
+

@@ -1,31 +1,11 @@
 ---
-name: acs-performing-graphql-depth-limit-attack
-description: Execute and test GraphQL depth limit attacks using deeply nested recursive
-  queries to identify denial-of-service vulnerabilities in GraphQL APIs.
-domain: cybersecurity
-subdomain: api-security
-tags:
-- graphql
-- depth-limit
-- denial-of-service
-- nested-queries
-- api-security
-- query-complexity
-- resource-exhaustion
-- penetration-testing
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1552.001
+name: "acs-performing-graphql-depth-limit-attack"
+description: "Execute and test GraphQL depth limit attacks using deeply nested recursive"
 ---
+
+# Acs Performing Graphql Depth Limit Attack
+
+*Sourced from abdo453-hunterai*
 
 # Performing GraphQL Depth Limit Attack
 
@@ -422,3 +402,4 @@ GRAPHQL_CONFIG = {
 - GraphQL.org Security: https://graphql.org/learn/security/
 - Escape.tech Cyclic Queries: https://escape.tech/blog/cyclic-queries-and-depth-limit/
 - PortSwigger GraphQL Vulnerabilities: https://portswigger.net/web-security/graphql
+

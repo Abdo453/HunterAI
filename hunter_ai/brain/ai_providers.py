@@ -29,7 +29,7 @@ _PROVIDERS: List[AIProvider] = [
         "100% free · local",
         "Full",
         "Fast",
-        model=os.getenv("HUNTER_AI_MODEL", "qwen2.5-coder:14b"),
+        model=os.getenv("HUNTER_AI_MODEL", "qwen2.5-coder:14b-tools"),
         base_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
     ),
     AIProvider("groq", "Free tier", "Cloud", "Very fast"),
@@ -97,7 +97,12 @@ def _ask_ollama(question: str) -> str:
     import urllib.request
 
     host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-    model = os.getenv("HUNTER_AI_MODEL", "qwen2.5-coder:14b")
+    if not host.startswith("http://") and not host.startswith("https://"):
+        host = f"http://{host}"
+    if "0.0.0.0" in host:
+        host = host.replace("0.0.0.0", "127.0.0.1")
+
+    model = os.getenv("HUNTER_AI_MODEL", "qwen2.5-coder:14b-tools")
     payload = {
         "model": model,
         "prompt": question,
@@ -110,7 +115,7 @@ def _ask_ollama(question: str) -> str:
             data=data,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=45) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             return result.get("response", "No response from Ollama")
     except Exception as e:

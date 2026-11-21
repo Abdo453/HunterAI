@@ -1,34 +1,12 @@
 ---
-name: acs-performing-ip-reputation-analysis-with-shodan
-description: Analyze IP address reputation using the Shodan API to identify open ports,
-  running services, known vulnerabilities, and hosting context for threat intelligence
-  enrichment and incident triage.
-domain: cybersecurity
-subdomain: threat-intelligence
-tags:
-- shodan
-- ip-reputation
-- enrichment
-- threat-intelligence
-- reconnaissance
-- vulnerability
-- api
-- internet-scanning
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- ID.RA-05
-- DE.CM-01
-- DE.AE-02
-mitre_attack:
-- T1591
-- T1592
-- T1593
-- T1589
-- T1595
+name: "acs-performing-ip-reputation-analysis-with-shodan"
+description: "Analyze IP address reputation using the Shodan API to identify open ports,"
 ---
+
+# Acs Performing Ip Reputation Analysis With Shodan
+
+*Sourced from abdo453-hunterai*
+
 # Performing IP Reputation Analysis with Shodan
 
 ## Overview
@@ -303,3 +281,4 @@ def correlate_infrastructure(enricher, ip_address):
 - [Query.ai: Leveraging Shodan for Security Research](https://www.query.ai/resources/blogs/leveraging-shodan-for-security-research/)
 - [Torq: Shodan IP Enrichment Workflow](https://kb.torq.io/en/articles/9350284-shodan-ip-address-enrichment-with-cache-workflow-template)
 - [Recorded Future: Shodan Integration](https://support.recordedfuture.com/hc/en-us/articles/115001403928-Shodan)
+

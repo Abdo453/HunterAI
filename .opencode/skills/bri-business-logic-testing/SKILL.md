@@ -1,8 +1,11 @@
 ---
-name: bri-business-logic-testing
-description: "Test an authorized web application for business-logic flaws and race conditions — the classes scanners cannot find. Model invariants (conservation of value, uniqueness, monotonicity, exclusivity), build an Actor x Action x Resource matrix, abuse state machines (skip/reorder/replay steps, limit-slicing), find numeric bugs (float-vs-decimal rounding, cross-currency refund arbitrage, negative amounts), stale feature gates, and saga gaps; prove concurrency bugs (double-spend, lost update, idempotency-key reuse) with controlled parallel requests. Use when the user mentions 'business logic testing,' 'race condition,' 'double spend,' 'TOCTOU,' 'concurrency bug,' 'idempotency,' 'coupon reuse,' 'workflow bypass,' 'limit bypass,' 'negative amount,' 'refund arbitrage,' 'parallel request attack,' or 'logic flaw.'"
-allowed-tools: Read, Grep, Glob
+name: "bri-business-logic-testing"
+description: "Test an authorized web application for business-logic flaws and race conditions \u2014 the classes scanners cannot find. Model invariants (conservation of value, uniqueness, monotonicity, exclusivity), build an Actor x Action x Resource matrix, abuse state machines (skip/reorder/replay steps, limit-sl..."
 ---
+
+# Bri Business Logic Testing
+
+*Sourced from abdo453-hunterai*
 
 # Business Logic Testing — Invariants, State-Machine Abuse, Race Conditions
 
@@ -161,3 +164,4 @@ Report with the shared findings vocabulary; see [references/findings-format.md](
 - Strix (Apache-2.0) — `vulnerabilities/race_conditions.md` and `vulnerabilities/business_logic.md` (https://github.com/usestrix/strix). Techniques paraphrased, not copied. This skill deliberately does **not** adopt Strix's never-refuse / never-question-authorization posture: authorization, staging preference, and request caps are enforced here.
 - PortSwigger Web Security Academy — race conditions (single-packet attack) and business-logic labs.
 - OWASP Web Security Testing Guide (WSTG) — Business Logic Testing section.
+

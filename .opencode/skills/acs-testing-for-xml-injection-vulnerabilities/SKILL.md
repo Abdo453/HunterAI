@@ -1,33 +1,11 @@
 ---
-name: acs-testing-for-xml-injection-vulnerabilities
-description: Test web applications for XML injection vulnerabilities including XXE,
-  XPath injection, and XML entity attacks to identify data exposure and server-side
-  request forgery risks.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- xml-injection
-- xxe
-- xpath-injection
-- xml-parsing
-- web-security
-- entity-injection
-- dtd-attack
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1055
+name: "acs-testing-for-xml-injection-vulnerabilities"
+description: "Test web applications for XML injection vulnerabilities including XXE,"
 ---
+
+# Acs Testing For Xml Injection Vulnerabilities
+
+*Sourced from abdo453-hunterai*
 
 # Testing for XML Injection Vulnerabilities
 
@@ -225,3 +203,4 @@ curl "http://target.com/search?query=' or substring(//user[1]/password,1,1)='a' 
 - Implement XML schema validation with strict DTD restrictions
 - Block outbound connections from XML processing services
 ```
+

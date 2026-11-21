@@ -1,64 +1,12 @@
 ---
-name: acs-performing-paste-site-monitoring-for-credentials
-description: Monitor paste sites like Pastebin and GitHub Gists for leaked credentials,
-  API keys, and sensitive data dumps using automated scraping and keyword matching
-  to detect breaches early.
-domain: cybersecurity
-subdomain: threat-intelligence
-tags:
-- paste-monitoring
-- credential-leak
-- pastebin
-- data-breach
-- threat-intelligence
-- osint
-- early-warning
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- ID.RA-05
-- DE.CM-01
-- DE.AE-02
-mitre_attack:
-- T1591
-- T1592
-- T1593
-- T1589
-- T1003
-mitre_f3:
-  version: '1.1'
-  tactics:
-  - reconnaissance
-  - resource-development
-  - initial-access
-  techniques:
-  - id: T1593
-    name: Search Open Websites/Domains
-    tactic: reconnaissance
-    source: attack
-  - id: T1593.002
-    name: 'Search Open Websites/Domains: Search Engines'
-    tactic: reconnaissance
-    source: attack
-  - id: T1650
-    name: Acquire Access
-    tactic: resource-development
-    source: attack
-  - id: T1555.003
-    name: 'Credentials from Password Stores: Credentials from Web Browsers'
-    tactic: reconnaissance
-    source: attack
-  - id: T1110.004
-    name: 'Brute Force:  Credential Stuffing'
-    tactic: initial-access
-    source: attack
-  - id: F1029
-    name: Gather Customer Information
-    tactic: reconnaissance
-    source: f3
+name: "acs-performing-paste-site-monitoring-for-credentials"
+description: "Monitor paste sites like Pastebin and GitHub Gists for leaked credentials,"
 ---
+
+# Acs Performing Paste Site Monitoring For Credentials
+
+*Sourced from abdo453-hunterai*
+
 # Performing Paste Site Monitoring for Credentials
 
 ## Overview
@@ -377,3 +325,4 @@ def generate_credential_leak_alert(alert_data):
 - [Bitdefender: Credentials on Pastebin](https://www.bitdefender.com/en-us/blog/hotforsecurity/more-than-300000-user-credentials-posted-on-pastebin-over-the-last-year)
 - [zSecurity: Pastebin Monitoring](https://zsecurity.org/glossary/pastebin-monitoring/)
 - [SecurityBoulevard: Need to Monitor Paste Sites](https://securityboulevard.com/2019/11/orvis-data-leak-and-the-need-to-monitor-paste-sites/)
+

@@ -1,30 +1,11 @@
 ---
-name: acs-performing-osint-with-spiderfoot
-description: Automate OSINT collection with the SpiderFoot REST API and CLI (sf.py/spiderfoot-cli) across 200+ modules, selecting scan modes (footprint, investigate, passive) and parsing results for domains, IPs, emails, leaked credentials, and DNS records into a target intelligence profile. Use when mapping an organization's attack surface or profiling a target for threat intelligence.
-domain: cybersecurity
-subdomain: threat-intelligence
-tags:
-- osint
-- spiderfoot
-- reconnaissance
-- threat-intelligence
-- attack-surface
-- target-profiling
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- ID.RA-05
-- DE.CM-01
-- DE.AE-02
-mitre_attack:
-- T1591
-- T1592
-- T1593
-- T1589
-- T1595
+name: "acs-performing-osint-with-spiderfoot"
+description: "Automate OSINT collection with the SpiderFoot REST API and CLI (sf.py/spiderfoot-cli) across 200+ modules, selecting scan modes (footprint, investigate, passive) and parsing results for domains, IPs, emails, leaked credentials, and DNS records into a target intelligence profile. Use when mapping ..."
 ---
+
+# Acs Performing Osint With Spiderfoot
+
+*Sourced from abdo453-hunterai*
 
 # Performing OSINT with SpiderFoot
 
@@ -60,3 +41,4 @@ SpiderFoot is an open-source OSINT automation tool with 200+ modules that integr
 ## Expected Output
 
 JSON report containing OSINT findings organized by data type (domains, IPs, emails, credentials, DNS records), module source attribution, and target profile summary with risk indicators.
+

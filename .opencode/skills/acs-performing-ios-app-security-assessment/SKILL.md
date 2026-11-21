@@ -1,41 +1,12 @@
 ---
-name: acs-performing-ios-app-security-assessment
-description: 'Performs comprehensive iOS application security assessments using Frida
-  for dynamic instrumentation, Objection for runtime exploration, SSL pinning bypass
-  for traffic interception, keychain extraction for credential analysis, and IPA static
-  analysis for binary-level review. Use when conducting authorized iOS penetration
-  tests, evaluating mobile app security posture against OWASP MASTG, or assessing
-  iOS app data protection and transport security controls. Activates for requests
-  involving iOS app pentesting, Frida-based iOS instrumentation, mobile app SSL pinning
-  bypass, or IPA reverse engineering.
-
-  '
-domain: cybersecurity
-subdomain: mobile-security
-author: mukul975
-tags:
-- mobile-security
-- ios
-- frida
-- objection
-- ssl-pinning
-- keychain
-- ipa-analysis
-- owasp-mastg
-version: 1.0.0
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- PR.AA-05
-- ID.RA-01
-- DE.CM-09
-mitre_attack:
-- T1059
-- T1056
-- T1036
-- T1078
-- T1003
+name: "acs-performing-ios-app-security-assessment"
+description: "Performs comprehensive iOS application security assessments using Frida"
 ---
+
+# Acs Performing Ios App Security Assessment
+
+*Sourced from abdo453-hunterai*
+
 # Performing iOS App Security Assessment
 
 ## Disclaimer
@@ -287,3 +258,4 @@ to the user's account without knowing device passcode.
 Store sensitive credentials with kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 and enable biometric protection via kSecAccessControlBiometryCurrentSet.
 ```
+

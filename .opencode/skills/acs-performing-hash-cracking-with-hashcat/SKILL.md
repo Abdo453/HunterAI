@@ -1,29 +1,12 @@
 ---
-name: acs-performing-hash-cracking-with-hashcat
-description: Cracks password hashes with Hashcat, covering hash-type identification,
-  dictionary/brute-force/rule-based attack modes, custom rule creation, GPU benchmarking,
-  and password-strength/compliance reporting. Use for authorized penetration testing
-  or security audits that need to evaluate password strength or crack captured hashes.
-domain: cybersecurity
-subdomain: cryptography
-tags:
-- cryptography
-- hash-cracking
-- password-security
-- hashcat
-- penetration-testing
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.DS-01
-- PR.DS-02
-- PR.DS-10
-mitre_attack:
-- T1600
-- T1573
-- T1553
+name: "acs-performing-hash-cracking-with-hashcat"
+description: "Cracks password hashes with Hashcat, covering hash-type identification,"
 ---
+
+# Acs Performing Hash Cracking With Hashcat
+
+*Sourced from abdo453-hunterai*
+
 # Performing Hash Cracking with Hashcat
 
 ## Overview
@@ -94,3 +77,4 @@ Hash cracking is an essential skill for penetration testers and security auditor
 - [ ] Mask attack cracks short passwords
 - [ ] Results report shows password strength distribution
 - [ ] All operations performed within authorized scope
+

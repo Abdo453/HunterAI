@@ -1,32 +1,11 @@
 ---
-name: acs-performing-graphql-security-assessment
-description: Assessing GraphQL API endpoints for introspection leaks, injection attacks,
-  authorization flaws, and denial-of-service vulnerabilities during authorized security
-  tests.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- graphql
-- api-security
-- owasp
-- web-security
-- introspection
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1055
+name: "acs-performing-graphql-security-assessment"
+description: "Assessing GraphQL API endpoints for introspection leaks, injection attacks,"
 ---
+
+# Acs Performing Graphql Security Assessment
+
+*Sourced from abdo453-hunterai*
 
 # Performing GraphQL Security Assessment
 
@@ -339,3 +318,4 @@ A social network API allows querying `friends { friends { friends { ... } } }` u
 6. Remove GraphiQL/Playground from production
 7. Parameterize all database queries in resolvers
 ```
+

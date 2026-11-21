@@ -1,8 +1,11 @@
 ---
-name: bri-dependency-audit
-description: "Audit project dependencies, frameworks, languages, and dev tools for known vulnerabilities, CVEs, and security anti-patterns. Use when the user mentions 'dependency audit,' 'npm audit,' 'CVE,' 'vulnerable packages,' 'supply chain security,' 'outdated dependencies,' 'known vulnerabilities,' 'security advisory,' 'package security,' 'framework vulnerability,' 'is this package safe,' 'pnpm audit,' 'yarn audit,' 'bundle audit,' 'patch this CVE,' 'audit fix broke,' 'lockfile diff,' 'dependency confusion,' 'registry redirection,' 'MCP server pinning,' 'release pipeline,' or needs to check whether their stack, CI, or release pipeline has known security issues."
-allowed-tools: Read, Grep, Glob, WebSearch, WebFetch, Bash(npm audit), Bash(npm audit --json), Bash(npm audit --omit=dev), Bash(npm audit --omit=dev --json), Bash(npm ls:*), Bash(npm view:*), Bash(npm outdated:*), Bash(pnpm audit --prod), Bash(pnpm audit --prod --json), Bash(pnpm why:*), Bash(yarn audit --groups dependencies --json), Bash(yarn npm audit:*), Bash(yarn why:*), Bash(osv-scanner scan:*), Bash(govulncheck:*), Bash(bundle audit:*), Bash(composer audit:*), Bash(dotnet list package:*), Bash(trivy fs:*), Bash(trivy image:*)
+name: "bri-dependency-audit"
+description: "Audit project dependencies, frameworks, languages, and dev tools for known vulnerabilities, CVEs, and security anti-patterns. Use when the user mentions 'dependency audit,' 'npm audit,' 'CVE,' 'vulnerable packages,' 'supply chain security,' 'outdated dependencies,' 'known vulnerabilities,' 'secur..."
 ---
+
+# Bri Dependency Audit
+
+*Sourced from abdo453-hunterai*
 
 # Dependency Audit — Framework, Package, and Toolchain Security
 
@@ -414,3 +417,4 @@ For CI/release trust handoffs (Step 5b), each row names the lower-trust actor, t
 - Cloudflare security-audit-skill, [`SUPPLY-CHAIN-AND-RELEASE.md`](https://github.com/cloudflare/security-audit-skill/blob/main/skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md) (MIT) — CI/release trust-handoff principles, paraphrased in [references/ci-release.md](references/ci-release.md)
 - NVIDIA SkillSpector (Apache-2.0) — [dependency-source redirection](https://github.com/NVIDIA/SkillSpector/blob/main/docs/DEPENDENCY_SOURCE_REDIRECTION.md), [MCP rug-pull](https://github.com/NVIDIA/SkillSpector/blob/main/src/skillspector/nodes/analyzers/mcp_rug_pull.py), and [supply-chain patterns](https://github.com/NVIDIA/SkillSpector/blob/main/README.md#supply-chain-10-patterns), paraphrased in [references/source-redirection.md](references/source-redirection.md)
 - Field notes from a 45-app CVE sweep (Rails/Heroku, Next.js/Vercel; npm, pnpm, yarn v1), October 2026 — [references/fixing-safely.md](references/fixing-safely.md)
+

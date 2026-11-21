@@ -1,25 +1,12 @@
 ---
-name: acs-operating-havoc-c2
-description: Deploy a Havoc C2 team server with Yaotl malleable profiles, generate evasive Demon agents using indirect syscalls and sleep obfuscation, and run post-exploitation and pivoting operations. Use during authorized, rules-of-engagement-bound red-team engagements for adversary emulation requiring a full C2 lifecycle (server setup, evasive implant generation, tasking, and lateral pivoting).
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- command-and-control
-- havoc
-- demon-agent
-- adversary-emulation
-- evasion
-- post-exploitation
-- sleep-obfuscation
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- DE.CM-01
-mitre_attack:
-- T1071.001
+name: "acs-operating-havoc-c2"
+description: "Deploy a Havoc C2 team server with Yaotl malleable profiles, generate evasive Demon agents using indirect syscalls and sleep obfuscation, and run post-exploitation and pivoting operations. Use during authorized, rules-of-engagement-bound red-team engagements for adversary emulation requiring a fu..."
 ---
+
+# Acs Operating Havoc C2
+
+*Sourced from abdo453-hunterai*
+
 # Operating Havoc C2
 
 > **Legal Notice:** This skill is for authorized security testing, sanctioned red-team engagements, and education only. Deploying a C2 framework or its agents against systems you do not own or lack explicit written authorization to test is illegal. Operate strictly within a signed rules-of-engagement document.
@@ -276,3 +263,4 @@ Stop the team server (`Ctrl-C`) and revoke operator credentials at engagement en
 - [ ] A .NET assembly or BOF executed in-memory
 - [ ] SOCKS proxy or port-forward established for pivoting
 - [ ] Artifacts removed, agent exited, and team server stopped at cleanup
+

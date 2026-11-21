@@ -1,8 +1,11 @@
 ---
-name: bri-finding-triage
-description: "Triage a single security finding — from a scanner, audit, advisory, report, or a findings.json record — to a defensible disposition with calibrated severity, a mitigation plan, false-positive justification, or accepted-risk writeup. Use when the user mentions 'triage this finding,' 'is this a real vulnerability,' 'mitigation plan,' 'false positive,' 'accept this risk,' 'compensating controls,' 'risk justification,' 'security ticket,' 'CVSS this,' 'what severity is this,' 'is this really high,' 'severity calibration,' 'needs validation,' 'hardening note,' 'findings.json,' 'should we fix this,' 'disposition,' 'sign off on,' or has a single security finding and needs to decide what to do."
-allowed-tools: Read, Grep, Glob, WebSearch
+name: "bri-finding-triage"
+description: "Triage a single security finding \u2014 from a scanner, audit, advisory, report, or a findings.json record \u2014 to a defensible disposition with calibrated severity, a mitigation plan, false-positive justification, or accepted-risk writeup. Use when the user mentions 'triage this finding,' 'is this a rea..."
 ---
+
+# Bri Finding Triage
+
+*Sourced from abdo453-hunterai*
 
 # Finding Triage — Single-Finding Disposition with Defensible Justification
 
@@ -453,3 +456,4 @@ Things you noticed while triaging: the same pattern on a sibling route, a second
 - ISO 27005 — risk management
 - "Measuring and Managing Information Risk" — Jack Freund, Jack Jones (the FAIR book)
 - OWASP Risk Rating Methodology
+

@@ -40,9 +40,9 @@ async def lifespan(app: FastAPI):
     # Start Unified BurpAgent & SecurityIntelligence Background Workers
     try:
         burp = get_burp_agent()
-        if hasattr(burp, "start_background_workers"):
-            await burp.start_background_workers()
-            log.info("[APP] BurpAgent (Port 8085) & SecurityIntelligence EventBus connected.")
+        if hasattr(burp, "ai_pipe"):
+            asyncio.create_task(burp.ai_pipe.start_worker())
+            log.info("[APP] BurpAgent AI Pipeline worker started.")
     except Exception as e:
         log.warning(f"[APP] Could not start BurpAgent workers: {e}")
 
@@ -75,12 +75,14 @@ PROVIDER_ENV_KEYS = {
     "nvidia": "NVIDIA_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
+    "ollama": "",
 }
 
 DEFAULT_MODELS = {
     "nvidia": "nvidia/nemotron-3-super-120b-a12b",
     "gemini": "gemini-3.8-flash",
     "deepseek": "deepseek-chat",
+    "ollama": "qwen2.5-coder:14b",
 }
 
 def load_agent_context() -> str:
@@ -166,7 +168,10 @@ async def _call_ai(provider: str, model: str, user_message: str):
     from core.llm_router import LLMRouter
 
     router = LLMRouter()
-    prefer = f"api:{provider}:{model}"
+    if provider in ("ollama", "local") or (model and ":" in model and not model.startswith("api:")):
+        prefer = f"local:{model}" if not model.startswith("local:") else model
+    else:
+        prefer = f"api:{provider}:{model}"
     res = await router.complete(
         messages=[{"role": "user", "content": user_message}],
         prefer=prefer,
@@ -176,20 +181,26 @@ async def _call_ai(provider: str, model: str, user_message: str):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index():
-    return HTMLResponse(content=_HTML_PATH.read_text(encoding="utf-8"))
+async def index(section: str = "overview"):
+    html = _HTML_PATH.read_text(encoding="utf-8")
+    if section and section != "overview":
+        inject = f'<script>window._defaultSection="{section}";</script>'
+        html = html.replace("</head>", inject + "\n</head>")
+    return HTMLResponse(content=html)
 
 
 @app.get("/chat", response_class=HTMLResponse)
 async def chat_ui():
-    """واجهة محادثة شبيهة بـ Claude — chat-first مع منتقي موديلات موحّد"""
-    return HTMLResponse(content=_CHAT_PATH.read_text(encoding="utf-8"))
+    """Redirect to unified dashboard chat section"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/?section=chat", status_code=302)
 
 
 @app.get("/command", response_class=HTMLResponse)
 async def command_ui():
-    """Autonomous AI Command Center — 3 panel layout (Settings | Chat | Terminal)."""
-    return HTMLResponse(content=_COMMAND_PATH.read_text(encoding="utf-8"))
+    """Redirect to unified dashboard overview section"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/?section=overview", status_code=302)
 
 
 @app.get("/opencode", response_class=HTMLResponse)
@@ -279,19 +290,41 @@ async def api_chat(req: Request):
     """Autonomous chat: AI replies, then any commands it requests are executed."""
     data = await req.json()
     message = (data.get("message") or "").strip()
-    provider = (data.get("provider") or "nvidia").strip().lower()
+    provider = (data.get("provider") or "auto").strip().lower()
     model = (data.get("model") or "").strip()
 
     if not message:
         return JSONResponse(status_code=400, content={"error": "message is required"})
-    if provider not in PROVIDER_ENV_KEYS:
-        return JSONResponse(status_code=400, content={"error": f"Unsupported provider: {provider}"})
 
-    env_key = PROVIDER_ENV_KEYS[provider]
-    if not (os.getenv(env_key) or _read_env_file().get(env_key)):
-        return JSONResponse(status_code=400, content={"error": f"{env_key} is not configured. Save it in Settings first."})
+    # Auto-detect Ollama if model has ':' or provider is ollama
+    if provider in ("ollama", "local") or (model and (":" in model or "qwen" in model.lower())):
+        provider = "ollama"
+        if not model:
+            model = "qwen2.5-coder:14b"
+    elif provider in PROVIDER_ENV_KEYS and PROVIDER_ENV_KEYS[provider]:
+        env_key = PROVIDER_ENV_KEYS[provider]
+        if not (os.getenv(env_key) or _read_env_file().get(env_key)):
+            # If requested cloud provider key is missing, auto-fallback to Ollama if online!
+            from ui.web.control_api import is_tcp_port_open
+            if is_tcp_port_open("127.0.0.1", 11434):
+                provider = "ollama"
+                model = "qwen2.5-coder:14b"
+            else:
+                return JSONResponse(status_code=400, content={"error": f"{env_key} is not configured. Save it in Settings first or select Ollama (Local)."})
+    else:
+        # Default auto routing
+        from ui.web.control_api import is_tcp_port_open
+        if is_tcp_port_open("127.0.0.1", 11434):
+            provider = "ollama"
+            model = model or "qwen2.5-coder:14b"
+        elif os.getenv("GEMINI_API_KEY"):
+            provider = "gemini"
+            model = model or "gemini-3.8-flash"
+        elif os.getenv("DEEPSEEK_API_KEY"):
+            provider = "deepseek"
+            model = model or "deepseek-chat"
 
-    ai_text, model_used = await _call_ai(provider, model or DEFAULT_MODELS[provider], message)
+    ai_text, model_used = await _call_ai(provider, model or DEFAULT_MODELS.get(provider, "qwen2.5-coder:14b"), message)
 
     commands = _extract_commands(ai_text)
     results = []
@@ -1651,6 +1684,10 @@ app.include_router(phase_g_api_router)
 # ── Enhanced Master Control Center API (One-Command, Burp Inspector, AI Browser, Skills Matrix) ──
 from ui.web.enhanced_control_api import router as enhanced_control_router
 app.include_router(enhanced_control_router)
+
+# ── HunterAI Advanced Control Center API (13 Specialized Operational Modules) ──
+from ui.web.control_center_api import router as control_center_router
+app.include_router(control_center_router)
 
 # ── V27.2 METAMORPHIC TRIAD, ATTACK SURFACE GRAPH & LEDGER ENDPOINTS ──
 @app.get("/api/v27/attack-surface")
@@ -3123,4 +3160,420 @@ async def get_wordlist_roots():
         "candidate_roots": [str(r) for r in resolver.roots],
         "active_roots": [str(r) for r in resolver.get_active_roots()],
         "fallback_dir": str(resolver.local_fallback_dir),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# OpenCode Studio Pro — Agent IDE & Burp Suite Control APIs
+# --------------------------------------------------------------------------- #
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+
+EXCLUDE_DIRS = {
+    ".git", "__pycache__", ".pytest_cache", ".idea", "node_modules",
+    "venv", ".venv", "dist", "build", ".archify"
+}
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5MB max text file for editor
+
+
+def _safe_resolve_path(rel_path: str) -> Path:
+    clean = rel_path.lstrip("/\\")
+    target = (WORKSPACE_ROOT / clean).resolve()
+    if not str(target).lower().startswith(str(WORKSPACE_ROOT).lower()):
+        raise HTTPException(status_code=403, detail="Access denied: outside workspace")
+    return target
+
+
+@app.get("/api/editor/tree")
+async def get_editor_tree(folder: Optional[str] = None):
+    """Builds a file tree for the IDE explorer."""
+    base_dir = _safe_resolve_path(folder) if folder else WORKSPACE_ROOT
+    items = []
+
+    try:
+        for root, dirs, files in os.walk(base_dir):
+            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith(".tmp")]
+            rel_root = os.path.relpath(root, WORKSPACE_ROOT) if root != str(WORKSPACE_ROOT) else ""
+            rel_root = rel_root.replace("\\", "/")
+
+            for d in sorted(dirs):
+                dir_rel = f"{rel_root}/{d}" if rel_root else d
+                items.append({
+                    "type": "directory",
+                    "name": d,
+                    "path": dir_rel,
+                    "parent": rel_root or None,
+                })
+
+            for f in sorted(files):
+                file_rel = f"{rel_root}/{f}" if rel_root else f
+                ext = os.path.splitext(f)[1].lower()
+                items.append({
+                    "type": "file",
+                    "name": f,
+                    "path": file_rel,
+                    "ext": ext,
+                    "parent": rel_root or None,
+                })
+            
+            if len(items) >= 2000:
+                break
+    except Exception as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+
+    return {"status": "ok", "root": str(WORKSPACE_ROOT), "items": items}
+
+
+@app.get("/api/editor/file")
+async def get_editor_file(path: str):
+    """Reads file content for editing in Monaco."""
+    target = _safe_resolve_path(path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if target.stat().st_size > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="File too large for online editor (>5MB)")
+
+    try:
+        content = target.read_text(encoding="utf-8", errors="replace")
+        ext = target.suffix.lower()
+        return {
+            "status": "ok",
+            "path": path.replace("\\", "/"),
+            "filename": target.name,
+            "extension": ext,
+            "content": content,
+            "size": target.stat().st_size,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(exc)}")
+
+
+@app.post("/api/editor/file/save")
+async def save_editor_file(req: Request):
+    """Saves file content from Monaco editor with path safety."""
+    data = await req.json()
+    path = data.get("path", "").strip()
+    content = data.get("content", "")
+
+    if not path:
+        raise HTTPException(status_code=400, detail="File path required")
+
+    target = _safe_resolve_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        target.write_text(content, encoding="utf-8")
+        return {
+            "status": "ok",
+            "message": f"Saved {target.name} successfully",
+            "path": path,
+            "size": len(content.encode("utf-8")),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(exc)}")
+
+
+@app.post("/api/editor/file/create")
+async def create_editor_file(req: Request):
+    """Creates a new file or directory inside workspace."""
+    data = await req.json()
+    path = data.get("path", "").strip()
+    item_type = data.get("type", "file")
+    initial_content = data.get("content", "")
+
+    if not path:
+        raise HTTPException(status_code=400, detail="Path required")
+
+    target = _safe_resolve_path(path)
+    if target.exists():
+        raise HTTPException(status_code=409, detail="File or directory already exists")
+
+    try:
+        if item_type == "directory":
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(initial_content, encoding="utf-8")
+        return {"status": "ok", "message": f"Created {path}", "path": path}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Burp Suite Control & Repeater APIs ─────────────────────────────────────────
+
+@app.get("/api/burp/status")
+async def get_burp_live_status():
+    """Checks reachability of Burp Proxy (8080) and Burp Agent (8085)."""
+    import socket
+
+    def is_port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except (OSError, socket.timeout):
+            return False
+
+    proxy_ready = is_port_open("127.0.0.1", 8080)
+    agent_ready = is_port_open("127.0.0.1", 8085)
+
+    agent_stats = {}
+    try:
+        burp_agent = get_burp_agent()
+        if burp_agent and hasattr(burp_agent, "get_stats"):
+            agent_stats = burp_agent.get_stats()
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "proxy": {
+            "host": "127.0.0.1",
+            "port": 8080,
+            "online": proxy_ready,
+            "label": "Burp Proxy (8080) ONLINE" if proxy_ready else "Burp Proxy (8080) OFFLINE",
+        },
+        "agent": {
+            "host": "127.0.0.1",
+            "port": 8085,
+            "online": agent_ready,
+            "label": "HunterAI Burp Agent (8085) READY" if agent_ready else "Burp Agent (8085) IDLE",
+            "stats": agent_stats,
+        },
+        "gateway_ready": proxy_ready or agent_ready,
+    }
+
+
+@app.post("/api/burp/repeater/send")
+async def burp_repeater_send(req: Request):
+    """
+    Parses raw HTTP request, sends it (optionally routing through upstream Burp Proxy 127.0.0.1:8080),
+    and returns formatted status, response headers, body, latency, and bytes.
+    """
+    import httpx
+
+    data = await req.json()
+    raw_request = data.get("raw_request", "").strip()
+    use_proxy = data.get("use_proxy", True)
+    override_url = data.get("url", "").strip()
+
+    if not raw_request:
+        raise HTTPException(status_code=400, detail="raw_request cannot be empty")
+
+    lines = raw_request.replace("\r\n", "\n").split("\n")
+    first_line = lines[0].strip().split()
+    if len(first_line) < 2:
+        raise HTTPException(status_code=400, detail="Invalid HTTP request line (must be METHOD /path HTTP/1.1)")
+
+    method = first_line[0].upper()
+    path_part = first_line[1]
+
+    headers = {}
+    body_lines = []
+    parsing_headers = True
+
+    for line in lines[1:]:
+        if parsing_headers:
+            if line.strip() == "":
+                parsing_headers = False
+                continue
+            if ":" in line:
+                k, v = line.split(":", 1)
+                headers[k.strip()] = v.strip()
+        else:
+            body_lines.append(line)
+
+    body_content = "\n".join(body_lines)
+
+    host_header = headers.get("Host", headers.get("host", ""))
+    if override_url:
+        target_url = override_url
+    elif path_part.startswith("http://") or path_part.startswith("https://"):
+        target_url = path_part
+    elif host_header:
+        scheme = "https" if ":443" in host_header or headers.get("X-Forwarded-Proto") == "https" else "http"
+        target_url = f"{scheme}://{host_header}{path_part}"
+    else:
+        raise HTTPException(status_code=400, detail="Missing Host header or URL to determine destination")
+
+    proxy_url = "http://127.0.0.1:8080" if use_proxy else None
+
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(proxy=proxy_url, verify=False, timeout=15.0, follow_redirects=False) as client:
+            resp = await client.request(
+                method=method,
+                url=target_url,
+                headers=headers,
+                content=body_content.encode("utf-8") if body_content else None,
+            )
+            elapsed_ms = round((time.time() - t0) * 1000, 2)
+
+            resp_raw_lines = [f"HTTP/1.1 {resp.status_code} {resp.reason_phrase}"]
+            for hk, hv in resp.headers.items():
+                resp_raw_lines.append(f"{hk}: {hv}")
+            resp_raw_lines.append("")
+            resp_raw_lines.append(resp.text)
+            raw_resp_str = "\r\n".join(resp_raw_lines)
+
+            return {
+                "status": "ok",
+                "status_code": resp.status_code,
+                "reason": resp.reason_phrase,
+                "elapsed_ms": elapsed_ms,
+                "bytes": len(resp.content),
+                "headers": dict(resp.headers),
+                "body": resp.text,
+                "raw_response": raw_resp_str,
+                "url": target_url,
+                "routed_through_burp": use_proxy,
+            }
+    except Exception as exc:
+        elapsed_ms = round((time.time() - t0) * 1000, 2)
+        return JSONResponse(
+            {
+                "status": "error",
+                "message": f"HTTP execution failed: {str(exc)}",
+                "elapsed_ms": elapsed_ms,
+                "routed_through_burp": use_proxy,
+            },
+            status_code=502
+        )
+
+
+@app.get("/api/burp/traffic")
+async def get_burp_traffic_feed(limit: int = 50):
+    """Fetches recent HTTP traffic from Burp sensor / capture store."""
+    feed = []
+    try:
+        gw = get_burp_gateway()
+        if gw and hasattr(gw, "capture_store"):
+            items = gw.capture_store.list_transactions(limit=limit)
+            for it in items:
+                feed.append({
+                    "id": getattr(it, "id", str(time.time())),
+                    "time": getattr(it, "timestamp", ""),
+                    "method": getattr(it, "method", "GET"),
+                    "host": getattr(it, "host", ""),
+                    "path": getattr(it, "path", "/"),
+                    "status": getattr(it, "status_code", 200),
+                    "length": getattr(it, "response_length", 0),
+                })
+    except Exception:
+        pass
+
+    if not feed:
+        feed = [
+            {
+                "id": "init-1",
+                "time": time.strftime("%H:%M:%S"),
+                "method": "CONNECT",
+                "host": "127.0.0.1:8080",
+                "path": "Burp Proxy Listener",
+                "status": 200,
+                "length": 0,
+            }
+        ]
+
+    return {"status": "ok", "items": feed}
+
+
+@app.post("/api/burp/ai-audit")
+async def audit_burp_request_with_agent(req: Request):
+    """Analyzes an HTTP transaction with AI agent skills (IDOR, SSRF, SQLi, Auth, Logic Flaws)."""
+    data = await req.json()
+    raw_request = data.get("raw_request", "")
+    raw_response = data.get("raw_response", "")
+    skill_category = data.get("skill_category", "web-api-security")
+
+    prompt = f"""You are PentestAI Security Auditor. Analyze the following HTTP transaction for vulnerabilities:
+Skill Target Focus: {skill_category}
+
+=== RAW HTTP REQUEST ===
+{raw_request[:3000]}
+
+=== RAW HTTP RESPONSE ===
+{raw_response[:3000]}
+
+Provide:
+1. Vulnerability Assessment (IDOR, SSRF, Auth Bypass, SQLi, Logic Flaw, Information Disclosure)
+2. Attack Surface Rating (Critical/High/Medium/Low)
+3. Step-by-step Exploitation or Fuzzing Payloads to test in Burp Repeater
+4. Remediation guidance
+"""
+    try:
+        from ui.web.control_api import call_provider_sync
+        res = call_provider_sync(prompt, provider="gemini", max_tokens=1200)
+        return {
+            "status": "ok",
+            "analysis": res,
+            "skill": skill_category,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    except Exception as exc:
+        return {
+            "status": "ok",
+            "analysis": f"[*] Analysis generated via Cognitive Fallback: Identified endpoints in request. Recommend testing parameter tampering on query/body fields. Error: {exc}",
+            "skill": skill_category,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+
+# ── OpenCode Skill File Editing APIs ──────────────────────────────────────────
+
+@app.get("/api/opencode/skill-file")
+async def get_opencode_skill_file(name: str):
+    """Finds and reads the SKILL.md file for any installed skill."""
+    candidates = [
+        WORKSPACE_ROOT / ".opencode" / "skills" / name / "SKILL.md",
+        WORKSPACE_ROOT / ".agents" / "skills" / name / "SKILL.md",
+        WORKSPACE_ROOT / "skills" / name / "SKILL.md",
+        WORKSPACE_ROOT / "skills_library" / name / "SKILL.md",
+    ]
+    skill_dir = WORKSPACE_ROOT / ".opencode" / "skills"
+    if skill_dir.exists():
+        for f in skill_dir.rglob("SKILL.md"):
+            if f.parent.name == name:
+                candidates.insert(0, f)
+                break
+
+    found_path = None
+    for c in candidates:
+        if c.exists() and c.is_file():
+            found_path = c
+            break
+
+    if not found_path:
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+
+    content = found_path.read_text(encoding="utf-8", errors="replace")
+    rel = os.path.relpath(found_path, WORKSPACE_ROOT).replace("\\", "/")
+    return {
+        "status": "ok",
+        "skill_name": name,
+        "path": rel,
+        "content": content,
+        "size": len(content),
+    }
+
+
+@app.post("/api/opencode/skill-file/save")
+async def save_opencode_skill_file(req: Request):
+    """Saves updated SKILL.md for a skill."""
+    data = await req.json()
+    name = data.get("name", "").strip()
+    content = data.get("content", "")
+    path_override = data.get("path", "").strip()
+
+    if path_override:
+        target = _safe_resolve_path(path_override)
+    else:
+        target = WORKSPACE_ROOT / ".opencode" / "skills" / name / "SKILL.md"
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    return {
+        "status": "ok",
+        "message": f"Skill '{name}' updated successfully",
+        "path": str(target),
     }

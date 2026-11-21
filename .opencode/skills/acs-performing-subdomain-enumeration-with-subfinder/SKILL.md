@@ -1,32 +1,11 @@
 ---
-name: acs-performing-subdomain-enumeration-with-subfinder
-description: Enumerate subdomains of target domains using ProjectDiscovery's Subfinder
-  passive reconnaissance tool to map the attack surface during security assessments.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- subdomain-enumeration
-- reconnaissance
-- bug-bounty
-- attack-surface
-- subfinder
-- passive-recon
-- osint
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1595
+name: "acs-performing-subdomain-enumeration-with-subfinder"
+description: "Enumerate subdomains of target domains using ProjectDiscovery's Subfinder"
 ---
+
+# Acs Performing Subdomain Enumeration With Subfinder
+
+*Sourced from abdo453-hunterai*
 
 # Performing Subdomain Enumeration with Subfinder
 
@@ -197,3 +176,4 @@ subfinder -d example.com -silent | httpx -silent | gowitness file -f - -P screen
 - Investigate subdomains with CNAME pointing to unclaimed services
 - Restrict access to development and staging environments
 ```
+

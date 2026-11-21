@@ -41,21 +41,31 @@ class AssetDiscoveryAgent:
         
         # Strip protocol if present
         clean_target = target.replace("https://", "").replace("http://", "").split("/")[0]
-        
-        # Simulated/Integrated discovery logic
-        seed_subdomains = [
-            clean_target,
-            f"api.{clean_target}",
-            f"auth.{clean_target}",
-            f"admin.{clean_target}",
-            f"app.{clean_target}",
-            f"static.{clean_target}",
-        ]
-        discovered_domains.extend(seed_subdomains)
-        discovered_domains = list(set(discovered_domains))
-        
-        # Live host probing
-        live_hosts = [clean_target, f"api.{clean_target}", f"auth.{clean_target}"]
+        host_only = clean_target.split(":")[0]
+        is_ip_or_local = host_only == "localhost"
+        if not is_ip_or_local:
+            import ipaddress
+            try:
+                ipaddress.ip_address(host_only)
+                is_ip_or_local = True
+            except ValueError:
+                pass
+
+        if is_ip_or_local:
+            discovered_domains = [clean_target]
+            live_hosts = [clean_target]
+        else:
+            seed_subdomains = [
+                clean_target,
+                f"api.{clean_target}",
+                f"auth.{clean_target}",
+                f"admin.{clean_target}",
+                f"app.{clean_target}",
+                f"static.{clean_target}",
+            ]
+            discovered_domains.extend(seed_subdomains)
+            discovered_domains = list(set(discovered_domains))
+            live_hosts = [clean_target, f"api.{clean_target}", f"auth.{clean_target}"]
 
         evidence = [
             EvidenceArtifact(

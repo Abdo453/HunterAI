@@ -1,7 +1,11 @@
 ---
-name: abh-cicd-security
-description: CI/CD pipeline security hunting — GitHub Actions workflow injection, secret exfiltration, self-hosted runner poisoning, dependency confusion, OIDC token theft, and supply chain attacks. Covers sisakulint scanning, manual workflow analysis, and chaining CI/CD bugs into critical findings. Use when a target has public repos, GitHub Actions, CircleCI, Jenkins, or GitLab CI.
+name: "abh-cicd-security"
+description: "CI/CD pipeline security hunting \u2014 GitHub Actions workflow injection, secret exfiltration, self-hosted runner poisoning, dependency confusion, OIDC token theft, and supply chain attacks. Covers sisakulint scanning, manual workflow analysis, and chaining CI/CD bugs into critical findings. Use when ..."
 ---
+
+# Abh Cicd Security
+
+*Sourced from abdo453-hunterai*
 
 # CI/CD SECURITY — Pipeline Attack Surface
 
@@ -379,3 +383,4 @@ gh run view <run-id> --log --repo owner/repo
 # List exposed secret names (names only — values never shown by API)
 gh secret list --repo owner/repo
 ```
+

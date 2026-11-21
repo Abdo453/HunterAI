@@ -1,8 +1,11 @@
 ---
-name: tob-ruzzy
-type: fuzzer
-description: "Sets up and runs Ruzzy, Trail of Bits' coverage-guided Ruby fuzzer and the only production-ready one for the language. Covers harness structure, fuzzing pure Ruby and the native C extensions in gems, and sanitizer builds. Use when fuzzing a Ruby library or gem, testing a Ruby C extension for memory safety, or asking how to fuzz Ruby at all."
+name: "tob-ruzzy"
+description: "Sets up and runs Ruzzy, Trail of Bits' coverage-guided Ruby fuzzer and the only production-ready one for the language. Covers harness structure, fuzzing pure Ruby and the native C extensions in gems, and sanitizer builds. Use when fuzzing a Ruby library or gem, testing a Ruby C extension for memo..."
 ---
+
+# Tob Ruzzy
+
+*Sourced from abdo453-hunterai*
 
 # Ruzzy
 
@@ -439,3 +442,4 @@ Detailed guide on fuzzing C extensions with compilation flags and examples.
 
 **[Fuzzing pure Ruby code](https://github.com/trailofbits/ruzzy#fuzzing-pure-ruby-code)**
 Detailed guide on the tracer pattern required for pure Ruby fuzzing.
+

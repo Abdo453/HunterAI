@@ -1,36 +1,12 @@
 ---
-name: acs-performing-web-application-penetration-test
-description: 'Performs systematic security testing of web applications following the
-  OWASP Web Security Testing Guide (WSTG) methodology to identify vulnerabilities
-  in authentication, authorization, input validation, session management, and business
-  logic. The tester uses Burp Suite as the primary interception proxy alongside manual
-  testing techniques to find flaws that automated scanners miss. Activates for requests
-  involving web app pentest, OWASP testing, application security assessment, or web
-  vulnerability testing.
-
-  '
-domain: cybersecurity
-subdomain: penetration-testing
-tags:
-- web-application-pentest
-- OWASP
-- Burp-Suite
-- WSTG
-- application-security
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- ID.RA-06
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
+name: "acs-performing-web-application-penetration-test"
+description: "Performs systematic security testing of web applications following the"
 ---
+
+# Acs Performing Web Application Penetration Test
+
+*Sourced from abdo453-hunterai*
+
 # Performing Web Application Penetration Test
 
 ## When to Use
@@ -206,3 +182,4 @@ Add authorization middleware that verifies the authenticated user's ID matches
 the order's userId field before returning order data. Implement UUIDs instead
 of sequential integers for order identifiers to prevent enumeration.
 ```
+

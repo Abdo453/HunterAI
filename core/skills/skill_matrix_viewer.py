@@ -99,6 +99,32 @@ class SkillMatrixViewer:
                 })
         return results
 
+    @staticmethod
+    def get_opencode_library_skills() -> List[Dict[str, Any]]:
+        """Retrieves installed OpenCode cybersecurity skills from .opencode/skills/MANIFEST.json."""
+        import json
+        results = []
+        manifest_path = os.path.join(".opencode", "skills", "MANIFEST.json")
+        if not os.path.isfile(manifest_path):
+            return results
+        try:
+            with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
+                data = json.load(f)
+            for item in data.get("skills", []):
+                name = item.get("name", "")
+                if name.startswith("abh-"):
+                    continue  # already counted in get_agentic_bug_hunter_skills
+                results.append({
+                    "name": name,
+                    "layer": "opencode_library",
+                    "category": item.get("pack", "cyber_library"),
+                    "description": (item.get("description") or "").replace("\n", " ").strip(),
+                    "filepath": item.get("source", ""),
+                })
+        except Exception:
+            pass
+        return results
+
     @classmethod
     def list_all_skills(
         cls,
@@ -116,6 +142,8 @@ class SkillMatrixViewer:
             all_skills.extend(cls.get_kali_tool_skills())
         if not layer or layer == "agentic_bug_hunter":
             all_skills.extend(cls.get_agentic_bug_hunter_skills())
+        if not layer or layer == "opencode_library":
+            all_skills.extend(cls.get_opencode_library_skills())
 
         if category:
             cat_lower = category.lower()
@@ -142,6 +170,7 @@ class SkillMatrixViewer:
         hunter_skills = cls.get_hunter_skills()
         kali_skills = cls.get_kali_tool_skills()
         abh_skills = cls.get_agentic_bug_hunter_skills()
+        opencode_skills = cls.get_opencode_library_skills()
 
         dir_cats: Dict[str, int] = {}
         for s in dir_skills:
@@ -154,11 +183,12 @@ class SkillMatrixViewer:
             kali_cats[cat] = kali_cats.get(cat, 0) + 1
 
         return {
-            "total_skills": len(dir_skills) + len(hunter_skills) + len(kali_skills) + len(abh_skills),
+            "total_skills": len(dir_skills) + len(hunter_skills) + len(kali_skills) + len(abh_skills) + len(opencode_skills),
             "directory_skills_count": len(dir_skills),
             "directory_categories": dir_cats,
             "hunter_vuln_skills_count": len(hunter_skills),
             "kali_tool_skills_count": len(kali_skills),
             "kali_categories": kali_cats,
             "agentic_bug_hunter_skills_count": len(abh_skills),
+            "opencode_library_skills_count": len(opencode_skills),
         }

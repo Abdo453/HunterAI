@@ -1,8 +1,11 @@
 ---
-name: bri-native-code-review
-description: "Review C, C++ and Rust source for memory-safety bugs: out-of-bounds reads and writes, integer overflow or truncation that feeds a size, use-after-free and double free, format strings, uninitialized memory, Rust unsafe soundness, FFI boundaries, parsers of untrusted input, and secrets left in memory. Also checks compiler hardening flags and recommends sanitizers, and reports in the shared findings.json format. Use when the user mentions 'native code review,' 'C code review,' 'C++ security review,' 'memory safety review,' 'buffer overflow,' 'use-after-free,' 'double free,' 'format string bug,' 'integer overflow,' 'uninitialized memory,' 'unsafe Rust,' 'is this unsafe block sound,' 'FFI boundary,' 'Miri,' 'AddressSanitizer,' 'checksec,' 'FORTIFY_SOURCE,' 'hardening flags,' 'explicit_bzero,' or 'zeroize.'"
-allowed-tools: Read, Grep, Glob, Bash(readelf:*), Bash(checksec file:*)
+name: "bri-native-code-review"
+description: "Review C, C++ and Rust source for memory-safety bugs: out-of-bounds reads and writes, integer overflow or truncation that feeds a size, use-after-free and double free, format strings, uninitialized memory, Rust unsafe soundness, FFI boundaries, parsers of untrusted input, and secrets left in memo..."
 ---
+
+# Bri Native Code Review
+
+*Sourced from abdo453-hunterai*
 
 # Native Code Review — C, C++ and Rust Memory Safety
 
@@ -370,3 +373,4 @@ Mitigated (platform/config) / Requires major migration. A false positive is a `r
 - Cloudflare, [security-audit-skill](https://github.com/cloudflare/security-audit-skill) `MEMORY-SAFETY-AND-BINARY.md` (MIT): re-derive bounds from the worst accepted input, the boundary table, a crash proves a defect only from realistic input, stop at the violated invariant. Paraphrased
 - Shared references (copied into `references/` at build time): [findings-format.md](references/findings-format.md), [severity-calibration.md](references/severity-calibration.md), [verification.md](references/verification.md), [validate-findings.mjs](references/validate-findings.mjs), [to-sarif.mjs](references/to-sarif.mjs), [findings.schema.json](references/findings.schema.json)
 - This skill's references: [bug-classes.md](references/bug-classes.md), [rust-unsafe-checklist.md](references/rust-unsafe-checklist.md), [hardening-and-sanitizers.md](references/hardening-and-sanitizers.md)
+

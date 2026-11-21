@@ -210,6 +210,7 @@ class BurpLogInspectorSkill(BaseSkill):
             "total_findings": len(findings),
             "discovered_endpoints": attack_surface["endpoints"],
             "discovered_apis": attack_surface["api_routes"],
+            "synthetic_fallback": source_desc == "Synthetic Burp Session Telemetry",
         }
         result.success = True
         return result
@@ -826,13 +827,16 @@ class BurpLogInspectorSkill(BaseSkill):
 
     def _generate_synthetic_interactions(self, target: str) -> List[NormalizedInteraction]:
         """Provides offline hermetic telemetry when Burp is not running."""
-        base = target.rstrip("/")
+        parsed = urlparse(target if "://" in target else f"https://{target}")
+        scheme = parsed.scheme or "https"
+        host = parsed.netloc or parsed.path.split("/")[0]
+        base = f"{scheme}://{host}"
         return [
             NormalizedInteraction(
                 source_index=0,
                 url=f"{base}/api/v1/users?id=101",
                 method="GET",
-                host=urlparse(target).netloc or target,
+                host=host,
                 path="/api/v1/users",
                 status_code=200,
                 req_headers={"Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMDEifQ."},
@@ -845,7 +849,7 @@ class BurpLogInspectorSkill(BaseSkill):
                 source_index=1,
                 url=f"{base}/api/v1/fetch?url=http://169.254.169.254/latest/meta-data/",
                 method="GET",
-                host=urlparse(target).netloc or target,
+                host=host,
                 path="/api/v1/fetch",
                 status_code=500,
                 req_headers={},
@@ -858,7 +862,7 @@ class BurpLogInspectorSkill(BaseSkill):
                 source_index=2,
                 url=f"{base}/api/v1/order",
                 method="POST",
-                host=urlparse(target).netloc or target,
+                host=host,
                 path="/api/v1/order",
                 status_code=201,
                 req_headers={"Content-Type": "application/json"},
@@ -872,7 +876,7 @@ class BurpLogInspectorSkill(BaseSkill):
                 source_index=3,
                 url=f"{base}/admin/system/metrics",
                 method="GET",
-                host=urlparse(target).netloc or target,
+                host=host,
                 path="/admin/system/metrics",
                 status_code=200,
                 req_headers={},

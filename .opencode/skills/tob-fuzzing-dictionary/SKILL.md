@@ -1,8 +1,11 @@
 ---
-name: tob-fuzzing-dictionary
-type: technique
-description: "Builds and applies fuzzing dictionaries so a fuzzer can produce the keywords, magic bytes, and tokens a target expects. Covers extracting tokens from source, headers, binaries, and specifications, dictionary syntax, and wiring one into libFuzzer or AFL++. Use when fuzzing a parser, protocol, or file format, when coverage stalls at input validation, or when a target compares against fixed strings."
+name: "tob-fuzzing-dictionary"
+description: "Builds and applies fuzzing dictionaries so a fuzzer can produce the keywords, magic bytes, and tokens a target expects. Covers extracting tokens from source, headers, binaries, and specifications, dictionary syntax, and wiring one into libFuzzer or AFL++. Use when fuzzing a parser, protocol, or f..."
 ---
+
+# Tob Fuzzing Dictionary
+
+*Sourced from abdo453-hunterai*
 
 # Fuzzing Dictionary
 
@@ -293,3 +296,4 @@ Official libFuzzer documentation on dictionary format and usage. Explains token 
 
 **[OSS-Fuzz Dictionaries](https://github.com/google/oss-fuzz/tree/master/projects)**
 Real-world dictionaries from Google's continuous fuzzing service. Search project directories for `*.dict` files to see production examples.
+

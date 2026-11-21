@@ -1,8 +1,11 @@
 ---
-name: bri-red-team-engagement
-description: "Plan, scope, and execute an authorized red-team engagement — distinct from a penetration test. Covers engagement methodology, assumed-breach scenarios, ATT&CK emulation plans, rules of engagement, deconfliction with the blue team, post-engagement debriefs, and the program-level work that makes red teams actually improve defenses. Use when the user mentions 'red team,' 'red team engagement,' 'red teaming,' 'adversary emulation,' 'ATT&CK emulation,' 'assumed breach,' 'purple team exercise,' 'tabletop with technical execution,' 'red team scope,' 'rules of engagement,' 'red team RoE,' 'deconfliction,' 'red team debrief,' or wants to design or run a red-team engagement against systems with authorization."
-allowed-tools: Read, Grep, Glob, WebSearch
+name: "bri-red-team-engagement"
+description: "Plan, scope, and execute an authorized red-team engagement \u2014 distinct from a penetration test. Covers engagement methodology, assumed-breach scenarios, ATT&CK emulation plans, rules of engagement, deconfliction with the blue team, post-engagement debriefs, and the program-level work that makes re..."
 ---
+
+# Bri Red Team Engagement
+
+*Sourced from abdo453-hunterai*
 
 # Red Team Engagement — Authorized Adversary Emulation
 
@@ -206,3 +209,4 @@ This is the most consequential boundaries section in this catalog. Read it.
 - **CTID (Center for Threat-Informed Defense)** — `ctid.mitre.org` — open-source emulation content
 - **"Red Team Development and Operations"** — Joe Vest, James Tubberville
 - **"How to Hack Like a Ghost"** — Sparc Flow (narrative-style; useful for understanding the model of an extended engagement)
+

@@ -1,8 +1,11 @@
 ---
-name: bri-recon
-description: "Perform structured reconnaissance and attack surface enumeration for authorized penetration tests, CTF challenges, and bug bounty programs. Use when the user mentions 'recon,' 'reconnaissance,' 'enumerate,' 'attack surface,' 'subdomain enumeration,' 'port scan,' 'fingerprint,' 'asset discovery,' or needs to map a target's external footprint."
-allowed-tools: Read, WebSearch, WebFetch, Bash(whois:*), Bash(dig:*)
+name: "bri-recon"
+description: "Perform structured reconnaissance and attack surface enumeration for authorized penetration tests, CTF challenges, and bug bounty programs. Use when the user mentions 'recon,' 'reconnaissance,' 'enumerate,' 'attack surface,' 'subdomain enumeration,' 'port scan,' 'fingerprint,' 'asset discovery,' ..."
 ---
+
+# Bri Recon
+
+*Sourced from abdo453-hunterai*
 
 # Recon — Penetration Testing Reconnaissance
 
@@ -111,3 +114,4 @@ Produce a structured recon report:
 - PTES (Penetration Testing Execution Standard)
 - OWASP Testing Guide
 - Bug Bounty Methodology (jhaddix/tbhm)
+

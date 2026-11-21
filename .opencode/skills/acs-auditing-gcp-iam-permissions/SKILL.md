@@ -1,34 +1,11 @@
 ---
-name: acs-auditing-gcp-iam-permissions
-description: 'Auditing Google Cloud Platform IAM permissions to identify overly permissive
-  bindings, primitive role usage, service account key proliferation, and cross-project
-  access risks using gcloud CLI, Policy Analyzer, and IAM Recommender.
-
-  '
-domain: cybersecurity
-subdomain: cloud-security
-tags:
-- cloud-security
-- gcp
-- iam
-- permissions-audit
-- service-accounts
-- policy-analyzer
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.IR-01
-- ID.AM-08
-- GV.SC-06
-- DE.CM-01
-mitre_attack:
-- T1078.004
-- T1098.003
-- T1528
-- T1548.005
-- T1580
+name: "acs-auditing-gcp-iam-permissions"
+description: "Auditing Google Cloud Platform IAM permissions to identify overly permissive"
 ---
+
+# Acs Auditing Gcp Iam Permissions
+
+*Sourced from abdo453-hunterai*
 
 # Auditing GCP IAM Permissions
 
@@ -324,3 +301,4 @@ RECOMMENDER SUGGESTIONS:
   Priority HIGH:                     12
   Estimated permissions reduced:     2,847 individual permissions
 ```
+

@@ -1,34 +1,11 @@
 ---
-name: acs-performing-directory-traversal-testing
-description: Test web applications for path traversal and Local/Remote File Inclusion
-  vulnerabilities by manipulating file path parameters, applying encoding and filter-bypass
-  techniques, automating discovery with ffuf and dotdotpwn, and reading high-value files
-  or achieving code execution. Use during authorized penetration tests of file download,
-  view, or include functionality, or when assessing APIs that accept file names or file
-  paths as parameters.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- directory-traversal
-- path-traversal
-- lfi
-- owasp
-- web-security
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
+name: "acs-performing-directory-traversal-testing"
+description: "Test web applications for path traversal and Local/Remote File Inclusion"
 ---
+
+# Acs Performing Directory Traversal Testing
+
+*Sourced from abdo453-hunterai*
 
 # Performing Directory Traversal Testing
 
@@ -329,3 +306,4 @@ Original `../` stripped by filter. Successful bypass: `....//....//....//etc/pas
 4. Remove sensitive files from web-accessible directories
 5. Disable PHP wrappers (allow_url_include, allow_url_fopen) if not required
 ```
+

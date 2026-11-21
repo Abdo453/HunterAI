@@ -1,8 +1,11 @@
 ---
-name: tob-burpsuite-project-parser
-description: Searches and explores Burp Suite project files (.burp) from the command line. Use when searching response headers or bodies with regex patterns, extracting security audit findings, dumping proxy history or site map data, or analyzing HTTP traffic captured in a Burp project.
-allowed-tools: Bash Read
+name: "tob-burpsuite-project-parser"
+description: "Searches and explores Burp Suite project files (.burp) from the command line. Use when searching response headers or bodies with regex patterns, extracting security audit findings, dumping proxy history or site map data, or analyzing HTTP traffic captured in a Burp project."
 ---
+
+# Tob Burpsuite Project Parser
+
+*Sourced from abdo453-hunterai*
 
 # Burp Project Parser
 
@@ -418,3 +421,4 @@ If not using the wrapper script, invoke directly:
 "$BURP_JAVA" -jar -Djava.awt.headless=true "$BURP_JAR" \
   --project-file=/path/to/project.burp [FLAGS]
 ```
+

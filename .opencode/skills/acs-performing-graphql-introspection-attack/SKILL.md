@@ -1,34 +1,12 @@
 ---
-name: acs-performing-graphql-introspection-attack
-description: 'Performs GraphQL introspection attacks that extract the full API schema
-  (types, queries, mutations, subscriptions, field definitions), map the attack surface,
-  test query depth/complexity limits, and exploit GraphQL-specific weaknesses such
-  as batching attacks, alias-based brute force, and nested query DoS. Use for GraphQL
-  security testing, schema enumeration, or GraphQL API penetration testing.
-
-  '
-domain: cybersecurity
-subdomain: api-security
-tags:
-- api-security
-- graphql
-- introspection
-- schema-extraction
-- query-abuse
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1552.001
-- T1110
+name: "acs-performing-graphql-introspection-attack"
+description: "Performs GraphQL introspection attacks that extract the full API schema"
 ---
+
+# Acs Performing Graphql Introspection Attack
+
+*Sourced from abdo453-hunterai*
+
 # Performing GraphQL Introspection Attack
 
 ## When to Use
@@ -524,3 +502,4 @@ production database credentials, and execute admin-only mutations.
 5. Disable field suggestions in error messages to prevent schema reconstruction
 6. Rate limit GraphQL requests per query, not just per HTTP request
 ```
+

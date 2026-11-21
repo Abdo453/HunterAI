@@ -1,32 +1,11 @@
 ---
-name: acs-testing-cors-misconfiguration
-description: Identifying and exploiting Cross-Origin Resource Sharing misconfigurations
-  that allow unauthorized cross-domain data access and credential theft during security
-  assessments.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- cors
-- web-security
-- owasp
-- same-origin-policy
-- burpsuite
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1003
+name: "acs-testing-cors-misconfiguration"
+description: "Identifying and exploiting Cross-Origin Resource Sharing misconfigurations"
 ---
+
+# Acs Testing Cors Misconfiguration
+
+*Sourced from abdo453-hunterai*
 
 # Testing CORS Misconfiguration
 
@@ -347,3 +326,4 @@ The server uses regex `target\.example\.com` to validate origins, but fails to a
 4. Validate origins with exact string matching, not regex substring matching
 5. Set Access-Control-Max-Age to a reasonable value (600 seconds)
 ```
+

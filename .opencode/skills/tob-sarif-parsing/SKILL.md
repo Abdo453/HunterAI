@@ -1,12 +1,11 @@
 ---
-name: tob-sarif-parsing
-description: >-
-  Parses and processes SARIF files from static analysis tools like CodeQL, Semgrep, or other
-  scanners. Triggers on "parse sarif", "read scan results", "aggregate findings", "deduplicate
-  alerts", or "process sarif output". Handles filtering, deduplication, format conversion, and
-  CI/CD integration of SARIF data. Does NOT run scans — use the Semgrep or CodeQL skills for that.
-allowed-tools: Bash Read Glob Grep
+name: "tob-sarif-parsing"
+description: ">-"
 ---
+
+# Tob Sarif Parsing
+
+*Sourced from abdo453-hunterai*
 
 # SARIF Parsing Best Practices
 
@@ -491,3 +490,4 @@ exactly one error, so a gate can be checked against a known answer before it is 
 - [pysarif (Python)](https://github.com/Kjeld-P/pysarif)
 - [GitHub SARIF Support](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning)
 - [SARIF Validator](https://sarifweb.azurewebsites.net/)
+

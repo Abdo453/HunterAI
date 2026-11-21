@@ -1,7 +1,11 @@
 ---
-name: abh-bug-bounty
-description: Complete bug bounty workflow — recon, pre-hunt learning, vulnerability hunting (IDOR, SSRF, XSS, auth bypass, CSRF, race conditions, SQLi, XXE, file upload, business logic, GraphQL, HTTP smuggling, cache poisoning, OAuth, OIDC, SSTI, subdomain takeover, cloud misconfig, ATO chains, agentic AI), LLM/AI security testing (ASI01-ASI10), A-to-B bug chaining, bypass tables, language-specific grep patterns, and reporting (7-Question Gate, 4 validation gates, CVSS 3.1, PoC generation, submission checklist). Use for ANY bug bounty task — recon, hunting specific vulns, auditing source code, testing AI features, validating findings, or writing reports.
+name: "abh-bug-bounty"
+description: "Complete bug bounty workflow \u2014 recon, pre-hunt learning, vulnerability hunting (IDOR, SSRF, XSS, auth bypass, CSRF, race conditions, SQLi, XXE, file upload, business logic, GraphQL, HTTP smuggling, cache poisoning, OAuth, OIDC, SSTI, subdomain takeover, cloud misconfig, ATO chains, agentic AI), L..."
 ---
+
+# Abh Bug Bounty
+
+*Sourced from abdo453-hunterai*
 
 # Bug Bounty Master Workflow
 
@@ -1645,3 +1649,4 @@ curl -s https://raw.githubusercontent.com/Awarexone/Agentic-Bug-Hunter/main/SKIL
 ```
 
 Then in Claude Code, this skill loads automatically when you ask about bug bounty, recon, or vulnerability hunting.
+

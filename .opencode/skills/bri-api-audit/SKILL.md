@@ -1,8 +1,11 @@
 ---
-name: bri-api-audit
-description: "Audit REST, GraphQL, and RPC APIs against the OWASP API Security Top 10 (2023). Use when the user mentions 'API security,' 'API audit,' 'BOLA,' 'broken object level authorization,' 'BFLA,' 'function-level authorization,' 'mass assignment,' 'API rate limiting,' 'GraphQL security,' 'REST security,' 'API authentication,' 'API authorization,' 'excessive data exposure,' or needs to review API endpoints for security weaknesses."
-allowed-tools: Read, Grep, Glob
+name: "bri-api-audit"
+description: "Audit REST, GraphQL, and RPC APIs against the OWASP API Security Top 10 (2023). Use when the user mentions 'API security,' 'API audit,' 'BOLA,' 'broken object level authorization,' 'BFLA,' 'function-level authorization,' 'mass assignment,' 'API rate limiting,' 'GraphQL security,' 'REST security,'..."
 ---
+
+# Bri Api Audit
+
+*Sourced from abdo453-hunterai*
 
 # API Audit — REST / GraphQL / RPC Security Review
 
@@ -292,3 +295,4 @@ Dispositions on a confirmed finding (what happens to it): `Fixed` | `Deferred` |
 - CWE-639 (Authorization Bypass Through User-Controlled Key), CWE-915 (Improperly Controlled Modification of Dynamically-Determined Object Attributes)
 - Verdicts, coverage, severity and findings format: the shared references linked above (`verification.md`, `recon-and-coverage.md`, `diff-review.md`, `severity-calibration.md`, `findings-format.md`).
 - GraphQL and paired-evidence technique notes paraphrase **Strix** (Apache-2.0); diff-mode and combined-mode concepts likewise. Not copied verbatim. See [references/graphql.md](references/graphql.md) for per-technique citations.
+

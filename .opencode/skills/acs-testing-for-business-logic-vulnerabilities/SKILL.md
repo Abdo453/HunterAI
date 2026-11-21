@@ -1,34 +1,11 @@
 ---
-name: acs-testing-for-business-logic-vulnerabilities
-description: Manually identifies flaws in application business logic - price manipulation,
-  multi-step workflow bypass, and privilege escalation - by intercepting and modifying
-  requests with Burp Suite, going beyond what automated vulnerability scanners detect.
-  Use for e-commerce checkout/cart flows, voucher and rewards systems, or any assessment
-  where scanners find little but business rules need scrutiny.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- business-logic
-- owasp
-- web-security
-- burpsuite
-- manual-testing
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1068
+name: "acs-testing-for-business-logic-vulnerabilities"
+description: "Manually identifies flaws in application business logic - price manipulation,"
 ---
+
+# Acs Testing For Business Logic Vulnerabilities
+
+*Sourced from abdo453-hunterai*
 
 # Testing for Business Logic Vulnerabilities
 
@@ -361,3 +338,4 @@ The password reset flow generates a one-time token but does not invalidate it af
 4. Implement idempotency keys to prevent duplicate transaction processing
 5. Rate-limit and log coupon applications, referral submissions, and transfers
 ```
+

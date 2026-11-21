@@ -1,7 +1,11 @@
 ---
-name: abh-triage-validation
-description: Finding validation before writing any report — 7-Question Gate (all 7 questions), 4 pre-submission gates, always-rejected list, conditionally valid with chain table, CVSS 3.1 quick reference, severity decision guide, report title formula, 60-second pre-submit checklist. Use BEFORE writing any report. One wrong answer = kill the finding and move on. Saves N/A ratio.
+name: "abh-triage-validation"
+description: "Finding validation before writing any report \u2014 7-Question Gate (all 7 questions), 4 pre-submission gates, always-rejected list, conditionally valid with chain table, CVSS 3.1 quick reference, severity decision guide, report title formula, 60-second pre-submit checklist. Use BEFORE writing any rep..."
 ---
+
+# Abh Triage Validation
+
+*Sourced from abdo453-hunterai*
 
 # TRIAGE & VALIDATION
 
@@ -307,3 +311,4 @@ Reporting B saying "similar to A in my other report" — fresh Gate 0 for every 
 Overclaiming severity — triagers trust you less next time
 Under-describing impact — triager doesn't understand why it matters
 ```
+

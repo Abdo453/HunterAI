@@ -1,8 +1,11 @@
 ---
-name: tob-atheris
-type: fuzzer
-description: "Sets up and runs Atheris, the coverage-guided Python fuzzer built on libFuzzer. Covers TestOneInput harnesses, FuzzedDataProvider, instrumenting both pure Python and native C extensions, and running under AddressSanitizer. Use when fuzzing a Python package, hunting memory corruption in a Python C extension, or choosing between Atheris and Hypothesis for a Python target."
+name: "tob-atheris"
+description: "Sets up and runs Atheris, the coverage-guided Python fuzzer built on libFuzzer. Covers TestOneInput harnesses, FuzzedDataProvider, instrumenting both pure Python and native C extensions, and running under AddressSanitizer. Use when fuzzing a Python package, hunting memory corruption in a Python C..."
 ---
+
+# Tob Atheris
+
+*Sourced from abdo453-hunterai*
 
 # Atheris
 
@@ -480,3 +483,4 @@ Guide for integrating Atheris fuzzing into CI/CD pipelines using ClusterFuzzLite
 ### Video Resources
 
 Videos and tutorials are available in the main Atheris documentation and libFuzzer resources.
+

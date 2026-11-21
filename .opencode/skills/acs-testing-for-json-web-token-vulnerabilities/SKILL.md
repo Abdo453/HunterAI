@@ -1,35 +1,11 @@
 ---
-name: acs-testing-for-json-web-token-vulnerabilities
-description: Tests JWT implementations for algorithm confusion, "none" algorithm bypass,
-  kid/jku parameter injection, and weak secret exploitation using jwt_tool and Burp Suite's
-  JWT Editor extension, aiming to achieve authentication bypass and privilege escalation.
-  Use when assessing JWT-based auth/session management, OAuth2/OIDC token handling, or
-  SSO systems during a security engagement.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- jwt
-- json-web-token
-- algorithm-confusion
-- authentication-bypass
-- token-forgery
-- kid-injection
-- jku-attack
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1068
+name: "acs-testing-for-json-web-token-vulnerabilities"
+description: "Tests JWT implementations for algorithm confusion, \"none\" algorithm bypass,"
 ---
+
+# Acs Testing For Json Web Token Vulnerabilities
+
+*Sourced from abdo453-hunterai*
 
 # Testing for JSON Web Token Vulnerabilities
 
@@ -244,3 +220,4 @@ python3 jwt_tool.py <JWT_TOKEN> -S hs256 -p "discovered_secret" \
 - Ignore jku/x5u headers or validate against known endpoints
 - Set appropriate token expiration (exp) and implement token revocation
 ```
+

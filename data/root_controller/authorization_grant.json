@@ -1,16 +1,20 @@
 {
-  "authorized_by": "Demo Signer (SOW #1)",
-  "grant_id": "ENG-8a7db649",
-  "not_after": 1793750064.2642415,
-  "not_before": 1793145264.2642415,
+  "authorized_by": "HackerOne Wolt Program",
+  "grant_id": "ENG-96c9d0b9",
+  "not_after": 1795714713.051389,
+  "not_before": 1795109613.051389,
   "profiles": [
     "red_team"
   ],
   "scope": [
     {
       "kind": "domain",
-      "value": "example.com"
+      "value": "wolt.com"
+    },
+    {
+      "kind": "domain",
+      "value": "*.wolt.com"
     }
   ],
-  "signature": "58859a078066fc2dfd324c4ec845008de2efecff43e885f5f2c60688ad8725c0"
+  "signature": "65000232cd0f031621373c2c0d20e9b088ac2bb3d6134fcee5ac89db8aae6288"
 }

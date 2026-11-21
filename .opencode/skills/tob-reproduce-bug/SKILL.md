@@ -1,7 +1,11 @@
 ---
-name: tob-reproduce-bug
-description: Use when a named runtime or compiler bug in a local repository needs independent reproduction.
+name: "tob-reproduce-bug"
+description: "Use when a named runtime or compiler bug in a local repository needs independent reproduction."
 ---
+
+# Tob Reproduce Bug
+
+*Sourced from abdo453-hunterai*
 
 # Reproduce Bug
 
@@ -62,3 +66,4 @@ Report a blocker when the build or environment cannot exercise the claim.
 | --- | --- |
 | A unit test imitates the bug. | Exercise the target compiler or built runtime artifact. |
 | A nonzero exit proves reproduction. | Require the target diagnostic, or runtime marker and assertion. |
+

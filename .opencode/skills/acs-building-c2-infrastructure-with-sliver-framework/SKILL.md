@@ -1,37 +1,12 @@
 ---
-name: acs-building-c2-infrastructure-with-sliver-framework
-description: Deploy and harden a Sliver C2 team server (BishopFox's Go-based adversary emulation framework) with multi-protocol listeners (mTLS, HTTP/S, DNS, WireGuard), redirectors, domain fronting, and multi-operator support for authorized red-team operations. Use when standing up resilient C2 for a red-team engagement or generating beacon/session implants that must survive blue-team detection.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- c2-framework
-- sliver
-- command-and-control
-- adversary-simulation
-- infrastructure
-- post-exploitation
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-d3fend_techniques:
-- File Metadata Consistency Validation
-- Certificate Analysis
-- Application Protocol Command Analysis
-- Content Format Conversion
-- File Content Analysis
-nist_csf:
-- ID.RA-01
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1071.001
-- T1071.004
-- T1573.002
-- T1090.002
-- T1105
-- T1572
+name: "acs-building-c2-infrastructure-with-sliver-framework"
+description: "Deploy and harden a Sliver C2 team server (BishopFox's Go-based adversary emulation framework) with multi-protocol listeners (mTLS, HTTP/S, DNS, WireGuard), redirectors, domain fronting, and multi-operator support for authorized red-team operations. Use when standing up resilient C2 for a red-tea..."
 ---
+
+# Acs Building C2 Infrastructure With Sliver Framework
+
+*Sourced from abdo453-hunterai*
+
 # Building C2 Infrastructure with Sliver Framework
 
 ## Overview
@@ -210,3 +185,4 @@ Sliver is an open-source, cross-platform adversary emulation framework developed
 - [ ] Post-exploitation modules tested (process listing, .NET assembly execution)
 - [ ] Pivot functionality validated for internal network access
 - [ ] All C2 traffic encrypted and passing through redirectors
+

@@ -1,7 +1,11 @@
 ---
-name: abh-report-writing
-description: Bug bounty report writing for H1/Bugcrowd/Intigriti/Immunefi — report templates, human tone guidelines, impact-first writing, CVSS 3.1 scoring, title formula, impact statement formula, severity decision guide, downgrade counters, pre-submit checklist. Use after validating a finding and before submitting. Never use "could potentially" — prove it or don't report.
+name: "abh-report-writing"
+description: "Bug bounty report writing for H1/Bugcrowd/Intigriti/Immunefi \u2014 report templates, human tone guidelines, impact-first writing, CVSS 3.1 scoring, title formula, impact statement formula, severity decision guide, downgrade counters, pre-submit checklist. Use after validating a finding and before sub..."
 ---
+
+# Abh Report Writing
+
+*Sourced from abdo453-hunterai*
 
 # REPORT WRITING
 
@@ -499,3 +503,4 @@ Authorization: Bearer ACCOUNT_A_TOKEN
 **Expected:** 403 Forbidden
 **Actual:** 200 OK with victim's private data
 ```
+

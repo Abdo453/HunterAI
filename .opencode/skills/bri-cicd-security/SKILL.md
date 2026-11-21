@@ -1,8 +1,11 @@
 ---
-name: bri-cicd-security
-description: "Audit CI/CD pipelines, GitHub Actions first and GitLab CI and CircleCI briefly, for the paths that give an outsider code execution, secrets or a write token: pull_request_target and workflow_run running untrusted code, expression injection into run steps, missing or broad workflow permissions, third-party actions not pinned to a commit SHA, OIDC trust policies with wildcard subjects, self-hosted runners on public repos, secrets reaching forks, cache and artifact trust between workflows, and AI agents in CI that read issue or PR text while holding a write token. Runs zizmor and actionlint read-only and writes findings.json. Use when the user mentions 'pull_request_target,' 'pwn request,' 'workflow injection,' 'zizmor,' 'actionlint,' 'pin actions to SHA,' 'GITHUB_TOKEN permissions,' 'self-hosted runner,' 'claude-code-action,' 'AI agent in CI,' 'GitLab CI security,' 'CircleCI security,' 'is this workflow safe,' or needs to secure a build pipeline."
-allowed-tools: Read, Grep, Glob, WebSearch, Bash(zizmor --offline .), Bash(zizmor --offline --format=json .), Bash(zizmor --offline --format=sarif .), Bash(actionlint), Bash(actionlint -oneline), Bash(actionlint -format '{{json .}}'), Bash(gh workflow list:*), Bash(gh workflow view:*), Bash(gh run list:*)
+name: "bri-cicd-security"
+description: "Audit CI/CD pipelines, GitHub Actions first and GitLab CI and CircleCI briefly, for the paths that give an outsider code execution, secrets or a write token: pull_request_target and workflow_run running untrusted code, expression injection into run steps, missing or broad workflow permissions, th..."
 ---
+
+# Bri Cicd Security
+
+*Sourced from abdo453-hunterai*
 
 # CI/CD Security — Workflows, Runners, Tokens and Agents in the Pipeline
 
@@ -326,3 +329,4 @@ already say.
 - Wiz, [Avoiding mistakes with AWS OIDC integration conditions](https://www.wiz.io/blog/avoiding-mistakes-with-aws-oidc-integration-conditions)
 - Shared references (copied in at build time): [findings-format.md](references/findings-format.md), [findings.schema.json](references/findings.schema.json), [validate-findings.mjs](references/validate-findings.mjs), [to-sarif.mjs](references/to-sarif.mjs), [severity-calibration.md](references/severity-calibration.md), [verification.md](references/verification.md)
 - This skill: [references/checks.md](references/checks.md), [references/ai-agents-in-ci.md](references/ai-agents-in-ci.md), [references/gitlab-circleci.md](references/gitlab-circleci.md), [references/worked-examples.md](references/worked-examples.md)
+

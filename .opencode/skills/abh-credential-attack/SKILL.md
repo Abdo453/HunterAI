@@ -1,7 +1,11 @@
 ---
-name: abh-credential-attack
-description: Password spray methodology for bug bounty — when to do it vs web-vuln hunting, the wordlist-gen + breach-check + osint-employees + spray pipeline, mode selection (http-form / oauth / o365 / okta), rate-limit + lockout tactics, BBP legal guardrails, success detection, and the spray → authenticated /hunt chain pattern. Use when assessing whether credential attack is worth running on a target, picking the right mode, or recovering from common pitfalls.
+name: "abh-credential-attack"
+description: "Password spray methodology for bug bounty \u2014 when to do it vs web-vuln hunting, the wordlist-gen + breach-check + osint-employees + spray pipeline, mode selection (http-form / oauth / o365 / okta), rate-limit + lockout tactics, BBP legal guardrails, success detection, and the spray \u2192 authenticated..."
 ---
+
+# Abh Credential Attack
+
+*Sourced from abdo453-hunterai*
 
 # CREDENTIAL ATTACK PIPELINE
 
@@ -385,3 +389,4 @@ For the underlying tools' own docs:
 - `web2-recon` — produces the URL list that surfaces login endpoints
 - `triage-validation` — run 7-Question Gate on any spray-discovered creds before reporting
 - `report-writing` — ATO-via-spray report templates (H1/Bugcrowd format)
+

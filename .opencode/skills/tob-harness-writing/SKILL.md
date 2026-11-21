@@ -1,8 +1,11 @@
 ---
-name: tob-harness-writing
-type: technique
-description: "Designs and improves fuzzing harnesses for C/C++ and Rust. Covers mapping raw bytes onto a target API, generating structured inputs, avoiding non-determinism and false crashes, and deciding what to fuzz together. Use when writing a first LLVMFuzzerTestOneInput or fuzz_target! harness, when a campaign finds nothing or reports crashes that will not reproduce, or when the target API needs structured rather than raw input."
+name: "tob-harness-writing"
+description: "Designs and improves fuzzing harnesses for C/C++ and Rust. Covers mapping raw bytes onto a target API, generating structured inputs, avoiding non-determinism and false crashes, and deciding what to fuzz together. Use when writing a first LLVMFuzzerTestOneInput or fuzz_target! harness, when a camp..."
 ---
+
+# Tob Harness Writing
+
+*Sourced from abdo453-hunterai*
 
 # Writing Fuzzing Harnesses
 
@@ -610,3 +613,4 @@ Comprehensive guide to writing Rust fuzzing harnesses with cargo-fuzz and the ar
 
 - [Effective File Format Fuzzing](https://www.youtube.com/watch?v=qTTwqFRD1H8) - Conference talk on writing harnesses for file format parsers
 - [Modern Fuzzing of C/C++ Projects](https://www.youtube.com/watch?v=x0FQkAPokfE) - Tutorial covering harness design patterns
+

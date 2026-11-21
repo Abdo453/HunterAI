@@ -1,36 +1,11 @@
 ---
-name: acs-performing-jwt-none-algorithm-attack
-description: Execute and test the JWT none algorithm attack, crafting tokens with
-  the alg header set to none using PyJWT and an intercepting proxy (Burp Suite/mitmproxy)
-  to bypass signature verification and forge arbitrary claims. Use during authorized
-  penetration tests or security assessments of applications that use JWT for authentication
-  or authorization, to validate that the server rejects unsigned tokens.
-domain: cybersecurity
-subdomain: api-security
-tags:
-- jwt
-- none-algorithm
-- authentication-bypass
-- token-manipulation
-- signature-bypass
-- penetration-testing
-- owasp
-- web-security
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1552.001
-- T1027
-- T1070
+name: "acs-performing-jwt-none-algorithm-attack"
+description: "Execute and test the JWT none algorithm attack, crafting tokens with"
 ---
+
+# Acs Performing Jwt None Algorithm Attack
+
+*Sourced from abdo453-hunterai*
 
 # Performing JWT None Algorithm Attack
 
@@ -346,3 +321,4 @@ def verify_token_secure(token: str, secret_key: str) -> dict:
 - PortSwigger JWT None Algorithm: https://portswigger.net/kb/issues/00200901_jwt-none-algorithm-supported
 - HackTricks JWT Vulnerabilities: https://book.hacktricks.xyz/pentesting-web/hacking-jwt-json-web-tokens
 - Invicti JWT Signature Bypass: https://www.invicti.com/web-vulnerability-scanner/vulnerabilities/jwt-signature-bypass-via-none-algorithm
+

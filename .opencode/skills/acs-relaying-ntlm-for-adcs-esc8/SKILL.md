@@ -1,29 +1,12 @@
 ---
-name: acs-relaying-ntlm-for-adcs-esc8
-description: Uses Impacket's ntlmrelayx.py with a coercion tool (PetitPotam, Coercer,
-  printerbug) to relay NTLM authentication from a coerced domain controller into
-  the AD CS HTTP web-enrollment endpoint (ESC8), obtaining a DC certificate usable
-  via Certipy for PKINIT/DCSync. Use during internal AD penetration tests or purple-team
-  exercises when AD CS Web Enrollment lacks Extended Protection for Authentication.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- ntlm-relay
-- adcs
-- esc8
-- impacket
-- certipy
-- active-directory
-- privilege-escalation
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- DE.CM-01
-mitre_attack:
-- T1557.001
+name: "acs-relaying-ntlm-for-adcs-esc8"
+description: "Uses Impacket's ntlmrelayx.py with a coercion tool (PetitPotam, Coercer,"
 ---
+
+# Acs Relaying Ntlm For Adcs Esc8
+
+*Sourced from abdo453-hunterai*
+
 # Relaying NTLM for ADCS ESC8
 
 > **Legal Notice:** This skill is for authorized penetration testing, red-team engagements, and educational purposes only. Coercing authentication and relaying credentials against systems you do not own or lack explicit written authorization to test is illegal. Operate strictly within a signed rules-of-engagement; ESC8 coercion can affect production domain controllers.
@@ -196,3 +179,4 @@ Confirm the environment is hardened against ESC8 after testing:
 - [ ] Certificate converted to a TGT and NT hash with `certipy auth`.
 - [ ] Domain compromise validated via DCSync (in scope only).
 - [ ] EPA/HTTPS and coercion-patch mitigations verified and documented.
+

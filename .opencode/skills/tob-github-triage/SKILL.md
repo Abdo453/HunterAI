@@ -1,9 +1,11 @@
 ---
-name: tob-github-triage
-description: "Triages a repository's open GitHub issues and pull requests via the gh CLI. Optionally reviews and merges ready PRs — incrementally merging passing automated/bot PRs and maintainer-approved ones, and spawning review subagents for never-reviewed ones — then closes already-resolved issues with comments citing the resolving PR or commit, cross-links issues with their pending fix PRs, and assigns local-only priority and change-size estimates for everything outstanding. Use when triaging, grooming, or reviewing a repository's open issues and PRs."
-disable-model-invocation: true
-allowed-tools: Bash Read Grep Agent AskUserQuestion Write
+name: "tob-github-triage"
+description: "Triages a repository's open GitHub issues and pull requests via the gh CLI. Optionally reviews and merges ready PRs \u2014 incrementally merging passing automated/bot PRs and maintainer-approved ones, and spawning review subagents for never-reviewed ones \u2014 then closes already-resolved issues with comm..."
 ---
+
+# Tob Github Triage
+
+*Sourced from abdo453-hunterai*
 
 # GitHub Triage
 
@@ -408,3 +410,4 @@ Let `K` be the number of outstanding (Bucket C) issues.
 | "The subagent recommended approve, so merge it." | The review is advisory and local. Merging is a separate, explicitly-approved action — never chained off a review verdict. |
 | "An unrecognized bot opened a green PR, so merge it." | Only merge bots on a trusted allowlist (Dependabot/Renovate/user-named). An unknown App could be hostile or misconfigured. |
 | "`mergeable` is true, so it's safe to merge." | Require `mergeStateStatus == CLEAN`. `MERGEABLE` can still be `BEHIND`/`BLOCKED`/`UNSTABLE`, and `UNKNOWN` means GitHub has not recomputed yet — never merge on it. |
+

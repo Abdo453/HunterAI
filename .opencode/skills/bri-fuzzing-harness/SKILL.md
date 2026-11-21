@@ -1,8 +1,11 @@
 ---
-name: bri-fuzzing-harness
-description: "Write and run a fuzzer, fuzz harnesses and property-based tests for the code that handles untrusted bytes (file and packet parsers in C, C++, Rust, Go, Python or JS, decoders, serializers, deserializers, token and header parsing, protocol state machines), then minimize, dedupe and triage the crashes into verified findings with regression tests. Covers libFuzzer, cargo-fuzz, Go native fuzzing, Atheris, Jazzer.js and Jazzer, Hypothesis, fast-check and proptest, seed corpora and dictionaries, sanitizer builds, and CI fuzzing with ClusterFuzzLite or OSS-Fuzz. Use when the user mentions 'fuzzing,' 'fuzz harness,' 'fuzz target,' 'libFuzzer,' 'cargo fuzz,' 'go test -fuzz,' 'Atheris,' 'Jazzer,' 'property-based testing,' 'Hypothesis property test,' 'fast-check,' 'proptest,' 'seed corpus,' 'fuzzing dictionary,' 'AddressSanitizer report,' 'fuzzer crash files,' 'minimize a crash input,' 'ClusterFuzzLite,' 'OSS-Fuzz,' or wants to fuzz their parser."
-allowed-tools: Read, Grep, Glob, Write, WebSearch
+name: "bri-fuzzing-harness"
+description: "Write and run a fuzzer, fuzz harnesses and property-based tests for the code that handles untrusted bytes (file and packet parsers in C, C++, Rust, Go, Python or JS, decoders, serializers, deserializers, token and header parsing, protocol state machines), then minimize, dedupe and triage the cras..."
 ---
+
+# Bri Fuzzing Harness
+
+*Sourced from abdo453-hunterai*
 
 # Fuzzing Harness — Fuzz Targets, Property Tests and Crash Triage
 
@@ -382,3 +385,4 @@ Mitigated (platform/config) / Requires major migration. A false positive is a `r
   [severity-calibration.md](references/severity-calibration.md), [verification.md](references/verification.md),
   [validate-findings.mjs](references/validate-findings.mjs), [to-sarif.mjs](references/to-sarif.mjs),
   [findings.schema.json](references/findings.schema.json)
+

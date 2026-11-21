@@ -1,32 +1,12 @@
 ---
-name: acs-escaping-containers-to-host
-description: >-
-  Exploits privileged pods, host mounts, runC CVEs, and exposed Docker sockets to break out of
-  a container and reach the underlying host during an authorized container-security
-  assessment. Use when executing an approved breakout test, demonstrating the real impact of a
-  privileged or hostPath workload, or validating that escape mitigations actually hold.
-  Keywords: container breakout, privileged, hostPath, docker.sock, runC CVE-2019-5736,
-  CVE-2024-21626, release_agent, nsenter. Do not use for defensive detection of these
-  techniques - use detecting-container-escape-attempts.
-domain: cybersecurity
-subdomain: container-security
-tags:
-- container-escape
-- privileged-container
-- runc-cve
-- docker-socket
-- host-mount
-- kubernetes
-- privilege-escalation
-- breakout
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-mitre_attack:
-- T1611
+name: "acs-escaping-containers-to-host"
+description: ">-"
 ---
+
+# Acs Escaping Containers To Host
+
+*Sourced from abdo453-hunterai*
+
 # Escaping Containers to Host
 
 > **Legal Notice:** This skill is for authorized security testing and educational purposes only. Container breakout grants full host compromise. Only run these techniques against systems you own or have explicit written authorization to test. Unauthorized use is illegal and may violate computer fraud laws.
@@ -281,3 +261,4 @@ kubectl get pod <pod> -o jsonpath='{.spec.containers[*].securityContext}'
 - [ ] runC/containerd/Docker versions checked against CVE patch baselines
 - [ ] Remediation guidance (drop privileges, remove socket mount, patch runtime) documented
 - [ ] All actions stayed within the authorized scope
+

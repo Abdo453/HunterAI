@@ -1,18 +1,11 @@
 ---
-name: tob-semgrep
-description: >-
-  Runs a Semgrep security scan over a codebase: detects languages, selects
-  rulesets, presents the plan for explicit approval, then runs every approved
-  ruleset through scripts/run-scans.sh, which batches the semgrep processes and
-  writes scans.json, and merges the output to SARIF. Supports two scan modes,
-  "run all" for full ruleset coverage and "important only" for security
-  findings at medium-to-high confidence and impact. Uses Semgrep Pro for
-  cross-file taint analysis when it is available. Use when asked to scan code
-  for vulnerabilities, run a security audit with Semgrep, find bugs, or perform
-  static analysis. For the same scan without the approval gate, use the
-  /static-analysis:semgrep-scan workflow.
-allowed-tools: Bash Read Glob AskUserQuestion TaskCreate TaskList TaskUpdate
+name: "tob-semgrep"
+description: ">-"
 ---
+
+# Tob Semgrep
+
+*Sourced from abdo453-hunterai*
 
 # Semgrep Security Scan
 
@@ -271,3 +264,4 @@ read from the processes and the JSON they wrote.
 - [ ] Important-only mode: post-filter applied before merge, merge run with `--important`, unfiltered results preserved in `raw/`
 - [ ] Results summary reported with severity and category breakdown
 - [ ] Cloned repos (if any) cleaned up from `$OUTPUT_DIR/repos/`
+

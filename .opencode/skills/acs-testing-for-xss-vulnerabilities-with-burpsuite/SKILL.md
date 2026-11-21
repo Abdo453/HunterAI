@@ -1,30 +1,11 @@
 ---
-name: acs-testing-for-xss-vulnerabilities-with-burpsuite
-description: Identifying and validating cross-site scripting vulnerabilities using
-  Burp Suite's scanner, intruder, and repeater tools during authorized security assessments.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- xss
-- burpsuite
-- owasp
-- web-security
-- cross-site-scripting
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
+name: "acs-testing-for-xss-vulnerabilities-with-burpsuite"
+description: "Identifying and validating cross-site scripting vulnerabilities using"
 ---
+
+# Acs Testing For Xss Vulnerabilities With Burpsuite
+
+*Sourced from abdo453-hunterai*
 
 # Testing for XSS Vulnerabilities with Burp Suite
 
@@ -321,3 +302,4 @@ A WAF blocks common XSS patterns and CSP restricts inline scripts. Discover a JS
 4. Set HttpOnly and Secure flags on session cookies
 5. Add X-Content-Type-Options: nosniff header
 ```
+

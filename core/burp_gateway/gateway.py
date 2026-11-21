@@ -770,12 +770,9 @@ class BurpGateway:
         self._server = uvicorn.Server(config)
         self._server.install_signal_handlers = lambda: None
         logger.info(f"[GATEWAY] HunterAI Burp Gateway running on http://{self.host}:{self.port}")
-        try:
-            await self._server.serve()
-        except (Exception, SystemExit) as e:
-            # uvicorn يستدعي sys.exit(3) عند فشل الـ bind — لا نسمح لهذا بأن يقتل
-            # الـ process أو يفسد الاختبارات المتسلسلة في نفس الجلسة
-            logger.warning(f"[GATEWAY] Gateway on {self.host}:{self.port} terminated gracefully: {e}")
+        import threading
+        t = threading.Thread(target=self._server.run, daemon=True)
+        t.start()
 
     def stop(self):
         if self._server:

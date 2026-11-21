@@ -16,25 +16,37 @@ from orchestrator.task_classifier import TaskClassifier, TaskType, Classificatio
 from orchestrator.resource_manager import ResourceManager
 from models.ollama_manager import OllamaManager
 from core.methodology_kb import MethodologyKB
+from core.skill_context_injector import skill_injector
 
 log = logging.getLogger("router")
 
-# System prompts لكل موديل
+# System prompts لكل موديل مخصص ومربوط بالأدوات والمهارات
 PROMPTS = {
-    "whiterabbitneo": """You are WhiteRabbitNeo, an elite offensive security AI.
-Focus on: attack surface mapping, CVE analysis, exploitation techniques, red team ops.
-Be direct, technical, and thorough.
-IMPORTANT: Follow standard penetration testing methodology (Subdomains -> Alive -> URL/JS discovery -> Fuzzing -> Exploit Verification).
-If you are NOT SURE about something, explicitly say "I am not certain" or "This needs verification".""",
+    "redteam": """You are REDTEAM-PRO, the Lead Offensive Security & Burp Suite Operator.
+Your primary domain is Red Teaming, Bug Bounty Hunting, and Traffic Interception.
+TOOL & SKILL OWNERSHIP:
+- Burp Suite Operator: Deep HTTP/WebSocket traffic analysis, repeater payloads, token tampering, WAF evasion.
+- Security Arsenal: Nuclei, Arjun, Dalfox, SQLMap, FFUF.
+- Skills Applied: abh-bug-bounty, abh-web2-vuln-classes, abh-credential-attack.
+Always enforce the 7-Question Gate to ensure high-impact, non-theoretical proof-of-concepts.""",
 
-    "xploiter": """You are an expert penetration tester with 10+ years experience.
-Your job: validate and cross-check security findings, suggest concrete attack paths and specific tool chains,
-prioritize vulnerabilities by exploitability and impact. Be precise.
-IMPORTANT: If you are NOT SURE about a finding, say "Possible but unconfirmed" or "Needs verification".""",
+    "coder": """You are QWEN-CODER-PRO, the Principal Software & Exploit Engineer.
+TOOL & SKILL OWNERSHIP:
+- Script Forge: Writing, debugging, and executing robust Python/Bash PoCs and automated exploit chains.
+- Code Audit: SAST with Semgrep, secrets analysis with Gitleaks, reverse engineering.
+- Skills Applied: abh-script-forge, abh-cicd-security, abh-client-reverse.
+Ensure all code follows Zero-Defects architecture with comprehensive error handling.""",
 
-    "qwen": """You are an elite software engineer and code analyst.
-Write clean, working code. When you encounter security questions you can't fully answer,
-say 'NEEDS_SECURITY_CONSULTATION' and explain what security knowledge is needed.""",
+    "dialogue": """You are QWEN-DIALOGUE, the Strategic Planner & AI Browser Navigator.
+TOOL & SKILL OWNERSHIP:
+- AI Browser Controller: Headless Chrome navigation, crawling, DOM analysis, interactive form discovery.
+- Strategy & Triage: Attack surface reconnaissance, asset mapping with Katana and LinkFinder.
+- Skills Applied: abh-bb-methodology, abh-web2-recon, abh-agent-ops.
+Coordinate with RedTeam and Coder to synthesize findings into clear, eloquent, structured reports.""",
+
+    "whiterabbitneo": """You are WhiteRabbitNeo, an elite offensive security AI.""",
+    "xploiter": """You are an expert penetration tester with 10+ years experience.""",
+    "qwen": """You are an elite software engineer and code analyst.""",
 }
 
 
@@ -140,17 +152,18 @@ class ModelRouter:
 
         results = {}
 
-        # ── Step 1: WhiteRabbitNeo ──
-        await self._emit("step", {"step": 1, "model": "WhiteRabbitNeo", "action": "Security Analysis"})
+        # ── Step 1: RedTeam Pro (WhiteRabbitNeo-Enhanced) ──
+        await self._emit("step", {"step": 1, "model": "RedTeam-Pro", "action": "Burp Suite & Security Analysis"})
 
         methodology_ctx = self.kb.format_methodology_context_for_ai()
+        skills_ctx = skill_injector.build_injected_context("redteam", prompt)
         wrn_messages = [
-            {"role": "system", "content": f"{PROMPTS['whiterabbitneo']}\n\n{methodology_ctx}"},
+            {"role": "system", "content": f"{PROMPTS['redteam']}\n\n{methodology_ctx}\n\n{skills_ctx}"},
             {"role": "user", "content": f"Context: {ctx}\n\nTask: {prompt}"}
         ]
 
         wrn_result = await self.rm.run_local_model(
-            model_name="WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
+            model_name="redteam-pro:8b",
             messages=wrn_messages,
             temperature=0.3,
             progress_cb=self.cb
@@ -181,7 +194,7 @@ class ModelRouter:
         ]
 
         xploiter_result = await self.rm.run_local_model(
-            model_name="xploiter/pentester:latest",
+            model_name="xploiter-chains:latest",
             messages=xploiter_messages,
             temperature=0.4,
             progress_cb=self.cb
@@ -225,19 +238,20 @@ class ModelRouter:
         await self._emit("route_start", {"route": "CODING"})
         results = {}
 
-        # ── Step 1: Qwen يبدأ ──
-        await self._emit("step", {"step": 1, "model": "Qwen", "action": "Code Generation"})
+        # ── Step 1: Qwen Coder Pro يبدأ ──
+        await self._emit("step", {"step": 1, "model": "Qwen-Coder-Pro", "action": "Code Generation"})
 
+        skills_ctx = skill_injector.build_injected_context("coder", prompt)
         qwen_messages = [
-            {"role": "system", "content": PROMPTS["qwen"]},
+            {"role": "system", "content": f"{PROMPTS['coder']}\n\n{skills_ctx}"},
             {"role": "user", "content": f"Context: {ctx}\n\nTask: {prompt}"}
         ]
 
         qwen_result = await self.rm.run_local_model(
-            model_name="qwen2.5-coder:14b",
+            model_name="qwen-coder-pro:14b",
             messages=qwen_messages,
             temperature=0.2,
-            num_ctx=8192,
+            num_ctx=4096,
             progress_cb=self.cb
         )
         results["qwen_initial"] = qwen_result
@@ -264,7 +278,7 @@ class ModelRouter:
             await self._emit("step", {"step": 3, "model": "Qwen", "action": "Final Code with Security"})
 
             qwen_final_messages = [
-                {"role": "system", "content": PROMPTS["qwen"]},
+                {"role": "system", "content": PROMPTS["coder"]},
                 {"role": "user", "content": (
                     f"Original task: {prompt}\n\n"
                     f"Your initial code:\n{qwen_result[:600]}\n\n"
@@ -274,10 +288,10 @@ class ModelRouter:
             ]
 
             qwen_final = await self.rm.run_local_model(
-                model_name="qwen2.5-coder:14b",
+                model_name="qwen-coder-pro:14b",
                 messages=qwen_final_messages,
                 temperature=0.2,
-                num_ctx=8192,
+                num_ctx=4096,
                 progress_cb=self.cb
             )
             results["qwen_final"] = qwen_final
@@ -368,10 +382,11 @@ class ModelRouter:
             log.warning(f"LLMRouter general route failed, falling back to local: {e}")
 
         if not result:
+            skills_ctx = skill_injector.build_injected_context("dialogue", prompt)
             result = await self.rm.run_local_model(
-                model_name="qwen2.5-coder:14b",
-                messages=messages,
-                temperature=0.5,
+                model_name="qwen-dialogue:8b",
+                messages=[{"role": "system", "content": f"{PROMPTS['dialogue']}\n\n{skills_ctx}"}, {"role": "user", "content": prompt}],
+                temperature=0.6,
                 progress_cb=self.cb
             )
 

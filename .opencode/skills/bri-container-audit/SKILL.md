@@ -1,8 +1,11 @@
 ---
-name: bri-container-audit
-description: "Audit container images, Dockerfiles, and Kubernetes manifests for misconfigurations, excessive privileges, exposed secrets, and runtime risks. Use when the user mentions 'container security,' 'Docker security,' 'Dockerfile audit,' 'Kubernetes security,' 'K8s security,' 'pod security,' 'container hardening,' 'kubectl audit,' 'image scanning,' 'distroless,' 'rootless containers,' 'pod security policy,' 'pod security standards,' 'PSS,' 'network policy,' 'OPA Gatekeeper,' 'Kyverno,' 'runtime security,' or needs to review container or orchestration security."
-allowed-tools: Read, Grep, Glob, WebSearch, WebFetch, Bash(trivy image:*), Bash(trivy config:*), Bash(kube-bench run:*)
+name: "bri-container-audit"
+description: "Audit container images, Dockerfiles, and Kubernetes manifests for misconfigurations, excessive privileges, exposed secrets, and runtime risks. Use when the user mentions 'container security,' 'Docker security,' 'Dockerfile audit,' 'Kubernetes security,' 'K8s security,' 'pod security,' 'container ..."
 ---
+
+# Bri Container Audit
+
+*Sourced from abdo453-hunterai*
 
 # Container Audit — Docker & Kubernetes Security Review
 
@@ -275,3 +278,4 @@ Dispositions for confirmed findings (set later, usually by `finding-triage`): Fi
 - MITRE ATT&CK for Containers
 - Red Hat Security Data API, OSV (Debian and Ubuntu), CISA KEV, FIRST EPSS: [references/vendor-severity.md](references/vendor-severity.md)
 - Shared references (copied into `references/` at build time): [findings-format.md](references/findings-format.md), [severity-calibration.md](references/severity-calibration.md), [verification.md](references/verification.md), [validate-findings.mjs](references/validate-findings.mjs), [to-sarif.mjs](references/to-sarif.mjs), [findings.schema.json](references/findings.schema.json)
+

@@ -1,42 +1,12 @@
 ---
-name: acs-performing-privilege-escalation-assessment
-description: 'Performs privilege escalation assessments on compromised Linux and Windows
-  systems to identify paths from low-privilege access to root or SYSTEM-level control.
-  The tester enumerates misconfigurations, vulnerable services, kernel exploits, SUID
-  binaries, unquoted service paths, and credential stores to demonstrate the full
-  impact of an initial compromise. Activates for requests involving privilege escalation
-  testing, local exploitation, post-compromise escalation, or OS-level security assessment.
-
-  '
-domain: cybersecurity
-subdomain: penetration-testing
-tags:
-- privilege-escalation
-- post-exploitation
-- Linux-privesc
-- Windows-privesc
-- local-exploitation
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-d3fend_techniques:
-- Executable Denylisting
-- Execution Isolation
-- File Metadata Consistency Validation
-- Restore Access
-- Password Authentication
-nist_csf:
-- ID.RA-01
-- ID.RA-06
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
-- T1068
+name: "acs-performing-privilege-escalation-assessment"
+description: "Performs privilege escalation assessments on compromised Linux and Windows"
 ---
+
+# Acs Performing Privilege Escalation Assessment
+
+*Sourced from abdo453-hunterai*
+
 # Performing Privilege Escalation Assessment
 
 ## When to Use
@@ -217,3 +187,4 @@ read access to 75,000 customer records including names, emails, and addresses.
 3. Audit all sudo entries for binaries listed in GTFOBins
 4. Implement sudo logging with auditd for all privileged command execution
 ```
+

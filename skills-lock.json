@@ -1,0 +1,95 @@
+{
+  "version": 2,
+  "skills": {
+    "agent-browser": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "skillPath": "skills/agent-browser/SKILL.md",
+      "computedHash": "a0dfac7503f69bcf529b2660fc79964064c4f179eb65695904ddc45fc0d99d20"
+    },
+    "api-fuzzing-bug-bounty": {
+      "source": "zebbern/claude-code-guide",
+      "sourceType": "github",
+      "skillPath": "skills/api-fuzzing-bug-bounty/SKILL.md",
+      "computedHash": "56834a286f60543dba17500d2bf63d261fa5cc2b37b646928a5bda500902888c"
+    },
+    "deploy-to-vercel": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/deploy-to-vercel/SKILL.md",
+      "computedHash": "66b99dfa063b1c405155e9bffd99c04ca3e312e81b168d540b757bb194b7400a"
+    },
+    "grill-me": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/grill-me/SKILL.md",
+      "computedHash": "ab1acb9fbd9eaee03da254abb8a8de228d1e7a07475fe959da4a5eefa34ea4b9"
+    },
+    "hack": {
+      "source": "yaklang/hack-skills",
+      "sourceType": "github",
+      "skillPath": "skills/hack/SKILL.md",
+      "computedHash": "94ce806a1a43e4ce90142357795dce99932cc6d5a38ea0c94097d748e30f6ed7"
+    },
+    "llm-testing": {
+      "source": "Eyadkelleh/awesome-skills-security",
+      "sourceType": "github",
+      "skillPath": "skills/llm-testing/SKILL.md",
+      "computedHash": "9d2da0407294c18f07aab83e06e971a4867025798e2e77b61054c1b406d39b13"
+    },
+    "security-fuzzing": {
+      "source": "Eyadkelleh/awesome-skills-security",
+      "sourceType": "github",
+      "skillPath": "skills/security-fuzzing/SKILL.md",
+      "computedHash": "530f044c5d07de50835f964648dbd84d9de0f53be7d9e81da5a62bc7dbce2a15"
+    },
+    "security-passwords": {
+      "source": "Eyadkelleh/awesome-skills-security",
+      "sourceType": "github",
+      "skillPath": "skills/security-passwords/SKILL.md",
+      "computedHash": "d167fefb1debf62412cab62a82f4bb46b7a910c1abb781d20729d4b2954309b0"
+    },
+    "security-patterns": {
+      "source": "Eyadkelleh/awesome-skills-security",
+      "sourceType": "github",
+      "skillPath": "skills/security-patterns/SKILL.md",
+      "computedHash": "87de2596477ef8a771b606250e0c0efc3ccfaac79255d54968ec06c0d9039c02"
+    },
+    "security-payloads": {
+      "source": "Eyadkelleh/awesome-skills-security",
+      "sourceType": "github",
+      "skillPath": "skills/security-payloads/SKILL.md",
+      "computedHash": "ae1cec725bf4cc20f23171662131ded2c0a4ed9e018665fa42a13c15ec1c0f2b"
+    },
+    "security-usernames": {
+      "source": "Eyadkelleh/awesome-skills-security",
+      "sourceType": "github",
+      "skillPath": "skills/security-usernames/SKILL.md",
+      "computedHash": "3ce3c25fa45f675c3922a7c32e0bd6d326c6f41033d9af56fe4fbee27bbcf97f"
+    },
+    "security-webshells": {
+      "source": "Eyadkelleh/awesome-skills-security",
+      "sourceType": "github",
+      "skillPath": "skills/security-webshells/SKILL.md",
+      "computedHash": "31c1cc7a9d9464838100676e15c669c4bd7eea70a1075d6fdf97c3e95d1816c6"
+    },
+    "skill-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "computedHash": "2d7f889e6ae93c6c27d699856942c336b5b8644537496987d5571043d059b1dc"
+    },
+    "tdd": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/tdd/SKILL.md",
+      "computedHash": "e3e0f78ff1c2d52ffefa0378baa1e80e129d359288cf9a56f4e59afcd2aac86c"
+    },
+    "teach": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/teach/SKILL.md",
+      "computedHash": "31bb3eed09dd2787e290e933def99fbf7d65044a29119c224af47c01404ab228"
+    }
+  }
+}

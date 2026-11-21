@@ -29,19 +29,26 @@ class TargetDesktopExporter:
     @classmethod
     def get_desktop_dir(cls) -> Path:
         """
-        Determines the Desktop root directory across Kali Linux, Unix, and Windows.
+        Determines the primary Desktop root directory across Kali Linux, Unix, and Windows.
         Priority:
         1. TARGET_DESKTOP_DIR environment variable (if specified)
-        2. /home/kali/Desktop (Standard Kali Linux environment)
-        3. ~/Desktop (Current user's Desktop)
-        4. XDG_DESKTOP_DIR environment variable
-        5. Fallback: Creates ~/Desktop if missing.
+        2. Windows USERPROFILE Desktop (when on Windows host)
+        3. /home/kali/Desktop (Standard Kali Linux environment)
+        4. ~/Desktop (Current user's Desktop)
+        5. XDG_DESKTOP_DIR environment variable
+        6. Fallback: Creates ~/Desktop if missing.
         """
         env_override = os.getenv("TARGET_DESKTOP_DIR")
         if env_override:
             p = Path(env_override)
             p.mkdir(parents=True, exist_ok=True)
             return p
+
+        # Check Windows USERPROFILE
+        if os.name == "nt" and "USERPROFILE" in os.environ:
+            win_desktop = Path(os.environ["USERPROFILE"]) / "Desktop"
+            if win_desktop.exists() and win_desktop.is_dir():
+                return win_desktop
 
         # Check Kali Linux standard desktop path
         kali_desktop = Path("/home/kali/Desktop")
@@ -60,12 +67,6 @@ class TargetDesktopExporter:
             if p.exists() and p.is_dir():
                 return p
 
-        # Check Windows USERPROFILE
-        if os.name == "nt" and "USERPROFILE" in os.environ:
-            win_desktop = Path(os.environ["USERPROFILE"]) / "Desktop"
-            if win_desktop.exists() and win_desktop.is_dir():
-                return win_desktop
-
         # Fallback: create ~/Desktop
         try:
             user_desktop.mkdir(parents=True, exist_ok=True)
@@ -75,6 +76,33 @@ class TargetDesktopExporter:
             fallback = Path("data/desktop_exports")
             fallback.mkdir(parents=True, exist_ok=True)
             return fallback
+
+    @classmethod
+    def get_secondary_desktop_dirs(cls) -> List[Path]:
+        """
+        Discovers secondary Desktop roots to mirror outputs automatically:
+        - If on Windows host: detects WSL Kali Desktop (\\\\wsl.localhost\\kali-linux\\home\\kali\\Desktop).
+        - If inside WSL/Linux: detects Windows Host Desktop (/mnt/c/Users/<user>/Desktop).
+        """
+        secondaries: List[Path] = []
+        if os.name == "nt":
+            for wsl_prefix in [
+                Path(r"\\wsl.localhost\kali-linux\home\kali\Desktop"),
+                Path(r"\\wsl$\kali-linux\home\kali\Desktop"),
+            ]:
+                try:
+                    if wsl_prefix.exists() and wsl_prefix.is_dir():
+                        secondaries.append(wsl_prefix)
+                        break
+                except Exception:
+                    pass
+        else:
+            # Inside Linux / WSL: search for Windows user desktop under /mnt/c/Users/*/Desktop
+            for p in Path("/mnt/c/Users").glob("*/Desktop"):
+                if p.is_dir() and "Default" not in p.as_posix() and "Public" not in p.as_posix():
+                    secondaries.append(p)
+                    break
+        return secondaries
 
     @classmethod
     def clean_target_name(cls, target: str) -> str:
@@ -228,8 +256,8 @@ class TargetDesktopExporter:
         # 2. Extract and Archive PoC Scripts & Evidence
         confirmed = getattr(result, "confirmed_findings", []) or []
         for idx, f in enumerate(confirmed, 1):
-            vuln_class = f.get("vuln_class", "VULN").lower().replace(" ", "_")
-            title_slug = re.sub(r'[^a-zA-Z0-9_]', '_', f.get("title", f"vuln_{idx}")).strip('_')
+            vuln_class = re.sub(r'[^a-zA-Z0-9_]', '_', str(f.get("vuln_class", "VULN"))).lower().strip('_')[:30]
+            title_slug = re.sub(r'[^a-zA-Z0-9_]', '_', str(f.get("title", f"vuln_{idx}"))).strip('_')[:45]
 
             # Check if finding already has a PoC bundle directory
             poc_dir = f.get("poc_bundle_dir")

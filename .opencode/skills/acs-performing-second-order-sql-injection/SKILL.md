@@ -1,33 +1,11 @@
 ---
-name: acs-performing-second-order-sql-injection
-description: Detect and exploit second-order SQL injection vulnerabilities where malicious
-  input is stored in a database and later executed in an unsafe SQL query during a
-  different application operation.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- second-order-sqli
-- stored-sql-injection
-- sql-injection
-- database-security
-- web-security
-- blind-injection
-- persistent-sqli
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1055
+name: "acs-performing-second-order-sql-injection"
+description: "Detect and exploit second-order SQL injection vulnerabilities where malicious"
 ---
+
+# Acs Performing Second Order Sql Injection
+
+*Sourced from abdo453-hunterai*
 
 # Performing Second-Order SQL Injection
 
@@ -233,3 +211,4 @@ curl http://target.com/profile
 - Apply least-privilege database permissions
 - Enable SQL query logging for detecting injection attempts
 ```
+

@@ -1,7 +1,11 @@
 ---
-name: tob-token-integration-analyzer
-description: Token integration and implementation analyzer based on Trail of Bits' token integration checklist. Analyzes token implementations for ERC20/ERC721 conformity, checks for 20+ weird token patterns, assesses contract composition and owner privileges, performs on-chain scarcity analysis, and evaluates how protocols handle non-standard tokens. Use when integrating or accepting arbitrary ERC20/ERC721 tokens, auditing a token implementation for standards conformity, or assessing risk from weird tokens such as fee-on-transfer, rebasing, missing return values, or blocklists.
+name: "tob-token-integration-analyzer"
+description: "Token integration and implementation analyzer based on Trail of Bits' token integration checklist. Analyzes token implementations for ERC20/ERC721 conformity, checks for 20+ weird token patterns, assesses contract composition and owner privileges, performs on-chain scarcity analysis, and evaluate..."
 ---
+
+# Tob Token Integration Analyzer
+
+*Sourced from abdo453-hunterai*
 
 # Token Integration Analyzer
 
@@ -360,3 +364,4 @@ Complete deliverable templates available in [REPORT_TEMPLATES.md](resources/REPO
 - RPC endpoint (if querying on-chain)
 
 Let's analyze your token implementation or integration for security risks!
+

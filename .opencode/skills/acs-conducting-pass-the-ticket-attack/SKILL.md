@@ -1,35 +1,12 @@
 ---
-name: acs-conducting-pass-the-ticket-attack
-description: Perform Pass-the-Ticket (PtT) lateral movement by extracting Kerberos TGT/TGS tickets from LSASS memory on a compromised host and injecting them into another session to impersonate the ticket owner without knowing their password. Use during authorized post-exploitation to move laterally or escalate access via stolen Kerberos tickets, or to validate detections for Kerberos ticket theft and reuse.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- adversary-simulation
-- mitre-attack
-- exploitation
-- post-exploitation
-- kerberos
-- pass-the-ticket
-- lateral-movement
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-d3fend_techniques:
-- Token Binding
-- Execution Isolation
-- Restore Access
-- Application Protocol Command Analysis
-- Process Termination
-nist_csf:
-- ID.RA-01
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1550.003
-- T1558.003
-- T1078
+name: "acs-conducting-pass-the-ticket-attack"
+description: "Perform Pass-the-Ticket (PtT) lateral movement by extracting Kerberos TGT/TGS tickets from LSASS memory on a compromised host and injecting them into another session to impersonate the ticket owner without knowing their password. Use during authorized post-exploitation to move laterally or escala..."
 ---
+
+# Acs Conducting Pass The Ticket Attack
+
+*Sourced from abdo453-hunterai*
+
 # Conducting Pass-the-Ticket Attack
 
 
@@ -103,3 +80,4 @@ Pass-the-Ticket (PtT) is a lateral movement technique that uses stolen Kerberos 
 - [ ] Tickets injected into attacker session
 - [ ] Lateral movement demonstrated using stolen tickets
 - [ ] Evidence captured for reporting
+

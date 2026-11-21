@@ -1,9 +1,11 @@
 ---
-name: tob-constant-time-analysis
-description: Detects timing side-channel vulnerabilities in cryptographic code. Use when implementing or reviewing crypto code, encountering division on secrets, secret-dependent branches, or constant-time programming questions in C, C++, Go, Rust, Swift, Java, Kotlin, C#, PHP, JavaScript, TypeScript, Python, or Ruby.
-allowed-tools: Bash Read Grep Glob
-effort: medium
+name: "tob-constant-time-analysis"
+description: "Detects timing side-channel vulnerabilities in cryptographic code. Use when implementing or reviewing crypto code, encountering division on secrets, secret-dependent branches, or constant-time programming questions in C, C++, Go, Rust, Swift, Java, Kotlin, C#, PHP, JavaScript, TypeScript, Python,..."
 ---
+
+# Tob Constant Time Analysis
+
+*Sourced from abdo453-hunterai*
 
 # Constant-Time Analysis
 
@@ -183,3 +185,4 @@ A secret-indexed lookup has no drop-in replacement: it needs a bit-sliced or ari
 - [Cryptocoding Guidelines](https://github.com/veorq/cryptocoding) — defensive coding for crypto
 - [KyberSlash](https://kyberslash.cr.yp.to/) — division timing in post-quantum crypto
 - [BearSSL Constant-Time](https://www.bearssl.org/constanttime.html) — practical constant-time techniques
+

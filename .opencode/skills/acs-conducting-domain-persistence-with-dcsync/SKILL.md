@@ -1,34 +1,12 @@
 ---
-name: acs-conducting-domain-persistence-with-dcsync
-description: Perform DCSync attacks by abusing MS-DRSR replication rights (DS-Replication-Get-Changes/-All) to impersonate a Domain Controller and extract KRBTGT, Domain Admin, and service account hashes for Golden Ticket forging, typically with Mimikatz. Use in authorized engagements after finding principals with replication rights, to establish long-term domain persistence, or to validate detections for replication abuse.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- red-team
-- active-directory
-- dcsync
-- persistence
-- credential-dumping
-- golden-ticket
-- mimikatz
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-d3fend_techniques:
-- Application Protocol Command Analysis
-- Network Isolation
-- Network Traffic Analysis
-- Client-server Payload Profiling
-- Platform Monitoring
-nist_csf:
-- ID.RA-01
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1003.006
-- T1207
-- T1098
+name: "acs-conducting-domain-persistence-with-dcsync"
+description: "Perform DCSync attacks by abusing MS-DRSR replication rights (DS-Replication-Get-Changes/-All) to impersonate a Domain Controller and extract KRBTGT, Domain Admin, and service account hashes for Golden Ticket forging, typically with Mimikatz. Use in authorized engagements after finding principals..."
 ---
+
+# Acs Conducting Domain Persistence With Dcsync
+
+*Sourced from abdo453-hunterai*
+
 # Conducting Domain Persistence with DCSync
 
 
@@ -207,3 +185,4 @@ DCSync is an attack technique that abuses the Microsoft Directory Replication Se
 - [ ] Access to Domain Controller validated with Golden Ticket
 - [ ] Evidence documented with hash values and timestamps
 - [ ] Remediation recommendations provided (double KRBTGT reset, ACL audit)
+

@@ -1,34 +1,12 @@
 ---
-name: acs-testing-websocket-api-security
-description: Tests WebSocket API implementations for missing upgrade-handshake authentication,
-  Cross-Site WebSocket Hijacking (CSWSH), message injection, insufficient input validation,
-  message-flooding DoS, and information leakage, using Burp Suite's WebSocket interception
-  and the wscat CLI to craft malicious payloads. Use for real-time API penetration testing
-  or CSWSH/authorization-bypass assessments on WebSocket channels.
-domain: cybersecurity
-subdomain: api-security
-tags:
-- api-security
-- websocket
-- cswsh
-- real-time
-- injection
-- authentication
-version: 1.0.0
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1552.001
-- T1055
-- T1059
+name: "acs-testing-websocket-api-security"
+description: "Tests WebSocket API implementations for missing upgrade-handshake authentication,"
 ---
+
+# Acs Testing Websocket Api Security
+
+*Sourced from abdo453-hunterai*
+
 # Testing WebSocket API Security
 
 ## When to Use
@@ -444,3 +422,4 @@ and typing indicators for any user who visits the attacker's page.
 4. Implement per-message authorization checks, not just connection-level authentication
 5. Add rate limiting on WebSocket message volume per connection
 ```
+

@@ -1,37 +1,11 @@
 ---
-name: acs-performing-clickjacking-attack-test
-description: Testing web applications for clickjacking vulnerabilities by assessing
-  frame embedding controls and crafting proof-of-concept overlay attacks during authorized
-  security assessments.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- clickjacking
-- ui-redressing
-- web-security
-- owasp
-- x-frame-options
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-atlas_techniques:
-- AML.T0024
-- AML.T0035
-nist_ai_rmf:
-- MEASURE-2.8
-- MAP-5.1
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
+name: "acs-performing-clickjacking-attack-test"
+description: "Testing web applications for clickjacking vulnerabilities by assessing"
 ---
+
+# Acs Performing Clickjacking Attack Test
+
+*Sourced from abdo453-hunterai*
 
 # Performing Clickjacking Attack Test
 
@@ -439,3 +413,4 @@ An OAuth consent screen allows framing. The attacker embeds the consent page and
 4. Add confirmation dialogs that cannot be pre-filled or auto-submitted
 5. Implement SameSite=Strict cookies to reduce session availability in frames
 ```
+

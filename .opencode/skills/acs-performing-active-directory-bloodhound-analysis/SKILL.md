@@ -1,39 +1,11 @@
 ---
-name: acs-performing-active-directory-bloodhound-analysis
-description: Use BloodHound and SharpHound (or AzureHound) to enumerate Active Directory
-  relationships and graph attack paths from a compromised user to Domain Admin. Use
-  when performing AD red-team reconnaissance, mapping privilege-escalation chains
-  from group memberships, ACLs, and trusts, or auditing AD for exploitable misconfigurations.
-domain: cybersecurity
-subdomain: red-teaming
-tags:
-- bloodhound
-- active-directory
-- sharphound
-- attack-path
-- ad-enumeration
-- graph-theory
-- privilege-escalation
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-d3fend_techniques:
-- Restore Access
-- Password Authentication
-- Biometric Authentication
-- Strong Password Policy
-- Restore User Account Access
-nist_csf:
-- ID.RA-01
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
-- T1068
+name: "acs-performing-active-directory-bloodhound-analysis"
+description: "Use BloodHound and SharpHound (or AzureHound) to enumerate Active Directory"
 ---
+
+# Acs Performing Active Directory Bloodhound Analysis
+
+*Sourced from abdo453-hunterai*
 
 # Performing Active Directory BloodHound Analysis
 
@@ -247,3 +219,4 @@ Code Execution as SYSTEM
 - SharpHound: https://github.com/BloodHoundAD/SharpHound
 - MITRE ATT&CK S0521: https://attack.mitre.org/software/S0521/
 - SpecterOps BloodHound Documentation: https://bloodhound.readthedocs.io/
+

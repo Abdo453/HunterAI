@@ -1,8 +1,8 @@
 """
-ثلاثي الوكلاء لـ HunterAI:
+ثلاثي الوكلاء لـ HunterAI (MazeRunner-style):
   Orchestrator — يخطط ويدير TDG
-  Executor — ينفذ المهام عبر المستشعرات
-  Reviewer — يراجع النتائج ويقرر النجاح/الفشل/التجاوز
+  Executor — ينفذ المهام عبر المستشعرات ويسجل الأدلة في TaskClueCache
+  Reviewer — يراجع النتائج، يعيد فحص المهام الفاشلة، يستعيد المتطلبات المفقودة، ويربط الأدلة البعيدة
 يدعم غير المتزامن (async)، السجلات، والتكامل مع جميع المكونات
 """
 from __future__ import annotations
@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from agents.security_intelligence.task_clue_cache import TaskClueCache
 from core.config.settings import config
 from core.exceptions import OrchestratorError, HunterAIError
 from core.logging.logger import logger
@@ -43,13 +44,20 @@ class ExecutionResult:
 
 class TripleAgentSystem:
     """
-    نظام ثلاثي الوكلاء يعمل مع الحفاظ على محكمة الأدلة (Evidence Court).
+    نظام ثلاثي الوكلاء (Orchestrator, Executor, Failure-Oriented Reviewer)
+    يعمل مع محكمة الأدلة (Evidence Court) وذاكرة المهمة والدليل المستمرة (TaskClueCache).
     """
 
-    def __init__(self, graph_id: str = "triple_default"):
+    def __init__(
+        self,
+        graph_id: str = "triple_default",
+        clue_cache: Optional[TaskClueCache] = None,
+        persist_cache: bool = True,
+    ):
         self.graph_id = graph_id
         self.orchestrator = MultiAgentOrchestrator(graph_id=graph_id)
         self.court = EvidenceCourt()
+        self.clue_cache = clue_cache or TaskClueCache(persist=persist_cache)
         self._lock = asyncio.Lock()
 
     async def plan_and_execute_async(
@@ -60,7 +68,7 @@ class TripleAgentSystem:
     ) -> Dict[str, Any]:
         """
         تخطيط وتنفيذ غير متزامن:
-        1. Orchestrator يخطط ويدرج المهمة في TDG
+        1. Orchestrator يخطط ويدرج المهمة في TDG و TaskClueCache
         2. Executor ينفذ المهمة عبر المستشعرات
         3. Reviewer يراجع النتيجة ويقرر
         """
@@ -89,6 +97,12 @@ class TripleAgentSystem:
             description=description,
             technique=technique,
         )
+        self.clue_cache.upsert_task_state(
+            task_id=plan_task.task_id,
+            title=description,
+            status="done",
+            assigned_agent=AgentRole.ORCHESTRATOR.value,
+        )
 
         # المرحلة 2: التنفيذ (يعتمد على المهمة التخطيطية)
         exec_task = self.orchestrator.create_task(
@@ -98,6 +112,12 @@ class TripleAgentSystem:
             technique=technique,
             dependencies=[plan_task.task_id],
         )
+        self.clue_cache.upsert_task_state(
+            task_id=exec_task.task_id,
+            title=f"Execute: {description}",
+            status="pending",
+            assigned_agent=AgentRole.EXECUTOR.value,
+        )
 
         # المرحلة 3: المراجعة (تعتمد على التنفيذ)
         review_task = self.orchestrator.create_task(
@@ -106,6 +126,12 @@ class TripleAgentSystem:
             description=f"Review: {description}",
             technique=technique,
             dependencies=[exec_task.task_id],
+        )
+        self.clue_cache.upsert_task_state(
+            task_id=review_task.task_id,
+            title=f"Review: {description}",
+            status="pending",
+            assigned_agent=AgentRole.REVIEWER.value,
         )
 
         result = {
@@ -150,7 +176,6 @@ class TripleAgentSystem:
         if not task:
             raise OrchestratorError(f"المهمة '{task_id}' غير موجودة", agent_role=AgentRole.EXECUTOR.value)
 
-        # تنفيذ المهمة (في الإنتاج، يتم الربط مع Burp Sensor، browser sensor، إلخ)
         if sensor_output:
             evidence = sensor_output
         else:
@@ -162,6 +187,19 @@ class TripleAgentSystem:
             }
 
         self.orchestrator.complete_task(task_id, evidence)
+        self.clue_cache.mark_task_completed(task_id, summary=f"Executed {task.technique} on {task.target}")
+
+        # إذا احتوى الإخراج على دليل بيئي، يسجله الـ Executor في TaskClueCache
+        if isinstance(evidence, dict) and evidence.get("clue_type") and evidence.get("clue_content"):
+            self.clue_cache.add_clue(
+                target=task.target,
+                source_tool=str(evidence.get("tool", task.technique)),
+                clue_type=str(evidence["clue_type"]),
+                content=str(evidence["clue_content"]),
+                related_task_ids=[task_id],
+                confidence=float(evidence.get("confidence", 0.8)),
+            )
+
         logger.info(f"[Triple] تنفيذ مهمة '{task_id}' بواسطة Executor: {task.status}")
         return ExecutionResult(
             task_id=task_id,
@@ -201,22 +239,24 @@ class TripleAgentSystem:
         if not task:
             raise OrchestratorError(f"المهمة '{task_id}' غير موجودة", agent_role=AgentRole.REVIEWER.value)
 
-        # تحديد الحكم بناءً على قرار المحكمة أو الأدلة
         if court_verdict == "blocked":
             verdict = Verdict.BLOCKED
             self.orchestrator.fail_task(
                 task_id, "Court verdict: blocked", retry=True
             )
+            self.clue_cache.mark_task_failed(task_id, reason="Court verdict: blocked (403/401 or missing prerequisite)")
             message = "Finding blocked by Evidence Court"
         elif court_verdict == "bypass" or bypass_method:
             verdict = Verdict.NEEDS_BYPASS
             self.orchestrator.bypass_task(task_id, bypass_method or "unknown")
+            self.clue_cache.add_task_note(task_id, f"[REVIEWER] Needs bypass: {bypass_method}")
             message = f"Finding requires WAF bypass: {bypass_method}"
         else:
             verdict = Verdict.ALLOWED
             self.orchestrator.complete_task(
                 task_id, {"review": "approved", "bypass_method": bypass_method}
             )
+            self.clue_cache.mark_task_completed(task_id, summary="Approved by Reviewer")
             message = "Finding approved by Evidence Court"
 
         logger.info(
@@ -231,11 +271,36 @@ class TripleAgentSystem:
             message=message,
         )
 
+    def review_and_recover_failed_tasks(self, target: str) -> Dict[str, Any]:
+        """
+        دورة وكيل مراجعة الفشل (Failure-Oriented Reviewer):
+        يعيد فحص جميع المهام الفاشلة، يستعيد المتطلبات المفقودة من TaskClueCache،
+        ويربط الأدلة البعيدة عبر المراحل.
+        """
+        failed_states = self.clue_cache.get_failed_tasks()
+        recovered_tasks: List[Dict[str, Any]] = []
+        for state in failed_states:
+            rec = self.clue_cache.recover_missing_prerequisites(state.task_id, target)
+            if rec.get("recovered"):
+                recovered_tasks.append(rec)
+
+        distant_links = self.clue_cache.link_distant_clues(target)
+        return {
+            "target": target,
+            "failed_inspected": len(failed_states),
+            "recovered_count": len(recovered_tasks),
+            "recovered_tasks": recovered_tasks,
+            "distant_clue_links": distant_links,
+        }
+
     def get_pending_for_role(self, role: AgentRole) -> List[OrchestrationTask]:
         return self.orchestrator.get_ready_tasks_for_role(role)
 
     def stats(self) -> Dict[str, Any]:
-        return self.orchestrator.stats()
+        base = self.orchestrator.stats()
+        base["clues_cached"] = len(self.clue_cache.clues)
+        base["failed_tasks_in_cache"] = len(self.clue_cache.get_failed_tasks())
+        return base
 
     def export_state(self) -> str:
         return self.orchestrator.export_state()

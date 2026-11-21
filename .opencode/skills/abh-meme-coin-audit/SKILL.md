@@ -1,7 +1,11 @@
 ---
-name: abh-meme-coin-audit
-description: Meme coin and token security audit — rug pull detection (honeypot, hidden mint, fee manipulation, LP lock bypass), Solana SPL token analysis (freeze authority, mint authority, metadata mutability), Token-2022 extension risks (transfer hooks, permanent delegate), DEX liquidity pool attacks (sandwich amplification, LP drain, bonding curve exploits), pump.fun/Raydium/Jupiter integration risks, token_scanner.py automation, and real exploit examples from 2024-2025. Use for any token audit, rug pull assessment, meme coin security review, or pre-investment due diligence.
+name: "abh-meme-coin-audit"
+description: "Meme coin and token security audit \u2014 rug pull detection (honeypot, hidden mint, fee manipulation, LP lock bypass), Solana SPL token analysis (freeze authority, mint authority, metadata mutability), Token-2022 extension risks (transfer hooks, permanent delegate), DEX liquidity pool attacks (sandwi..."
 ---
+
+# Abh Meme Coin Audit
+
+*Sourced from abdo453-hunterai*
 
 # MEME COIN & TOKEN SECURITY AUDIT
 
@@ -292,3 +296,4 @@ For deep dives into specific areas:
 - `web3/10-meme-coin-bugs.md` — All 8 bug classes with full code examples and variants
 - `web3/11-solana-token-audit.md` — Solana-specific: SPL authorities, Token-2022, pump.fun, Raydium, Jupiter
 - `web3/12-dex-lp-attacks.md` — DEX & LP manipulation patterns (sandwich, pool sniping, CL position attacks)
+

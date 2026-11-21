@@ -1,7 +1,11 @@
 ---
-name: abh-agentic-app-audit
-description: Black-box security audit of a DEPLOYED AI agent (not the MCP server behind it) — tool-call hijacking, cross-session memory poisoning, confused-deputy via connected tools, agent-to-agent IDOR, excessive agency / unconfirmed destructive actions, and privilege compromise where the agent holds broader perms than the user. Use when the target is a live assistant/agent product with tool access (bookings, email, payments, file/RAG, browsing) rather than a raw LLM chat box or an MCP server you can read.
+name: "abh-agentic-app-audit"
+description: "Black-box security audit of a DEPLOYED AI agent (not the MCP server behind it) \u2014 tool-call hijacking, cross-session memory poisoning, confused-deputy via connected tools, agent-to-agent IDOR, excessive agency / unconfirmed destructive actions, and privilege compromise where the agent holds broade..."
 ---
+
+# Abh Agentic App Audit
+
+*Sourced from abdo453-hunterai*
 
 # Agentic App Audit
 
@@ -57,3 +61,4 @@ Use the single authoritative ASI01-ASI10 table in `skills/llm-redteam/SKILL.md`.
 - Use TWO identities for anything cross-tenant — the #1 N/A cause is proving it against your own data.
 - Destructive-action findings must show the action actually happened (or a safe canary equivalent the program allows), never "it would have."
 - Record the full turn sequence so triage can replay the chain verbatim.
+

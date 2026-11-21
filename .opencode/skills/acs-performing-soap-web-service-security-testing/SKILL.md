@@ -1,36 +1,11 @@
 ---
-name: acs-performing-soap-web-service-security-testing
-description: Performs security testing of SOAP web services by analyzing WSDL definitions
-  and testing for XML injection, XXE, WS-Security bypass, SOAPAction spoofing, and
-  XPath injection. Use when assessing a SOAP/WSDL-based API endpoint for XML-related
-  vulnerabilities during a penetration test.
-domain: cybersecurity
-subdomain: api-security
-tags:
-- soap
-- web-services
-- wsdl
-- xml-injection
-- xxe
-- ws-security
-- penetration-testing
-- soapaction-spoofing
-- xpath-injection
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1552.001
-- T1055
-- T1059
+name: "acs-performing-soap-web-service-security-testing"
+description: "Performs security testing of SOAP web services by analyzing WSDL definitions"
 ---
+
+# Acs Performing Soap Web Service Security Testing
+
+*Sourced from abdo453-hunterai*
 
 # Performing SOAP Web Service Security Testing
 
@@ -459,3 +434,4 @@ if __name__ == "__main__":
 - Levo.ai SOAP API Security Testing Guide: https://www.levo.ai/resources/blogs/soap-api-security-testing
 - SoapUI Web Service Hacking: https://www.soapui.org/docs/soap-and-wsdl/tips-and-tricks/web-service-hacking/
 - PortSwigger XXE Tutorial: https://portswigger.net/web-security/xxe
+

@@ -1,8 +1,11 @@
 ---
-name: tob-address-sanitizer
-type: technique
-description: "Builds and runs code under AddressSanitizer to catch buffer overflows, use-after-free, and other memory errors during fuzzing or tests. Covers -fsanitize=address builds, ASAN_OPTIONS, reading the crash report, LeakSanitizer, and the overhead and platform trade-offs. Use when fuzzing C/C++ or Rust that has unsafe blocks or FFI, when debugging a memory corruption crash, or when reading an ASan stack trace."
+name: "tob-address-sanitizer"
+description: "Builds and runs code under AddressSanitizer to catch buffer overflows, use-after-free, and other memory errors during fuzzing or tests. Covers -fsanitize=address builds, ASAN_OPTIONS, reading the crash report, LeakSanitizer, and the overhead and platform trade-offs. Use when fuzzing C/C++ or Rust..."
 ---
+
+# Tob Address Sanitizer
+
+*Sourced from abdo453-hunterai*
 
 # AddressSanitizer (ASan)
 
@@ -337,3 +340,4 @@ Original research paper with technical details:
 - Virtual memory requirements (historically 16TB, now ~20TB)
 - Performance benchmarks
 - Design decisions and tradeoffs
+

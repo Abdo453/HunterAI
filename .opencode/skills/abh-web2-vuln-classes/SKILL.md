@@ -1,7 +1,11 @@
 ---
-name: abh-web2-vuln-classes
-description: Complete reference for 26 web2 bug classes with root causes, detection patterns, bypass tables, exploit techniques, and real paid examples. Covers IDOR, auth bypass, XSS (postMessage), SSRF (11 IP bypass techniques), SQLi, business logic, race conditions, OAuth/OIDC, file upload (10 bypass techniques), GraphQL, LLM/AI (ASI01-ASI10, MCP/RAG attacks), API misconfig (mass assignment, JWT, prototype pollution, CORS), ATO (9 paths), SSTI, subdomain takeover, cloud misconfig, HTTP smuggling, cache poisoning, MFA bypass (7 patterns), SAML attacks, error disclosure, CSS injection, LFI/RCE, insecure deserialization, dependency confusion, padding oracle. Use when hunting a specific vuln class or studying what makes bugs pay.
+name: "abh-web2-vuln-classes"
+description: "Complete reference for 26 web2 bug classes with root causes, detection patterns, bypass tables, exploit techniques, and real paid examples. Covers IDOR, auth bypass, XSS (postMessage), SSRF (11 IP bypass techniques), SQLi, business logic, race conditions, OAuth/OIDC, file upload (10 bypass techni..."
 ---
+
+# Abh Web2 Vuln Classes
+
+*Sourced from abdo453-hunterai*
 
 # WEB2 BUG CLASSES — 26 Classes
 
@@ -1839,3 +1843,4 @@ Deps fully scoped + lockfile integrity + hash-pinned                       = N/A
 Real payload used instead of a benign callback                             = STOP — do not submit, legal/ethical breach
 
 ```
+

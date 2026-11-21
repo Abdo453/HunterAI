@@ -31,6 +31,23 @@ ENV_PATH = ROOT / ".env"
 def probe(binary: str, timeout: float) -> Dict[str, Any]:
     path = shutil.which(binary)
     if not path:
+        extra_paths = [
+            "/usr/local/go/bin",
+            "/root/go/bin",
+            "/home/kali/go/bin",
+            "/home/kali/.local/bin",
+            "/home/kali/pentest-venv/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/usr/sbin",
+            "/sbin",
+        ]
+        search_path = os.environ.get("PATH", "") + os.pathsep + os.pathsep.join(extra_paths)
+        try:
+            path = shutil.which(binary, path=search_path)
+        except TypeError:
+            path = None
+    if not path:
         return {"status": "MISSING", "binary": binary, "path": None, "detail": "Not found on PATH"}
 
     for argument in ("--version", "--help", "-h"):
@@ -62,12 +79,12 @@ def check_ollama_models(host: str, expected_models: List[str], timeout: float) -
             capture_output=True, text=True, timeout=timeout + 2, check=False,
         )
         if completed.returncode != 0:
-            return [{"status": "UNHEALTHY", "binary": "ollama", "path": host,
+            return [{"status": "UNHEALTHY", "binary": "ollama", "path": host, "name": "ollama",
                      "detail": f"curl failed (exit {completed.returncode})"}]
         try:
             data = json.loads(completed.stdout or "{}")
         except json.JSONDecodeError:
-            return [{"status": "UNHEALTHY", "binary": "ollama", "path": host,
+            return [{"status": "UNHEALTHY", "binary": "ollama", "path": host, "name": "ollama",
                      "detail": "Ollama /api/tags returned non-JSON"}]
         available = {m.get("name", "") for m in data.get("models", [])}
         for model in expected_models:
@@ -85,13 +102,37 @@ def check_ollama_models(host: str, expected_models: List[str], timeout: float) -
 
 
 def load_env_host() -> str:
-    """Read OLLAMA_HOST from .env (fallback to localhost:11434)."""
+    """Read OLLAMA_HOST from .env or environment, with automatic WSL2 host gateway fallback."""
+    host = ""
     if ENV_PATH.exists():
         for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line.startswith("OLLAMA_HOST="):
-                return line.split("=", 1)[1].strip().strip('"')
-    return "http://localhost:11434"
+                host = line.split("=", 1)[1].strip().strip('"')
+                break
+    if not host:
+        host = os.environ.get("OLLAMA_HOST", "").strip()
+    if not host or host in ("0.0.0.0:11434", "http://0.0.0.0:11434"):
+        host = "http://localhost:11434"
+    if not host.startswith(("http://", "https://")):
+        host = f"http://{host}"
+
+    # If inside WSL2 and localhost/127.0.0.1 is not reachable, try the Windows host gateway IP
+    if "microsoft" in platform.release().lower() and ("127.0.0.1" in host or "localhost" in host):
+        probe_local = subprocess.run(
+            ["curl", "-s", "--connect-timeout", "1", f"{host}/api/tags"],
+            capture_output=True, text=True, check=False,
+        )
+        if probe_local.returncode != 0:
+            route = subprocess.run(
+                ["ip", "route", "show", "default"],
+                capture_output=True, text=True, check=False,
+            )
+            parts = (route.stdout or "").split()
+            if "via" in parts:
+                gw_ip = parts[parts.index("via") + 1]
+                return f"http://{gw_ip}:11434"
+    return host
 
 
 def main() -> int:
@@ -128,7 +169,12 @@ def main() -> int:
     tools.sort(key=lambda item: (item["status"] != "READY", item["category"], item["name"]))
     counts = {status: sum(item["status"] == status for item in tools) for status in ("READY", "UNHEALTHY", "MISSING")}
     required_ready = all(item["status"] == "READY" for item in tools if item["required"])
-    wordlist_roots = [Path("/usr/share/seclists"), Path("/usr/share/wordlists/seclists"), Path.home() / "wordlist" / "SecLists"]
+    wordlist_roots = [
+        Path("/usr/share/seclists"),
+        Path("/usr/share/wordlists/seclists"),
+        Path("/home/kali/wordlist/SecLists"),
+        Path.home() / "wordlist" / "SecLists",
+    ]
     report = {
         "host": {"system": platform.system(), "release": platform.release(), "python": sys.version.split()[0]},
         "ollama_host": ollama_host,

@@ -1,34 +1,11 @@
 ---
-name: acs-testing-for-broken-access-control
-description: Systematically tests web applications and APIs for broken access control
-  (OWASP A01:2021), including privilege escalation, missing function-level checks, insecure
-  direct object references, and multi-tenant data leakage, using Burp Suite with the
-  Authorize extension. Use during authorized penetration tests or RBAC/multi-tenant
-  authorization audits.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- access-control
-- authorization
-- owasp
-- privilege-escalation
-- web-security
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1068
+name: "acs-testing-for-broken-access-control"
+description: "Systematically tests web applications and APIs for broken access control"
 ---
+
+# Acs Testing For Broken Access Control
+
+*Sourced from abdo453-hunterai*
 
 # Testing for Broken Access Control
 
@@ -367,3 +344,4 @@ The user profile update endpoint at `PUT /api/users/{id}` accepts a `role` field
 5. Use allowlists for mass assignment (only permit expected fields)
 6. Implement audit logging for all access control decisions
 ```
+

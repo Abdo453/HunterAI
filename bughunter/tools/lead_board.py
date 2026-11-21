@@ -25,7 +25,10 @@ Claude reads `show`, says "I see X -> run skill Y", and `touch`es leads as it wo
 
 import argparse
 import contextlib
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import glob
 import json
 import os
@@ -186,10 +189,12 @@ def ledger_lock(target):
     lock_path = ledger_path(target) + ".lock"
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        if fcntl:
+            fcntl.flock(fd, fcntl.LOCK_EX)
         yield
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        if fcntl:
+            fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
 
 

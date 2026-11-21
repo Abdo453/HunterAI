@@ -1,8 +1,11 @@
 ---
-name: ant-webapp-testing
-description: Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.
-license: Complete terms in LICENSE.txt
+name: "ant-webapp-testing"
+description: "Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs."
 ---
+
+# Ant Webapp Testing
+
+*Sourced from abdo453-hunterai*
 
 # Web Application Testing
 

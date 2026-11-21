@@ -1,31 +1,12 @@
 ---
-name: acs-performing-red-team-with-covenant
-description: Conducts red team operations using the Covenant C2 framework for authorized
-  adversary simulation, covering listener setup, grunt deployment, task execution,
-  and lateral movement tracking. Use when standing up or operating a Covenant command-and-control
-  server for an authorized red team engagement.
-domain: cybersecurity
-subdomain: red-team
-tags:
-- red-team
-- c2
-- covenant
-- adversary-simulation
-- penetration-testing
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.RA-01
-- GV.OV-02
-- DE.AE-07
-mitre_attack:
-- T1595
-- T1190
-- T1059
-- T1078
-- T1021
+name: "acs-performing-red-team-with-covenant"
+description: "Conducts red team operations using the Covenant C2 framework for authorized"
 ---
+
+# Acs Performing Red Team With Covenant
+
+*Sourced from abdo453-hunterai*
+
 # Performing Red Team Operations with Covenant C2
 
 ## Overview
@@ -68,3 +49,4 @@ Generate an operations report documenting all actions, timestamps, and findings.
 ## Expected Output
 
 JSON report with listener configuration, active grunts, executed tasks, and task output for engagement documentation.
+

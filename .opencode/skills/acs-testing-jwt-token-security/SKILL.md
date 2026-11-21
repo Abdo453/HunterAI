@@ -1,32 +1,11 @@
 ---
-name: acs-testing-jwt-token-security
-description: Assessing JSON Web Token implementations for cryptographic weaknesses,
-  algorithm confusion attacks, and authorization bypass vulnerabilities during security
-  engagements.
-domain: cybersecurity
-subdomain: web-application-security
-tags:
-- penetration-testing
-- jwt
-- authentication
-- web-security
-- token-security
-- burpsuite
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- PR.PS-01
-- ID.RA-01
-- PR.DS-10
-- DE.CM-01
-mitre_attack:
-- T1190
-- T1059.007
-- T1505.003
-- T1083
-- T1027
+name: "acs-testing-jwt-token-security"
+description: "Assessing JSON Web Token implementations for cryptographic weaknesses,"
 ---
+
+# Acs Testing Jwt Token Security
+
+*Sourced from abdo453-hunterai*
 
 # Testing JWT Token Security
 
@@ -352,3 +331,4 @@ The `kid` header parameter is used in a SQL query to look up signing keys. Injec
 4. Validate all JWT claims server-side (iss, aud, exp, nbf)
 5. Use a minimum key length of 256 bits for HMAC secrets
 ```
+

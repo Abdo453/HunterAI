@@ -59,6 +59,600 @@
       "max_retries": 3,
       "created_at": 1793143446.4919214,
       "updated_at": 1793143446.4929292
+    },
+    "orch-5b7af758": {
+      "task_id": "orch-5b7af758",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182002.2889662,
+      "updated_at": 1794182002.2889662
+    },
+    "orch-af71d709": {
+      "task_id": "orch-af71d709",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-5b7af758"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794182002.3080423,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182002.294972,
+      "updated_at": 1794182002.3080423
+    },
+    "orch-ee20586b": {
+      "task_id": "orch-ee20586b",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-af71d709"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794182002.2999885,
+      "updated_at": 1794182002.3155658
+    },
+    "orch-10154d10": {
+      "task_id": "orch-10154d10",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182131.6748748,
+      "updated_at": 1794182131.6748748
+    },
+    "orch-06d7ada9": {
+      "task_id": "orch-06d7ada9",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-10154d10"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794182131.6871119,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182131.6784089,
+      "updated_at": 1794182131.6871119
+    },
+    "orch-818487cf": {
+      "task_id": "orch-818487cf",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-06d7ada9"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794182131.6810062,
+      "updated_at": 1794182131.692111
+    },
+    "orch-a88d0014": {
+      "task_id": "orch-a88d0014",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182468.8433769,
+      "updated_at": 1794182468.8433769
+    },
+    "orch-0ee9723e": {
+      "task_id": "orch-0ee9723e",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-a88d0014"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794182468.860058,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182468.8463686,
+      "updated_at": 1794182468.860058
+    },
+    "orch-1c54033d": {
+      "task_id": "orch-1c54033d",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-0ee9723e"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794182468.8498802,
+      "updated_at": 1794182468.866373
+    },
+    "orch-d258900f": {
+      "task_id": "orch-d258900f",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182498.94939,
+      "updated_at": 1794182498.94939
+    },
+    "orch-a70d3e19": {
+      "task_id": "orch-a70d3e19",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-d258900f"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794182498.962514,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182498.9525034,
+      "updated_at": 1794182498.962514
+    },
+    "orch-9a9e7e66": {
+      "task_id": "orch-9a9e7e66",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-a70d3e19"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794182498.9565015,
+      "updated_at": 1794182498.968513
+    },
+    "orch-4216e345": {
+      "task_id": "orch-4216e345",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182728.7113307,
+      "updated_at": 1794182728.7113307
+    },
+    "orch-605715e5": {
+      "task_id": "orch-605715e5",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-4216e345"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794182728.725632,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794182728.7148554,
+      "updated_at": 1794182728.725632
+    },
+    "orch-1c41b024": {
+      "task_id": "orch-1c41b024",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-605715e5"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794182728.7184594,
+      "updated_at": 1794182728.731626
+    },
+    "orch-11807005": {
+      "task_id": "orch-11807005",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794184757.0701842,
+      "updated_at": 1794184757.0701842
+    },
+    "orch-3858b8d2": {
+      "task_id": "orch-3858b8d2",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-11807005"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794184757.0863338,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794184757.074197,
+      "updated_at": 1794184757.0863338
+    },
+    "orch-bc11f6ae": {
+      "task_id": "orch-bc11f6ae",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-3858b8d2"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794184757.0797167,
+      "updated_at": 1794184757.092869
+    },
+    "orch-082dc930": {
+      "task_id": "orch-082dc930",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794225090.4254334,
+      "updated_at": 1794225090.4254334
+    },
+    "orch-a6723983": {
+      "task_id": "orch-a6723983",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-082dc930"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794225090.440893,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794225090.429183,
+      "updated_at": 1794225090.440893
+    },
+    "orch-aa6f8cd4": {
+      "task_id": "orch-aa6f8cd4",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-a6723983"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794225090.4333882,
+      "updated_at": 1794225090.4494092
+    },
+    "orch-f5151ff3": {
+      "task_id": "orch-f5151ff3",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794230537.3554792,
+      "updated_at": 1794230537.3554792
+    },
+    "orch-53289687": {
+      "task_id": "orch-53289687",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-f5151ff3"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794230537.3725054,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794230537.3604753,
+      "updated_at": 1794230537.3725054
+    },
+    "orch-9c4ba35b": {
+      "task_id": "orch-9c4ba35b",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-53289687"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794230537.3650007,
+      "updated_at": 1794230537.3795855
+    },
+    "orch-ff2ea050": {
+      "task_id": "orch-ff2ea050",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794230687.7156327,
+      "updated_at": 1794230687.7156327
+    },
+    "orch-3bf34659": {
+      "task_id": "orch-3bf34659",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-ff2ea050"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794230687.7324667,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794230687.7201414,
+      "updated_at": 1794230687.7330077
+    },
+    "orch-7ece1e1c": {
+      "task_id": "orch-7ece1e1c",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-3bf34659"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794230687.7243958,
+      "updated_at": 1794230687.7397602
+    },
+    "orch-4b08b762": {
+      "task_id": "orch-4b08b762",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794230775.5533683,
+      "updated_at": 1794230775.5533683
+    },
+    "orch-8ebc1637": {
+      "task_id": "orch-8ebc1637",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-4b08b762"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794230775.5715094,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794230775.5574546,
+      "updated_at": 1794230775.5715094
+    },
+    "orch-41e7b824": {
+      "task_id": "orch-41e7b824",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-8ebc1637"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794230775.5624564,
+      "updated_at": 1794230775.5780342
+    },
+    "orch-292f8be0": {
+      "task_id": "orch-292f8be0",
+      "name": "Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794232603.0776298,
+      "updated_at": 1794232603.0776298
+    },
+    "orch-c26a8313": {
+      "task_id": "orch-c26a8313",
+      "name": "Execute: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "completed",
+      "dependencies": [
+        "orch-292f8be0"
+      ],
+      "dependents": [],
+      "evidence": {
+        "technique": "bfla_auth_bypass_skill",
+        "target": "api.example.com",
+        "executed_at": 1794232603.1045609,
+        "note": "Simulated execution — connect real sensors"
+      },
+      "failure_reason": null,
+      "retry_count": 0,
+      "max_retries": 3,
+      "created_at": 1794232603.082325,
+      "updated_at": 1794232603.1045609
+    },
+    "orch-810482c0": {
+      "task_id": "orch-810482c0",
+      "name": "Review: Test privileged admin endpoint /api/v1/admin/export",
+      "technique": "bfla_auth_bypass_skill",
+      "target": "api.example.com",
+      "status": "pending",
+      "dependencies": [
+        "orch-c26a8313"
+      ],
+      "dependents": [],
+      "evidence": {},
+      "failure_reason": "Court verdict: blocked",
+      "retry_count": 1,
+      "max_retries": 3,
+      "created_at": 1794232603.0910995,
+      "updated_at": 1794232603.1179228
     }
   },
   "edges": {
@@ -68,6 +662,83 @@
     "task-c4294812": [
       "task-2989bf7d"
     ],
-    "task-2989bf7d": []
+    "task-2989bf7d": [],
+    "orch-5b7af758": [
+      "orch-af71d709"
+    ],
+    "orch-af71d709": [
+      "orch-ee20586b"
+    ],
+    "orch-ee20586b": [],
+    "orch-10154d10": [
+      "orch-06d7ada9"
+    ],
+    "orch-06d7ada9": [
+      "orch-818487cf"
+    ],
+    "orch-818487cf": [],
+    "orch-a88d0014": [
+      "orch-0ee9723e"
+    ],
+    "orch-0ee9723e": [
+      "orch-1c54033d"
+    ],
+    "orch-1c54033d": [],
+    "orch-d258900f": [
+      "orch-a70d3e19"
+    ],
+    "orch-a70d3e19": [
+      "orch-9a9e7e66"
+    ],
+    "orch-9a9e7e66": [],
+    "orch-4216e345": [
+      "orch-605715e5"
+    ],
+    "orch-605715e5": [
+      "orch-1c41b024"
+    ],
+    "orch-1c41b024": [],
+    "orch-11807005": [
+      "orch-3858b8d2"
+    ],
+    "orch-3858b8d2": [
+      "orch-bc11f6ae"
+    ],
+    "orch-bc11f6ae": [],
+    "orch-082dc930": [
+      "orch-a6723983"
+    ],
+    "orch-a6723983": [
+      "orch-aa6f8cd4"
+    ],
+    "orch-aa6f8cd4": [],
+    "orch-f5151ff3": [
+      "orch-53289687"
+    ],
+    "orch-53289687": [
+      "orch-9c4ba35b"
+    ],
+    "orch-9c4ba35b": [],
+    "orch-ff2ea050": [
+      "orch-3bf34659"
+    ],
+    "orch-3bf34659": [
+      "orch-7ece1e1c"
+    ],
+    "orch-7ece1e1c": [],
+    "orch-4b08b762": [
+      "orch-8ebc1637"
+    ],
+    "orch-8ebc1637": [
+      "orch-41e7b824"
+    ],
+    "orch-41e7b824": [],
+    "orch-292f8be0": [
+      "orch-c26a8313"
+    ],
+    "orch-c26a8313": [
+      "orch-810482c0"
+    ],
+    "orch-810482c0": []
   }
 }

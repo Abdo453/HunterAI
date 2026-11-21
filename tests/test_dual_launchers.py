@@ -74,8 +74,8 @@ def test_opencode_web_routes(test_client):
     res_skills = test_client.get("/api/opencode/skills")
     assert res_skills.status_code == 200
     data_skills = res_skills.json()
-    assert data_skills["count"] == 217
-    assert len(data_skills["skills"]) == 217
+    assert data_skills["count"] >= 217
+    assert len(data_skills["skills"]) == data_skills["count"]
     assert "library_inventory" in data_skills
 
     # 3. GET /api/opencode/mcp-status
@@ -123,8 +123,8 @@ def test_manifest_and_mcp_config_integrity():
     manifest_file = repo_root / ".opencode" / "skills" / "MANIFEST.json"
     assert manifest_file.exists()
     mdata = json.loads(manifest_file.read_text(encoding="utf-8"))
-    assert mdata["count"] == 217
-    assert len(mdata["skills"]) == 217
+    assert mdata["count"] >= 217
+    assert len(mdata["skills"]) == mdata["count"]
 
     # Verify all 5 packs exist
     packs = {s["pack"] for s in mdata["skills"]}

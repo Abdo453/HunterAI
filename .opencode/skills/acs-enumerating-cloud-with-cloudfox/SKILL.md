@@ -1,29 +1,12 @@
 ---
-name: acs-enumerating-cloud-with-cloudfox
-description: Run CloudFox's read-only Describe/List/Get enumeration (all-checks,
-  role-trusts, secrets, endpoints, and permissions commands) to map AWS and Azure attack
-  paths and surface exploitable misconfigurations. Use immediately after obtaining a cloud
-  credential to build situational awareness, find exposed resources and secrets, or map
-  sts:AssumeRole trust relationships for lateral-movement/privilege-escalation planning.
-domain: cybersecurity
-subdomain: cloud-security
-tags:
-- cloudfox
-- aws
-- azure
-- cloud-pentest
-- attack-paths
-- situational-awareness
-- enumeration
-- offensive-security
-version: '1.0'
-author: mahipal
-license: Apache-2.0
-nist_csf:
-- ID.AM-03
-mitre_attack:
-- T1526
+name: "acs-enumerating-cloud-with-cloudfox"
+description: "Run CloudFox's read-only Describe/List/Get enumeration (all-checks,"
 ---
+
+# Acs Enumerating Cloud With Cloudfox
+
+*Sourced from abdo453-hunterai*
+
 # Enumerating Cloud with CloudFox
 
 > **Legal Notice:** This skill is for authorized cloud penetration testing and assessment only. CloudFox makes read/describe API calls against the cloud account whose credentials you supply. Run it ONLY against accounts you own or are authorized to test under a signed scope. Although CloudFox is read-only by design, the enumeration it performs is reconnaissance against a live environment and must be in scope.
@@ -208,3 +191,4 @@ so the blue team can correlate, and prefer running from an in-scope, attributabl
 - [ ] Loot files triaged for pivot opportunities
 - [ ] Findings exported to a structured directory for reporting
 - [ ] Enumeration confirmed to stay within authorized scope
+
