@@ -36,6 +36,8 @@
     selectedMode: 'analyst',
     attachments: [],
     streaming: false,
+    creating: false,
+    loadSeq: 0,
     streamAbortController: null,
     renaming: false,
     confirmDeleteId: null
@@ -44,6 +46,7 @@
   var _boundWorkspaces = [];
   var _drawerEls = null;
   var _catalogLoaded = false;
+  var _refreshSeq = 0;
 
   /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -353,8 +356,12 @@
   }
 
   async function refreshConversations() {
+    var refreshSeq = ++_refreshSeq;
     try {
       var data = await apiJson('/api/copilot/conversations');
+      if (refreshSeq !== _refreshSeq || copilotState.streaming || copilotState.creating) {
+        return;
+      }
       copilotState.conversations = Array.isArray(data.conversations) ? data.conversations : [];
       var ctxId = global.HunterPlatform && global.HunterPlatform.getState().context.active_conversation_id;
       if (!copilotState.activeConversationId && ctxId) {
@@ -372,53 +379,89 @@
       }
       syncAllViews();
     } catch (_err) {
-      syncAllViews();
+      if (refreshSeq === _refreshSeq && !copilotState.streaming && !copilotState.creating) {
+        syncAllViews();
+      }
     }
   }
 
   async function createConversation(title) {
-    var eng = global.HunterPlatform ? global.HunterPlatform.getActiveEngagement() : null;
-    var run = global.HunterPlatform ? global.HunterPlatform.getActiveRun() : null;
-    var data = await apiJson('/api/copilot/conversations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: title || tr('تحقيق أمني جديد', 'New Investigation'),
-        engagement_id: eng ? eng.engagement_id : null,
-        run_id: run ? run.run_id : null,
-        mode: copilotState.selectedMode || 'analyst',
-        model: copilotState.selectedModel || 'auto',
-        set_active: true
-      })
-    });
-    if (data.conversation) {
-      copilotState.activeConversationId = data.conversation.conversation_id;
-      copilotState.messages = [];
-      copilotState.conversations.unshift(data.conversation);
-      if (global.HunterPlatform) {
-        global.HunterPlatform.setContext({ active_conversation_id: data.conversation.conversation_id }).catch(function () {});
+    if (copilotState.creating) return null;
+    copilotState.creating = true;
+    copilotState.loadSeq += 1;
+    _refreshSeq += 1;
+    try {
+      var eng = global.HunterPlatform ? global.HunterPlatform.getActiveEngagement() : null;
+      var run = global.HunterPlatform ? global.HunterPlatform.getActiveRun() : null;
+      var data = await apiJson('/api/copilot/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title || tr('تحقيق أمني جديد', 'New Investigation'),
+          engagement_id: eng ? eng.engagement_id : null,
+          run_id: run ? run.run_id : null,
+          mode: copilotState.selectedMode || 'analyst',
+          model: copilotState.selectedModel || 'auto',
+          set_active: true
+        })
+      });
+      if (data.conversation) {
+        copilotState.loadSeq += 1;
+        _refreshSeq += 1;
+        copilotState.activeConversationId = data.conversation.conversation_id;
+        copilotState.messages = [];
+        copilotState.conversations.unshift(data.conversation);
+        if (global.HunterPlatform) {
+          global.HunterPlatform.setContext({ active_conversation_id: data.conversation.conversation_id }).catch(function () {});
+        }
+        syncAllViews();
       }
-      syncAllViews();
+      return data.conversation;
+    } finally {
+      copilotState.creating = false;
     }
-    return data.conversation;
   }
 
   async function selectConversation(cid) {
-    if (!cid) return;
+    if (!cid || copilotState.streaming || copilotState.creating) return;
+    var targetCid = String(cid);
+    var prevActiveCid = copilotState.activeConversationId;
+    var reqSeq = ++copilotState.loadSeq;
     try {
-      var detail = await apiJson('/api/copilot/conversations/' + encodeURIComponent(cid));
-      copilotState.activeConversationId = cid;
+      var detail = await apiJson('/api/copilot/conversations/' + encodeURIComponent(targetCid));
+      if (
+        reqSeq !== copilotState.loadSeq ||
+        copilotState.streaming ||
+        copilotState.creating ||
+        (copilotState.activeConversationId &&
+          copilotState.activeConversationId !== prevActiveCid &&
+          copilotState.activeConversationId !== targetCid)
+      ) {
+        return;
+      }
+      var incomingMessages = Array.isArray(detail.messages) ? detail.messages : [];
+      if (
+        copilotState.activeConversationId === targetCid &&
+        Array.isArray(copilotState.messages) &&
+        copilotState.messages.length > 0 &&
+        incomingMessages.length < copilotState.messages.length
+      ) {
+        return;
+      }
+      copilotState.activeConversationId = targetCid;
       if (detail.conversation) {
         copilotState.selectedMode = detail.conversation.mode || copilotState.selectedMode;
         copilotState.selectedModel = detail.conversation.model || copilotState.selectedModel;
       }
-      copilotState.messages = Array.isArray(detail.messages) ? detail.messages : [];
+      copilotState.messages = incomingMessages;
       if (global.HunterPlatform) {
-        global.HunterPlatform.setContext({ active_conversation_id: cid }).catch(function () {});
+        global.HunterPlatform.setContext({ active_conversation_id: targetCid }).catch(function () {});
       }
       syncAllViews();
     } catch (err) {
-      toast(err.message, 'error');
+      if (reqSeq === copilotState.loadSeq && !copilotState.streaming && !copilotState.creating) {
+        toast(err.message, 'error');
+      }
     }
   }
 
@@ -441,7 +484,9 @@
   }
 
   async function deleteConversation(cid) {
-    if (!cid) return;
+    if (!cid || copilotState.streaming || copilotState.creating) return;
+    copilotState.loadSeq += 1;
+    _refreshSeq += 1;
     await apiJson('/api/copilot/conversations/' + encodeURIComponent(cid), { method: 'DELETE' });
     copilotState.conversations = copilotState.conversations.filter(function (c) {
       return c.conversation_id !== cid;
@@ -483,10 +528,35 @@
   async function sendMessage(rawText, options) {
     var opts = options || {};
     var text = (rawText || '').trim();
-    if (!text || copilotState.streaming) return null;
+    if (!text || copilotState.streaming || copilotState.creating) return null;
+
+    copilotState.streaming = true;
+    copilotState.loadSeq += 1;
+    _refreshSeq += 1;
+    var controller = new AbortController();
+    copilotState.streamAbortController = controller;
 
     if (!copilotState.activeConversationId) {
-      await createConversation(text.slice(0, 56));
+      syncAllViews();
+      try {
+        var created = await createConversation(text.slice(0, 56));
+        if (!created || !copilotState.activeConversationId) {
+          throw new Error(tr('تعذر إنشاء جلسة المحادثة', 'Failed to create conversation'));
+        }
+      } catch (createErr) {
+        copilotState.streaming = false;
+        copilotState.streamAbortController = null;
+        syncAllViews();
+        toast((createErr && createErr.message) || tr('تعذر إنشاء جلسة المحادثة', 'Failed to create conversation'), 'error');
+        return null;
+      }
+    }
+
+    if (controller.signal.aborted) {
+      copilotState.streaming = false;
+      copilotState.streamAbortController = null;
+      syncAllViews();
+      return null;
     }
 
     var cid = copilotState.activeConversationId;
@@ -514,9 +584,6 @@
 
     copilotState.messages.push(userMsg, assistantMsg);
     copilotState.attachments = [];
-    copilotState.streaming = true;
-    var controller = new AbortController();
-    copilotState.streamAbortController = controller;
     syncAllViews();
     scrollMessagesToBottom();
 
@@ -1098,6 +1165,10 @@
       'aria-label': tr('جلسة المحادثة', 'Copilot conversation')
     });
     convSelect.addEventListener('change', function () {
+      if (copilotState.streaming || copilotState.creating) {
+        syncAllViews();
+        return;
+      }
       if (convSelect.value) selectConversation(convSelect.value);
     });
 
@@ -1108,7 +1179,11 @@
         class: 'hc-icon-btn',
         title: tr('محادثة جديدة', 'New conversation'),
         'aria-label': tr('محادثة جديدة', 'New conversation'),
-        onclick: function () { createConversation(); }
+        onclick: function () {
+          if (!copilotState.streaming && !copilotState.creating) {
+            createConversation();
+          }
+        }
       },
       '＋'
     );
@@ -1466,7 +1541,7 @@
       window.addEventListener('hunter:state', function (ev) {
         var detail = ev.detail || {};
         var ctxConv = detail.context && detail.context.active_conversation_id;
-        if (ctxConv && !copilotState.activeConversationId && !copilotState.streaming) {
+        if (ctxConv && !copilotState.activeConversationId && !copilotState.streaming && !copilotState.creating) {
           selectConversation(ctxConv);
         }
         _boundWorkspaces.forEach(function (ws) {
