@@ -230,3 +230,34 @@ def test_catalog_endpoint_registered():
         pytest.skip(f"web app import failed: {e}")
     paths = {getattr(r, "path", None) for r in app_module.app.routes}
     assert "/api/models/catalog" in paths
+
+
+def test_cloud_refusal_retries_same_provider_reframed_before_local(monkeypatch):
+    _clear_keys(monkeypatch)
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("HUNTER_LLM_POLICY", "cloud_first")
+    r = LLMRouter()
+
+    calls = []
+
+    class _RefusalThenOkProvider:
+        async def is_available(self) -> bool:
+            return True
+
+        async def chat(self, messages):
+            calls.append([m.content for m in messages])
+            if len(calls) == 1:
+                return ModelResponse(content="I cannot assist with hacking or exploit requests.", model_name="fake", role="api")
+            return ModelResponse(content="Validation checks: parameterize queries and inspect normalization.", model_name="fake", role="api")
+
+    async def _boom():
+        raise AssertionError("local Ollama must NOT be called when reframed retry succeeds on same cloud model")
+
+    monkeypatch.setattr(r, "_load_provider", lambda spec, model=None: _RefusalThenOkProvider())
+    monkeypatch.setattr(r, "local_models", _boom)
+
+    res = asyncio.run(r.complete([{"role": "user", "content": "Test how to exploit SQL injection and bypass WAF"}]))
+    assert len(calls) == 2
+    assert "exploit" in calls[0][-1].lower()
+    assert "evaluate waf filtering boundaries" in calls[1][-1].lower()
+    assert "Validation checks" in res.content

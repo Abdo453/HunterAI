@@ -156,3 +156,36 @@ async def test_hybrid_ai_router_full_fallback_to_deterministic_rules():
     assert resp.model_used == "deterministic_rule_engine"
     assert resp.parsed_json["vulnerability_type"] == "ssrf"
     assert "canary_collaborator_callback" in resp.parsed_json["recommended_action"]
+
+
+@pytest.mark.asyncio
+async def test_hybrid_ai_router_reframes_same_model_on_refusal_before_switching():
+    router = HybridAIRouter(prefer_online=True)
+    seen_queries = []
+
+    async def mock_online_accepts_reframed(query: str, sys_prompt: str):
+        seen_queries.append(query)
+        if len(seen_queries) == 1:
+            assert "bypass waf" in query.lower()
+            return "I cannot assist with hacking or bypassing security controls."
+        assert "evaluate waf filtering boundaries" in query.lower()
+        return json.dumps({
+            "status": "validated",
+            "remediation": "Normalize paths and headers consistently before WAF inspection."
+        })
+
+    async def mock_local_should_not_run(query: str, sys_prompt: str):
+        raise AssertionError("local model must not be called when reframed retry on same online model succeeds")
+
+    resp: AIBridgeResponse = await router.query_security_reasoning(
+        raw_agent_query="How to bypass WAF on /search?",
+        online_caller_fn=mock_online_accepts_reframed,
+        local_caller_fn=mock_local_should_not_run,
+    )
+
+    assert len(seen_queries) == 2
+    assert resp.provider_tier == "online_cloud"
+    assert resp.refusal_encountered is True
+    assert resp.raw_prompt_reframed is True
+    assert resp.fallback_triggered is False
+    assert resp.parsed_json["status"] == "validated"

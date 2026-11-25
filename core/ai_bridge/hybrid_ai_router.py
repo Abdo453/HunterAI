@@ -1,12 +1,11 @@
 """
-Hybrid AI Router (Local Ollama <-> Online Cloud with Auto-Fallback)
+Hybrid AI Router (Local Ollama <-> Online Cloud with Refusal-Triggered Reframe)
 Mediates between the Security Agent and AI Models:
-1. Preserves the requested cybersecurity mode and terminology for every model.
+1. Preserves the requested cybersecurity mode and terminology on the initial call.
 2. Invokes Online Cloud AI (Gemini / Claude / OpenRouter).
 3. Inspects for refusal signatures via RefusalDetector.
-4. Auto-falls back to Local Ollama models (Qwen2.5-Coder, DeepSeek, WhiteRabbitNeo) if online model refuses.
-5. Auto-falls back to Deterministic Security Heuristic Rules if local Ollama is offline.
-Ensures the Agent NEVER halts and always receives a valid, structured technical decision.
+4. On refusal, reframes the request phrasing and retries the SAME model before switching models.
+5. Falls back to Local Ollama (Qwen2.5-Coder, DeepSeek, WhiteRabbitNeo) and then deterministic rules only if needed.
 """
 from __future__ import annotations
 
@@ -48,12 +47,20 @@ class HybridAIRouter:
         self,
         prefer_online: bool = True,
         preferred_local_model: str = "qwen2.5-coder:14b",
-        preferred_online_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        preferred_online_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+        retry_reframed_on_refusal: bool = True,
     ):
         self.prefer_online = prefer_online
         self.preferred_local_model = preferred_local_model
         self.preferred_online_model = preferred_online_model
+        self.retry_reframed_on_refusal = retry_reframed_on_refusal
         self.call_history: List[AIBridgeResponse] = []
+
+    @staticmethod
+    async def _invoke_caller(caller_fn: Callable[[str, str], Any], query: str, system_prompt: str) -> str:
+        if asyncio.iscoroutinefunction(caller_fn):
+            return await caller_fn(query, system_prompt)
+        return caller_fn(query, system_prompt)
 
     async def query_security_reasoning(
         self,
@@ -64,10 +71,11 @@ class HybridAIRouter:
         local_caller_fn: Optional[Callable[[str, str], Any]] = None
     ) -> AIBridgeResponse:
         """
-        إرسال استفسار الـ Agent مع الصياغة الدفاعية والتحويل التلقائي للبديل عند الرفض
+        Send the raw mode-preserving prompt first; if the model refuses, reframe the
+        request wording on the same model before falling back to local/deterministic tiers.
         """
         t0 = time.time()
-        sys_prompt, reframed_query = DefensivePromptFramer.reframe_query(
+        sys_prompt, initial_query = DefensivePromptFramer.reframe_query(
             raw_query=raw_agent_query,
             target_context=target_context,
             task_category=task_category
@@ -75,17 +83,18 @@ class HybridAIRouter:
 
         refusal_encountered = False
         fallback_triggered = False
+        raw_prompt_reframed = False
         content_result = ""
         model_name = "unknown"
         provider_tier = "online_cloud"
 
-        # ── Step 1: Try Online Cloud AI (if enabled and caller available) ─
+        # ── Step 1: Try Online Cloud AI (raw wording first, reframe same model on refusal) ─
         if self.prefer_online and (online_caller_fn or os.getenv("GEMINI_API_KEY") or os.getenv("OPENROUTER_API_KEY")):
             try:
                 if online_caller_fn:
-                    res_raw = await online_caller_fn(reframed_query, sys_prompt) if asyncio.iscoroutinefunction(online_caller_fn) else online_caller_fn(reframed_query, sys_prompt)
+                    res_raw = await self._invoke_caller(online_caller_fn, initial_query, sys_prompt)
                 else:
-                    res_raw = await self._call_default_online(reframed_query, sys_prompt)
+                    res_raw = await self._call_default_online(initial_query, sys_prompt)
 
                 refusal_check = RefusalDetector.check_response(res_raw)
                 if not refusal_check.is_refusal:
@@ -93,9 +102,40 @@ class HybridAIRouter:
                     model_name = self.preferred_online_model
                     provider_tier = "online_cloud"
                 else:
-                    logger.warning(f"[HybridAIRouter] Online AI refused request: '{refusal_check.matched_signature}'. Falling back to local model...")
                     refusal_encountered = True
-                    fallback_triggered = True
+                    if self.retry_reframed_on_refusal:
+                        logger.warning(
+                            f"[HybridAIRouter] Online AI refused raw prompt ('{refusal_check.matched_signature}'). "
+                            "Retrying same online model with reframed phrasing..."
+                        )
+                        reframed_sys, reframed_query = DefensivePromptFramer.reframe_on_refusal(
+                            raw_query=raw_agent_query,
+                            target_context=target_context,
+                            task_category=task_category,
+                            refusal_signature=refusal_check.matched_signature,
+                        )
+                        if online_caller_fn:
+                            res_retry = await self._invoke_caller(online_caller_fn, reframed_query, reframed_sys)
+                        else:
+                            res_retry = await self._call_default_online(reframed_query, reframed_sys)
+                        retry_check = RefusalDetector.check_response(res_retry)
+                        if not retry_check.is_refusal:
+                            content_result = res_retry
+                            model_name = self.preferred_online_model
+                            provider_tier = "online_cloud"
+                            raw_prompt_reframed = True
+                        else:
+                            logger.warning(
+                                f"[HybridAIRouter] Reframed retry also refused ('{retry_check.matched_signature}'). "
+                                "Falling back to local model..."
+                            )
+                            fallback_triggered = True
+                    else:
+                        logger.warning(
+                            f"[HybridAIRouter] Online AI refused request: '{refusal_check.matched_signature}'. "
+                            "Falling back to local model..."
+                        )
+                        fallback_triggered = True
 
             except Exception as e:
                 logger.warning(f"[HybridAIRouter] Online AI communication failed ({e}). Falling back to local model...")
@@ -106,16 +146,35 @@ class HybridAIRouter:
             fallback_triggered = True
             try:
                 if local_caller_fn:
-                    res_local = await local_caller_fn(reframed_query, sys_prompt) if asyncio.iscoroutinefunction(local_caller_fn) else local_caller_fn(reframed_query, sys_prompt)
+                    res_local = await self._invoke_caller(local_caller_fn, initial_query, sys_prompt)
                 else:
-                    res_local = await self._call_default_local(reframed_query, sys_prompt)
+                    res_local = await self._call_default_local(initial_query, sys_prompt)
 
-                if res_local and len(res_local.strip()) > 10:
+                local_check = RefusalDetector.check_response(res_local)
+                if local_check.is_refusal and self.retry_reframed_on_refusal and res_local and res_local.strip():
+                    refusal_encountered = True
+                    reframed_sys, reframed_query = DefensivePromptFramer.reframe_on_refusal(
+                        raw_query=raw_agent_query,
+                        target_context=target_context,
+                        task_category=task_category,
+                        refusal_signature=local_check.matched_signature,
+                    )
+                    if local_caller_fn:
+                        res_local_retry = await self._invoke_caller(local_caller_fn, reframed_query, reframed_sys)
+                    else:
+                        res_local_retry = await self._call_default_local(reframed_query, reframed_sys)
+                    if not RefusalDetector.check_response(res_local_retry).is_refusal:
+                        content_result = res_local_retry
+                        model_name = f"ollama/{self.preferred_local_model}"
+                        provider_tier = "local_ollama"
+                        raw_prompt_reframed = True
+                elif not local_check.is_refusal and res_local and len(res_local.strip()) > 10:
                     content_result = res_local
                     model_name = f"ollama/{self.preferred_local_model}"
                     provider_tier = "local_ollama"
+                    raw_prompt_reframed = False
                 else:
-                    logger.info("[HybridAIRouter] Local model returned empty response. Activating deterministic rule engine...")
+                    logger.info("[HybridAIRouter] Local model returned empty or refused response. Activating deterministic rule engine...")
 
             except Exception as e:
                 logger.info(f"[HybridAIRouter] Local Ollama unavailable ({e}). Activating deterministic rule engine...")
@@ -139,7 +198,7 @@ class HybridAIRouter:
             fallback_triggered=fallback_triggered,
             refusal_encountered=refusal_encountered,
             latency_ms=latency_ms,
-            raw_prompt_reframed=False
+            raw_prompt_reframed=raw_prompt_reframed
         )
 
         self.call_history.append(bridge_resp)

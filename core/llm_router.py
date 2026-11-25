@@ -244,6 +244,40 @@ class LLMRouter:
         return ModelResponse(content="", model_name="none", role="router",
                              error="; ".join(collected) or "no model available")
 
+    async def _retry_provider_on_refusal(
+        self,
+        provider: Any,
+        msgs: List[Message],
+        res: ModelResponse,
+        provider_label: str,
+        errors: Optional[List[str]] = None,
+    ) -> Optional[ModelResponse]:
+        """When a model returns a refusal, reframe and retry the same model once."""
+        from core.ai_bridge.defensive_prompt_framer import DefensivePromptFramer
+        from core.ai_bridge.refusal_detector import RefusalDetector
+
+        check = RefusalDetector.check_response(res.content)
+        if not check.is_refusal:
+            return res
+        logger.warning(
+            f"[LLMRouter] {provider_label} refused request ('{check.matched_signature}'); "
+            "retrying same model with reframed phrasing."
+        )
+        reframed_msgs = _coerce_messages(
+            DefensivePromptFramer.reframe_messages_on_refusal(msgs, refusal_signature=check.matched_signature)
+        )
+        retry_res = await provider.chat(reframed_msgs)
+        if retry_res and retry_res.content:
+            retry_check = RefusalDetector.check_response(retry_res.content)
+            if not retry_check.is_refusal:
+                return retry_res
+            if errors is not None:
+                errors.append(f"{provider_label}: refused after reframe ({retry_check.matched_signature})")
+            return None
+        if retry_res and retry_res.error and errors is not None:
+            errors.append(f"{provider_label}: {retry_res.error}")
+        return None
+
     async def _complete_cloud(self, msgs: List[Message], errors: List[str]) -> Optional[ModelResponse]:
         for spec in self.cloud_specs(only_available=True):
             try:
@@ -252,8 +286,11 @@ class LLMRouter:
                     continue
                 res = await provider.chat(msgs)
                 if res and res.content:
-                    logger.info(f"[LLMRouter] answered via {spec.id}:{res.model_name}")
-                    return res
+                    checked = await self._retry_provider_on_refusal(provider, msgs, res, spec.id, errors)
+                    if checked and checked.content:
+                        logger.info(f"[LLMRouter] answered via {spec.id}:{checked.model_name}")
+                        return checked
+                    continue
                 if res and res.error:
                     errors.append(f"{spec.id}: {res.error}")
             except Exception as e:  # noqa: BLE001
@@ -305,7 +342,8 @@ class LLMRouter:
                 provider = self._load_provider(spec, model=model or self.default_model_for(spec))
                 res = await provider.chat(msgs)
                 if res and res.content:
-                    return res
+                    checked = await self._retry_provider_on_refusal(provider, msgs, res, f"{spec.id}:{model}")
+                    return checked or res
                 if res:
                     return res
                 return ModelResponse(content="", model_name=model, role="api",
