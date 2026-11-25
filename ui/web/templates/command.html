@@ -1,41 +1,143 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en" dir="ltr" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PentestAI — Command Center</title>
+  <title>HunterAI — Command Center</title>
+  <link rel="stylesheet" href="/static/fonts.css">
+  <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    :root,
+    :root[data-theme="dark"] {
+      --bg-obsidian: var(--bg-canvas, #0d1117);
+      --bg-panel: var(--bg-surface, #161b22);
+      --bg-elevated: var(--bg-elevated, #1c2128);
+      --border-subtle: #30363d;
+      --text-main: var(--text-primary, #e6edf3);
+      --text-muted: var(--text-secondary, #8b949e);
+      --emerald: var(--accent-success, #3fb950);
+      --cyan: var(--accent-primary, #2563eb);
+      --red: var(--accent-danger, #f85149);
+      --amber: var(--accent-warning, #d29922);
+    }
+
+    :root[data-theme="light"] {
+      --bg-obsidian: var(--bg-canvas, #f8fafc);
+      --bg-panel: var(--bg-surface, #ffffff);
+      --bg-elevated: var(--bg-elevated, #f1f5f9);
+      --border-subtle: #cbd5e1;
+      --text-main: var(--text-primary, #0f172a);
+      --text-muted: var(--text-secondary, #475569);
+      --emerald: var(--accent-success, #16a34a);
+      --cyan: var(--accent-primary, #2563eb);
+      --red: var(--accent-danger, #dc2626);
+      --amber: var(--accent-warning, #d97706);
+    }
+
+    body {
+      background: var(--bg-obsidian);
+      color: var(--text-main);
+      font-family: var(--font-sans, "Cairo", "Inter", system-ui, sans-serif);
+    }
+
+    #panel-left,
+    #panel-terminal,
+    .chat-header,
+    .chat-composer {
+      background: var(--bg-panel);
+      border-color: var(--border-subtle);
+    }
+
+    .setting-input,
+    .provider-select,
+    .chat-composer textarea {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-subtle);
+      min-height: 44px;
+    }
+
+    .cyber-btn {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+
+    .cmd-hdr-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-inline-start: auto;
+    }
+
+    .cmd-clear-btn {
+      min-height: 44px;
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.8em;
+    }
+
+    .chat-bubble {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #term-output,
+    #target-input,
+    #scope-input,
+    #api-key-input,
+    #model-input,
+    #provider-status,
+    #chat-input {
+      direction: ltr;
+      unicode-bidi: isolate;
+      text-align: left;
+    }
+
+    .save-status-line {
+      font-size: 0.78em;
+      color: var(--emerald);
+      margin-top: 6px;
+      min-height: 18px;
+    }
+  </style>
 </head>
 <body>
 <div id="command-center">
 
-  <!-- ─── LEFT: Settings & Target Configuration ─── -->
   <aside id="panel-left">
     <div class="panel-brand">
-      <span style="font-size:1.5em;">🖥️</span>
       <div>
-        <div class="panel-brand-main">PentestAI</div>
+        <div class="panel-brand-main">HunterAI</div>
         <div class="panel-brand-sub">Command Center — Autonomous Agent</div>
       </div>
     </div>
 
-    <div class="panel-title">🎯 Target Configuration</div>
+    <div class="panel-title">Target Configuration</div>
     <div class="setting-row">
-      <label class="setting-label">Target Host / URL</label>
-      <input type="text" id="target-input" class="setting-input" placeholder="https://target.com" value="https://target.local">
+      <label class="setting-label" for="target-input">Target Host / URL</label>
+      <input type="text" id="target-input" class="setting-input ltr-isolate" placeholder="https://target.com" value="https://target.local">
     </div>
     <div class="setting-row">
-      <label class="setting-label">Scope (comma separated)</label>
-      <input type="text" id="scope-input" class="setting-input" placeholder="target.local, api.target.local" value="target.local">
+      <label class="setting-label" for="scope-input">Scope (comma separated)</label>
+      <input type="text" id="scope-input" class="setting-input ltr-isolate" placeholder="target.local, api.target.local" value="target.local">
     </div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:0.78em;color:var(--text-muted);cursor:pointer;margin-top:4px;">
+    <label class="cmd-check-row" style="display:flex;align-items:center;gap:8px;font-size:0.78em;color:var(--text-muted);cursor:pointer;margin-top:4px;min-height:44px;">
       <input type="checkbox" id="authorized-chk" checked>
-      <span style="color:var(--emerald);font-weight:bold;">Red Team Authorized</span>
+      <span>Authorized Scope</span>
     </label>
 
-    <div class="panel-title">🤖 AI Providers &amp; API Keys</div>
+    <div class="panel-title">AI Providers &amp; API Keys</div>
     <div class="setting-row">
-      <label class="setting-label">Provider</label>
+      <label class="setting-label" for="provider-select">Provider</label>
       <select id="provider-select" class="provider-select">
         <option value="nvidia">NVIDIA NIM</option>
         <option value="gemini">Google Gemini</option>
@@ -43,62 +145,72 @@
       </select>
     </div>
     <div class="setting-row">
-      <label class="setting-label">API Key</label>
-      <input type="password" id="api-key-input" class="setting-input" placeholder="sk-... / nvapi-...">
+      <label class="setting-label" for="api-key-input">API Key</label>
+      <input type="password" id="api-key-input" class="setting-input ltr-isolate" placeholder="sk-... / nvapi-...">
       <div class="key-hint">Persisted to .env · loaded live (no restart)</div>
     </div>
     <div class="setting-row">
-      <label class="setting-label">Model</label>
-      <input type="text" id="model-input" class="setting-input" placeholder="e.g. nvidia/nemotron-3-super-120b-a12b">
+      <label class="setting-label" for="model-input">Model</label>
+      <input type="text" id="model-input" class="setting-input ltr-isolate" placeholder="e.g. nvidia/nemotron-3-super-120b-a12b">
     </div>
-    <button class="cyber-btn cyber-btn-launch btn-save" onclick="saveSettings()">💾 Save API Keys to .env</button>
-    <div id="save-status" style="font-size:0.72em;color:var(--emerald);margin-top:6px;min-height:16px;"></div>
+    <button type="button" id="save-settings-btn" class="cyber-btn cyber-btn-launch btn-save">Save API Keys to .env</button>
+    <div id="save-status" class="save-status-line" aria-live="polite"></div>
 
-    <div class="panel-title">🔧 Command Execution</div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:0.78em;color:var(--text-muted);cursor:pointer;">
+    <div class="panel-title">Command Execution</div>
+    <label class="cmd-check-row" style="display:flex;align-items:center;gap:8px;font-size:0.78em;color:var(--text-muted);cursor:pointer;min-height:44px;">
       <input type="checkbox" id="exec-chk" checked>
-      <span>Allow AI to run terminal commands</span>
+      <span>Allow Live Command Execution</span>
     </label>
     <div id="exec-status" class="status-chip ok" style="display:none;margin-top:6px;">Execution: enabled</div>
-
-    <div class="warning">
-      <strong>⚠️ Security warning</strong><br>
-      Command execution runs arbitrary shell commands on this host with your user's privileges. Only enable on isolated, authorized systems you own or have written permission to test.
+    <div class="warning" style="margin-top:8px;font-size:0.75em;color:var(--text-muted);">
+      Commands only run inside your authorized engagement scope.
     </div>
 
-    <div class="panel-title">📡 Provider Status</div>
-    <div id="provider-status"></div>
+    <div class="panel-title">Provider Status</div>
+    <div id="provider-status" class="ltr-isolate"></div>
   </aside>
 
-  <!-- ─── MIDDLE: Interactive Chat ─── -->
   <section id="panel-chat">
     <header class="chat-header">
-      <div class="chat-title"><span>💬</span> PentestAI Agent</div>
+      <div class="chat-title"><span>●</span> HunterAI Agent</div>
+      <div class="cmd-hdr-actions">
+        <a href="/" id="cmdWorkspaceLink" class="cyber-btn">Workspace</a>
+        <button type="button" id="cmdThemeToggle" class="cyber-btn" aria-label="Toggle theme">Theme</button>
+        <button type="button" data-hunter-copilot-toggle class="cyber-btn" aria-label="Toggle Copilot Drawer">Copilot</button>
+      </div>
     </header>
-    <div id="chat-messages">
+
+    <div id="chat-messages" aria-live="polite">
       <div class="chat-msg ai">
-        <div class="chat-bubble">أهلاً — أنا PentestAI. لدي تفويض كامل لتشغيل الأوامر ضد الهدف. اكتب طلبك، وسأقوم بالتحليل وتنفيذ الأوامر (nmap, python3 pentest.py, ...) عند الحاجة.</div>
-        <div class="meta">PentestAI · ready</div>
+        <div class="chat-bubble">أهلاً — أنا HunterAI. أعمل ضمن النطاق المصرح به لتنفيذ التحليل والأوامر عند الحاجة.</div>
+        <div class="meta">HunterAI · ready</div>
       </div>
     </div>
-    <form class="chat-composer" id="chat-composer" onsubmit="return sendChat(event)">
-      <textarea id="chat-input" rows="1" placeholder="Ask PentestAI… (e.g. "Run nmap -sV on the target" or "Scan target.local for open ports")"></textarea>
+
+    <form class="chat-composer" id="chat-composer">
+      <textarea id="chat-input" rows="1" class="ltr-isolate" placeholder="Ask HunterAI... (e.g. &quot;Run nmap -sV on the target&quot; or &quot;Scan target.local for open ports&quot;)"></textarea>
       <button type="submit" class="cyber-btn cyber-btn-launch" style="padding:10px 20px;">Send ▶</button>
     </form>
   </section>
 
-  <!-- ─── RIGHT: Live Terminal ─── -->
   <aside id="panel-terminal">
     <div class="term-header">
-      <div class="term-title">🖥️ Live Terminal</div>
-      <button onclick="clearTerminal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.8em;">Clear</button>
+      <div class="term-title">Live Terminal</div>
+      <button type="button" id="clear-term-btn" class="cmd-clear-btn">Clear</button>
     </div>
-    <div id="term-output">
-      <div class="term-line"><span class="term-prompt">pentestai></span> <span class="term-out">Terminal ready. Command output from the AI appears here.</span></div>
+    <div id="term-output" class="ltr-isolate" dir="ltr">
+      <div class="term-line"><span class="term-prompt">hunterai&gt;</span> <span class="term-out">Terminal ready. Command output appears here.</span></div>
     </div>
   </aside>
 
 </div>
+
+<div id="hunterCopilotMount"></div>
+
+<script src="/static/vendor/dompurify/purify.min.js"></script>
+<script src="/static/ui-core.js"></script>
+<script src="/static/platform-client.js"></script>
+<script src="/static/copilot-drawer.js"></script>
 <script src="/static/command.js"></script>
 </body>
 </html>

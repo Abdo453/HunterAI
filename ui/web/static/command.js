@@ -1,190 +1,315 @@
-'use strict';
+/* HunterAI Command Center JS — Hardened DOM updates & visibility-aware polling */
 
-/* ════════════════════════════════════════════════════════════════════
-   PentestAI Command Center — frontend controller
-   Panels: Left = Settings & Target, Middle = Chat, Right = Terminal
-   ════════════════════════════════════════════════════════════════════ */
+(function () {
+  "use strict";
 
-let terminalLines = [];
+  let isBusy = false;
 
-document.addEventListener('DOMContentLoaded', () => {
-  loadSettings();
-  setupInput();
-  // Keep provider status fresh in case keys are saved elsewhere
-  setInterval(loadSettings, 15000);
-});
-
-function setupInput() {
-  const ta = document.getElementById('chat-input');
-  ta.addEventListener('input', () => {
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
-  });
-  ta.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChat(e);
+  function notify(msg, tone) {
+    if (window.HunterCore && typeof window.HunterCore.toast === "function") {
+      window.HunterCore.toast(msg, tone || "info");
     }
-  });
-}
+  }
 
-/* ── Settings / API Management ─────────────────────────────────────── */
+  function setupInput() {
+    const inp = document.getElementById("chat-input");
+    if (!inp) return;
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const form = document.getElementById("chat-composer");
+        if (form) form.requestSubmit ? form.requestSubmit() : sendChat(e);
+      }
+    });
+    inp.addEventListener("input", function () {
+      this.style.height = "auto";
+      this.style.height = Math.min(this.scrollHeight, 140) + "px";
+    });
+  }
 
-async function loadSettings() {
-  try {
-    const res = await fetch('/api/settings');
-    const d = await res.json();
-    const box = document.getElementById('provider-status');
+  async function loadSettings() {
+    try {
+      const res = await fetch("/api/settings");
+      if (!res.ok) return;
+      const d = await res.json();
+      const box = document.getElementById("provider-status");
+      if (!box) return;
+      box.textContent = "";
+
+      const providers = d.providers || {};
+      const entries = Object.entries(providers);
+      for (const [k, v] of entries) {
+        const chip = document.createElement("span");
+        chip.className = "status-chip ltr-isolate " + (v ? "ok" : "miss");
+        chip.textContent = `${k}: ${v ? "Ready" : "Missing"}`;
+        box.appendChild(chip);
+        box.appendChild(document.createTextNode(" "));
+      }
+
+      if (d.default_provider) {
+        const sel = document.getElementById("provider-select");
+        if (sel && [...sel.options].some((o) => o.value === d.default_provider)) {
+          sel.value = d.default_provider;
+        }
+      }
+      if (d.default_model) {
+        const mEl = document.getElementById("model-input");
+        if (mEl && !mEl.value) mEl.value = d.default_model;
+      }
+      const execChip = document.getElementById("exec-status");
+      if (execChip) {
+        execChip.style.display = d.allow_exec ? "inline-flex" : "none";
+      }
+    } catch (_) {}
+  }
+
+  async function saveSettings() {
+    const prov = document.getElementById("provider-select")?.value || "nvidia";
+    const key = document.getElementById("api-key-input")?.value.trim() || "";
+    const model = document.getElementById("model-input")?.value.trim() || "";
+    const status = document.getElementById("save-status");
+    if (status) {
+      status.style.color = "var(--cyan)";
+      status.textContent = "Saving to .env...";
+    }
+
+    try {
+      const res = await fetch("/api/settings/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: prov, api_key: key, model: model }),
+      });
+      const d = await res.json();
+      if (d.ok) {
+        if (status) {
+          status.style.color = "var(--emerald)";
+          status.textContent = "Saved to .env & active now";
+        }
+        const apiKeyEl = document.getElementById("api-key-input");
+        if (apiKeyEl) apiKeyEl.value = "";
+        notify("Settings saved to .env", "success");
+        loadSettings();
+      } else {
+        if (status) {
+          status.style.color = "var(--red)";
+          status.textContent = d.error || "Save failed";
+        }
+        notify(d.error || "Save failed", "error");
+      }
+    } catch (e) {
+      if (status) {
+        status.style.color = "var(--red)";
+        status.textContent = "Error: " + (e && e.message ? e.message : String(e));
+      }
+    }
+  }
+
+  async function sendChat(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    if (isBusy) return false;
+    const inp = document.getElementById("chat-input");
+    const msg = (inp?.value || "").trim();
+    if (!msg) return false;
+
+    isBusy = true;
+    inp.value = "";
+    inp.style.height = "auto";
+    appendUserMsg(msg);
+    const aiMsg = appendAIMsg("Thinking & executing...");
+
+    const target = document.getElementById("target-input")?.value.trim() || "";
+    const scopeRaw = document.getElementById("scope-input")?.value.trim() || "";
+    const scope = scopeRaw ? scopeRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const provider = document.getElementById("provider-select")?.value || "auto";
+    const model = document.getElementById("model-input")?.value.trim() || "";
+    const authorized = Boolean(document.getElementById("authorized-chk")?.checked);
+    const allowExec = Boolean(document.getElementById("exec-chk")?.checked);
+
+    const platformState = window.HunterPlatform && typeof window.HunterPlatform.getState === "function"
+      ? window.HunterPlatform.getState()
+      : null;
+    const ctx = (platformState && platformState.context) || {};
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: msg,
+          target: target,
+          scope: scope,
+          provider: provider,
+          model: model,
+          authorized: authorized,
+          allow_exec: allowExec,
+          engagement_id: ctx.engagement_id || "",
+          run_id: ctx.run_id || "",
+        }),
+      });
+      const d = await res.json();
+      if (d.error) {
+        aiMsg.bubble.textContent = "Error: " + d.error;
+        aiMsg.meta.textContent = "HunterAI · error";
+      } else {
+        aiMsg.bubble.textContent = d.response || "Done";
+        aiMsg.meta.textContent = `HunterAI · ${d.provider || provider}${d.executed ? " · executed commands" : ""}`;
+        if (d.terminal_output) {
+          appendTerminal(d.terminal_output);
+        }
+      }
+    } catch (err) {
+      aiMsg.bubble.textContent = "Connection error: " + (err && err.message ? err.message : String(err));
+      aiMsg.meta.textContent = "HunterAI · connection error";
+    } finally {
+      isBusy = false;
+      scrollMsgs();
+    }
+    return false;
+  }
+
+  function appendUserMsg(text) {
+    const box = document.getElementById("chat-messages");
     if (!box) return;
-    box.innerHTML = '';
-    for (const prov of (d.providers || [])) {
-      const k = (d.keys || {})[prov] || {};
-      const chip = document.createElement('div');
-      chip.className = `status-chip ${k.configured ? 'ok' : 'bad'}`;
-      chip.textContent = `${prov.toUpperCase()}: ${k.configured ? 'configured (' + k.key_masked + ')' : 'not set'}`;
-      box.appendChild(chip);
-    }
-    // Prefill model input with the provider default when empty
-    const sel = document.getElementById('provider-select').value;
-    const def = (d.default_models || {})[sel];
-    const mi = document.getElementById('model-input');
-    if (def && !mi.value) mi.value = def;
-  } catch (err) {
-    console.error('loadSettings error', err);
-  }
-}
+    const div = document.createElement("div");
+    div.className = "chat-msg user";
 
-async function saveSettings() {
-  const prov = document.getElementById('provider-select').value;
-  const key = document.getElementById('api-key-input').value.trim();
-  const model = document.getElementById('model-input').value.trim();
-  const statusEl = document.getElementById('save-status');
-  statusEl.textContent = 'Saving to .env…';
-  statusEl.style.color = 'var(--amber)';
-  try {
-    const res = await fetch('/api/settings/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [prov]: key, model }),
-    });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.error || 'save failed');
-    statusEl.textContent = d.note || 'Saved to .env — live reload complete.';
-    statusEl.style.color = 'var(--emerald)';
-    document.getElementById('api-key-input').value = '';
-    loadSettings();
-  } catch (err) {
-    statusEl.textContent = 'Save failed: ' + err;
-    statusEl.style.color = 'var(--rose)';
-  }
-}
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble";
+    bubble.textContent = String(text ?? "");
 
-/* ── Chat ──────────────────────────────────────────────────────────── */
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = `You · ${new Date().toLocaleTimeString()}`;
 
-async function sendChat(e) {
-  if (e) e.preventDefault();
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
-  if (!text) return false;
-  input.value = '';
-  input.style.height = 'auto';
-
-  const provider = document.getElementById('provider-select').value;
-  const model = document.getElementById('model-input').value.trim();
-
-  appendUserMsg(text);
-  scrollMsgs();
-
-  const aiDiv = appendAIMsg('');
-
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, provider, model }),
-    });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.error || 'chat failed');
-
-    const aiText = d.response || '(no response)';
-    const bubble = aiDiv.querySelector('.chat-bubble');
-    const meta = aiDiv.querySelector('.meta');
-    bubble.textContent = aiText;
-    meta.textContent = `PentestAI · ${d.provider} · ${d.model_used}`;
-
-    // Render terminal output from executed commands
-    if (d.terminal_output && d.terminal_output !== '(no commands executed)') {
-      appendTerminal(d.terminal_output);
-    }
-  } catch (err) {
-    const bubble = aiDiv.querySelector('.chat-bubble');
-    bubble.textContent = 'Error: ' + err;
-    bubble.style.color = 'var(--rose)';
-  }
-  scrollMsgs();
-  scrollTerminal();
-  return false;
-}
-
-function appendUserMsg(text) {
-  const box = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.className = 'chat-msg user';
-  div.innerHTML = `<div class="chat-bubble">${escapeHtml(text)}</div><div class="meta">You · ${new Date().toLocaleTimeString()}</div>`;
-  box.appendChild(div);
-  return div;
-}
-
-function appendAIMsg(placeholder) {
-  const box = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.className = 'chat-msg ai';
-  div.innerHTML = `<div class="chat-bubble">${placeholder}</div><div class="meta">PentestAI · thinking…</div>`;
-  box.appendChild(div);
-  return div;
-}
-
-/* ── Terminal ──────────────────────────────────────────────────────── */
-
-function appendTerminal(output) {
-  const box = document.getElementById('term-output');
-  const lines = String(output).split(/\r?\n/).filter((l) => l.length > 0);
-  for (const line of lines) {
-    const div = document.createElement('div');
-    div.className = 'term-line';
-    if (line.startsWith('$ ')) {
-      div.innerHTML = `<span class="term-prompt">pentestai></span> <span class="term-cmd">${escapeHtml(line.slice(2))}</span>`;
-    } else if (/timed out|error|fail|traceback|exception/i.test(line)) {
-      div.innerHTML = `<span class="term-err">${escapeHtml(line)}</span>`;
-    } else {
-      div.innerHTML = `<span class="term-out">${escapeHtml(line)}</span>`;
-    }
+    div.appendChild(bubble);
+    div.appendChild(meta);
     box.appendChild(div);
-    terminalLines.push(div);
+    scrollMsgs();
   }
-  // Bound the DOM so long sessions stay snappy
-  if (terminalLines.length > 400) {
-    terminalLines.splice(0, terminalLines.length - 400).forEach((d) => d.remove());
+
+  function appendAIMsg(placeholder) {
+    const box = document.getElementById("chat-messages");
+    const div = document.createElement("div");
+    div.className = "chat-msg ai";
+
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble";
+    bubble.textContent = String(placeholder ?? "");
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = "HunterAI · thinking...";
+
+    div.appendChild(bubble);
+    div.appendChild(meta);
+    if (box) {
+      box.appendChild(div);
+      scrollMsgs();
+    }
+    return { wrap: div, bubble: bubble, meta: meta };
   }
-}
 
-function clearTerminal() {
-  const box = document.getElementById('term-output');
-  box.innerHTML = '<div class="term-line"><span class="term-prompt">pentestai></span> <span class="term-out">Terminal cleared.</span></div>';
-  terminalLines = [];
-}
+  function appendTerminal(output) {
+    const box = document.getElementById("term-output");
+    if (!box) return;
+    const lines = String(output ?? "").split("\n");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const div = document.createElement("div");
+      div.className = "term-line ltr-isolate";
+      if (line.startsWith("$ ")) {
+        const promptSpan = document.createElement("span");
+        promptSpan.className = "term-prompt";
+        promptSpan.textContent = "hunterai> ";
+        const cmdSpan = document.createElement("span");
+        cmdSpan.className = "term-cmd";
+        cmdSpan.textContent = line.slice(2);
+        div.appendChild(promptSpan);
+        div.appendChild(cmdSpan);
+      } else if (line.startsWith("[ERR]") || line.startsWith("[!]")) {
+        const errSpan = document.createElement("span");
+        errSpan.className = "term-err";
+        errSpan.textContent = line;
+        div.appendChild(errSpan);
+      } else {
+        const outSpan = document.createElement("span");
+        outSpan.className = "term-out";
+        outSpan.textContent = line;
+        div.appendChild(outSpan);
+      }
+      box.appendChild(div);
+    }
+    scrollTerminal();
+  }
 
-function scrollMsgs() {
-  const box = document.getElementById('chat-messages');
-  box.scrollTop = box.scrollHeight;
-}
+  function clearTerminal() {
+    const box = document.getElementById("term-output");
+    if (!box) return;
+    box.textContent = "";
+    const line = document.createElement("div");
+    line.className = "term-line ltr-isolate";
+    const promptSpan = document.createElement("span");
+    promptSpan.className = "term-prompt";
+    promptSpan.textContent = "hunterai> ";
+    const outSpan = document.createElement("span");
+    outSpan.className = "term-out";
+    outSpan.textContent = "Terminal cleared.";
+    line.appendChild(promptSpan);
+    line.appendChild(outSpan);
+    box.appendChild(line);
+  }
 
-function scrollTerminal() {
-  const box = document.getElementById('term-output');
-  box.scrollTop = box.scrollHeight;
-}
+  function scrollMsgs() {
+    const box = document.getElementById("chat-messages");
+    if (box) box.scrollTop = box.scrollHeight;
+  }
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
+  function scrollTerminal() {
+    const box = document.getElementById("term-output");
+    if (box) box.scrollTop = box.scrollHeight;
+  }
+
+  function init() {
+    const core = window.HunterCore;
+    if (core) {
+      core.initTheme();
+    }
+
+    setupInput();
+
+    const saveBtn = document.getElementById("save-settings-btn");
+    if (saveBtn) saveBtn.addEventListener("click", saveSettings);
+
+    const form = document.getElementById("chat-composer");
+    if (form) form.addEventListener("submit", sendChat);
+
+    const clearBtn = document.getElementById("clear-term-btn");
+    if (clearBtn) clearBtn.addEventListener("click", clearTerminal);
+
+    const themeBtn = document.getElementById("cmdThemeToggle");
+    if (themeBtn && core) {
+      themeBtn.addEventListener("click", function () { core.toggleTheme(); });
+    }
+
+    const backLink = document.getElementById("cmdWorkspaceLink");
+    if (backLink && core) {
+      const updateHref = function () {
+        backLink.href = "/?theme=" + encodeURIComponent(core.getTheme()) + "&lang=" + encodeURIComponent(core.getLang());
+      };
+      updateHref();
+      window.addEventListener("hunter:themechange", updateHref);
+      window.addEventListener("hunter:langchange", updateHref);
+    }
+
+    loadSettings();
+    if (core && typeof core.createVisibilityPoller === "function") {
+      core.createVisibilityPoller(loadSettings, 15000, { immediate: false });
+    }
+  }
+
+  window.saveSettings = saveSettings;
+  window.sendChat = sendChat;
+  window.clearTerminal = clearTerminal;
+
+  document.addEventListener("DOMContentLoaded", init);
+})();

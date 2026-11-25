@@ -1,57 +1,258 @@
 <!DOCTYPE html>
-<html lang="ar" dir="ltr">
+<html lang="ar" dir="rtl" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PentestAI · Co-Pilot</title>
+  <title>HunterAI · Security Co-Pilot</title>
+  <link rel="stylesheet" href="/static/fonts.css" />
+  <link rel="stylesheet" href="/static/tokens.css" />
   <link rel="stylesheet" href="/static/chat.css" />
+  <style>
+    :root,
+    :root[data-theme="dark"] {
+      --bg: var(--bg-canvas, #0d1117);
+      --surface: var(--bg-surface, #161b22);
+      --surface-2: var(--bg-elevated, #1c2128);
+      --border: var(--border-subtle, #30363d);
+      --ink: var(--text-primary, #e6edf3);
+      --ink-dim: var(--text-secondary, #8b949e);
+      --ink-muted: var(--text-muted, #6e7681);
+      --accent: var(--accent-primary, #2563eb);
+      --accent-ink: #ffffff;
+      --user-bg: var(--bg-inset, #1e293b);
+      --code-bg: #0b0f16;
+      --ok: var(--accent-success, #3fb950);
+      --err: var(--accent-danger, #f85149);
+      --warn: var(--accent-warning, #d29922);
+      --mono: var(--font-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, monospace);
+      --sans: var(--font-sans, "Cairo", "Inter", system-ui, sans-serif);
+    }
+
+    :root[data-theme="light"] {
+      --bg: var(--bg-canvas, #f8fafc);
+      --surface: var(--bg-surface, #ffffff);
+      --surface-2: var(--bg-elevated, #f1f5f9);
+      --border: var(--border-subtle, #e2e8f0);
+      --ink: var(--text-primary, #0f172a);
+      --ink-dim: var(--text-secondary, #475569);
+      --ink-muted: var(--text-muted, #64748b);
+      --accent: var(--accent-primary, #2563eb);
+      --accent-ink: #ffffff;
+      --user-bg: #e2e8f0;
+      --code-bg: #0f172a;
+      --ok: var(--accent-success, #16a34a);
+      --err: var(--accent-danger, #dc2626);
+      --warn: var(--accent-warning, #d97706);
+      --mono: var(--font-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, monospace);
+      --sans: var(--font-sans, "Cairo", "Inter", system-ui, sans-serif);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+
+    .sidebar {
+      background: var(--surface);
+      border-inline-end: 1px solid var(--border);
+      border-right: none;
+    }
+
+    .topbar {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-inline-start: auto;
+    }
+
+    .icon-btn,
+    .new-chat,
+    .top-link {
+      min-height: 44px;
+      min-width: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .icon-btn:hover,
+    .top-link:hover {
+      background: var(--surface-2);
+    }
+
+    .new-chat {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+
+    .conv {
+      min-height: 44px;
+    }
+
+    .conv .x {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      cursor: pointer;
+      min-width: 28px;
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+    }
+
+    .model-select,
+    .composer textarea {
+      color: var(--ink);
+      background: var(--surface);
+      border-color: var(--border);
+      font-family: var(--sans);
+    }
+
+    .msg.user {
+      justify-content: flex-end;
+    }
+
+    .msg.user .bubble {
+      background: var(--user-bg);
+      color: var(--ink);
+    }
+
+    .msg.assistant .bubble,
+    .msg.assistant .text {
+      color: var(--ink);
+    }
+
+    .msg.assistant pre,
+    .trace-body,
+    .skills-badge {
+      direction: ltr;
+      unicode-bidi: isolate;
+      text-align: left;
+    }
+
+    .msg.assistant pre {
+      background: var(--code-bg);
+      color: #e6edf3;
+    }
+
+    .trace {
+      background: var(--surface);
+      border-color: var(--border);
+    }
+
+    .trace-head {
+      width: 100%;
+      background: transparent;
+      border: 0;
+      color: var(--ink);
+      text-align: inherit;
+      font: inherit;
+      min-height: 44px;
+    }
+
+    .trace-body {
+      background: var(--surface-2);
+      color: var(--ink-dim);
+      border-top-color: var(--border);
+    }
+
+    .chip {
+      background: var(--surface);
+      color: var(--ink);
+      border-color: var(--border);
+      min-height: 44px;
+    }
+
+    .chip:hover {
+      background: var(--surface-2);
+    }
+
+    .skills-badge {
+      font-size: 11px;
+      color: var(--ink-dim);
+      margin-top: 6px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .send-icon {
+      transform: scaleX(-1);
+    }
+
+    [dir="ltr"] .send-icon {
+      transform: none;
+    }
+  </style>
 </head>
 <body>
   <div class="app" id="app">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <span class="brand-mark">✳</span>
-        <span class="brand-name">PentestAI</span>
+        <span class="brand-mark" aria-hidden="true">H</span>
+        <span class="brand-name">HunterAI</span>
       </div>
 
-      <button class="new-chat" id="newChat">
-        <span>＋</span> New chat
+      <button type="button" class="new-chat" id="newChat">
+        <span aria-hidden="true">+</span>
+        <span data-i18n="copilot.new_chat">محادثة جديدة</span>
       </button>
 
       <nav class="convs" id="convs" aria-label="Conversations"></nav>
 
       <div class="sidebar-foot">
-        <label class="lbl" for="modelSelect">Model</label>
+        <label class="lbl" for="modelSelect" data-i18n="copilot.model">النموذج</label>
         <select id="modelSelect" class="model-select">
           <option value="auto">Auto (smart router)</option>
         </select>
-        <div class="hint" id="modelHint"></div>
+        <div class="hint ltr-isolate" id="modelHint"></div>
 
         <div class="status-row">
-          <span class="dot" id="connDot"></span>
-          <span id="connText">connecting…</span>
+          <span class="dot" id="connDot" aria-hidden="true"></span>
+          <span id="connText" class="ltr-isolate">connecting...</span>
         </div>
-        <div class="policy" id="policyTag">policy: —</div>
-        <div id="globalSkillsBadge" title="Project skills loaded from .agents/skills"
-             style="margin-top:8px;padding:4px 8px;border-radius:6px;background:rgba(0,200,83,.12);color:#00c853;font-size:11px;border:1px solid rgba(0,200,83,.35);line-height:1.35;">
-          Loaded Global Skills: …
-        </div>
+        <div class="policy ltr-isolate" id="policyTag">policy: —</div>
+        <div id="globalSkillsBadge" class="skills-badge" title="Project skills loaded from .agents/skills"></div>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <button class="icon-btn menu" id="menuBtn" aria-label="Toggle sidebar">☰</button>
-        <div class="title">Security Co-Pilot</div>
-        <button class="icon-btn" id="clearBtn" title="Clear this conversation">⟲</button>
+        <button type="button" class="icon-btn menu" id="menuBtn" aria-label="Toggle sidebar">☰</button>
+        <div class="title" data-i18n="copilot.title">مساعد الأمان الذكي · Co-Pilot</div>
+        <div class="topbar-actions">
+          <a href="/?section=chat" class="top-link" id="workspaceBackLink" data-i18n="nav.overview">مساحة العمل</a>
+          <button type="button" class="icon-btn" id="themeToggleBtn" aria-label="Toggle theme" title="Dark / Light">◐</button>
+          <button type="button" class="icon-btn" id="langToggleBtn" aria-label="Switch language" title="AR / EN">EN</button>
+          <button type="button" class="icon-btn" data-hunter-copilot-toggle aria-label="Open Copilot Drawer" title="Ctrl+J">✦</button>
+          <button type="button" class="icon-btn" id="clearBtn" title="Clear this conversation" aria-label="Clear conversation">⟲</button>
+        </div>
       </header>
 
-      <section class="messages" id="messages"></section>
+      <section class="messages" id="messages" aria-live="polite"></section>
 
       <form class="composer" id="composer" autocomplete="off">
-        <textarea id="input" rows="1" placeholder="Message PentestAI…  (Shift+Enter for newline)"></textarea>
+        <textarea id="input" rows="1" placeholder="اكتب رسالتك لـ HunterAI… (Shift+Enter لسطر جديد)"></textarea>
         <button type="submit" id="send" aria-label="Send">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <svg class="send-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path d="M4 12l15-7-7 15-2-6-6-2z" fill="currentColor"/>
           </svg>
         </button>
@@ -60,22 +261,58 @@
     </main>
   </div>
 
+  <div id="hunterCopilotMount"></div>
+
+  <script src="/static/vendor/dompurify/purify.min.js"></script>
+  <script src="/static/ui-core.js"></script>
+  <script src="/static/platform-client.js"></script>
+  <script src="/static/copilot-drawer.js"></script>
   <script src="/static/chat.js"></script>
   <script>
     (function () {
-      var el = document.getElementById("globalSkillsBadge");
-      if (!el) return;
-      fetch("/api/global-skills").then(function (r) { return r.json(); }).then(function (d) {
-        if (d && Array.isArray(d.loaded) && d.loaded.length) {
-          el.textContent = d.badge;
-          el.title = d.loaded.join(", ") + "  ·  " + d.root;
-        } else {
-          el.textContent = "Loaded Global Skills: none";
-          el.style.color = "#ff5252";
-          el.style.borderColor = "rgba(255,82,82,.4)";
-          el.style.background = "rgba(255,82,82,.10)";
-        }
-      }).catch(function () {});
+      var core = window.HunterCore;
+      if (core) {
+        core.initTheme();
+        core.initI18n();
+      }
+      var themeBtn = document.getElementById("themeToggleBtn");
+      var langBtn = document.getElementById("langToggleBtn");
+      var syncLangLabel = function () {
+        if (!langBtn || !core) return;
+        langBtn.textContent = core.getLang() === "ar" ? "EN" : "AR";
+      };
+      if (themeBtn && core) {
+        themeBtn.addEventListener("click", function () { core.toggleTheme(); });
+      }
+      if (langBtn && core) {
+        langBtn.addEventListener("click", function () {
+          core.setLang(core.getLang() === "ar" ? "en" : "ar");
+          syncLangLabel();
+        });
+        syncLangLabel();
+      }
+      var back = document.getElementById("workspaceBackLink");
+      if (back && core) {
+        var updateBackHref = function () {
+          back.href = "/?section=chat&theme=" + encodeURIComponent(core.getTheme()) + "&lang=" + encodeURIComponent(core.getLang());
+        };
+        updateBackHref();
+        window.addEventListener("hunter:themechange", updateBackHref);
+        window.addEventListener("hunter:langchange", updateBackHref);
+      }
+
+      var badgeEl = document.getElementById("globalSkillsBadge");
+      if (!badgeEl) return;
+      fetch("/api/global-skills")
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.badge) {
+            badgeEl.textContent = d.badge;
+          } else {
+            badgeEl.textContent = "Loaded Global Skills: none";
+          }
+        })
+        .catch(function () {});
     })();
   </script>
 </body>
