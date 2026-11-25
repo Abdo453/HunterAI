@@ -164,9 +164,9 @@ export default function Navbar() {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-base text-ink-primary tracking-tight">
+              <h1 className="m-0 font-bold text-base text-ink-primary tracking-tight">
                 {t("brand.name")}
-              </span>
+              </h1>
               <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-elevated text-ink-secondary border border-border-subtle">
                 {t("brand.engineTag")}
               </span>

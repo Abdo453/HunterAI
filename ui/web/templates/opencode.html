@@ -1500,6 +1500,27 @@ Accept: */*
         }
       }
 
+      function getActivePlatformMeta() {
+        const hp = window.HunterPlatform;
+        const pState = hp && typeof hp.getState === 'function' ? hp.getState() : null;
+        const ctx = (hp && typeof hp.getContext === 'function')
+          ? hp.getContext()
+          : (pState && pState.context ? pState.context : {});
+        const activeEng = hp && typeof hp.getActiveEngagement === 'function'
+          ? hp.getActiveEngagement()
+          : null;
+        const activeRun = hp && typeof hp.getActiveRun === 'function'
+          ? hp.getActiveRun()
+          : null;
+        return {
+          engagementId: (ctx && ctx.active_engagement_id) || (activeEng && activeEng.engagement_id) || '',
+          runId: (ctx && ctx.active_run_id) || (activeRun && activeRun.run_id) || '',
+          target: (activeEng && activeEng.target) || state.activeEngagementTarget || '',
+          scope: activeEng && Array.isArray(activeEng.in_scope) ? activeEng.in_scope : undefined,
+          outOfScope: activeEng && Array.isArray(activeEng.out_of_scope) ? activeEng.out_of_scope : undefined
+        };
+      }
+
       // ── 7. Agent Co-Pilot Chat ──────────────────────────────────────────────
       async function sendAgentChat() {
         const input = document.getElementById('agentPromptInput');
@@ -1514,15 +1535,31 @@ Accept: */*
         const promptWithContext = `User Question: ${text}\n\nContext File (${state.activeTabId || 'None'}):\n\`\`\`\n${activeCode.slice(0, 3000)}\n\`\`\``;
         const modelEl = document.getElementById('modelSelector');
         const model = modelEl ? modelEl.value : 'gemini';
+        const meta = getActivePlatformMeta();
+
+        const payload = {
+          message: promptWithContext,
+          provider: model,
+          allow_exec: false
+        };
+        if (meta.engagementId) payload.engagement_id = meta.engagementId;
+        if (meta.runId) payload.run_id = meta.runId;
+        if (meta.target) payload.target = meta.target;
 
         try {
           const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: promptWithContext, provider: model })
+            body: JSON.stringify(payload)
           });
-          const data = await res.json();
-          appendAgentMessage('ai', data.response || data.message || '');
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.error) {
+            const errText = data.error || data.detail || `HTTP ${res.status}`;
+            appendAgentMessage('ai', `[!] ${errText}`);
+            return;
+          }
+          const reply = data.response || data.answer || data.message || '';
+          appendAgentMessage('ai', reply || '[!] Empty response from AI provider.');
         } catch (err) {
           appendAgentMessage('ai', t('networkError') + ': ' + err.message);
         }
@@ -1687,15 +1724,28 @@ Accept: */*
         input.value = '';
         appendDockLog(`\n$ ${cmd}`);
 
+        const meta = getActivePlatformMeta();
+        const payload = { command: cmd };
+        if (meta.target) payload.target = meta.target;
+        if (Array.isArray(meta.scope)) payload.scope = meta.scope;
+        if (Array.isArray(meta.outOfScope)) payload.out_of_scope = meta.outOfScope;
+        if (meta.engagementId) payload.engagement_id = meta.engagementId;
+
         try {
           const res = await fetch('/api/run-tool', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: cmd })
+            body: JSON.stringify(payload)
           });
-          const data = await res.json();
-          if (data.output) {
-            appendDockLog(data.output);
+          const data = await res.json().catch(() => ({}));
+          const textOut = data.stdout || data.output || data.stderr || data.error || data.detail || '';
+          if (!res.ok || data.blocked) {
+            const errMsg = textOut || `HTTP ${res.status}`;
+            appendDockLog(`[!] ${data.blocked ? 'BLOCKED' : 'Error'} (${res.status}): ${errMsg}`);
+            return;
+          }
+          if (textOut) {
+            appendDockLog(textOut);
           } else if (data.status) {
             appendDockLog(`[Status: ${data.status}]`);
           }

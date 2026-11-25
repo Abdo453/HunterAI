@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 
 const ALLOWED_PREFIXES = ["api/platform/", "api/copilot/"] as const;
+const ALLOWED_GET_EXACT = new Set<string>(["api/models/catalog"]);
 
 function getUpstreamBase(): string {
   const raw =
@@ -12,7 +13,11 @@ function getUpstreamBase(): string {
   return raw.replace(/\/+$/, "");
 }
 
-function buildSafeUpstreamUrl(segments: string[], search: string): URL | null {
+function buildSafeUpstreamUrl(
+  segments: string[],
+  search: string,
+  method: string
+): URL | null {
   if (!Array.isArray(segments) || segments.length === 0) {
     return null;
   }
@@ -22,7 +27,9 @@ function buildSafeUpstreamUrl(segments: string[], search: string): URL | null {
     }
   }
   const joined = segments.join("/");
-  if (!ALLOWED_PREFIXES.some((prefix) => joined.startsWith(prefix))) {
+  const isAllowedPrefix = ALLOWED_PREFIXES.some((prefix) => joined.startsWith(prefix));
+  const isAllowedGetExact = method === "GET" && ALLOWED_GET_EXACT.has(joined);
+  if (!isAllowedPrefix && !isAllowedGetExact) {
     return null;
   }
 
@@ -49,7 +56,7 @@ async function handleProxy(
   context: { params: Promise<{ path: string[] }> }
 ): Promise<Response> {
   const { path } = await context.params;
-  const targetUrl = buildSafeUpstreamUrl(path, request.nextUrl.search);
+  const targetUrl = buildSafeUpstreamUrl(path, request.nextUrl.search, request.method);
   if (!targetUrl) {
     return Response.json(
       { status: "error", error: "Disallowed upstream path" },

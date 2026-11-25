@@ -1254,6 +1254,7 @@
       modeSelect: modeSelect,
       messagesBox: messagesBox,
       attachBox: attachBox,
+      composer: composer,
       textarea: textarea,
       sendBtn: sendBtn,
       stopBtn: stopBtn

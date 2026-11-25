@@ -1386,30 +1386,136 @@ async def get_methodology(q: Optional[str] = None):
     }
 
 
+_RUN_TOOL_SHELL_META_RE = re.compile(r"(?:[;|&`><\n\r\x00]|\$\(|\$\{)")
+
+
 @app.post("/api/run-tool")
 async def run_tool(req: Request):
-    """تنفيذ أداة أمنية معتمدة بأمان"""
-    data = await req.json()
-    tool = data.get("tool", "").strip()
-    target = data.get("target", "").strip()
-    args = data.get("args", "")
+    """تنفيذ أداة أمنية معتمدة بأمان مع التحقق من النطاق وسياسات الحماية"""
+    import shlex
 
-    if not tool or not target:
-        return JSONResponse(status_code=400, content={"error": "Tool and Target required"})
+    try:
+        data = await req.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
+    if not isinstance(data, dict):
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON payload"})
+
+    has_command = "command" in data and data.get("command") is not None
+    raw_command = str(data.get("command") or "").strip() if has_command else ""
+    tool = str(data.get("tool") or "").strip()
+    target = str(data.get("target") or "").strip()
+    raw_args = data.get("args", "")
+    if isinstance(raw_args, list):
+        args_str = " ".join(str(x).strip() for x in raw_args if str(x).strip())
+    else:
+        args_str = str(raw_args or "").strip()
+
+    raw_scope = data.get("scope")
+    if isinstance(raw_scope, list):
+        scope_list: Optional[List[str]] = [str(s).strip() for s in raw_scope if str(s).strip()]
+    elif isinstance(raw_scope, str) and raw_scope.strip():
+        scope_list = [s.strip() for s in raw_scope.split(",") if s.strip()]
+    else:
+        scope_list = None
+
+    raw_out_of_scope = data.get("out_of_scope")
+    if isinstance(raw_out_of_scope, list):
+        out_of_scope_list: Optional[List[str]] = [str(s).strip() for s in raw_out_of_scope if str(s).strip()]
+    elif isinstance(raw_out_of_scope, str) and raw_out_of_scope.strip():
+        out_of_scope_list = [s.strip() for s in raw_out_of_scope.split(",") if s.strip()]
+    else:
+        out_of_scope_list = None
+
+    engagement_id = str(data.get("engagement_id") or "").strip()
+
+    if has_command:
+        if not raw_command:
+            return JSONResponse(status_code=400, content={"error": "Command is required"})
+        if _RUN_TOOL_SHELL_META_RE.search(raw_command) or (target and _RUN_TOOL_SHELL_META_RE.search(target)):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "Shell metacharacters (&, |, ;, `, $()) are forbidden in /api/run-tool.",
+                    "blocked": True,
+                    "status": "blocked",
+                },
+            )
+        try:
+            cmd_tokens = shlex.split(raw_command)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error": f"Invalid command syntax: {exc}"})
+        if not cmd_tokens:
+            return JSONResponse(status_code=400, content={"error": "Command is required"})
+        tool = cmd_tokens[0]
+        if not target:
+            extracted_targets = _extract_targets_from_command(cmd_tokens)
+            target = extracted_targets[0] if extracted_targets else ""
+        full_cmd = raw_command
+    else:
+        if not tool or not target:
+            return JSONResponse(status_code=400, content={"error": "Tool and Target required"})
+        if any(_RUN_TOOL_SHELL_META_RE.search(val) for val in (tool, target, args_str) if val):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "Shell metacharacters (&, |, ;, `, $()) are forbidden in /api/run-tool.",
+                    "blocked": True,
+                    "status": "blocked",
+                },
+            )
+        try:
+            shlex.split(tool)
+            shlex.split(target)
+            if args_str:
+                shlex.split(args_str)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error": f"Invalid command arguments: {exc}"})
+        full_cmd = " ".join(part for part in (tool, target, args_str) if part).strip()
+
+    eff_target, eff_in_scope, eff_out_of_scope = _resolve_chat_scope(
+        target, scope_list, out_of_scope_list, engagement_id
+    )
+    allowed, policy_status, reason = _evaluate_chat_command(
+        full_cmd,
+        effective_target=eff_target or target,
+        in_scope=eff_in_scope,
+        out_of_scope=eff_out_of_scope,
+    )
+    if not allowed:
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": reason,
+                "reason": reason,
+                "policy_status": policy_status,
+                "blocked": True,
+                "status": "blocked",
+            },
+        )
 
     from tools.tool_manager import ToolManager
     tm = ToolManager()
-    
-    # Run tool via ToolManager
-    result = await tm.execute_tool(tool, f"{target} {args}".strip())
+
+    if has_command:
+        result = await tm.execute(full_cmd)
+    else:
+        result = await tm.execute_tool(tool, f"{target} {args_str}".strip())
+
+    ok = result.returncode == 0 and not getattr(result, "error", None)
+    output_text = (result.stdout or result.stderr or getattr(result, "error", "") or "").strip()
     return {
         "tool": tool,
-        "target": target,
-        "success": result.returncode == 0,
+        "target": eff_target or target,
+        "command": full_cmd,
+        "success": ok,
+        "status": "ok" if ok else "error",
         "stdout": result.stdout,
         "stderr": result.stderr,
+        "output": output_text,
+        "error": getattr(result, "error", None),
         "duration": round(result.duration, 2),
-        "cached": result.cached
+        "cached": result.cached,
     }
 
 
