@@ -429,7 +429,7 @@
       <div class="nav-item" onclick="switchSection('skills')">
         <span class="icon">🎯</span>
         <span>المهارات (Skills)</span>
-        <span id="navSkillsBadge" class="badge">898</span>
+        <span id="navSkillsBadge" class="badge">--</span>
       </div>
       <div class="nav-item" onclick="switchSection('tools')">
         <span class="icon">🛠️</span>
@@ -568,7 +568,7 @@
               <span>المهارات المحملة (Skills)</span>
               <span>🎯</span>
             </div>
-            <div class="metric-hero" id="cardSkillsCount" style="color:var(--cyan);">898</div>
+            <div class="metric-hero" id="cardSkillsCount" style="color:var(--cyan);">--</div>
             <div class="metric-sub">وحدات المنصة + مهارة HunterAI المركزية</div>
           </div>
 
@@ -732,11 +732,9 @@
         <!-- Search & Filter Controls -->
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <input type="text" id="skillsSearchInput" class="cyber-input" style="flex:1;min-width:240px;" placeholder="بحث في المهارات بالاسم أو نوع الثغرة (IDOR, SQLi, SSRF...)..." oninput="filterSkillsTable()">
-          <button class="btn-cyber active" onclick="filterSkillsByPack('all')">الكل (898)</button>
-          <button class="btn-cyber" onclick="filterSkillsByPack('native-hunterai')">Native HunterAI (52)</button>
-          <button class="btn-cyber" onclick="filterSkillsByPack('agentic-bug-hunter')">Bug Hunter (19)</button>
-          <button class="btn-cyber" onclick="filterSkillsByPack('anthropic-cyber')">Anthropic Cyber</button>
-          <button class="btn-cyber" onclick="filterSkillsByPack('trailofbits')">TrailOfBits</button>
+          <button class="btn-cyber active" onclick="filterSkillsByPack('all')">الكل</button>
+          <button class="btn-cyber" onclick="filterSkillsByPack('project_primary')">HunterAI RedTeam (مركزية)</button>
+          <button class="btn-cyber" onclick="filterSkillsByPack('native-hunterai')">Native HunterAI</button>
         </div>
 
         <div class="cyber-card">
@@ -2056,8 +2054,8 @@ Accept: application/json
         document.getElementById('cardAgentsCount').textContent = comp.agents_available || 38;
         document.getElementById('navAgentsBadge').textContent = comp.agents_available || 38;
 
-        document.getElementById('cardSkillsCount').textContent = comp.skills_total || 898;
-        document.getElementById('navSkillsBadge').textContent = comp.skills_total || 898;
+        document.getElementById('cardSkillsCount').textContent = comp.skills_total ?? '--';
+        document.getElementById('navSkillsBadge').textContent = comp.skills_total ?? '--';
 
         document.getElementById('cardToolsCount').textContent = `${comp.tools_installed} / ${comp.tools_catalog}`;
         document.getElementById('navToolsBadge').textContent = comp.tools_installed || 14;

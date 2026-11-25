@@ -15,7 +15,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -346,7 +346,7 @@ async def api_chat(req: Request):
 
 @app.get("/api/global-skills")
 async def get_global_skills():
-    """Global Markdown skills loaded from ~/.agents/skills (for the UI badge)."""
+    """Project Markdown skills loaded from .agents/skills (for the UI badge)."""
     from core.global_skills import global_skills_status
     return global_skills_status()
 
@@ -3531,19 +3531,26 @@ Provide:
 
 # ── OpenCode Skill File Editing APIs ──────────────────────────────────────────
 
+def _validate_skill_name(name: str) -> str:
+    clean = name.strip()
+    if not clean or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", clean):
+        raise HTTPException(status_code=400, detail="Invalid skill name")
+    return clean
+
+
 @app.get("/api/opencode/skill-file")
 async def get_opencode_skill_file(name: str):
-    """Finds and reads the SKILL.md file for any installed skill."""
+    """Finds and reads the canonical or mirrored SKILL.md file for an active skill."""
+    clean_name = _validate_skill_name(name)
     candidates = [
-        WORKSPACE_ROOT / ".opencode" / "skills" / name / "SKILL.md",
-        WORKSPACE_ROOT / ".agents" / "skills" / name / "SKILL.md",
-        WORKSPACE_ROOT / "skills" / name / "SKILL.md",
-        WORKSPACE_ROOT / "skills_library" / name / "SKILL.md",
+        WORKSPACE_ROOT / "skills" / clean_name / "SKILL.md",
+        WORKSPACE_ROOT / ".opencode" / "skills" / clean_name / "SKILL.md",
+        WORKSPACE_ROOT / ".agents" / "skills" / clean_name / "SKILL.md",
     ]
-    skill_dir = WORKSPACE_ROOT / ".opencode" / "skills"
+    skill_dir = WORKSPACE_ROOT / "skills"
     if skill_dir.exists():
         for f in skill_dir.rglob("SKILL.md"):
-            if f.parent.name == name:
+            if f.parent.name == clean_name:
                 candidates.insert(0, f)
                 break
 
@@ -3554,13 +3561,13 @@ async def get_opencode_skill_file(name: str):
             break
 
     if not found_path:
-        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+        raise HTTPException(status_code=404, detail=f"Skill '{clean_name}' not found")
 
     content = found_path.read_text(encoding="utf-8", errors="replace")
     rel = os.path.relpath(found_path, WORKSPACE_ROOT).replace("\\", "/")
     return {
         "status": "ok",
-        "skill_name": name,
+        "skill_name": clean_name,
         "path": rel,
         "content": content,
         "size": len(content),
@@ -3569,21 +3576,39 @@ async def get_opencode_skill_file(name: str):
 
 @app.post("/api/opencode/skill-file/save")
 async def save_opencode_skill_file(req: Request):
-    """Saves updated SKILL.md for a skill."""
+    """Saves updated SKILL.md for a project skill and refreshes discovery mirrors."""
     data = await req.json()
-    name = data.get("name", "").strip()
+    clean_name = _validate_skill_name(data.get("name", ""))
     content = data.get("content", "")
     path_override = data.get("path", "").strip()
 
     if path_override:
         target = _safe_resolve_path(path_override)
+        allowed_roots = (
+            (WORKSPACE_ROOT / "skills").resolve(),
+            (WORKSPACE_ROOT / ".opencode" / "skills").resolve(),
+            (WORKSPACE_ROOT / ".agents" / "skills").resolve(),
+        )
+        if not any(target.is_relative_to(root) for root in allowed_roots):
+            raise HTTPException(status_code=403, detail="Access denied: outside project skill directories")
     else:
-        target = WORKSPACE_ROOT / ".opencode" / "skills" / name / "SKILL.md"
+        target = WORKSPACE_ROOT / "skills" / clean_name / "SKILL.md"
 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
+
+    # Keep generated mirrors synchronized when editing the canonical skill.
+    if target.resolve().is_relative_to((WORKSPACE_ROOT / "skills").resolve()):
+        try:
+            from tools.install_opencode_skills import load_registry, sync
+            entries = load_registry()
+            if any(entry.get("name") == clean_name for entry in entries):
+                sync(entries, clean=False, dry_run=False)
+        except Exception:
+            pass
+
     return {
         "status": "ok",
-        "message": f"Skill '{name}' updated successfully",
-        "path": str(target),
+        "message": f"Skill '{clean_name}' updated successfully",
+        "path": os.path.relpath(target, WORKSPACE_ROOT).replace("\\", "/"),
     }

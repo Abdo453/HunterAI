@@ -152,7 +152,7 @@ class MissionPlanner:
             )
             guidance = await AIReasoningCore.ask_ai(
                 prompt=prompt,
-                system_prompt="You are an autonomous defensive security mission planner. Provide concise strategic guidance."
+                system_prompt="You are an autonomous red-team security mission planner. Provide concise, evidence-driven strategic guidance."
             )
             return guidance.strip() if guidance else None
         except Exception as exc:

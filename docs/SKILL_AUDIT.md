@@ -1,6 +1,6 @@
 # HunterAI skill catalog audit
 
-Generated: `2026-11-25T16:16:58.734083+00:00`
+Generated: `2026-11-25T16:42:43.603468+00:00`
 
 The audit reads every discovered `SKILL.md` line by line. It does not execute skill content.
 

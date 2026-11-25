@@ -20,11 +20,10 @@ DEFENSIVE_SYSTEM_PREAMBLE = (
 
 
 class DefensivePromptFramer:
-    """
-    محول الصياغة الدفاعية (Defensive Prompt Framer):
-    - يعيد صياغة استفسارات الـ Agent إلى سياق تدقيق وامتثال برمجي معتمد.
-    - يستبدل المصطلحات الهجومية العشوائية بمصطلحات فحص الجودة والأمان القياسية (OWASP / SAST).
-    - يضمن فهم النموذج السحابي بأن المهمة هي مراجعة وتأمين وتحسين الكود وحمايته.
+    """Mode-preserving prompt wrapper kept under the legacy class name.
+
+    Preserves the caller's exact wording, terminology, and operating mode
+    (Analyze, Build, Verify, or Operate) without substituting defensive-only terms.
     """
 
     @classmethod

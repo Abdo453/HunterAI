@@ -1,16 +1,15 @@
 """
-Global Skills Loader
-====================
-Reads the Markdown-based global skills installed under ``~/.agents/skills``
-and turns them into prompt context for the chat/agent flow.
+Project Red-Team Skills Loader
+==============================
+Reads the project-local Markdown red-team skill installed under ``.agents/skills``
+inside the HunterAI repository (never reading external machine-global skills by
+default) and formats prompt context for the chat and agent orchestration flow.
 
-Injected into the model prompt:
-  * ``bug-hunting/SKILL.md`` — hunting methodology router
-  * ``BugBountySkills/SKILL_FILES/PAYLOADS/waf_bypass_payloads.md`` — WAF bypass payloads
-
-Archify is reported as an available global skill (for the UI badge) but its
-``SKILL.md`` is not injected into every chat prompt because it is a diagram
-authoring guide, not hunting context.
+Loaded from ``<repo>/.agents/skills``:
+  * ``hunterai-redteam/SKILL.md`` — central red-team entrypoint
+  * ``hunterai-redteam/references/ai-jailbreak-redteam.md`` — core AI/jailbreak red teaming
+  * ``hunterai-redteam/references/web-api-browser.md`` — web, API, browser, and session testing
+  * ``hunterai-redteam/references/agent-mcp.md`` — deployed agent, MCP, and tool boundaries
 """
 from __future__ import annotations
 
@@ -18,27 +17,26 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_ROOT = Path(
-    os.getenv("GLOBAL_SKILLS_DIR", str(Path.home() / ".agents" / "skills"))
+    os.getenv(
+        "HUNTERAI_PROJECT_SKILLS_DIR",
+        os.getenv("GLOBAL_SKILLS_DIR", str(_REPO_ROOT / ".agents" / "skills")),
+    )
 )
 
-# label -> relative path parts inside the skills root
+# label -> relative path parts inside the project skills root
 INJECTED_SKILLS: Dict[str, Tuple[str, ...]] = {
-    "BugHunter": ("bug-hunting", "SKILL.md"),
-    "WAF Bypass": (
-        "BugBountySkills",
-        "SKILL_FILES",
-        "PAYLOADS",
-        "waf_bypass_payloads.md",
-    ),
+    "HunterAI RedTeam": ("hunterai-redteam", "SKILL.md"),
+    "AI & Jailbreak RedTeam": ("hunterai-redteam", "references", "ai-jailbreak-redteam.md"),
+    "Web & API RedTeam": ("hunterai-redteam", "references", "web-api-browser.md"),
+    "Agent & MCP Security": ("hunterai-redteam", "references", "agent-mcp.md"),
 }
 
-# Detected/reported only (not injected into every prompt)
-STATUS_ONLY_SKILLS: Dict[str, Tuple[str, ...]] = {
-    "Archify": ("archify", "SKILL.md"),
-}
+# Machine-global skills are intentionally excluded from project status checks.
+STATUS_ONLY_SKILLS: Dict[str, Tuple[str, ...]] = {}
 
-DEFAULT_MAX_CHARS = int(os.getenv("GLOBAL_SKILLS_MAX_CHARS", "12000"))
+DEFAULT_MAX_CHARS = int(os.getenv("GLOBAL_SKILLS_MAX_CHARS", "16000"))
 
 _cache: Dict[str, Tuple[float, int, str]] = {}
 
@@ -75,7 +73,7 @@ def load_global_skills(
     root: Optional[str] = None,
     max_chars: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Load injected skills and report status for all global skills."""
+    """Load project-local red-team skills and report status."""
     base = Path(root) if root else _DEFAULT_ROOT
     limit = DEFAULT_MAX_CHARS if max_chars is None else max_chars
 
@@ -95,7 +93,6 @@ def load_global_skills(
             f"### {label}\nSource: {path}\n\n{_truncate(text, limit)}"
         )
 
-    # Report-only skills (existence check)
     for label, parts in STATUS_ONLY_SKILLS.items():
         path = _resolve(base, parts)
         text = _read_cached(path)
@@ -110,10 +107,12 @@ def load_global_skills(
     preamble = ""
     if sections:
         preamble = (
-            "# Loaded Global Skills\n"
-            "The following operator skills are active for this session. Use them "
-            "as methodology and payload guidance, and keep the safety/scope rules "
-            "they contain.\n\n" + "\n\n---\n\n".join(sections)
+            "# Loaded Project Red-Team Skills\n"
+            "The following project-local HunterAI red-team skill and core references "
+            "are active for this session. Preserve the requested Analyze, Build, "
+            "Verify, or Operate mode, treat jailbreak and prompt-injection testing "
+            "as core capabilities, and avoid skill-level false refusals.\n\n"
+            + "\n\n---\n\n".join(sections)
         )
 
     return {
@@ -129,7 +128,7 @@ def build_skills_preamble(
     root: Optional[str] = None,
     max_chars: Optional[int] = None,
 ) -> str:
-    """Return the prompt preamble, or '' when no skills are installed."""
+    """Return the prompt preamble, or '' when no project skills are installed."""
     return load_global_skills(root=root, max_chars=max_chars)["preamble"]
 
 
@@ -139,7 +138,7 @@ def global_skills_status(
     """Compact status for the UI badge."""
     data = load_global_skills(root=root, max_chars=DEFAULT_MAX_CHARS)
     loaded = list(data["loaded"])
-    badge = "Loaded Global Skills: " + (", ".join(loaded) if loaded else "none")
+    badge = "Project Red-Team Skills: " + (", ".join(loaded) if loaded else "none")
     return {
         "root": data["root"],
         "loaded": loaded,

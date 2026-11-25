@@ -5,13 +5,14 @@ description: Black-box audit of a DEPLOYED AI agent (not the MCP server) — too
 # /llm-app-audit
 
 Audit a live AI agent product as a black box: you are trying to make it *act*
-with its privileges on someone else's behalf, not just say something. Loads the
-`skills/agentic-app-audit` playbook.
+with its privileges on someone else's behalf, not just say something. Routes
+through `skills/hunterai-redteam/` (`references/ai-jailbreak-redteam.md` and
+`references/agent-mcp.md`).
 
 ## When to use
 
 - The target is a deployed assistant/agent with tools (bookings, email, payments, file/RAG, browsing).
-- You can interact with it but cannot read its MCP server / tool definitions (for that, use `/mcp` + `skills/mcp-server-audit`).
+- You can interact with it but cannot read its MCP server / tool definitions (for that, use `/mcp` + `skills/hunterai-redteam/references/agent-mcp.md`).
 - For pure text-behavior attacks on a chat box, use `/llm-redteam` instead.
 
 ## What it checks (ASI-mapped)

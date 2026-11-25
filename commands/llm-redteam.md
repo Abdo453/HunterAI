@@ -48,7 +48,7 @@ bughunter/tools/llm_redteam.py --list-categories
 | `insecure-output` | emit raw HTML/script for downstream XSS | LLM02 |
 
 For attacking a deployed agent (tools/memory/multi-agent) rather than a chat box,
-see `/llm-app-audit` and `skills/agentic-app-audit`.
+see `/llm-app-audit` and `skills/hunterai-redteam/references/agent-mcp.md`.
 
 ## How detection works
 
@@ -64,5 +64,5 @@ than keyword matching. System-prompt-leak uses a multi-signal heuristic;
 A bare prompt-injection is **Informational** until chained. Escalate:
 injection → **chatbot IDOR** (read another user's data), **data exfil** (the
 markdown-beacon hit proves a working channel), or **RCE** if the agent has a
-code/tool execution capability. See `skills/web2-vuln-classes` §11 and
-`skills/bug-bounty` Agentic AI (ASI01–ASI10).
+code/tool execution capability. See `skills/hunterai-redteam/references/ai-jailbreak-redteam.md`
+and `skills/hunterai-redteam/references/tooling-evidence.md`.

@@ -1,6 +1,6 @@
 # Commands
 
-33 slash commands installed into `~/.claude/commands/` by `install.sh`.
+Project-local slash command references under `commands/`, routed through the central `hunterai-redteam` skill (`skills/registry.json`).
 
 ## Core Workflow
 | Command | What It Does |

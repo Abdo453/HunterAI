@@ -328,7 +328,7 @@ async def chat_with_agent(req: AgentChatRequest):
     agent_id = req.agent_id
     msg = req.message
 
-    # Cognitive Dynamic Skill Injection from 5,200+ security skills
+    # Cognitive Dynamic Skill Injection via centralized hunterai-redteam skill
     injected_skills_names = []
     skill_context = ""
     try:
@@ -429,7 +429,7 @@ async def list_all_skills_detailed(category: Optional[str] = None):
             for s in s_list:
                 sname = s.get("name", "")
                 sdesc = s.get("description", "")
-                spack = s.get("pack", "community-pack")
+                spack = s.get("pack") or s.get("kind") or "hunterai-redteam"
                 
                 req_tools = []
                 for t in ["nmap", "ffuf", "nuclei", "sqlmap", "httpx", "dalfox", "subfinder", "katana"]:

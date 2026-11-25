@@ -72,7 +72,7 @@ class SmartOrchestrator:
         self.memory.add_user_message(user_input)
         context = self.memory.get_context(max_messages=4)
 
-        # Inject the Markdown global skills (bug-hunting + WAF payloads) into
+        # Inject the project-local HunterAI red-team skill preamble into
         # every prompt, regardless of route (auto/local/api).
         skills_preamble = build_skills_preamble()
         if skills_preamble:

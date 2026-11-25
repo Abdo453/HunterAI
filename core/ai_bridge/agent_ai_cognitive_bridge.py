@@ -235,8 +235,9 @@ class AgentAICognitiveBridge:
         model_profile: AIModelProfile
     ) -> Tuple[str, str]:
         """
-        Frames Agent OODA Context into high-precision, defensive prompts
-        tailored specifically to the chosen AI Model's specialization.
+        Frames Agent OODA Context into high-precision red-team prompts
+        tailored specifically to the chosen AI Model's specialization while
+        preserving the requested Analyze, Build, Verify, or Operate mode.
         """
         system_prompt = (
             f"You are {model_profile.display_name}, acting as the {model_profile.role_title} for PentestAI.\n"
@@ -255,7 +256,7 @@ Baseline Observation:
 - Detected Technology: {observed_data.get('tech_stack', 'Unknown')}
 - Hypotheses: {observed_data.get('hypotheses', [])}
 
-Provide optimal, non-destructive validation probes tailored to your expertise ({model_profile.role_title})."""
+Provide concrete validation probes and attack-path reasoning tailored to your expertise ({model_profile.role_title})."""
 
         return system_prompt, user_prompt
 

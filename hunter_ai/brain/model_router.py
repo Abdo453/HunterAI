@@ -94,7 +94,7 @@ class AIModelRouter:
                 provider="ollama",
                 context_window=8192,
                 temperature=0.2,
-                rationale="High-precision defensive attack vector analysis with WhiteRabbitNeo 8B."
+                rationale="High-precision offensive and red-team attack vector analysis with WhiteRabbitNeo 8B."
             )
 
         elif preferred_tier == ModelTierPreference.CLOUD_FAST or intent == TaskIntent.LARGE_REASONING:

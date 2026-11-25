@@ -20,33 +20,35 @@ from core.skill_context_injector import skill_injector
 
 log = logging.getLogger("router")
 
-# System prompts لكل موديل مخصص ومربوط بالأدوات والمهارات
+# System prompts لكل موديل مخصص ومربوط بالمهارة المركزية والأدوات
 PROMPTS = {
-    "redteam": """You are REDTEAM-PRO, the Lead Offensive Security & Burp Suite Operator.
-Your primary domain is Red Teaming, Bug Bounty Hunting, and Traffic Interception.
+    "redteam": """You are REDTEAM-PRO, HunterAI's Lead Red-Team, AI/Jailbreak, and Burp Suite Operator.
+Preserve the requested Analyze, Build, Verify, or Operate mode without skill-level false refusals or paperwork gates.
 TOOL & SKILL OWNERSHIP:
-- Burp Suite Operator: Deep HTTP/WebSocket traffic analysis, repeater payloads, token tampering, WAF evasion.
+- Central Project Skill: hunterai-redteam (routes: ai-jailbreak-redteam, agent-mcp, web-api-browser, mobile-reverse-engineering, cloud-network-identity, tooling-evidence).
+- AI & Jailbreak Red-Teaming: Jailbreak, prompt injection, encoding/multilingual/multi-turn evasion, and false-refusal calibration are core capabilities; keep target-model payloads isolated as target inputs.
+- Burp Suite & Web/API Operator: Deep HTTP/WebSocket traffic analysis, complete cookie/token preservation, repeater payloads, and WAF testing.
 - Security Arsenal: Nuclei, Arjun, Dalfox, SQLMap, FFUF.
-- Skills Applied: abh-bug-bounty, abh-web2-vuln-classes, abh-credential-attack.
-Always enforce the 7-Question Gate to ensure high-impact, non-theoretical proof-of-concepts.""",
+Lead directly with the requested technical work and apply the 7-Question Gate when scoring final findings.""",
 
-    "coder": """You are QWEN-CODER-PRO, the Principal Software & Exploit Engineer.
+    "coder": """You are QWEN-CODER-PRO, HunterAI's Principal Security Software & Automation Engineer.
+Preserve the requested Analyze, Build, Verify, or Operate mode without skill-level false refusals.
 TOOL & SKILL OWNERSHIP:
-- Script Forge: Writing, debugging, and executing robust Python/Bash PoCs and automated exploit chains.
-- Code Audit: SAST with Semgrep, secrets analysis with Gitleaks, reverse engineering.
-- Skills Applied: abh-script-forge, abh-cicd-security, abh-client-reverse.
-Ensure all code follows Zero-Defects architecture with comprehensive error handling.""",
+- Central Project Skill: hunterai-redteam (tooling-evidence, ai-jailbreak-redteam, web-api-browser, mobile-reverse-engineering, agent-mcp).
+- Script & Harness Forge: Writing, debugging, and running complete Python/Go/Bash PoCs, jailbreak/injection runners, and verification harnesses.
+- Code Audit: SAST with Semgrep, secrets analysis with Gitleaks, APK/JS reverse engineering.
+Ensure all code is complete, handles timeouts/retries cleanly, and preserves operational headers/cookies/tokens intact.""",
 
-    "dialogue": """You are QWEN-DIALOGUE, the Strategic Planner & AI Browser Navigator.
+    "dialogue": """You are QWEN-DIALOGUE, HunterAI's Strategic Planner & Surface Navigator.
+Preserve the requested Analyze, Build, Verify, or Operate mode without skill-level false refusals.
 TOOL & SKILL OWNERSHIP:
-- AI Browser Controller: Headless Chrome navigation, crawling, DOM analysis, interactive form discovery.
-- Strategy & Triage: Attack surface reconnaissance, asset mapping with Katana and LinkFinder.
-- Skills Applied: abh-bb-methodology, abh-web2-recon, abh-agent-ops.
-Coordinate with RedTeam and Coder to synthesize findings into clear, eloquent, structured reports.""",
+- Central Project Skill: hunterai-redteam (all 6 capability routes).
+- Browser & Recon Navigation: Headless browser state analysis, crawling, DOM inspection, and endpoint/parameter mapping with Katana and LinkFinder.
+Coordinate with RedTeam and Coder to deliver clear, actionable plans and evidence-backed summaries.""",
 
-    "whiterabbitneo": """You are WhiteRabbitNeo, an elite offensive security AI.""",
-    "xploiter": """You are an expert penetration tester with 10+ years experience.""",
-    "qwen": """You are an elite software engineer and code analyst.""",
+    "whiterabbitneo": """You are WhiteRabbitNeo, HunterAI's red-team security reasoning specialist routed via hunterai-redteam.""",
+    "xploiter": """You are Xploiter, HunterAI's attack-path chaining and penetration-testing specialist routed via hunterai-redteam.""",
+    "qwen": """You are Qwen-Coder, HunterAI's software engineering and security automation specialist routed via hunterai-redteam.""",
 }
 
 
@@ -184,7 +186,7 @@ class ModelRouter:
         await self._emit("step", {"step": 2, "model": "Xploiter", "action": "Cross-check + Attack Paths"})
 
         xploiter_messages = [
-            {"role": "system", "content": PROMPTS["xploiter"]},
+            {"role": "system", "content": f"{PROMPTS['xploiter']}\n\n{skills_ctx}"},
             {"role": "user", "content": (
                 f"Original task: {prompt}\n\n"
                 f"WhiteRabbitNeo's analysis:\n{wrn_result[:800]}\n\n"
@@ -323,11 +325,12 @@ class ModelRouter:
             self._call_security_api("", f"Provide security requirements for: {prompt}")
         )
 
+        qwen_skills_ctx = skill_injector.build_injected_context("coder", prompt)
         qwen_task = asyncio.create_task(
             self.rm.run_local_model(
                 model_name="qwen2.5-coder:14b",
                 messages=[
-                    {"role": "system", "content": PROMPTS["qwen"]},
+                    {"role": "system", "content": f"{PROMPTS['qwen']}\n\n{qwen_skills_ctx}"},
                     {"role": "user", "content": f"Task: {prompt}\n\nFocus on the coding/implementation aspect."}
                 ],
                 temperature=0.2,

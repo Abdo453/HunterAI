@@ -1,6 +1,6 @@
 {
   "schema": "hunterai-active-skills/1",
-  "generated_at": "2026-11-25T16:16:58.396855+00:00",
+  "generated_at": "2026-11-25T16:42:43.218575+00:00",
   "count": 1,
   "primary": "hunterai-redteam",
   "skills": [
@@ -26,23 +26,33 @@
             "llm",
             "model",
             "prompt",
+            "prompt injection",
             "jailbreak",
             "guardrail",
+            "guardrails",
             "rag",
             "system prompt",
-            "refusal"
+            "refusal",
+            "chatbot",
+            "evasion",
+            "جلبريك",
+            "حقن",
+            "نماذج"
           ]
         },
         {
           "path": "references/agent-mcp.md",
           "keywords": [
             "agent",
+            "agentic",
             "mcp",
             "tool",
             "memory",
             "plugin",
             "skill",
-            "delegation"
+            "delegation",
+            "hook",
+            "supply chain"
           ]
         },
         {
@@ -52,6 +62,7 @@
             "api",
             "browser",
             "cookie",
+            "cookies",
             "token",
             "waf",
             "session",
@@ -60,7 +71,28 @@
             "oauth",
             "ssrf",
             "xss",
-            "sqli"
+            "sqli",
+            "idor",
+            "bola",
+            "bfla",
+            "csrf",
+            "xxe",
+            "ssti",
+            "lfi",
+            "rce",
+            "smuggling",
+            "websocket",
+            "cors",
+            "crlf",
+            "nosql",
+            "jwt",
+            "redirect",
+            "403",
+            "burp",
+            "recon",
+            "subdomain",
+            "domain",
+            "http"
           ]
         },
         {
@@ -69,13 +101,17 @@
             "android",
             "ios",
             "apk",
+            "xapk",
+            "aab",
             "ipa",
             "mobile",
             "frida",
             "reverse",
             "binary",
             "decompile",
-            "device"
+            "device",
+            "pinning",
+            "jadx"
           ]
         },
         {
@@ -92,7 +128,13 @@
             "container",
             "kubernetes",
             "host",
-            "cicd"
+            "cicd",
+            "kerberos",
+            "adcs",
+            "smb",
+            "nmap",
+            "ssh",
+            "dns"
           ]
         },
         {
@@ -107,7 +149,13 @@
             "report",
             "triage",
             "poc",
-            "automation"
+            "automation",
+            "web3",
+            "solidity",
+            "smart contract",
+            "nuclei",
+            "sqlmap",
+            "ffuf"
           ]
         }
       ]

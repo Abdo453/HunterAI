@@ -7,7 +7,7 @@ The gap this closes (docs/CAPABILITY-GAPS.md → "No automatic PoC capture
 hunter to hand-assemble proof. A report is only as strong as its evidence — the
 exact request, the exact response, a copy-paste reproduction, and (when possible)
 a screenshot. This produces all of that as one folder, laid out exactly the way
-skills/report-writing and commands/report.md expect:
+skills/hunterai-redteam/references/tooling-evidence.md and commands/report.md expect:
 
     findings/<target>-<vuln-class>/evidence/<finding-id>/
     ├── request.http      raw HTTP request (what you sent)

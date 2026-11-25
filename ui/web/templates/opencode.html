@@ -731,9 +731,7 @@
         <input type="text" id="skillSearchInput" class="repeater-input" style="width:100%;font-size:11px;margin-bottom:6px;" placeholder="بحث في مسارات المهارة المركزية..." oninput="filterSkills()">
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
           <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('all')">الكل</button>
-          <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('agentic-bug-hunter')">Bug Hunter</button>
-          <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('anthropic-cyber')">Cyber</button>
-          <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('trailofbits')">TrailOfBits</button>
+          <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('project_primary')">HunterAI RedTeam (المركزية)</button>
         </div>
         <div id="skillsListContainer" style="display:flex;flex-direction:column;gap:6px;">
           <div style="color:#64748b;padding:10px;text-align:center;">جاري تحميل المهارات...</div>
@@ -1227,7 +1225,8 @@ Accept: */*
       const q = document.getElementById('skillSearchInput').value.toLowerCase().trim();
 
       const filtered = allSkills.filter(s => {
-        const matchesPack = (currentSkillFilter === 'all') || (s.pack === currentSkillFilter);
+        const packLabel = s.pack || s.kind || 'project_primary';
+        const matchesPack = (currentSkillFilter === 'all') || (packLabel === currentSkillFilter);
         const matchesQ = !q || s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q));
         return matchesPack && matchesQ;
       });
@@ -1238,12 +1237,13 @@ Accept: */*
       }
 
       filtered.slice(0, 100).forEach(s => {
+        const packLabel = s.pack || s.kind || 'project_primary';
         const card = document.createElement('div');
         card.className = 'skill-card';
         card.innerHTML = `
           <div class="skill-card-top">
             <span class="skill-card-title">${escapeHtml(s.name)}</span>
-            <span class="skill-card-pack">${escapeHtml(s.pack)}</span>
+            <span class="skill-card-pack">${escapeHtml(packLabel)}</span>
           </div>
           <div class="skill-card-desc">${escapeHtml(s.description || 'No description')}</div>
           <div style="display:flex;gap:4px;margin-top:4px;">

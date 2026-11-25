@@ -117,17 +117,27 @@ class SkillContextInjector:
         return selected
 
     @staticmethod
-    def _route_for_query(skill: Dict[str, Any], query: str) -> Optional[str]:
+    def _keyword_matches(keyword: str, query_lower: str) -> bool:
+        kw = keyword.lower().strip()
+        if not kw:
+            return False
+        if re.fullmatch(r"[a-z0-9_ -]+", kw):
+            pattern = r"(?<![a-z0-9_])" + re.escape(kw) + r"(?![a-z0-9_])"
+            return re.search(pattern, query_lower) is not None
+        return kw in query_lower
+
+    @classmethod
+    def _route_for_query(cls, skill: Dict[str, Any], query: str) -> Optional[str]:
         query_lower = query.lower()
         ranked = []
         for route in skill.get("routes", []):
-            score = sum(1 for keyword in route.get("keywords", []) if keyword.lower() in query_lower)
+            score = sum(1 for keyword in route.get("keywords", []) if cls._keyword_matches(keyword, query_lower))
             if score:
                 ranked.append((score, route.get("path", "")))
         ranked.sort(key=lambda item: item[0], reverse=True)
         return ranked[0][1] if ranked else None
 
-    def extract_skill_summary(self, skill: Dict[str, Any], query: str = "", max_chars: int = 1200) -> str:
+    def extract_skill_summary(self, skill: Dict[str, Any], query: str = "", max_chars: int = 3600) -> str:
         """
         قراءة التعليمات الأساسية من ملف SKILL.md للمهارة
         """
@@ -162,7 +172,7 @@ class SkillContextInjector:
                 if char_count >= max_chars:
                     break
 
-            summary = "\n".join(summary_lines[:20])
+            summary = "\n".join(summary_lines[:24])
             route = self._route_for_query(skill, query)
             if route:
                 reference = (skill_dir / route).resolve(strict=False)
@@ -189,7 +199,7 @@ class SkillContextInjector:
         for skill in relevant:
             name = skill.get("name", "")
             title = skill.get("title", name)
-            summary = self.extract_skill_summary(skill, query=query, max_chars=1600)
+            summary = self.extract_skill_summary(skill, query=query, max_chars=3600)
             if not summary:
                 summary = skill.get("description", "")[:250]
 
