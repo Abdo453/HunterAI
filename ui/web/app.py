@@ -400,6 +400,309 @@ async def save_settings(req: Request):
     }
 
 
+_LOCAL_FILE_EXTS = frozenset({
+    ".py", ".sh", ".txt", ".json", ".xml", ".yaml", ".yml", ".md", ".csv",
+    ".log", ".db", ".sqlite", ".sqlite3", ".html", ".css", ".js", ".ts",
+    ".tsx", ".go", ".rs", ".sol", ".apk", ".jar", ".zip", ".tar", ".gz",
+    ".pdf", ".png", ".jpg", ".svg", ".woff2",
+})
+_FORBIDDEN_SHELL_TOOLS = frozenset({
+    "bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh",
+    "rm", "rmdir", "del", "erase", "format", "mkfs", "dd", "shred", "wipefs",
+    "shutdown", "reboot", "halt", "poweroff", "init", "nc", "ncat", "netcat",
+    "socat", "crontab", "systemctl", "schtasks", "reg", "wevtutil", "mimikatz",
+    "chmod", "chown", "useradd", "usermod", "passwd",
+})
+_INLINE_EXEC_INTERPRETERS = frozenset({"python", "python3", "py", "node", "perl", "ruby", "php"})
+_INLINE_EXEC_FLAGS = frozenset({"-c", "-e", "-r", "--eval", "-command"})
+_METADATA_HOST_LITERALS = frozenset({
+    "169.254.169.254", "100.100.100.200", "fd00:ec2::254",
+    "metadata.google.internal", "metadata.internal", "instance-data",
+})
+_SENSITIVE_CMD_PATH_RE = re.compile(
+    r"(?i)(?:^|[/\\])(?:\.env(?:\.|$)|authorization_grant\.json$|\.git(?:/|\\|$)|"
+    r"id_rsa$|id_ed25519$|/etc/shadow$|/etc/passwd$|ntds\.dit$|[^/\s]+\.(?:pem|key)$)"
+)
+_UNSAFE_EXTRA_CMD_RE = re.compile(
+    r"(?i)(?:/dev/(?:tcp|udp)/|\bmkfifo\b|pty\.spawn|--os-shell|--os-pwn|--sql-shell|--priv-esc|--upload|--file-write|--file-dest)"
+)
+_DISALLOWED_URL_SCHEME_RE = re.compile(
+    r"(?i)\b(?:file|gopher|dict|ldap|ldaps|ftp|tftp|php|expect|jar)://"
+)
+_DOMAIN_TOKEN_RE = re.compile(r"^(?:[a-z0-9-]+\.)+[a-z]{2,63}$", re.IGNORECASE)
+
+
+def _resolve_chat_scope(
+    requested_target: str,
+    requested_scope: Optional[List[str]],
+    requested_out_of_scope: Optional[List[str]],
+    engagement_id: str,
+) -> Tuple[str, List[str], List[str]]:
+    """Resolve engagement target and scope from request or PlatformStore (never self-authorizing)."""
+    in_scope = [str(s).strip() for s in (requested_scope or []) if str(s).strip()]
+    out_of_scope = [str(s).strip() for s in (requested_out_of_scope or []) if str(s).strip()]
+    eff_target = requested_target.strip()
+
+    use_store_scope = (requested_scope is None) or (not in_scope and bool(engagement_id))
+    if use_store_scope or not eff_target:
+        try:
+            from core.platform_store import get_platform_store
+
+            store = get_platform_store()
+            ctx = store.get_context()
+            eff_eng_id = engagement_id or ctx.get("active_engagement_id")
+            eng = store.get_engagement(eff_eng_id) if eff_eng_id else None
+            if eng is None and not eff_eng_id:
+                engagements = store.list_engagements(limit=1)
+                if engagements:
+                    eng = engagements[0]
+            if eng and str(eng.get("status") or "authorized").lower() not in ("revoked", "disabled", "blocked"):
+                if use_store_scope and not in_scope:
+                    in_scope = [str(s).strip() for s in (eng.get("in_scope") or []) if str(s).strip()]
+                if not out_of_scope:
+                    out_of_scope = [str(s).strip() for s in (eng.get("out_of_scope") or []) if str(s).strip()]
+                if not eff_target:
+                    eff_target = str(eng.get("target") or "").strip()
+        except Exception:
+            pass
+
+    return eff_target, in_scope, out_of_scope
+
+
+def _expand_chat_command_lines(raw_blocks: List[str]) -> Tuple[List[str], List[Dict[str, str]]]:
+    """Split extracted markdown code blocks into single-line commands, blocking continuations/nulls."""
+    cmds: List[str] = []
+    blocked: List[Dict[str, str]] = []
+    for block in raw_blocks:
+        if "\x00" in block:
+            blocked.append({
+                "command": block,
+                "status": "BLOCKED_RISK",
+                "reason": "Null byte is forbidden in shell commands.",
+            })
+            continue
+        lines = block.splitlines()
+        if any(ln.rstrip().endswith("\\") for ln in lines if ln.strip()):
+            blocked.append({
+                "command": block,
+                "status": "BLOCKED_RISK",
+                "reason": "Multiline backslash line continuation is forbidden.",
+            })
+            continue
+        for ln in lines:
+            stripped = ln.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            cmds.append(stripped)
+    return cmds, blocked
+
+
+def _extract_targets_from_command(tokens: List[str]) -> List[str]:
+    """Extract URLs, IP literals (including hex/octal/int/IPv6), and domain/host targets from CLI tokens."""
+    from urllib.parse import urlparse
+    from core.scope_engine import HARD_BLOCKED_HOSTS, normalize_ip_literal
+
+    targets: List[str] = []
+    seen = set()
+
+    def _add(val: str) -> None:
+        v = val.strip()
+        if v and v not in seen:
+            seen.add(v)
+            targets.append(v)
+
+    def _inspect_candidate(candidate: str) -> None:
+        if not candidate:
+            return
+        if "://" in candidate:
+            parsed = urlparse(candidate)
+            if parsed.hostname:
+                _add(candidate)
+            return
+
+        if "," in candidate and not candidate.startswith("["):
+            for part in candidate.split(","):
+                _inspect_candidate(part.strip("'\",;)"))
+            return
+
+        if candidate.startswith("["):
+            inner = candidate[1:].split("]", 1)[0]
+            if normalize_ip_literal(inner) is not None:
+                _add(inner)
+            return
+
+        if candidate.count(":") >= 2:
+            if normalize_ip_literal(candidate) is not None:
+                _add(candidate)
+                return
+            for part in candidate.split(":"):
+                if part and not (part.isdigit() and int(part) <= 65535):
+                    _inspect_candidate(part)
+            return
+
+        host_part = candidate.split("/", 1)[0]
+        if host_part.count(":") == 1:
+            h, p = host_part.split(":", 1)
+            if p.isdigit():
+                host_part = h
+            else:
+                _inspect_candidate(h)
+                _inspect_candidate(p)
+                return
+
+        low_host = host_part.lower()
+        if low_host in HARD_BLOCKED_HOSTS or low_host in _METADATA_HOST_LITERALS:
+            _add(low_host)
+            return
+
+        # Avoid treating small port numbers (e.g. "-p 80") as 0.0.0.80 via inet_aton
+        is_small_port = host_part.isdigit() and int(host_part) <= 65535
+        if not is_small_port and normalize_ip_literal(host_part) is not None:
+            _add(host_part)
+            return
+
+        if _DOMAIN_TOKEN_RE.fullmatch(low_host) and not candidate.startswith(("./", "../", "/")):
+            if Path(low_host).suffix.lower() not in _LOCAL_FILE_EXTS:
+                _add(candidate)
+
+    for raw_tok in tokens[1:]:
+        candidate = raw_tok
+        if candidate.startswith("-"):
+            if "=" not in candidate:
+                continue
+            candidate = candidate.split("=", 1)[1]
+        _inspect_candidate(candidate.strip("'\",;)"))
+
+    return targets
+
+
+def _evaluate_chat_command(
+    cmd: str,
+    *,
+    effective_target: str,
+    in_scope: List[str],
+    out_of_scope: List[str],
+) -> Tuple[bool, str, str]:
+    """Enforce fail-closed scope, hard safety invariants, RiskClassifier, and PolicyEngine on a shell command."""
+    import ipaddress
+    import shlex
+    from urllib.parse import urlparse
+    from core.copilot_service import evaluate_action_policy
+    from core.policy.red_team import (
+        _DESTRUCTIVE_PATTERNS,
+        _EVASION_PATTERNS,
+        _EXFIL_PATTERNS,
+        _PERSISTENCE_PATTERNS,
+    )
+    from core.scope_engine import INVIOLABLE_IPV4_SUBNETS, normalize_ip_literal
+
+    if not in_scope:
+        return (
+            False,
+            "BLOCKED_SCOPE",
+            "No authorized target scope configured (empty scope fails closed). Register an engagement or supply scope first.",
+        )
+
+    if any(ord(ch) < 32 and ch != "\t" for ch in cmd):
+        return False, "BLOCKED_RISK", "Control characters are forbidden in shell commands."
+
+    if _DISALLOWED_URL_SCHEME_RE.search(cmd):
+        return False, "BLOCKED_INVARIANT", "Disallowed non-HTTP(S) URL scheme in command."
+
+    if _UNSAFE_EXTRA_CMD_RE.search(cmd):
+        return False, "BLOCKED_INVARIANT", "Prohibited backdoor/shell-escape or interactive exploit flag detected."
+
+    for pat, label in (
+        (_DESTRUCTIVE_PATTERNS, "destructive operation"),
+        (_PERSISTENCE_PATTERNS, "backdoor/persistence/C2 pattern"),
+        (_EXFIL_PATTERNS, "exfiltration/credential-dump pattern"),
+        (_EVASION_PATTERNS, "log-tampering/evasion pattern"),
+    ):
+        if pat.search(cmd):
+            return False, "BLOCKED_INVARIANT", f"Command blocked by hard safety invariant ({label})."
+
+    try:
+        tokens = shlex.split(cmd)
+    except ValueError as exc:
+        return False, "BLOCKED_RISK", f"Malformed command quoting: {exc}"
+
+    if not tokens:
+        return False, "BLOCKED_RISK", "Empty command."
+
+    for raw_tok in tokens[1:]:
+        tok_val = raw_tok.split("=", 1)[1] if (raw_tok.startswith("-") and "=" in raw_tok) else raw_tok
+        low_tok = tok_val.strip("'\"").lower()
+        if not low_tok.startswith(("http://", "https://")) and _SENSITIVE_CMD_PATH_RE.search(low_tok):
+            return False, "BLOCKED_INVARIANT", "Access to sensitive host credentials/secrets is prohibited."
+
+    tool_name = Path(tokens[0]).name.lower()
+    if tool_name.endswith(".exe"):
+        tool_name = tool_name[:-4]
+
+    if tool_name in _FORBIDDEN_SHELL_TOOLS:
+        return False, "BLOCKED_INVARIANT", f"Tool/shell '{tool_name}' is blocked by hard safety policy."
+
+    if tool_name in _INLINE_EXEC_INTERPRETERS and any(
+        tok.lower().split("=", 1)[0] in _INLINE_EXEC_FLAGS for tok in tokens[1:]
+    ):
+        return False, "BLOCKED_INVARIANT", f"Inline code execution via '{tool_name}' is prohibited."
+
+    cmd_targets = _extract_targets_from_command(tokens)
+    targets_to_check: List[str] = []
+    seen = set()
+    for t in cmd_targets + ([effective_target] if effective_target else []):
+        if t and t not in seen:
+            seen.add(t)
+            targets_to_check.append(t)
+
+    if not targets_to_check:
+        targets_to_check = [""]
+
+    for tgt in targets_to_check:
+        # Unconditional cloud metadata check before PolicyEngine
+        host = tgt.strip().lower()
+        if "://" in host:
+            host = (urlparse(host).hostname or host).lower()
+        elif host.startswith("["):
+            host = host[1:].split("]", 1)[0]
+        else:
+            host = host.split("/", 1)[0]
+            if host.count(":") == 1:
+                host = host.split(":", 1)[0]
+        if host in _METADATA_HOST_LITERALS:
+            return False, "BLOCKED_INVARIANT", f"Metadata host '{host}' is strictly forbidden."
+        ip_obj = normalize_ip_literal(host) if host and not (host.isdigit() and int(host) <= 65535) else None
+        if ip_obj is not None:
+            norm_ip = (
+                ip_obj.ipv4_mapped
+                if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped is not None
+                else ip_obj
+            )
+            if str(norm_ip) in _METADATA_HOST_LITERALS or (
+                isinstance(norm_ip, ipaddress.IPv4Address) and norm_ip in INVIOLABLE_IPV4_SUBNETS[1]
+            ):
+                return False, "BLOCKED_INVARIANT", f"Metadata/link-local IP '{host}' is strictly forbidden."
+
+        policy = evaluate_action_policy(
+            action_type="CLI_TOOL",
+            target=tgt,
+            tool_name=tool_name,
+            command_args=cmd,
+            in_scope=in_scope,
+            out_of_scope=out_of_scope,
+            allow_active_tests=True,
+            rationale="Requested via /api/chat",
+        )
+        if not policy.get("allowed"):
+            return (
+                False,
+                str(policy.get("status") or "BLOCKED_POLICY"),
+                str(policy.get("reason") or "Blocked by PolicyEngine"),
+            )
+
+    return True, "APPROVED", "Command verified against scope and policy invariants."
+
+
 # ── Command Center: AI Chat + Command Execution ───────────────────────────
 @app.post("/api/chat")
 async def api_chat(req: Request):
@@ -423,6 +726,13 @@ async def api_chat(req: Request):
     target = str(data.get("target") or "").strip()
     raw_scope = data.get("scope")
     scope_list = [str(s).strip() for s in raw_scope if str(s).strip()] if isinstance(raw_scope, list) else None
+    raw_out_of_scope = data.get("out_of_scope")
+    out_of_scope_list = (
+        [str(s).strip() for s in raw_out_of_scope if str(s).strip()]
+        if isinstance(raw_out_of_scope, list)
+        else None
+    )
+    engagement_id = str(data.get("engagement_id") or "").strip()
 
     if not message:
         return JSONResponse(status_code=400, content={"error": "message is required"})
@@ -457,6 +767,7 @@ async def api_chat(req: Request):
 
     commands = _extract_commands(ai_text)
     results = []
+    blocked_results = []
     terminal_parts = []
     exec_note = "(no commands executed)"
 
@@ -465,27 +776,31 @@ async def api_chat(req: Request):
     elif not authorized:
         exec_note = "(execution skipped: authorized=false)"
     elif commands:
-        scope_ok = True
-        if target or scope_list is not None:
-            from core.copilot_service import evaluate_action_policy
+        eff_target, eff_in_scope, eff_out_of_scope = _resolve_chat_scope(
+            target, scope_list, out_of_scope_list, engagement_id
+        )
+        cmd_lines, split_blocked = _expand_chat_command_lines(commands)
+        for blk in split_blocked:
+            blocked_results.append(blk)
+            terminal_parts.append(f"[!] BLOCKED ({blk['status']}): {blk['command']} — {blk['reason']}")
 
-            policy = evaluate_action_policy(
-                action_type="CLI_TOOL",
-                target=target,
-                tool_name="shell",
-                command_args=target,
-                in_scope=scope_list or [],
-                allow_active_tests=True,
-                rationale="Requested via /api/chat",
+        for cmd in cmd_lines:
+            allowed, status, reason = _evaluate_chat_command(
+                cmd,
+                effective_target=eff_target,
+                in_scope=eff_in_scope,
+                out_of_scope=eff_out_of_scope,
             )
-            if not policy["allowed"]:
-                scope_ok = False
-                exec_note = f"(execution blocked by scope/policy: {policy['reason']})"
-        if scope_ok:
-            for cmd in commands:
-                c, out, err, rc = await _run_command(cmd)
-                results.append({"command": c, "stdout": out, "stderr": err, "exit_code": rc})
-                terminal_parts.append(f"$ {c}\n{out}{err}")
+            if not allowed:
+                blocked_results.append({"command": cmd, "status": status, "reason": reason})
+                terminal_parts.append(f"[!] BLOCKED ({status}): {cmd} — {reason}")
+                continue
+            c, out, err, rc = await _run_command(cmd)
+            results.append({"command": c, "stdout": out, "stderr": err, "exit_code": rc})
+            terminal_parts.append(f"$ {c}\n{out}{err}")
+
+        if not results and blocked_results:
+            exec_note = f"(execution blocked by scope/policy: {blocked_results[0]['reason']})"
 
     return {
         "response": ai_text,
@@ -494,6 +809,7 @@ async def api_chat(req: Request):
         "allow_exec": allow_exec,
         "executed": results,
         "commands": results,
+        "blocked": blocked_results,
         "terminal_output": "\n".join(terminal_parts) if terminal_parts else exec_note,
     }
 

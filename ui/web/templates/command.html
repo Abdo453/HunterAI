@@ -95,11 +95,15 @@
     #scope-input,
     #api-key-input,
     #model-input,
-    #provider-status,
-    #chat-input {
+    #provider-status {
       direction: ltr;
       unicode-bidi: isolate;
       text-align: left;
+    }
+
+    #chat-input {
+      direction: inherit;
+      text-align: start;
     }
 
     .save-status-line {
@@ -134,28 +138,28 @@
   <aside id="panel-left">
     <div class="panel-brand">
       <div>
-        <div class="panel-brand-main">HunterAI</div>
-        <div class="panel-brand-sub">Command Center — Autonomous Agent</div>
+        <div class="panel-brand-main" data-i18n="common.appName">HunterAI</div>
+        <div class="panel-brand-sub" data-i18n="common.appSubtitle">مركز القيادة السيبراني الموحد</div>
       </div>
     </div>
 
-    <h2 class="panel-title">Target Configuration</h2>
+    <h2 class="panel-title" data-i18n="targets.title">إدارة الأهداف وحماية النطاق</h2>
     <div class="setting-row">
-      <label class="setting-label" for="target-input">Target Host / URL</label>
+      <label class="setting-label" for="target-input" data-i18n="targets.targetUrl">الرابط الأساسي للهدف</label>
       <input type="text" id="target-input" class="setting-input ltr-isolate" placeholder="https://target.com" value="https://target.local">
     </div>
     <div class="setting-row">
-      <label class="setting-label" for="scope-input">Scope (comma separated)</label>
+      <label class="setting-label" for="scope-input" data-i18n="targets.inScopeDomains">النطاقات المصرح بها (In-Scope)</label>
       <input type="text" id="scope-input" class="setting-input ltr-isolate" placeholder="target.local, api.target.local" value="target.local">
     </div>
     <label class="cmd-check-row" style="display:flex;align-items:center;gap:8px;font-size:0.78em;color:var(--text-muted);cursor:pointer;margin-top:4px;min-height:44px;">
       <input type="checkbox" id="authorized-chk" checked>
-      <span>Authorized Scope</span>
+      <span data-i18n="redteam.grantScope">النطاق المعتمد</span>
     </label>
 
-    <h2 class="panel-title">AI Providers &amp; API Keys</h2>
+    <h2 class="panel-title" data-i18n="settings.apiKeysTitle">حالة مفاتيح API السحابية (مقنّعة)</h2>
     <div class="setting-row">
-      <label class="setting-label" for="provider-select">Provider</label>
+      <label class="setting-label" for="provider-select" data-i18n="models.colProvider">المزود</label>
       <select id="provider-select" class="provider-select">
         <option value="nvidia">NVIDIA NIM</option>
         <option value="gemini">Google Gemini</option>
@@ -164,62 +168,62 @@
       </select>
     </div>
     <div class="setting-row">
-      <label class="setting-label" for="api-key-input">API Key</label>
+      <label class="setting-label" for="api-key-input" data-ar="مفتاح API" data-en="API Key">مفتاح API</label>
       <input type="password" id="api-key-input" class="setting-input ltr-isolate" placeholder="sk-... / nvapi-...">
-      <div class="key-hint">Persisted to .env · loaded live (no restart)</div>
+      <div class="key-hint" data-i18n="settings.apiKeysNote">تُقرأ المفاتيح بأمان من ملف البيئة دون كشف قيمها للمتصفح.</div>
     </div>
     <div class="setting-row">
-      <label class="setting-label" for="model-input">Model</label>
+      <label class="setting-label" for="model-input" data-i18n="copilot.modelLabel">النموذج</label>
       <input type="text" id="model-input" class="setting-input ltr-isolate" placeholder="e.g. nvidia/nemotron-3-super-120b-a12b">
     </div>
-    <button type="button" id="save-settings-btn" class="cyber-btn cyber-btn-launch btn-save">Save API Keys to .env</button>
+    <button type="button" id="save-settings-btn" class="cyber-btn cyber-btn-launch btn-save" data-i18n="settings.saveSettings">حفظ الإعدادات</button>
     <div id="save-status" class="save-status-line" aria-live="polite"></div>
 
-    <h2 class="panel-title">Command Execution</h2>
+    <h2 class="panel-title" data-i18n="copilot.modeAuto">تنفيذ أوامر تلقائي (Autonomous)</h2>
     <label class="cmd-check-row" style="display:flex;align-items:center;gap:8px;font-size:0.78em;color:var(--text-muted);cursor:pointer;min-height:44px;">
       <input type="checkbox" id="exec-chk" checked>
-      <span>Allow Live Command Execution</span>
+      <span data-ar="السماح بالتنفيذ المباشر للأوامر" data-en="Allow Live Command Execution">السماح بالتنفيذ المباشر للأوامر</span>
     </label>
-    <div id="exec-status" class="status-chip ok" style="display:none;margin-top:6px;">Execution: enabled</div>
-    <div class="warning" style="margin-top:8px;font-size:0.75em;color:var(--text-muted);">
-      Commands only run inside your authorized engagement scope.
+    <div id="exec-status" class="status-chip ok" style="display:none;margin-top:6px;" data-i18n="common.enabled">مفعّل</div>
+    <div class="warning" style="margin-top:8px;font-size:0.75em;color:var(--text-muted);" data-i18n="targets.validatorDesc">
+      يطبق قواعد الاشتباك ويمنع لمس أي أصل خارج النطاق أو عناوين الشبكة الداخلية.
     </div>
 
-    <h2 class="panel-title">Provider Status</h2>
+    <h2 class="panel-title" data-i18n="models.colStatus">الحالة</h2>
     <div id="provider-status" class="ltr-isolate"></div>
   </aside>
 
   <section id="panel-chat">
     <header class="chat-header">
-      <h1 class="chat-title"><span>●</span> HunterAI Command Center</h1>
+      <h1 class="chat-title"><span aria-hidden="true">●</span> <span data-i18n="common.appName">HunterAI</span> · <span data-i18n="common.appSubtitle">مركز القيادة السيبراني الموحد</span></h1>
       <div class="cmd-hdr-actions">
-        <a href="/" id="cmdWorkspaceLink" class="cyber-btn">Workspace</a>
-        <button type="button" id="cmdLangToggle" class="cyber-btn" aria-label="Switch language">EN</button>
-        <button type="button" id="cmdThemeToggle" class="cyber-btn" aria-label="Toggle theme">Theme</button>
-        <button type="button" data-hunter-copilot-toggle class="cyber-btn" aria-label="Toggle Copilot Drawer">Copilot</button>
+        <a href="/" id="cmdWorkspaceLink" class="cyber-btn" data-i18n="topbar.breadcrumbRoot">لوحة التحكم الرئيسية</a>
+        <button type="button" id="cmdLangToggle" class="cyber-btn" data-i18n-aria-label="topbar.languageToggle" aria-label="تبديل اللغة">EN</button>
+        <button type="button" id="cmdThemeToggle" class="cyber-btn" data-i18n="common.theme" data-i18n-aria-label="topbar.themeToggle" aria-label="تبديل المظهر">المظهر</button>
+        <button type="button" data-hunter-copilot-toggle class="cyber-btn" data-i18n="sections.copilot" data-i18n-aria-label="sections.copilot" aria-label="المساعد الذكي (AI Copilot)">المساعد الذكي (AI Copilot)</button>
       </div>
     </header>
 
     <div id="chat-messages" aria-live="polite">
       <div class="chat-msg ai">
-        <div class="chat-bubble">أهلاً — أنا HunterAI. أعمل ضمن النطاق المصرح به لتنفيذ التحليل والأوامر عند الحاجة.</div>
-        <div class="meta">HunterAI · ready</div>
+        <div class="chat-bubble" data-i18n="copilot.welcomeBody">يمكنك التخاطب مع الوكلاء المتخصصين أو إرسال مقتطفات الكود وطلبات HTTP لتحليلها فورياً.</div>
+        <div class="meta"><span data-i18n="common.appName">HunterAI</span> · <span data-i18n="states.ready">جاهز</span></div>
       </div>
     </div>
 
     <form class="chat-composer" id="chat-composer">
-      <textarea id="chat-input" rows="1" aria-label="Command prompt input" class="ltr-isolate" placeholder="Ask HunterAI... (e.g. &quot;Run nmap -sV on the target&quot; or &quot;Scan target.local for open ports&quot;)"></textarea>
-      <button type="submit" class="cyber-btn cyber-btn-launch" style="padding:10px 20px;">Send ▶</button>
+      <textarea id="chat-input" rows="1" dir="auto" data-i18n-aria-label="copilot.inputPlaceholder" aria-label="أدخل تعليماتك للوكيل هنا..." data-i18n-placeholder="copilot.inputPlaceholder" placeholder="أدخل تعليماتك للوكيل هنا... (Enter للإرسال، Shift+Enter لسطر جديد)"></textarea>
+      <button type="submit" class="cyber-btn cyber-btn-launch" style="padding:10px 20px;" data-i18n="copilot.send">إرسال</button>
     </form>
   </section>
 
   <aside id="panel-terminal">
     <div class="term-header">
-      <h2 class="term-title">Live Terminal</h2>
-      <button type="button" id="clear-term-btn" class="cmd-clear-btn">Clear</button>
+      <h2 class="term-title" data-i18n="opencode.dockTerminal">الطرفية التفاعلية</h2>
+      <button type="button" id="clear-term-btn" class="cmd-clear-btn" data-i18n="common.clear">مسح</button>
     </div>
     <div id="term-output" class="ltr-isolate" dir="ltr">
-      <div class="term-line"><span class="term-prompt">hunterai&gt;</span> <span class="term-out">Terminal ready. Command output appears here.</span></div>
+      <div class="term-line"><span class="term-prompt">hunterai&gt;</span> <span class="term-out" data-i18n="editor.readyOutput">جاهز لتنفيذ الأوامر</span></div>
     </div>
   </aside>
 
@@ -232,5 +236,21 @@
 <script src="/static/platform-client.js"></script>
 <script src="/static/copilot-drawer.js"></script>
 <script src="/static/command.js"></script>
+<script>
+  (function () {
+    function syncCommandInlineLabels() {
+      var core = window.HunterCore;
+      var lang = core && typeof core.getLang === "function"
+        ? core.getLang()
+        : (document.documentElement.getAttribute("lang") === "en" ? "en" : "ar");
+      document.querySelectorAll("[data-ar][data-en]").forEach(function (node) {
+        var val = node.getAttribute(lang === "en" ? "data-en" : "data-ar");
+        if (val) node.textContent = val;
+      });
+    }
+    document.addEventListener("DOMContentLoaded", syncCommandInlineLabels);
+    window.addEventListener("hunter:langchange", syncCommandInlineLabels);
+  })();
+</script>
 </body>
 </html>

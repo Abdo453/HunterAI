@@ -495,7 +495,7 @@ export default function AssetDualGraph() {
                           onClick={() => setInspectedAsset(asset)}
                           aria-label={`${asset.value} — ${t("graph.inspectorTitle")}`}
                           title={asset.value}
-                          className="block w-full max-w-[260px] py-2 px-3 ltr-isolate truncate hover:text-sentinel-primary hover:underline underline-offset-2 cursor-pointer"
+                          className="block w-full max-w-[260px] py-2 px-3 text-left ltr-isolate truncate hover:text-sentinel-primary hover:underline underline-offset-2 cursor-pointer"
                         >
                           {asset.value}
                         </button>

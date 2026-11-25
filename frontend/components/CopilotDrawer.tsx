@@ -225,12 +225,13 @@ export default function CopilotDrawer() {
       list.push(opt);
     };
 
+    pushUnique({ id: "auto", label: autoLabel });
+
     if (catalogLoaded && catalogModels.length > 0) {
       for (const item of catalogModels) {
         pushUnique(item);
       }
     } else {
-      pushUnique({ id: "auto", label: autoLabel });
       const cloudProviders = hunterHubHealth.services?.cloud_providers || [];
       for (const prov of cloudProviders) {
         if (!prov) continue;
