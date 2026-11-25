@@ -105,7 +105,7 @@
 
   function newConversation() {
     const id = "c_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const c = { id, title: "New chat", model: $("modelSelect").value || "auto", messages: [] };
+    const c = { id, serverConversationId: null, title: "New chat", model: $("modelSelect").value || "auto", messages: [] };
     state.convs.unshift(c);
     state.activeId = id;
     save();
@@ -264,8 +264,10 @@
       meta.className = "meta ltr-isolate";
       const bits = [];
       if (m.meta.model) bits.push(m.meta.model);
+      if (m.meta.provider) bits.push(m.meta.provider);
       if (m.meta.latency_ms != null) bits.push(m.meta.latency_ms + "ms");
       if (m.meta.tier) bits.push(m.meta.tier);
+      if (m.meta.fallback) bits.push("fallback");
       if (bits.length) {
         meta.textContent = bits.join(" · ");
         bubble.appendChild(meta);
@@ -325,45 +327,99 @@
 
   function connect() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
+    let socket;
     try {
-      ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
+      socket = new WebSocket(`${proto}://${location.host}/ws/chat`);
+      ws = socket;
     } catch (_) {
       setConn("err", "ws error");
       return;
     }
     setConn("", "connecting…");
 
-    ws.onopen = () => {
+    socket.onopen = () => {
+      if (ws !== socket) return;
       retryDelay = 1000;
       setConn("ok", "connected");
     };
-    ws.onclose = () => {
+    socket.onclose = () => {
+      if (ws !== socket) return;
       setConn("err", "reconnecting…");
       setTimeout(connect, retryDelay);
       retryDelay = Math.min(retryDelay * 1.6, 15000);
     };
-    ws.onerror = () => { setConn("err", "error"); };
-    ws.onmessage = (ev) => {
+    socket.onerror = () => {
+      if (ws !== socket) return;
+      setConn("err", "error");
+    };
+    socket.onmessage = (ev) => {
+      if (ws !== socket) return;
       let d;
       try { d = JSON.parse(ev.data); } catch { return; }
       handleEvent(d);
     };
   }
 
+  function appendPendingTrace(label, detail, done) {
+    if (!pendingNode) return;
+    const t = { label: String(label || "step"), detail: String(detail || "") };
+    pendingTraces.push(t);
+    const tracesEl = pendingNode.querySelector(".traces");
+    if (tracesEl) tracesEl.appendChild(traceNode(t, Boolean(done)));
+    scrollDown();
+  }
+
   function handleEvent(d) {
-    if (d.type === "chat_ack") {
-      if (d.policy) $("policyTag").textContent = "policy: " + d.policy;
+    if (!d || typeof d !== "object") return;
+    const ev = d.event || d.type;
+
+    if (ev === "chat_start" || ev === "chat_ack") {
+      const conv = activeConv();
+      if (conv && d.conversation_id) {
+        conv.serverConversationId = d.conversation_id;
+        save();
+      }
+      if (d.policy) {
+        const pText = typeof d.policy === "string" ? d.policy : (d.policy.status || "checked");
+        $("policyTag").textContent = "policy: " + pText;
+      } else if (d.mode) {
+        $("policyTag").textContent = "mode: " + d.mode;
+      }
       return;
     }
-    if (d.type === "chat_trace") {
-      if (!pendingNode) return;
-      const t = { label: d.label || "step", detail: d.detail || "" };
-      pendingTraces.push(t);
-      pendingNode.querySelector(".traces").appendChild(traceNode(t, false));
-      scrollDown();
+    if (ev === "context" || ev === "refs") {
+      const refs = Array.isArray(d.refs) ? d.refs : [];
+      const cites = Array.isArray(d.citations) ? d.citations : [];
+      if (refs.length > 0 || cites.length > 0) {
+        const lines = refs.map((r) => `[${r.kind || "ref"}] ${r.label || r.id || ""}`);
+        if (cites.length > 0) lines.push(`citations: ${cites.length}`);
+        appendPendingTrace(ev, lines.join("\n"), true);
+      }
       return;
     }
-    if (d.type === "chat_token") {
+    if (ev === "approval_request") {
+      const ap = d.approval || d;
+      $("policyTag").textContent = "policy: approval_required";
+      const detail = `${ap.action_type || "ACTION"} · ${ap.tool_name || "tool"} -> ${ap.target || ""}` +
+        (ap.risk_tier ? ` (${ap.risk_tier})` : "") +
+        (ap.approval_id ? ` [${ap.approval_id}]` : "");
+      appendPendingTrace("approval_request", detail, false);
+      if (window.HunterPlatform && typeof window.HunterPlatform.refreshOverview === "function") {
+        window.HunterPlatform.refreshOverview();
+      }
+      return;
+    }
+    if (ev === "policy_blocked") {
+      const pol = d.policy || d;
+      $("policyTag").textContent = "policy: " + (pol.status || "blocked");
+      appendPendingTrace("policy_blocked", `${pol.status || "BLOCKED"}: ${pol.reason || ""}`, true);
+      return;
+    }
+    if (ev === "chat_trace") {
+      appendPendingTrace(d.label || "step", d.detail || "", false);
+      return;
+    }
+    if (ev === "token" || ev === "chat_token") {
       if (!pendingNode) return;
       const tok = d.delta ?? d.token ?? "";
       pendingText += tok;
@@ -373,14 +429,32 @@
       scrollDown();
       return;
     }
-    if (d.type === "chat_done") {
-      const content = d.response ?? pendingText ?? "";
-      const meta = { model: d.model, latency_ms: d.latency_ms, tier: d.tier };
+    if (ev === "chat_response" || ev === "chat_done") {
+      const conv = activeConv();
+      if (conv && d.conversation_id) {
+        conv.serverConversationId = d.conversation_id;
+      }
+      if (d.policy) {
+        const pStatus = typeof d.policy === "string" ? d.policy : (d.policy.status || (d.policy.allowed === false ? "blocked" : "allowed"));
+        $("policyTag").textContent = "policy: " + pStatus;
+      }
+      const content = (d.answer !== undefined && d.answer !== null && d.answer !== "")
+        ? d.answer
+        : ((d.response !== undefined && d.response !== null && d.response !== "")
+          ? d.response
+          : (pendingText || ""));
+      const meta = {
+        model: d.model_used || d.model,
+        provider: d.provider,
+        latency_ms: d.latency_ms != null ? d.latency_ms : (d.duration != null ? Math.round(Number(d.duration) * 1000) : null),
+        tier: d.tier || d.mode || d.route,
+        fallback: Boolean(d.fallback),
+      };
       finishAssistant(content, meta, null);
       return;
     }
-    if (d.type === "chat_error") {
-      finishAssistant(pendingText || "", null, d.message || "Error");
+    if (ev === "error" || ev === "chat_error") {
+      finishAssistant(pendingText || "", null, d.message || d.error || "Error");
       return;
     }
   }
@@ -447,9 +521,9 @@
       type: "chat",
       message: msg,
       model: $("modelSelect").value || "auto",
-      conversation_id: conv.id,
-      engagement_id: ctx.engagement_id || "",
-      run_id: ctx.run_id || "",
+      conversation_id: conv.serverConversationId || conv.id,
+      engagement_id: ctx.active_engagement_id || ctx.engagement_id || "",
+      run_id: ctx.active_run_id || ctx.run_id || "",
     }));
   }
 
@@ -462,6 +536,56 @@
     } catch (_) {}
   }
 
+  function normalizeCatalogChoices(cat) {
+    if (Array.isArray(cat?.choices) && cat.choices.length > 0) {
+      return cat.choices;
+    }
+    const choices = [];
+    if (Array.isArray(cat?.cloud)) {
+      for (const c of cat.cloud) {
+        const prov = c.provider || "cloud";
+        const models = Array.isArray(c.models) ? c.models : [];
+        for (const m of models) {
+          choices.push({
+            id: `api:${prov}:${m}`,
+            kind: "cloud",
+            provider: prov,
+            model: m,
+            label: `${c.label || prov} · ${m}`,
+            available: true,
+          });
+        }
+      }
+    }
+    const localModels = Array.isArray(cat?.local?.models) ? cat.local.models : [];
+    for (const m of localModels) {
+      choices.push({
+        id: `local:${m}`,
+        kind: "local",
+        provider: "ollama",
+        model: m,
+        label: `Ollama · ${m}`,
+        available: cat?.local?.available !== false,
+      });
+    }
+    if (choices.length === 0 && Array.isArray(cat?.models)) {
+      for (const m of cat.models) {
+        const p = m.provider || "other";
+        const rawId = String(m.id || "");
+        choices.push({
+          id: rawId.startsWith("api:") || rawId.startsWith("local:") ? rawId : `${p}:${rawId}`,
+          kind: m.kind || (p === "ollama" ? "local" : "cloud"),
+          provider: p,
+          model: m.model || rawId,
+          label: m.label || rawId,
+          tier: m.tier,
+          available: m.available !== false,
+        });
+      }
+    }
+    return choices;
+  }
+
   function fillModels(cat) {
     const sel = $("modelSelect");
     const saved = sel.value || "auto";
@@ -472,10 +596,10 @@
     autoOpt.textContent = "Auto (smart router)";
     sel.appendChild(autoOpt);
 
-    const models = Array.isArray(cat?.models) ? cat.models : [];
+    const choices = normalizeCatalogChoices(cat);
     const byProvider = new Map();
-    for (const m of models) {
-      const p = m.provider || "other";
+    for (const m of choices) {
+      const p = m.provider || (m.kind === "local" ? "ollama" : "other");
       if (!byProvider.has(p)) byProvider.set(p, []);
       byProvider.get(p).push(m);
     }
@@ -485,10 +609,10 @@
       grp.label = provider.toUpperCase();
       for (const m of list) {
         const opt = document.createElement("option");
-        opt.value = `${provider}:${m.id}`;
+        opt.value = m.id;
         const tag = m.tier ? ` [${m.tier}]` : "";
         const avail = m.available === false ? " (offline)" : "";
-        opt.textContent = `${m.label || m.id}${tag}${avail}`;
+        opt.textContent = `${m.label || m.model || m.id}${tag}${avail}`;
         grp.appendChild(opt);
       }
       sel.appendChild(grp);
@@ -502,9 +626,16 @@
     const v = $("modelSelect").value;
     const hint = $("modelHint");
     if (v === "auto") {
-      hint.textContent = catalog?.auto
-        ? `Fast: ${catalog.auto.fast || "local"} · Deep: ${catalog.auto.reasoning || "local"}`
-        : "Chooses fast vs reasoning automatically";
+      if (catalog?.auto) {
+        hint.textContent = `Fast: ${catalog.auto.fast || "local"} · Deep: ${catalog.auto.reasoning || "local"}`;
+      } else if (catalog) {
+        const policy = catalog.policy || "auto";
+        const localCount = Array.isArray(catalog.local?.models) ? catalog.local.models.length : 0;
+        const cloudCount = Array.isArray(catalog.cloud) ? catalog.cloud.length : 0;
+        hint.textContent = `Policy: ${policy} · Local: ${localCount} · Cloud: ${cloudCount}`;
+      } else {
+        hint.textContent = "Chooses fast vs reasoning automatically";
+      }
     } else {
       hint.textContent = `Pinned: ${v}`;
     }
@@ -538,10 +669,14 @@
       const c = activeConv();
       if (!c) return;
       c.messages = [];
+      c.serverConversationId = null;
       c.title = "New chat";
       save();
       renderConvs();
       renderThread();
+      if (ws && ws.readyState === 1) {
+        try { ws.send(JSON.stringify({ action: "clear_memory" })); } catch (_) {}
+      }
     });
     $("modelSelect").addEventListener("change", updateModelHint);
     $("menuBtn").addEventListener("click", () => $("sidebar").classList.toggle("open"));

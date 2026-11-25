@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════
    HunterAI OmniCyber Command Center — Modern Dark Glassmorphism CSS
    ═══════════════════════════════════════════════════════════════════ */
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('/static/fonts.css');
 
 :root {
   --bg-deep: #06080f;
@@ -26,9 +26,9 @@
   --text-muted: #8b949e;
   --text-dim: #545d68;
 
-  --font-arabic: 'Cairo', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-ui: 'Inter', sans-serif;
+  --font-arabic: 'Cairo', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-ui: 'Inter', 'Cairo', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --radius-lg: 14px;
   --radius-md: 8px;
   --radius-sm: 5px;
@@ -46,7 +46,6 @@ body {
   font-family: var(--font-arabic);
   height: 100vh;
   overflow: hidden;
-  direction: rtl;
 }
 
 #app {
@@ -349,6 +348,7 @@ header.top-command-bar {
 }
 
 .cyber-btn {
+  min-height: 44px;
   background: linear-gradient(135deg, #00b4d8, #0077b6);
   color: #fff;
   border: none;
@@ -705,12 +705,6 @@ header.top-command-bar {
   width: 100vw;
   overflow: hidden;
   background: var(--bg-deep);
-  direction: ltr;
-}
-
-#command-center body,
-#command-center * {
-  direction: ltr;
 }
 
 /* ── Left panel: Settings & Target ─────────────────────────────────── */
@@ -718,7 +712,7 @@ header.top-command-bar {
   width: 340px;
   min-width: 300px;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -932,7 +926,7 @@ header.top-command-bar {
   font-size: 0.88em;
   outline: none;
   resize: vertical;
-  min-height: 34px;
+  min-height: 44px;
 }
 
 /* ── Right panel: Terminal ─────────────────────────────────────────── */
@@ -940,7 +934,7 @@ header.top-command-bar {
   width: 360px;
   min-width: 280px;
   background: #05070c;
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;

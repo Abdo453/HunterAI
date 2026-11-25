@@ -4,7 +4,8 @@
 
 let currentPillar = 'omni';
 let activeMasterMissionId = null;
-let masterPollTimer = null;
+let masterPollHandle = null;
+let masterPollAbort = null;
 let allArsenalTools = [];
 let currentCategory = 'all';
 let modalActiveTool = null;
@@ -308,23 +309,62 @@ function renderApiKeys(keys) {
   });
 }
 
-function updateGPUStatus() {
-  fetch('/api/status').then((r) => r.json()).then((d) => {
+function stopMasterMissionPoller() {
+  if (masterPollHandle && typeof masterPollHandle.stop === 'function') {
+    masterPollHandle.stop();
+  }
+  masterPollHandle = null;
+  if (masterPollAbort) {
+    try {
+      masterPollAbort.abort();
+    } catch (_) {}
+    masterPollAbort = null;
+  }
+}
+
+function updateGPUStatus(signal) {
+  const fetchOpts = signal ? { signal: signal } : undefined;
+  fetch('/api/status', fetchOpts).then((r) => r.json()).then((d) => {
     const freeEl = document.getElementById('gpu-state');
     const modelEl = document.getElementById('gpu-model');
     if (!freeEl || !modelEl) return;
-    const loaded = d.loaded_models || [];
+    const loaded = Array.isArray(d.loaded_models) ? d.loaded_models : [];
+    const local = Array.isArray(d.local_models) ? d.local_models : [];
+    const configuredCloud = Object.entries(d.api_keys || {})
+      .filter(([, ok]) => Boolean(ok))
+      .map(([name]) => name);
+
     if (loaded.length > 0) {
       freeEl.textContent = 'ACTIVE';
       freeEl.className = 'gpu-metric-val';
       freeEl.style.color = 'var(--cyan)';
       modelEl.textContent = String(loaded[0]);
-    } else {
-      freeEl.textContent = 'READY (جاهز)';
+    } else if (local.length > 0) {
+      freeEl.textContent = 'IDLE';
       freeEl.className = 'gpu-metric-val free';
-      modelEl.textContent = 'Qwen2.5-14B / Claude';
+      freeEl.style.color = '';
+      modelEl.textContent = `Idle (${local[0]} available)`;
+    } else if (configuredCloud.length > 0) {
+      freeEl.textContent = 'LOCAL OFFLINE';
+      freeEl.className = 'gpu-metric-val';
+      freeEl.style.color = 'var(--amber)';
+      modelEl.textContent = `Cloud ready (${configuredCloud.join(', ')})`;
+    } else {
+      freeEl.textContent = 'OFFLINE';
+      freeEl.className = 'gpu-metric-val';
+      freeEl.style.color = 'var(--rose)';
+      modelEl.textContent = 'No model loaded';
     }
-  }).catch(() => {});
+  }).catch((err) => {
+    if (err && err.name === 'AbortError') return;
+    const freeEl = document.getElementById('gpu-state');
+    const modelEl = document.getElementById('gpu-model');
+    if (!freeEl || !modelEl) return;
+    freeEl.textContent = 'OFFLINE';
+    freeEl.className = 'gpu-metric-val';
+    freeEl.style.color = 'var(--rose)';
+    modelEl.textContent = 'Status unavailable';
+  });
 }
 
 // ── PILLAR 1: Master One-Command-For-Everything Controller ────────────────────
@@ -377,12 +417,30 @@ async function launchMasterAllAssessment() {
         pill.textContent = `نشط: ${activeMasterMissionId}`;
         pill.className = 'status-badge badge-green';
       }
-      if (masterPollTimer) clearInterval(masterPollTimer);
-      masterPollTimer = setInterval(() => {
-        if (!document.hidden && activeMasterMissionId) {
-          pollMasterMission(activeMasterMissionId);
-        }
-      }, 2500);
+      stopMasterMissionPoller();
+      if (window.HunterCore && typeof window.HunterCore.createVisibilityPoller === 'function') {
+        masterPollHandle = window.HunterCore.createVisibilityPoller((signal) => {
+          if (activeMasterMissionId) {
+            return pollMasterMission(activeMasterMissionId, signal);
+          }
+        }, 2500, { immediate: false });
+      } else {
+        masterPollAbort = typeof AbortController === 'function' ? new AbortController() : null;
+        const scheduleNext = () => {
+          if (!activeMasterMissionId || (masterPollAbort && masterPollAbort.signal.aborted)) return;
+          const tid = setTimeout(async () => {
+            if (!activeMasterMissionId || (masterPollAbort && masterPollAbort.signal.aborted)) return;
+            if (!document.hidden) {
+              await pollMasterMission(activeMasterMissionId, masterPollAbort ? masterPollAbort.signal : undefined);
+            }
+            scheduleNext();
+          }, 2500);
+          if (masterPollAbort) {
+            masterPollAbort.signal.addEventListener('abort', () => clearTimeout(tid), { once: true });
+          }
+        };
+        scheduleNext();
+      }
     }
   } catch (err) {
     if (pill) pill.textContent = 'فشل الإطلاق';
@@ -390,9 +448,10 @@ async function launchMasterAllAssessment() {
   }
 }
 
-async function pollMasterMission(missionId) {
+async function pollMasterMission(missionId, signal) {
   try {
-    const res = await fetch(`/api/enhanced/omni/status/${encodeURIComponent(missionId)}`);
+    const fetchOpts = signal ? { signal: signal } : undefined;
+    const res = await fetch(`/api/enhanced/omni/status/${encodeURIComponent(missionId)}`, fetchOpts);
     const data = await res.json();
 
     const curPhase = data.current_phase || 'INIT';
@@ -461,8 +520,7 @@ async function pollMasterMission(missionId) {
     }
 
     if (data.status === 'COMPLETED' || data.status === 'FAILED') {
-      if (masterPollTimer) clearInterval(masterPollTimer);
-      masterPollTimer = null;
+      stopMasterMissionPoller();
       const pill = document.getElementById('mission-status-pill');
       if (pill) {
         pill.textContent = data.status === 'COMPLETED' ? 'اكتمل الفحص الشامل بنجاح' : 'انتهت المهمة';
@@ -471,6 +529,7 @@ async function pollMasterMission(missionId) {
       loadSnapshotsList();
     }
   } catch (err) {
+    if (err && err.name === 'AbortError') return;
     console.error('Master poll error:', err);
   }
 }

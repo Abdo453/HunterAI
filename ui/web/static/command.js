@@ -4,10 +4,33 @@
   "use strict";
 
   let isBusy = false;
+  let cachedSettings = null;
 
   function notify(msg, tone) {
     if (window.HunterCore && typeof window.HunterCore.toast === "function") {
       window.HunterCore.toast(msg, tone || "info");
+    }
+  }
+
+  function syncExecStatus(overrideAllowExec) {
+    const execChip = document.getElementById("exec-status");
+    if (!execChip) return;
+    const chk = document.getElementById("exec-chk");
+    const allowed = typeof overrideAllowExec === "boolean"
+      ? overrideAllowExec
+      : (chk ? Boolean(chk.checked) : true);
+    execChip.style.display = allowed ? "inline-flex" : "none";
+  }
+
+  function applyProviderDefaultModel(providerName) {
+    if (!cachedSettings) return;
+    const mEl = document.getElementById("model-input");
+    if (!mEl) return;
+    const defaults = cachedSettings.default_models || {};
+    const nextDefault = defaults[providerName] || cachedSettings.default_model || "";
+    if (nextDefault) {
+      mEl.placeholder = nextDefault;
+      if (!mEl.value) mEl.value = nextDefault;
     }
   }
 
@@ -32,34 +55,58 @@
       const res = await fetch("/api/settings");
       if (!res.ok) return;
       const d = await res.json();
+      cachedSettings = d;
       const box = document.getElementById("provider-status");
       if (!box) return;
       box.textContent = "";
 
-      const providers = d.providers || {};
-      const entries = Object.entries(providers);
-      for (const [k, v] of entries) {
+      const keysMap = d.keys && typeof d.keys === "object" ? d.keys : {};
+      let statusEntries = [];
+      if (Array.isArray(d.providers)) {
+        statusEntries = d.providers.map((prov) => {
+          const info = keysMap[prov];
+          const configured = typeof info === "boolean"
+            ? info
+            : Boolean(info && (info.configured || info.key_masked));
+          return [prov, configured, info];
+        });
+      } else if (d.providers && typeof d.providers === "object") {
+        statusEntries = Object.entries(d.providers).map(([k, v]) => [k, Boolean(v), null]);
+      } else {
+        statusEntries = Object.entries(keysMap).map(([k, info]) => [
+          k,
+          typeof info === "boolean" ? info : Boolean(info && (info.configured || info.key_masked)),
+          info,
+        ]);
+      }
+
+      for (const [k, configured, info] of statusEntries) {
         const chip = document.createElement("span");
-        chip.className = "status-chip ltr-isolate " + (v ? "ok" : "miss");
-        chip.textContent = `${k}: ${v ? "Ready" : "Missing"}`;
+        const isLocal = k === "ollama";
+        if (isLocal && !configured) {
+          chip.className = "status-chip ltr-isolate";
+          chip.textContent = `${k}: Local (no key)`;
+        } else {
+          chip.className = "status-chip ltr-isolate " + (configured ? "ok" : "miss");
+          const masked = info && info.key_masked ? ` (${info.key_masked})` : "";
+          chip.textContent = `${k}: ${configured ? "Ready" : "Missing"}${masked}`;
+        }
         box.appendChild(chip);
         box.appendChild(document.createTextNode(" "));
       }
 
-      if (d.default_provider) {
-        const sel = document.getElementById("provider-select");
-        if (sel && [...sel.options].some((o) => o.value === d.default_provider)) {
-          sel.value = d.default_provider;
-        }
+      const sel = document.getElementById("provider-select");
+      let activeProvider = d.default_provider || "";
+      if (!activeProvider) {
+        const firstConfigured = statusEntries.find(([, ok]) => ok);
+        if (firstConfigured) activeProvider = firstConfigured[0];
       }
-      if (d.default_model) {
-        const mEl = document.getElementById("model-input");
-        if (mEl && !mEl.value) mEl.value = d.default_model;
+      if (sel && activeProvider && [...sel.options].some((o) => o.value === activeProvider)) {
+        sel.value = activeProvider;
       }
-      const execChip = document.getElementById("exec-status");
-      if (execChip) {
-        execChip.style.display = d.allow_exec ? "inline-flex" : "none";
-      }
+
+      applyProviderDefaultModel(sel ? sel.value : activeProvider);
+      syncExecStatus(typeof d.allow_exec === "boolean" ? d.allow_exec : undefined);
     } catch (_) {}
   }
 
@@ -73,28 +120,35 @@
       status.textContent = "Saving to .env...";
     }
 
+    const payload = { provider: prov, api_key: key, model: model };
+    if (key) {
+      payload[prov] = key;
+    }
+
     try {
       const res = await fetch("/api/settings/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: prov, api_key: key, model: model }),
+        body: JSON.stringify(payload),
       });
-      const d = await res.json();
-      if (d.ok) {
+      const d = await res.json().catch(() => ({}));
+      const savedOk = res.ok && (d.status === "saved" || Boolean(d.ok));
+      if (savedOk) {
         if (status) {
           status.style.color = "var(--emerald)";
-          status.textContent = "Saved to .env & active now";
+          status.textContent = d.note || "Saved to .env & active now";
         }
         const apiKeyEl = document.getElementById("api-key-input");
         if (apiKeyEl) apiKeyEl.value = "";
         notify("Settings saved to .env", "success");
         loadSettings();
       } else {
+        const errText = d.error || d.detail || ("Save failed (HTTP " + res.status + ")");
         if (status) {
           status.style.color = "var(--red)";
-          status.textContent = d.error || "Save failed";
+          status.textContent = errText;
         }
-        notify(d.error || "Save failed", "error");
+        notify(errText, "error");
       }
     } catch (e) {
       if (status) {
@@ -142,19 +196,35 @@
           model: model,
           authorized: authorized,
           allow_exec: allowExec,
-          engagement_id: ctx.engagement_id || "",
-          run_id: ctx.run_id || "",
+          engagement_id: ctx.active_engagement_id || ctx.engagement_id || "",
+          run_id: ctx.active_run_id || ctx.run_id || "",
         }),
       });
-      const d = await res.json();
-      if (d.error) {
-        aiMsg.bubble.textContent = "Error: " + d.error;
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || d.error) {
+        const errMsg = d.error || d.detail || ("HTTP " + res.status);
+        aiMsg.bubble.textContent = "Error: " + errMsg;
         aiMsg.meta.textContent = "HunterAI · error";
       } else {
         aiMsg.bubble.textContent = d.response || "Done";
-        aiMsg.meta.textContent = `HunterAI · ${d.provider || provider}${d.executed ? " · executed commands" : ""}`;
-        if (d.terminal_output) {
+        const cmdList = Array.isArray(d.executed)
+          ? d.executed
+          : (Array.isArray(d.commands) ? d.commands : []);
+        const didExec = Boolean(
+          (typeof d.executed === "boolean" && d.executed) ||
+          cmdList.length > 0
+        );
+        const metaBits = ["HunterAI", d.provider || provider];
+        if (d.model_used) metaBits.push(d.model_used);
+        if (!allowExec) metaBits.push("exec disabled");
+        else if (didExec) metaBits.push(`executed ${cmdList.length || ""} command(s)`.trim());
+        aiMsg.meta.textContent = metaBits.join(" · ");
+
+        if (d.terminal_output && d.terminal_output !== "(no commands executed)") {
           appendTerminal(d.terminal_output);
+        } else if (cmdList.length > 0) {
+          const formatted = cmdList.map((c) => `$ ${c.command || ""}\n${c.stdout || ""}${c.stderr || ""}`).join("\n");
+          appendTerminal(formatted);
         }
       }
     } catch (err) {
@@ -273,6 +343,7 @@
     const core = window.HunterCore;
     if (core) {
       core.initTheme();
+      if (typeof core.initI18n === "function") core.initI18n();
     }
 
     setupInput();
@@ -286,9 +357,35 @@
     const clearBtn = document.getElementById("clear-term-btn");
     if (clearBtn) clearBtn.addEventListener("click", clearTerminal);
 
+    const provSel = document.getElementById("provider-select");
+    if (provSel) {
+      provSel.addEventListener("change", function () {
+        applyProviderDefaultModel(provSel.value);
+      });
+    }
+
+    const execChk = document.getElementById("exec-chk");
+    if (execChk) {
+      execChk.addEventListener("change", function () { syncExecStatus(); });
+      syncExecStatus();
+    }
+
     const themeBtn = document.getElementById("cmdThemeToggle");
     if (themeBtn && core) {
       themeBtn.addEventListener("click", function () { core.toggleTheme(); });
+    }
+
+    const langBtn = document.getElementById("cmdLangToggle");
+    if (langBtn && core) {
+      const syncLangLabel = function () {
+        langBtn.textContent = core.getLang() === "ar" ? "EN" : "AR";
+      };
+      langBtn.addEventListener("click", function () {
+        core.setLang(core.getLang() === "ar" ? "en" : "ar");
+        syncLangLabel();
+      });
+      window.addEventListener("hunter:langchange", syncLangLabel);
+      syncLangLabel();
     }
 
     const backLink = document.getElementById("cmdWorkspaceLink");

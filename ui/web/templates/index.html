@@ -170,7 +170,7 @@
         <div class="header-breadcrumb">
           <span class="header-breadcrumb-root" data-i18n="topbar.breadcrumbRoot">لوحة التحكم الرئيسية</span>
           <span aria-hidden="true">/</span>
-          <span id="deckCurrentSectionTitle" class="header-breadcrumb-cur" data-i18n="sections.overview">نظرة عامة على النظام</span>
+          <h1 id="deckCurrentSectionTitle" class="header-breadcrumb-cur" data-i18n="sections.overview">نظرة عامة على النظام</h1>
         </div>
       </div>
 
@@ -228,25 +228,26 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 1: OVERVIEW (Unified Launch, Runs, Approvals, Budget)   -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-overview" class="tab-section active">
+      <section id="sec-overview" class="tab-section active" aria-labelledby="heading-sec-overview">
+        <h2 id="heading-sec-overview" class="section-heading" data-i18n="sections.overview">نظرة عامة على النظام</h2>
         <div class="grid-4">
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="overview.agentsCard">الوكلاء المتخصصون</span></div>
+            <div class="card-hdr"><h3 data-i18n="overview.agentsCard">الوكلاء المتخصصون</h3></div>
             <div class="metric-hero" id="cardAgentsCount">0</div>
             <div class="metric-sub" data-i18n="overview.agentsSub">وكيل هجومي واستطلاعي جاهز للتشغيل</div>
           </div>
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="overview.skillsCard">المهارات المحملة</span></div>
+            <div class="card-hdr"><h3 data-i18n="overview.skillsCard">المهارات المحملة</h3></div>
             <div class="metric-hero" id="cardSkillsCount">--</div>
             <div class="metric-sub" data-i18n="overview.skillsSub">وحدات المنصة ومهارة HunterAI المركزية</div>
           </div>
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="overview.toolsCard">ترسانة الأدوات و MCP</span></div>
+            <div class="card-hdr"><h3 data-i18n="overview.toolsCard">ترسانة الأدوات و MCP</h3></div>
             <div class="metric-hero" id="cardToolsCount">0 / 0</div>
             <div class="metric-sub" data-i18n="overview.toolsSub">أدوات مثبتة وخوادم MCP متصلة</div>
           </div>
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="overview.findingsCard">الثغرات والنتائج</span></div>
+            <div class="card-hdr"><h3 data-i18n="overview.findingsCard">الثغرات والنتائج</h3></div>
             <div class="metric-hero" id="cardFindingsCount">0</div>
             <div class="metric-sub" data-i18n="overview.findingsSub">نتائج وتقارير موثقة بالأدلة والبراهين</div>
           </div>
@@ -256,7 +257,7 @@
         <div class="grid-2">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="runs.launchMission">إطلاق الفحص الشامل</span>
+              <h3 data-i18n="runs.launchMission">إطلاق الفحص الشامل</h3>
               <span class="status-pill pill-cyan ltr-isolate" dir="ltr">/api/platform/runs/start</span>
             </div>
             <form id="launchUnifiedForm" style="display:flex;flex-direction:column;gap:10px;">
@@ -303,7 +304,7 @@
           <!-- Cost & Budget Controller -->
           <div class="cyber-card">
             <div class="card-hdr">
-              <span>مراقبة التكلفة وسقف الميزانية (Cost Budget)</span>
+              <h3>مراقبة التكلفة وسقف الميزانية (Cost Budget)</h3>
               <span class="status-pill pill-green ltr-isolate" dir="ltr" id="budgetSpentLabel">$0.00</span>
             </div>
             <div class="grid-3" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">
@@ -342,7 +343,7 @@
         <div class="grid-2">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="runs.title">مهمات الفحص والتشغيلات</span>
+              <h3 data-i18n="runs.title">مهمات الفحص والتشغيلات</h3>
               <span id="overviewRunsCountPill" class="badge ltr-isolate" dir="ltr">0</span>
             </div>
             <div class="table-scroll" style="max-height:260px;">
@@ -364,20 +365,20 @@
             <!-- Selected Run Inspector Subtabs -->
             <div id="overviewRunInspector" style="display:none;flex-direction:column;gap:8px;border-top:1px solid var(--border-subtle);padding-top:10px;">
               <div class="card-hdr">
-                <span id="runInspectorTitle" class="mono ltr-isolate" dir="ltr"></span>
-                <div id="overviewRunSubtabs" class="tablist" role="tablist">
-                  <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-run-tab="events" data-i18n="runs.eventsTab">الأحداث</button>
-                  <button type="button" class="tab-btn" role="tab" aria-selected="false" data-run-tab="evidence" data-i18n="runs.evidenceTab">الأدلة</button>
-                  <button type="button" class="tab-btn" role="tab" aria-selected="false" data-run-tab="findings" data-i18n="runs.findingsTab">النتائج</button>
+                <h3 id="runInspectorTitle" class="mono ltr-isolate" dir="ltr"></h3>
+                <div id="overviewRunSubtabs" class="tablist" role="tablist" aria-label="Run inspector">
+                  <button type="button" id="runTabBtnEvents" class="tab-btn active" role="tab" aria-selected="true" aria-controls="runInspectorOutput" data-run-tab="events" data-i18n="runs.eventsTab">الأحداث</button>
+                  <button type="button" id="runTabBtnEvidence" class="tab-btn" role="tab" aria-selected="false" aria-controls="runInspectorOutput" data-run-tab="evidence" data-i18n="runs.evidenceTab">الأدلة</button>
+                  <button type="button" id="runTabBtnFindings" class="tab-btn" role="tab" aria-selected="false" aria-controls="runInspectorOutput" data-run-tab="findings" data-i18n="runs.findingsTab">النتائج</button>
                 </div>
               </div>
-              <pre id="runInspectorOutput" class="code-box ltr-isolate" dir="ltr" style="max-height:160px;"></pre>
+              <pre id="runInspectorOutput" role="tabpanel" aria-labelledby="runTabBtnEvents" class="code-box ltr-isolate" dir="ltr" style="max-height:160px;"></pre>
             </div>
           </div>
 
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="approvals.title">بوابة الموافقات وحوكمة التنفيذ</span>
+              <h3 data-i18n="approvals.title">بوابة الموافقات وحوكمة التنفيذ</h3>
               <span id="overviewPendingApprovalsPill" class="status-pill pill-yellow ltr-isolate" dir="ltr">0</span>
             </div>
             <div id="overviewApprovalsList" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;">
@@ -389,7 +390,7 @@
         <!-- Services & Host Specs -->
         <div class="grid-2">
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="overview.integrationsTitle">حالة الخدمات والتكاملات الخارجية</span></div>
+            <div class="card-hdr"><h3 data-i18n="overview.integrationsTitle">حالة الخدمات والتكاملات الخارجية</h3></div>
             <div class="inset-row">
               <div>
                 <strong>ARTEX-Pro Go Core</strong> <span class="mono ltr-isolate" dir="ltr">(127.0.0.1:7071)</span>
@@ -428,7 +429,7 @@
           </div>
 
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="overview.hostSpecsTitle">بيئة التشغيل والعتاد</span></div>
+            <div class="card-hdr"><h3 data-i18n="overview.hostSpecsTitle">بيئة التشغيل والعتاد</h3></div>
             <div class="table-scroll">
               <table class="cyber-table">
                 <tr><td data-i18n="overview.osLabel">نظام التشغيل</td><td id="specOsName" class="mono ltr-isolate" dir="ltr">---</td></tr>
@@ -444,7 +445,7 @@
         <!-- Recent Live Events -->
         <div class="cyber-card">
           <div class="card-hdr">
-            <span data-i18n="overview.recentEventsTitle">آخر الأحداث والأنشطة اللحظية</span>
+            <h3 data-i18n="overview.recentEventsTitle">آخر الأحداث والأنشطة اللحظية</h3>
             <button type="button" class="btn-cyber is-compact" id="overviewViewAllActivityBtn" data-i18n="common.viewAll">عرض الكل</button>
           </div>
           <div class="table-scroll">
@@ -470,18 +471,19 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 2: AGENTS MANAGEMENT                                     -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-agents" class="tab-section">
+      <section id="sec-agents" class="tab-section" aria-labelledby="heading-sec-agents">
+        <h2 id="heading-sec-agents" class="section-heading" data-i18n="sections.agents">إدارة الوكلاء المتخصصين</h2>
         <div class="cyber-card">
           <div class="card-hdr">
-            <span data-i18n="sections.agents">إدارة الوكلاء المتخصصين</span>
+            <h3 data-i18n="sections.agents">إدارة الوكلاء المتخصصين</h3>
             <span id="agentsFilteredCountBadge" class="status-pill pill-cyan">0</span>
           </div>
-          <input type="search" id="agentsSearchInput" class="cyber-input" placeholder="بحث في الوكلاء بالاسم أو التخصص أو الأداة...">
+          <input type="search" id="agentsSearchInput" class="cyber-input" aria-label="Search agents" placeholder="بحث في الوكلاء بالاسم أو التخصص أو الأداة...">
         </div>
         <div id="agentsGridContainer" class="grid-3"></div>
         <div class="cyber-card">
           <div class="card-hdr">
-            <span>Hunter Agent Protocol v1 Contracts</span>
+            <h3>Hunter Agent Protocol v1 Contracts</h3>
             <button type="button" id="loadContractsBtn" class="btn-cyber is-compact" data-i18n="common.refresh">تحديث</button>
           </div>
           <div id="hunterContractsContainer" class="grid-3"></div>
@@ -491,25 +493,26 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 3: SKILLS EXPLORER & ELITE PROBERS                       -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-skills" class="tab-section">
+      <section id="sec-skills" class="tab-section" aria-labelledby="heading-sec-skills">
+        <h2 id="heading-sec-skills" class="section-heading" data-i18n="sections.skills">مستكشف المهارات المركزية</h2>
         <div class="cyber-card">
           <div class="card-hdr">
-            <span data-i18n="sections.skills">مستكشف المهارات المركزية وفاحص الاعتماديات</span>
+            <h3 data-i18n="sections.skills">مستكشف المهارات المركزية وفاحص الاعتماديات</h3>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <span id="skillsReadyCountPill" class="status-pill pill-green">--</span>
               <span id="skillsMissingDepsPill" class="status-pill pill-yellow">--</span>
             </div>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-            <input type="search" id="skillsSearchInput" class="cyber-input" style="flex:1;min-width:220px;" placeholder="بحث في المهارات (IDOR, SQLi, SSRF, Smuggling...)">
-            <div id="skillsPackTabs" class="tablist" role="tablist">
-              <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-skill-pack="all" data-i18n="common.all">الكل</button>
-              <button type="button" class="tab-btn" role="tab" aria-selected="false" data-skill-pack="hunterai-redteam">HunterAI RedTeam</button>
-              <button type="button" class="tab-btn" role="tab" aria-selected="false" data-skill-pack="native-hunterai">Native HunterAI</button>
-              <button type="button" class="tab-btn" role="tab" aria-selected="false" data-skill-pack="matrix">4-Layer Matrix</button>
+            <input type="search" id="skillsSearchInput" class="cyber-input" aria-label="Search skills" style="flex:1;min-width:220px;" placeholder="بحث في المهارات (IDOR, SQLi, SSRF, Smuggling...)">
+            <div id="skillsPackTabs" class="tablist" role="tablist" aria-label="Skill packs">
+              <button type="button" id="skillsTabBtnAll" class="tab-btn active" role="tab" aria-selected="true" aria-controls="skillsTabPanel" data-skill-pack="all" data-i18n="common.all">الكل</button>
+              <button type="button" id="skillsTabBtnRedteam" class="tab-btn" role="tab" aria-selected="false" aria-controls="skillsTabPanel" data-skill-pack="hunterai-redteam">HunterAI RedTeam</button>
+              <button type="button" id="skillsTabBtnNative" class="tab-btn" role="tab" aria-selected="false" aria-controls="skillsTabPanel" data-skill-pack="native-hunterai">Native HunterAI</button>
+              <button type="button" id="skillsTabBtnMatrix" class="tab-btn" role="tab" aria-selected="false" aria-controls="skillsTabPanel" data-skill-pack="matrix">4-Layer Matrix</button>
             </div>
           </div>
-          <div class="table-scroll" style="max-height:460px;">
+          <div id="skillsTabPanel" role="tabpanel" aria-labelledby="skillsTabBtnAll" class="table-scroll" style="max-height:460px;">
             <table class="cyber-table">
               <thead>
                 <tr>
@@ -529,7 +532,7 @@
         <!-- 6 Elite Exploit Probers -->
         <div class="cyber-card">
           <div class="card-hdr">
-            <span>Elite Exploit Probers (/api/enhanced/skills/elite-run)</span>
+            <h3>Elite Exploit Probers (/api/enhanced/skills/elite-run)</h3>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <input type="url" id="eliteTargetInput" class="cyber-input ltr-isolate" dir="ltr" style="flex:1;min-width:240px;" placeholder="https://example.com/api">
@@ -550,14 +553,15 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 4: TOOLS, ENGINES & AI COMMAND SYNTHESIZER               -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-tools" class="tab-section">
+      <section id="sec-tools" class="tab-section" aria-labelledby="heading-sec-tools">
+        <h2 id="heading-sec-tools" class="section-heading" data-i18n="sections.tools">ترسانة الأدوات الهجومية</h2>
         <div class="grid-2">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="tools.title">ترسانة الأدوات الهجومية</span>
+              <h3 data-i18n="tools.title">ترسانة الأدوات الهجومية</h3>
               <span id="toolsInstalledStatsBadge" class="status-pill pill-green">--</span>
             </div>
-            <input type="search" id="toolsSearchInput" class="cyber-input" data-i18n-placeholder="tools.searchToolsPlaceholder" placeholder="بحث في الأدوات...">
+            <input type="search" id="toolsSearchInput" class="cyber-input" aria-label="Search tools" data-i18n-placeholder="tools.searchToolsPlaceholder" placeholder="بحث في الأدوات...">
             <div class="table-scroll" style="max-height:420px;">
               <table class="cyber-table">
                 <thead>
@@ -575,7 +579,7 @@
 
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="tools.executionOutput">سجلات ومخرجات تنفيذ الأدوات</span>
+              <h3 data-i18n="tools.executionOutput">سجلات ومخرجات تنفيذ الأدوات</h3>
               <button type="button" id="refreshToolsBtn" class="btn-cyber is-compact" data-i18n="common.refresh">تحديث</button>
             </div>
             <pre id="toolExecutionOutputBox" class="code-box ltr-isolate" dir="ltr" style="flex:1;min-height:260px;">Select a tool and run Check Health to inspect output.</pre>
@@ -597,7 +601,7 @@
         <!-- CLI Engines Card -->
         <div class="cyber-card">
           <div class="card-hdr">
-            <span>CLI Engine Workers (/api/engines)</span>
+            <h3>CLI Engine Workers (/api/engines)</h3>
             <button type="button" id="runEngineSelfcheckBtn" class="btn-cyber is-compact">Selfcheck Engines</button>
           </div>
           <div id="enginesListGrid" class="grid-3"></div>
@@ -608,10 +612,11 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 5: MCP SERVERS & SANDBOX RUNTIME                         -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-mcp" class="tab-section">
+      <section id="sec-mcp" class="tab-section" aria-labelledby="heading-sec-mcp">
+        <h2 id="heading-sec-mcp" class="section-heading" data-i18n="sections.mcp">خوادم بروتوكول السياق (MCP)</h2>
         <div class="cyber-card">
           <div class="card-hdr">
-            <span data-i18n="mcp.title">خوادم بروتوكول السياق (MCP)</span>
+            <h3 data-i18n="mcp.title">خوادم بروتوكول السياق (MCP)</h3>
             <span class="status-pill pill-green ltr-isolate" dir="ltr">opencode.json + /api/mcp</span>
           </div>
           <div id="mcpServersGrid" class="grid-3"></div>
@@ -620,7 +625,7 @@
         <div class="grid-2">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="mcp.callTool">استدعاء أداة MCP</span>
+              <h3 data-i18n="mcp.callTool">استدعاء أداة MCP</h3>
             </div>
             <form id="mcpCallForm" style="display:flex;flex-direction:column;gap:8px;">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -635,7 +640,7 @@
 
           <div class="cyber-card">
             <div class="card-hdr">
-              <span>Local Execution Sandbox (/api/sandbox/*)</span>
+              <h3>Local Execution Sandbox (/api/sandbox/*)</h3>
               <span id="sandboxHealthBadge" class="status-pill pill-yellow">--</span>
             </div>
             <form id="sandboxRunForm" style="display:flex;flex-direction:column;gap:8px;">
@@ -650,11 +655,12 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 6: INTERACTIVE BROWSER & DOM XSS STUDIO                  -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-browser" class="tab-section">
+      <section id="sec-browser" class="tab-section" aria-labelledby="heading-sec-browser">
+        <h2 id="heading-sec-browser" class="section-heading" data-i18n="sections.browser">مراقب متصفح الأتمتة</h2>
         <div class="grid-2">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="browser.title">إدارة متصفح الأتمتة التفاعلي</span>
+              <h3 data-i18n="browser.title">إدارة متصفح الأتمتة التفاعلي</h3>
               <span id="browserHeaderBadge" class="status-pill pill-yellow">--</span>
             </div>
             <div class="table-scroll">
@@ -673,7 +679,7 @@
 
           <div class="cyber-card">
             <div class="card-hdr">
-              <span>AI Browser &amp; DOM XSS Studio (/api/enhanced/browser/explore)</span>
+              <h3>AI Browser &amp; DOM XSS Studio (/api/enhanced/browser/explore)</h3>
               <button type="button" id="refreshBrowserBtn" class="btn-cyber is-compact" data-i18n="common.refresh">تحديث</button>
             </div>
             <form id="browserExploreForm" style="display:flex;flex-direction:column;gap:8px;">
@@ -695,11 +701,12 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 7: BURP SUITE MONITOR & LOG INSPECTOR                    -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-burp" class="tab-section">
+      <section id="sec-burp" class="tab-section" aria-labelledby="heading-sec-burp">
+        <h2 id="heading-sec-burp" class="section-heading" data-i18n="sections.burp">تكامل ومراقب Burp Suite</h2>
         <div class="grid-2">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="burp.title">مراقب ومحلل Burp Suite</span>
+              <h3 data-i18n="burp.title">مراقب ومحلل Burp Suite</h3>
               <button type="button" id="checkBurpNowBtn" class="btn-cyber is-compact" data-i18n="burp.checkConnection">فحص الاتصال الآن</button>
             </div>
             <div class="inset-row">
@@ -724,7 +731,7 @@
 
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="burp.inspectorTitle">محلل سجلات Burp (XML / JSON / HAR)</span>
+              <h3 data-i18n="burp.inspectorTitle">محلل سجلات Burp (XML / JSON / HAR)</h3>
             </div>
             <form id="burpInspectForm" style="display:flex;flex-direction:column;gap:8px;">
               <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">
@@ -740,7 +747,7 @@
 
         <div class="cyber-card">
           <div class="card-hdr">
-            <span data-i18n="burp.recentTraffic">حركة المرور الحديثة (/api/burp/traffic)</span>
+            <h3 data-i18n="burp.recentTraffic">حركة المرور الحديثة (/api/burp/traffic)</h3>
             <button type="button" id="refreshBurpTrafficBtn" class="btn-cyber is-compact" data-i18n="common.refresh">تحديث</button>
           </div>
           <div class="table-scroll" style="max-height:260px;">
@@ -755,11 +762,12 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 8: AI MODELS MANAGER                                     -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-models" class="tab-section">
+      <section id="sec-models" class="tab-section" aria-labelledby="heading-sec-models">
+        <h2 id="heading-sec-models" class="section-heading" data-i18n="sections.models">إدارة نماذج الذكاء الاصطناعي</h2>
         <div class="grid-2">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="models.discoveredModels">النماذج المكتشفة (المحلية والسحابية)</span>
+              <h3 data-i18n="models.discoveredModels">النماذج المكتشفة (المحلية والسحابية)</h3>
               <button type="button" id="refreshModelsBtn" class="btn-cyber is-compact" data-i18n="models.scanModels">فحص النماذج</button>
             </div>
             <div class="table-scroll">
@@ -778,7 +786,7 @@
           </div>
 
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="models.defaultSettingsTitle">إعدادات النموذج الافتراضي للوكلاء</span></div>
+            <div class="card-hdr"><h3 data-i18n="models.defaultSettingsTitle">إعدادات النموذج الافتراضي للوكلاء</h3></div>
             <p class="metric-sub" data-i18n="models.defaultSettingsDesc">اختر النموذج المعتمد للتحليل والتشغيل؛ تتيح النماذج المحلية خصوصية كاملة.</p>
             <label for="controlCenterModelSelect" class="metric-sub" data-i18n="models.activeModelLabel">النموذج النشط للوكلاء</label>
             <select id="controlCenterModelSelect" class="cyber-input ltr-isolate" dir="ltr">
@@ -803,10 +811,11 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 9: TARGETS MANAGEMENT & STRICT SCOPE GUARD               -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-targets" class="tab-section">
+      <section id="sec-targets" class="tab-section" aria-labelledby="heading-sec-targets">
+        <h2 id="heading-sec-targets" class="section-heading" data-i18n="sections.targets">إدارة الأهداف وحماية النطاق</h2>
         <div class="grid-2">
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="targets.addTargetTitle">إضافة هدف / ارتباط مصرح به</span></div>
+            <div class="card-hdr"><h3 data-i18n="targets.addTargetTitle">إضافة هدف / ارتباط مصرح به</h3></div>
             <form id="saveTargetForm" style="display:flex;flex-direction:column;gap:10px;">
               <input type="text" id="targetNameInput" class="cyber-input" data-i18n-placeholder="targets.projectName" placeholder="اسم المشروع أو البرنامج">
               <input type="text" id="targetUrlInput" class="cyber-input ltr-isolate" dir="ltr" data-i18n-placeholder="targets.targetUrl" placeholder="https://example.com">
@@ -819,7 +828,7 @@
 
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="targets.validatorTitle">متحقق النطاق الصارم (Strict Scope Validator)</span>
+              <h3 data-i18n="targets.validatorTitle">متحقق النطاق الصارم (Strict Scope Validator)</h3>
               <span class="status-pill pill-green" data-i18n="targets.localhostBlocked">حظر Localhost مفعّل</span>
             </div>
             <p class="metric-sub" data-i18n="targets.validatorDesc">يطبق قواعد الاشتباك ويمنع لمس أي أصل خارج النطاق أو عناوين الشبكة الداخلية.</p>
@@ -829,7 +838,7 @@
             </div>
             <div id="scopeValidationResultBox" class="inset-row" style="display:none;flex-direction:column;align-items:flex-start;"></div>
 
-            <div class="card-hdr" style="margin-top:6px;"><span data-i18n="targets.registeredTargetsTitle">الأهداف والارتباطات المسجلة</span></div>
+            <div class="card-hdr" style="margin-top:6px;"><h3 data-i18n="targets.registeredTargetsTitle">الأهداف والارتباطات المسجلة</h3></div>
             <div id="authorizedTargetsList" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;"></div>
           </div>
         </div>
@@ -838,10 +847,11 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 10: LIVE RADAR & ARTEX-PRO GO CORE BRIDGE                -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-radar" class="tab-section">
+      <section id="sec-radar" class="tab-section" aria-labelledby="heading-sec-radar">
+        <h2 id="heading-sec-radar" class="section-heading" data-i18n="sections.radar">رادار الهدف المباشر</h2>
         <div class="cyber-card">
           <div class="card-hdr">
-            <span>ARTEX-Pro Go Core Bridge (/api/platform/artex/*)</span>
+            <h3>ARTEX-Pro Go Core Bridge (/api/platform/artex/*)</h3>
             <div style="display:flex;gap:8px;align-items:center;">
               <span id="artexRadarHealthBadge" class="status-pill pill-yellow">--</span>
               <button type="button" id="refreshArtexRadarBtn" class="btn-cyber is-compact" data-i18n="common.refresh">تحديث</button>
@@ -868,7 +878,7 @@
         <!-- Local Proxy / Radar Ingestion State (Honest Standby) -->
         <div class="cyber-card">
           <div class="card-hdr">
-            <span>Proxy &amp; Capture Radar Ingestion (/api/control/test-radar)</span>
+            <h3>Proxy &amp; Capture Radar Ingestion (/api/control/test-radar)</h3>
             <div style="display:flex;gap:8px;align-items:center;">
               <span id="radarStatusBadge" class="status-pill pill-yellow">STANDBY</span>
               <button type="button" id="simulateRadarBtn" class="btn-cyber is-compact">Simulate Sample (Tagged)</button>
@@ -889,13 +899,14 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 11: LIVE ACTIVITY & SSE EVENT STREAM                     -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-activity" class="tab-section">
+      <section id="sec-activity" class="tab-section" aria-labelledby="heading-sec-activity">
+        <h2 id="heading-sec-activity" class="section-heading" data-i18n="sections.activity">سجل الأنشطة المباشر</h2>
         <div class="cyber-card">
           <div class="card-hdr">
-            <span data-i18n="logs.title">سجل الأنشطة والبث اللحظي</span>
+            <h3 data-i18n="logs.title">سجل الأنشطة والبث اللحظي</h3>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <span id="sseStreamBadge" class="status-pill pill-yellow">SSE: --</span>
-              <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;min-height:44px;cursor:pointer;">
                 <input type="checkbox" id="activityAutoRefreshCheckbox" checked>
                 <span data-i18n="logs.autoPoll">تحديث تلقائي</span>
               </label>
@@ -922,7 +933,7 @@
 
         <div class="cyber-card">
           <div class="card-hdr">
-            <span>Platform SSE Event Stream (since_seq replay)</span>
+            <h3>Platform SSE Event Stream (since_seq replay)</h3>
             <button type="button" id="clearSseFeedBtn" class="btn-cyber is-compact" data-i18n="logs.clearLogs">مسح العرض</button>
           </div>
           <pre id="sseEventFeedBox" class="code-box ltr-isolate" dir="ltr" style="max-height:220px;">Awaiting platform events...</pre>
@@ -932,25 +943,26 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 12: RESULTS, EVIDENCE LEDGER, SESSIONS & DOSSIERS        -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-results" class="tab-section">
+      <section id="sec-results" class="tab-section" aria-labelledby="heading-sec-results">
+        <h2 id="heading-sec-results" class="section-heading" data-i18n="sections.results">مستكشف النتائج والتقارير</h2>
         <div class="grid-3">
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="findings.confirmedCount">نتائج مؤكدة</span></div>
+            <div class="card-hdr"><h3 data-i18n="findings.confirmedCount">نتائج مؤكدة</h3></div>
             <div class="metric-hero" id="resultsConfirmedCount">0</div>
           </div>
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="findings.suspectedCount">اشتباهات قيد التدقيق</span></div>
+            <div class="card-hdr"><h3 data-i18n="findings.suspectedCount">اشتباهات قيد التدقيق</h3></div>
             <div class="metric-hero" id="resultsSuspectedCount">0</div>
           </div>
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="findings.falsePositiveCount">إنذارات خاطئة مستبعدة</span></div>
+            <div class="card-hdr"><h3 data-i18n="findings.falsePositiveCount">إنذارات خاطئة مستبعدة</h3></div>
             <div class="metric-hero" id="resultsFpCount">0</div>
           </div>
         </div>
 
         <div class="cyber-card">
           <div class="card-hdr">
-            <span data-i18n="findings.explorerTitle">سجل الثغرات والتقارير المستخرجة</span>
+            <h3 data-i18n="findings.explorerTitle">سجل الثغرات والتقارير المستخرجة</h3>
             <button type="button" id="refreshResultsBtn" class="btn-cyber is-compact" data-i18n="common.refresh">تحديث</button>
           </div>
           <div id="findingsContainer" style="display:flex;flex-direction:column;gap:10px;"></div>
@@ -958,17 +970,17 @@
 
         <div class="grid-2">
           <div class="cyber-card">
-            <div class="card-hdr"><span>Sessions &amp; Platform Reports (/api/sessions)</span></div>
+            <div class="card-hdr"><h3>Sessions &amp; Platform Reports (/api/sessions)</h3></div>
             <div id="sessionsListContainer" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;"></div>
           </div>
           <div class="cyber-card">
-            <div class="card-hdr"><span>Master Dossiers &amp; Snapshots</span></div>
+            <div class="card-hdr"><h3>Master Dossiers &amp; Snapshots</h3></div>
             <div id="dossiersSnapshotsContainer" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;"></div>
           </div>
         </div>
 
         <div class="cyber-card">
-          <div class="card-hdr"><span>Evidence Ledger (/api/evidence/ledger)</span></div>
+          <div class="card-hdr"><h3>Evidence Ledger (/api/evidence/ledger)</h3></div>
           <pre id="evidenceLedgerSummaryBox" class="code-box ltr-isolate" dir="ltr" style="max-height:200px;">Loading ledger...</pre>
         </div>
       </section>
@@ -976,11 +988,12 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 13: SYSTEM DIAGNOSTICS & READINESS                       -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-diagnostics" class="tab-section">
+      <section id="sec-diagnostics" class="tab-section" aria-labelledby="heading-sec-diagnostics">
+        <h2 id="heading-sec-diagnostics" class="section-heading" data-i18n="sections.diagnostics">فحص صحة وجاهزية النظام</h2>
         <div class="cyber-card">
           <div class="card-hdr">
             <div>
-              <strong data-i18n="diagnostics.title">فحص صحة وجاهزية المنصة الشامل</strong>
+              <h3 data-i18n="diagnostics.title">فحص صحة وجاهزية المنصة الشامل</h3>
               <div class="metric-sub" data-i18n="diagnostics.subtitle">يفحص المكتبات البرمجية والأدوات الهجومية والخدمات الخارجية والسياسات الأمنية.</div>
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -1006,11 +1019,11 @@
 
         <div class="grid-2">
           <div class="cyber-card">
-            <div class="card-hdr"><span>Readiness Report (/api/diagnostics/readiness)</span></div>
+            <div class="card-hdr"><h3>Readiness Report (/api/diagnostics/readiness)</h3></div>
             <pre id="readinessOutputBox" class="code-box ltr-isolate" dir="ltr" style="max-height:220px;">Click Readiness Checker to run local readiness scan.</pre>
           </div>
           <div class="cyber-card">
-            <div class="card-hdr"><span>Tool Installation Plan (View-Only, Never Executed in Browser)</span></div>
+            <div class="card-hdr"><h3>Tool Installation Plan (View-Only, Never Executed in Browser)</h3></div>
             <pre id="installPlanBox" class="code-box ltr-isolate" dir="ltr" style="max-height:220px;">Loading install plan...</pre>
           </div>
         </div>
@@ -1019,10 +1032,11 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 14: SETTINGS & POLICIES (Real DB Persistence)            -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-settings" class="tab-section">
+      <section id="sec-settings" class="tab-section" aria-labelledby="heading-sec-settings">
+        <h2 id="heading-sec-settings" class="section-heading" data-i18n="sections.settings">الإعدادات والسياسات الأمنية</h2>
         <div class="grid-2">
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="settings.networkTitle">إعدادات البروكسي والشبكة (محفوظة في DB)</span></div>
+            <div class="card-hdr"><h3 data-i18n="settings.networkTitle">إعدادات البروكسي والشبكة (محفوظة في DB)</h3></div>
             <form id="controlSettingsForm" style="display:flex;flex-direction:column;gap:10px;">
               <div>
                 <label for="settingProxyInput" class="metric-sub" data-i18n="settings.upstreamProxy">البروكسي العلوي (Upstream Burp Proxy)</label>
@@ -1056,7 +1070,7 @@
           </div>
 
           <div class="cyber-card">
-            <div class="card-hdr"><span data-i18n="settings.apiKeysTitle">حالة مفاتيح API السحابية (Masked)</span></div>
+            <div class="card-hdr"><h3 data-i18n="settings.apiKeysTitle">حالة مفاتيح API السحابية (Masked)</h3></div>
             <p class="metric-sub" data-i18n="settings.apiKeysNote">تُقرأ المفاتيح بأمان دون كشف قيمها للمتصفح.</p>
             <div class="table-scroll">
               <table class="cyber-table">
@@ -1066,7 +1080,7 @@
                 <tr><td data-i18n="settings.localhostGuard">حظر استهداف Localhost</td><td><span class="status-pill pill-green" data-i18n="settings.localhostGuardValue">مفعّل وصارم (Non-Overridable)</span></td></tr>
               </table>
             </div>
-            <div class="card-hdr" style="margin-top:4px;"><span data-i18n="settings.preferencesTitle">تفضيلات الواجهة</span></div>
+            <div class="card-hdr" style="margin-top:4px;"><h3 data-i18n="settings.preferencesTitle">تفضيلات الواجهة</h3></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button type="button" id="settingsLangBtn" class="btn-cyber" data-i18n="settings.interfaceLanguage">تبديل اللغة (AR / EN)</button>
               <button type="button" id="settingsThemeBtn" class="btn-cyber" data-i18n="settings.interfaceTheme">تبديل السمة (Dark / Light)</button>
@@ -1078,7 +1092,8 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 15: ATTACK SURFACE GRAPH & WIRETAP (vis.Network reused)  -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-telemetry" class="tab-section">
+      <section id="sec-telemetry" class="tab-section" aria-labelledby="heading-sec-telemetry">
+        <h2 id="heading-sec-telemetry" class="section-heading" data-i18n="sections.telemetry">مسار الهجوم ورادار الوكلاء</h2>
         <div class="cyber-card">
           <div class="card-hdr">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -1098,7 +1113,7 @@
         <div class="split-telemetry">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="assets.attackGraphTitle">خريطة مسار الهجوم اللحظية (Attack Path DAG)</span>
+              <h3 data-i18n="assets.attackGraphTitle">خريطة مسار الهجوم اللحظية (Attack Path DAG)</h3>
               <span id="stGraphNodesBadge" class="badge ltr-isolate" dir="ltr">0 nodes</span>
             </div>
             <div id="stGraphStandbyBanner" class="vis-standby-banner">STANDBY — No attack surface nodes observed yet.</div>
@@ -1107,7 +1122,7 @@
 
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="logs.wiretapTitle">رادار اتصالات الوكلاء (Wiretap)</span>
+              <h3 data-i18n="logs.wiretapTitle">رادار اتصالات الوكلاء (Wiretap)</h3>
             </div>
             <div id="stWiretapStreamList" class="ltr-isolate" dir="ltr" style="flex:1;min-height:360px;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
           </div>
@@ -1115,7 +1130,7 @@
 
         <div class="cyber-card">
           <div class="card-hdr">
-            <span data-i18n="findings.twoBrainTitle">مستعرض تفاضل الـ PoC (Two-Brain Differential)</span>
+            <h3 data-i18n="findings.twoBrainTitle">مستعرض تفاضل الـ PoC (Two-Brain Differential)</h3>
             <span id="stDiffConfidenceBadge" class="status-pill pill-cyan ltr-isolate" dir="ltr">STANDBY</span>
           </div>
           <div id="stDiffTargetUrl" class="mono metric-sub ltr-isolate" dir="ltr">No differential proof verdicts recorded yet.</div>
@@ -1141,11 +1156,12 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 16: RED TEAM COCKPIT, CHECKLISTS, 7-GATE & LEAD BOARD    -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-redteam" class="tab-section">
+      <section id="sec-redteam" class="tab-section" aria-labelledby="heading-sec-redteam">
+        <h2 id="heading-sec-redteam" class="section-heading" data-i18n="sections.redteam">مركز قيادة Red Team</h2>
         <div class="split-redteam-top">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="redteam.grantCardTitle">تفويض Red Team المصرح به</span>
+              <h3 data-i18n="redteam.grantCardTitle">تفويض Red Team المصرح به</h3>
               <span id="rtProfileBadge" class="status-pill pill-yellow">STANDARD</span>
             </div>
             <div class="inset-row" style="flex-direction:column;align-items:stretch;gap:6px;">
@@ -1164,7 +1180,7 @@
 
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="redteam.invariantsTitle">الخطوط الحمراء المحظورة قطعياً (Hard Invariants)</span>
+              <h3 data-i18n="redteam.invariantsTitle">الخطوط الحمراء المحظورة قطعياً (Hard Invariants)</h3>
               <span class="status-pill pill-green" data-i18n="redteam.invariantsBadge">حماية صارمة</span>
             </div>
             <div id="rtInvariantsGrid" class="grid-3">
@@ -1182,20 +1198,20 @@
         <div class="cyber-card">
           <div class="card-hdr">
             <div style="display:flex;align-items:center;gap:10px;">
-              <span data-i18n="redteam.checklistsTitle">قوائم الفحص التكتيكية</span>
+              <h3 id="clChecklistHeading" data-i18n="redteam.checklistsTitle">قوائم الفحص التكتيكية</h3>
               <span id="clProgressBadge" class="status-pill pill-cyan">0/0 (0%)</span>
             </div>
-            <div id="clCategoryPills" class="tablist" role="tablist"></div>
+            <div id="clCategoryPills" class="tablist" role="tablist" aria-label="Checklist categories"></div>
           </div>
           <div class="meter-bar-bg"><div id="clProgressBar" class="meter-bar-fill" style="width:0%"></div></div>
-          <div id="clItemsContainer" class="grid-2" style="max-height:380px;overflow-y:auto;"></div>
+          <div id="clItemsContainer" role="tabpanel" aria-labelledby="clChecklistHeading" aria-live="polite" class="grid-2" style="max-height:380px;overflow-y:auto;"></div>
         </div>
 
         <!-- 7-Question Gate & Lead Board -->
         <div class="grid-2">
           <div class="cyber-card">
             <div class="card-hdr">
-              <span data-i18n="redteam.sevenGateTitle">بوابة الأسئلة السبعة لغربلة الثغرات</span>
+              <h3 data-i18n="redteam.sevenGateTitle">بوابة الأسئلة السبعة لغربلة الثغرات</h3>
               <span id="gateResultScore" class="badge">--</span>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -1228,7 +1244,7 @@
           <div class="cyber-card">
             <div class="card-hdr">
               <div style="display:flex;align-items:center;gap:8px;">
-                <span data-i18n="redteam.leadBoardTitle">لوحة الخيوط والأدلة (Lead Board)</span>
+                <h3 data-i18n="redteam.leadBoardTitle">لوحة الخيوط والأدلة (Lead Board)</h3>
                 <span id="leadTotalCount" class="badge">0</span>
               </div>
               <div style="display:flex;gap:6px;">
@@ -1255,12 +1271,13 @@
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 17: MONACO CODE EDITOR & BURP REPEATER                   -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-editor" class="tab-section">
+      <section id="sec-editor" class="tab-section" aria-labelledby="heading-sec-editor">
+        <h2 id="heading-sec-editor" class="section-heading" data-i18n="sections.editor">محرر الأكواد المتكامل</h2>
         <div class="editor-shell-grid">
           <!-- File Explorer -->
           <div class="cyber-card" style="overflow:hidden;padding:10px;">
             <div class="card-hdr">
-              <span data-i18n="editor.fileExplorer">مستكشف الملفات</span>
+              <h3 data-i18n="editor.fileExplorer">مستكشف الملفات</h3>
               <div style="display:flex;gap:4px;">
                 <button type="button" id="newEditorFileBtn" class="btn-cyber is-compact" data-i18n-title="editor.newFile" aria-label="ملف جديد">＋</button>
                 <button type="button" id="refreshEditorTreeBtn" class="btn-cyber is-compact" aria-label="تحديث">↻</button>
@@ -1274,11 +1291,11 @@
           <div class="cyber-card" style="overflow:hidden;padding:10px;">
             <div class="card-hdr">
               <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-                <span id="editorActiveFilePath" class="mono ltr-isolate" dir="ltr" data-i18n="editor.noOpenFile">No file open</span>
+                <h3 id="editorActiveFilePath" class="mono ltr-isolate" dir="ltr" data-i18n="editor.noOpenFile">No file open</h3>
                 <span id="editorModifiedBadge" class="status-pill pill-yellow" style="display:none;" data-i18n="editor.modifiedBadge">Modified</span>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                <select id="editorLangSelect" class="cyber-input ltr-isolate" dir="ltr" style="width:120px;">
+                <select id="editorLangSelect" class="cyber-input ltr-isolate" dir="ltr" style="width:120px;" aria-label="Editor language">
                   <option value="python">Python</option>
                   <option value="javascript">JavaScript</option>
                   <option value="json">JSON</option>
@@ -1302,19 +1319,19 @@
 
           <!-- Right Tooling Pane: Repeater / Skills / Output -->
           <div class="cyber-card editor-right-pane" style="overflow:hidden;padding:10px;">
-            <div id="editorSideTabs" class="tablist" role="tablist">
-              <button type="button" id="sideTabBtnRepeater" class="tab-btn active" role="tab" aria-selected="true" data-side-tab="repeater" data-i18n="editor.tabRepeater">Repeater</button>
-              <button type="button" id="sideTabBtnSkills" class="tab-btn" role="tab" aria-selected="false" data-side-tab="skills" data-i18n="editor.tabSkills">Skills</button>
-              <button type="button" id="sideTabBtnOutput" class="tab-btn" role="tab" aria-selected="false" data-side-tab="output" data-i18n="editor.tabOutput">Output</button>
+            <div id="editorSideTabs" class="tablist" role="tablist" aria-label="Editor tooling">
+              <button type="button" id="sideTabBtnRepeater" class="tab-btn active" role="tab" aria-selected="true" aria-controls="sideTabRepeater" data-side-tab="repeater" data-i18n="editor.tabRepeater">Repeater</button>
+              <button type="button" id="sideTabBtnSkills" class="tab-btn" role="tab" aria-selected="false" aria-controls="sideTabSkills" data-side-tab="skills" data-i18n="editor.tabSkills">Skills</button>
+              <button type="button" id="sideTabBtnOutput" class="tab-btn" role="tab" aria-selected="false" aria-controls="sideTabOutput" data-side-tab="output" data-i18n="editor.tabOutput">Output</button>
             </div>
 
-            <div id="sideTabRepeater" style="flex:1;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
+            <div id="sideTabRepeater" role="tabpanel" aria-labelledby="sideTabBtnRepeater" style="flex:1;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
               <div style="display:flex;gap:6px;">
                 <input type="text" id="repeaterUrl" class="cyber-input mono ltr-isolate" dir="ltr" value="http://127.0.0.1:7070/api/control/system-status">
                 <button type="button" id="sendRepeaterBtn" class="btn-cyber is-compact primary" data-i18n="burp.sendRequest">إرسال</button>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:0.78rem;">
-                <label style="display:flex;align-items:center;gap:6px;">
+                <label style="display:flex;align-items:center;gap:6px;min-height:44px;cursor:pointer;">
                   <input type="checkbox" id="repeaterProxyCheck" checked>
                   <span data-i18n="burp.routeViaBurp">Burp Proxy</span>
                 </label>
@@ -1332,12 +1349,12 @@ Accept: application/json
               <pre id="repeaterResponseViewer" class="code-box ltr-isolate" dir="ltr" style="flex:1;min-height:140px;">(No response yet)</pre>
             </div>
 
-            <div id="sideTabSkills" style="flex:1;display:none;flex-direction:column;gap:8px;overflow:hidden;">
-              <input type="search" id="editorSkillsSearch" class="cyber-input" placeholder="Search skills...">
+            <div id="sideTabSkills" role="tabpanel" aria-labelledby="sideTabBtnSkills" hidden style="flex:1;display:none;flex-direction:column;gap:8px;overflow:hidden;">
+              <input type="search" id="editorSkillsSearch" class="cyber-input" aria-label="Search editor skills" placeholder="Search skills...">
               <div id="editorSkillsList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
             </div>
 
-            <div id="sideTabOutput" style="flex:1;display:none;flex-direction:column;gap:8px;overflow:hidden;">
+            <div id="sideTabOutput" role="tabpanel" aria-labelledby="sideTabBtnOutput" hidden style="flex:1;display:none;flex-direction:column;gap:8px;overflow:hidden;">
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <span class="metric-sub" data-i18n="editor.tabOutput">Output</span>
                 <button type="button" id="clearEditorOutputBtn" class="btn-cyber is-compact" data-i18n="editor.clearOutput">مسح</button>
@@ -1351,12 +1368,13 @@ Accept: application/json
       <!-- ════════════════════════════════════════════════════════════════ -->
       <!-- SECTION 18: FULL-SCREEN SYNCED AGENT & COPILOT WORKSPACE         -->
       <!-- ════════════════════════════════════════════════════════════════ -->
-      <section id="sec-chat" class="tab-section">
+      <section id="sec-chat" class="tab-section" aria-labelledby="heading-sec-chat">
+        <h2 id="heading-sec-chat" class="section-heading" data-i18n="sections.chat">محادثة الوكلاء متعددة النماذج</h2>
         <div class="cyber-card" style="padding:12px;">
           <div class="card-hdr">
-            <span data-i18n="copilot.title">مساعد الأجنت الذكي ومحادثة الوكلاء</span>
+            <h3 data-i18n="copilot.title">مساعد الأجنت الذكي ومحادثة الوكلاء</h3>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <select id="chatAgentPicker" class="cyber-input" style="width:180px;">
+              <select id="chatAgentPicker" class="cyber-input" style="width:180px;" aria-label="Select specialist agent">
                 <option value="recon-agent">Reconnaissance Agent</option>
                 <option value="recon-methodology">Recon Methodology</option>
                 <option value="validator">7-Question Validator</option>
@@ -1368,10 +1386,10 @@ Accept: application/json
                 <option value="credential-hunter">Credential Hunter</option>
                 <option value="token-auditor">Token Auditor</option>
               </select>
-              <select id="chatModelPicker" class="cyber-input ltr-isolate" dir="ltr" style="width:180px;">
+              <select id="chatModelPicker" class="cyber-input ltr-isolate" dir="ltr" style="width:180px;" aria-label="Select model">
                 <option value="auto">Auto (Smart Router)</option>
               </select>
-              <select id="chatExecMode" class="cyber-input" style="width:200px;">
+              <select id="chatExecMode" class="cyber-input" style="width:200px;" aria-label="Select execution mode">
                 <option value="copilot">Grounded Copilot (Persistent SSE)</option>
                 <option value="auto">Autonomous Command (/api/chat)</option>
                 <option value="instruct">Specialized Agent Turn</option>
@@ -1388,7 +1406,7 @@ Accept: application/json
         <!-- Specialist Agent Output Stream (for auto/instruct turns) -->
         <div class="cyber-card" id="specialistChatBoxCard" style="padding:12px;">
           <div class="card-hdr">
-            <span>Specialist Agent Dispatch &amp; Command Console</span>
+            <h3>Specialist Agent Dispatch &amp; Command Console</h3>
             <span id="chatScopeIndicator" class="status-pill pill-green" data-i18n="copilot.scopeProtected">النطاق محمي</span>
           </div>
           <div id="unifiedChatMessages" style="display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;"></div>
@@ -1654,9 +1672,11 @@ Accept: application/json
 
         var goBadge = document.getElementById('overviewGoCoreBadge');
         if (goBadge && pState.services && pState.services.artex_go_core) {
-          var goOn = Boolean(pState.services.artex_go_core.online);
-          goBadge.className = 'status-pill ' + (goOn ? 'pill-green' : 'pill-yellow');
-          goBadge.textContent = goOn ? 'ONLINE' : 'OFFLINE';
+          var goInfo = pState.services.artex_go_core;
+          var goOn = Boolean(goInfo.online);
+          var goDegraded = !goOn && String(goInfo.status || '').toLowerCase() === 'degraded';
+          goBadge.className = 'status-pill ' + (goOn ? 'pill-green' : (goDegraded ? 'pill-yellow' : 'pill-red'));
+          goBadge.textContent = goOn ? 'ONLINE' : (goDegraded ? 'DEGRADED' : 'OFFLINE');
         }
 
         var sseBadge = document.getElementById('sseStreamBadge');
@@ -2436,18 +2456,23 @@ Accept: application/json
         var badge = document.getElementById('artexRadarHealthBadge');
         var statusEl = document.getElementById('artexCoreStatusVal');
         var online = Boolean(health && health.online);
+        var degraded = !online && health && String(health.status || '').toLowerCase() === 'degraded';
         if (badge) {
-          badge.className = 'status-pill ' + (online ? 'pill-green' : 'pill-yellow');
-          badge.textContent = online ? 'ONLINE' : 'OFFLINE';
+          badge.className = 'status-pill ' + (online ? 'pill-green' : (degraded ? 'pill-yellow' : 'pill-red'));
+          badge.textContent = online ? 'ONLINE' : (degraded ? 'DEGRADED' : 'OFFLINE');
         }
-        if (statusEl) statusEl.textContent = online ? (health.status || 'healthy') : 'OFFLINE';
+        if (statusEl) statusEl.textContent = online ? (health.status || 'healthy') : (degraded ? 'DEGRADED' : 'OFFLINE');
         if (!online) {
-          document.getElementById('artexAssetsBox').textContent = 'ARTEX Go Core offline (' + (health.error || '127.0.0.1:7071 unreachable') + ').';
-          document.getElementById('artexTasksBox').textContent = 'Offline.';
+          document.getElementById('artexAssetsBox').textContent = degraded
+            ? ('ARTEX Go Core degraded (' + (health.error || 'database disconnected / HTTP ' + (health.http_status || 503)) + ').')
+            : ('ARTEX Go Core offline (' + (health.error || '127.0.0.1:7071 unreachable') + ').');
+          document.getElementById('artexTasksBox').textContent = degraded ? 'Degraded (DB unavailable).' : 'Offline.';
           return;
         }
         var eng = window.HunterPlatform.getActiveEngagement();
-        var qs = eng ? ('?engagement_id=' + encodeURIComponent(eng.engagement_id)) : '';
+        var engId = eng && eng.engagement_id ? String(eng.engagement_id).trim() : '';
+        var isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(engId);
+        var qs = isUuid ? ('?engagement_id=' + encodeURIComponent(engId)) : '';
         var [assetsRes, findingsRes, tasksRes, auditRes] = await Promise.all([
           window.HunterPlatform.artexRequest('assets' + qs),
           window.HunterPlatform.artexRequest('findings' + qs),
@@ -2837,21 +2862,30 @@ Accept: application/json
           document.getElementById('clProgressBar').style.width = (data.progress_percent || 0) + '%';
 
           var pillsEl = document.getElementById('clCategoryPills');
+          var itemsPanel = document.getElementById('clItemsContainer');
+          var matchedTabId = null;
           pillsEl.textContent = '';
           (data.categories || []).forEach(function (cat) {
             var active = cat.category_id === _activeChecklistCategory;
+            var tabId = 'clTab_' + cat.category_id;
             var btn = el('button', {
               type: 'button',
+              id: tabId,
               class: 'tab-btn' + (active ? ' active' : ''),
               role: 'tab',
               'aria-selected': active ? 'true' : 'false',
+              'aria-controls': 'clItemsContainer',
               onclick: function () {
                 _activeChecklistCategory = cat.category_id;
                 loadSecurityChecklists();
               }
             }, cat.category_title);
             pillsEl.appendChild(btn);
+            if (active) matchedTabId = tabId;
           });
+          if (itemsPanel) {
+            itemsPanel.setAttribute('aria-labelledby', matchedTabId || (pillsEl.firstElementChild ? pillsEl.firstElementChild.id : 'clChecklistHeading'));
+          }
           renderCurrentChecklistItems();
         } catch (_e) { /* ignore */ }
       }
@@ -2953,7 +2987,7 @@ Accept: application/json
             return;
           }
           data.leads.forEach(function (lead) {
-            var sel = el('select', { class: 'cyber-input', style: 'width:130px;min-height:36px;' }, [
+            var sel = el('select', { class: 'cyber-input', style: 'width:130px;min-height:44px;', 'aria-label': 'Lead status' }, [
               el('option', { value: 'new', selected: lead.status === 'new' }, 'New'),
               el('option', { value: 'investigating', selected: lead.status === 'investigating' }, 'Investigating'),
               el('option', { value: 'reported', selected: lead.status === 'reported' }, 'Reported'),
@@ -3053,7 +3087,7 @@ Accept: application/json
           var btn = el('button', {
             type: 'button',
             class: 'btn-cyber is-compact',
-            style: 'justify-content:flex-start;min-height:32px;border-color:' + (_currentEditorPath === item.path ? 'var(--accent-primary)' : 'transparent') + ';',
+            style: 'justify-content:flex-start;min-height:44px;border-color:' + (_currentEditorPath === item.path ? 'var(--accent-primary)' : 'transparent') + ';',
             title: item.path,
             onclick: function () {
               if (!isDir) openEditorFile(item.path);
@@ -3380,6 +3414,8 @@ Accept: application/json
               b.classList.toggle('active', on);
               b.setAttribute('aria-selected', on ? 'true' : 'false');
             });
+            var outEl = document.getElementById('runInspectorOutput');
+            if (outEl && btn.id) outEl.setAttribute('aria-labelledby', btn.id);
             _activeRunInspectTab = btn.getAttribute('data-run-tab');
             if (_activeRunInspectId) inspectRunDetails(_activeRunInspectId);
           });
@@ -3405,6 +3441,8 @@ Accept: application/json
               b.classList.toggle('active', on);
               b.setAttribute('aria-selected', on ? 'true' : 'false');
             });
+            var panelEl = document.getElementById('skillsTabPanel');
+            if (panelEl && btn.id) panelEl.setAttribute('aria-labelledby', btn.id);
             _activeSkillPack = btn.getAttribute('data-skill-pack');
             loadSkills();
           });
@@ -3683,9 +3721,12 @@ Accept: application/json
               b.classList.toggle('active', on);
               b.setAttribute('aria-selected', on ? 'true' : 'false');
             });
-            document.getElementById('sideTabRepeater').style.display = tab === 'repeater' ? 'flex' : 'none';
-            document.getElementById('sideTabSkills').style.display = tab === 'skills' ? 'flex' : 'none';
-            document.getElementById('sideTabOutput').style.display = tab === 'output' ? 'flex' : 'none';
+            var rep = document.getElementById('sideTabRepeater');
+            var sk = document.getElementById('sideTabSkills');
+            var out = document.getElementById('sideTabOutput');
+            if (rep) { rep.style.display = tab === 'repeater' ? 'flex' : 'none'; rep.hidden = tab !== 'repeater'; }
+            if (sk) { sk.style.display = tab === 'skills' ? 'flex' : 'none'; sk.hidden = tab !== 'skills'; }
+            if (out) { out.style.display = tab === 'output' ? 'flex' : 'none'; out.hidden = tab !== 'output'; }
           });
         });
         document.getElementById('sendRepeaterBtn').addEventListener('click', sendRepeaterRequest);
