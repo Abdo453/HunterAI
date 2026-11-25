@@ -2,13 +2,258 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #0b0f19;
-  --foreground: #f3f4f6;
+/* ==========================================================================
+   Obsidian Sentinel Dark & Paper Slate Light Design System
+   WCAG 2.2 AA Contrast Compliant (>= 4.5:1 text, >= 3:1 UI & focus)
+   ========================================================================== */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-canvas: #0b0f17;
+  --bg-surface: #111827;
+  --bg-elevated: #1a2332;
+  --bg-inset: #070a10;
+
+  --border-subtle: #1f2937;
+  --border-strong: #475569;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
+  --accent-primary: #38bdf8;
+  --accent-success: #34d399;
+  --accent-warning: #fbbf24;
+  --accent-danger: #fb7185;
+  --accent-ai: #a78bfa;
+
+  --accent-primary-bg: rgba(56, 189, 248, 0.14);
+  --accent-success-bg: rgba(52, 211, 153, 0.14);
+  --accent-warning-bg: rgba(251, 191, 36, 0.14);
+  --accent-danger-bg: rgba(251, 113, 133, 0.14);
+  --accent-ai-bg: rgba(167, 139, 250, 0.14);
+  --on-accent: #070a10;
+
+  --font-sans: "Inter", "Cairo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --border-width: 1px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.45);
+  --shadow-md: 0 4px 12px rgba(2, 6, 23, 0.55);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --transition-fast: 150ms cubic-bezier(0.2, 0, 0, 1);
 }
 
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-canvas: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --bg-inset: #eef2f6;
+
+  --border-subtle: #dde4ee;
+  --border-strong: #64748b;
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+
+  --accent-primary: #0369a1;
+  --accent-success: #047857;
+  --accent-warning: #92400e;
+  --accent-danger: #be123c;
+  --accent-ai: #6d28d9;
+
+  --accent-primary-bg: rgba(3, 105, 161, 0.1);
+  --accent-success-bg: rgba(4, 120, 87, 0.1);
+  --accent-warning-bg: rgba(180, 83, 9, 0.1);
+  --accent-danger-bg: rgba(190, 18, 60, 0.1);
+  --accent-ai-bg: rgba(109, 40, 217, 0.1);
+  --on-accent: #ffffff;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+:root[lang="en"],
+[lang="en"] {
+  --font-sans: "Inter", "Cairo", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+:root[lang="ar"],
+[lang="ar"] {
+  --font-sans: "Cairo", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html,
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.sentinel-surface {
+  background-color: var(--bg-surface);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.sentinel-elevated {
+  background-color: var(--bg-elevated);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.ltr-isolate {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+}
+
+.mono,
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-mono);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+:where(
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex],
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"]
+):focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Clean React Flow theming matching Obsidian Sentinel & Paper Slate */
+.sentinel-flow .react-flow__controls {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.sentinel-flow .react-flow__controls-button {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  fill: currentColor;
+}
+
+.sentinel-flow .react-flow__controls-button:hover {
+  background: var(--bg-elevated);
+  color: var(--accent-primary);
+}
+
+.sentinel-flow .react-flow__minimap {
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.sentinel-flow .react-flow__attribution {
+  display: none;
+}
+
+/* Markdown rendered inside sanitized Copilot / Finding Drawers */
+.sentinel-prose {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.sentinel-prose p {
+  margin: 0.45rem 0;
+}
+
+.sentinel-prose h1,
+.sentinel-prose h2,
+.sentinel-prose h3,
+.sentinel-prose h4 {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0.75rem 0 0.35rem;
+}
+
+.sentinel-prose ul,
+.sentinel-prose ol {
+  padding-inline-start: 1.25rem;
+  margin: 0.45rem 0;
+  list-style-position: outside;
+}
+
+.sentinel-prose ul {
+  list-style-type: disc;
+}
+
+.sentinel-prose ol {
+  list-style-type: decimal;
+}
+
+.sentinel-prose pre {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.sentinel-prose code:not(pre code) {
+  direction: ltr;
+  unicode-bidi: isolate;
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.1rem 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--accent-primary);
+}
+
+.sentinel-prose a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
