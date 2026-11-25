@@ -46,11 +46,11 @@ def test_opencode_api_skills_endpoint(client):
     data = response.json()
     assert "skills" in data
     assert "count" in data
-    assert data["count"] >= 200
+    assert data["count"] == 1
     
     # Check that skills have required metadata
     skills = data["skills"]
-    assert any("abh-" in s.get("name", "") or "acs-" in s.get("name", "") for s in skills)
+    assert [s.get("name") for s in skills] == ["hunterai-redteam"]
 
 
 def test_opencode_api_mcp_status_endpoint(client):
@@ -67,14 +67,14 @@ def test_opencode_api_mcp_status_endpoint(client):
 def test_opencode_api_execute_endpoint(client):
     """Verify POST /api/opencode/execute dispatches skill execution cleanly."""
     payload = {
-        "skill_name": "abh-cors-scanner",
+        "skill_name": "hunterai-redteam",
         "target": "example.com"
     }
     response = client.post("/api/opencode/execute", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data.get("status") in ["ok", "success"]
-    assert data.get("skill") == "abh-cors-scanner"
+    assert data.get("skill") == "hunterai-redteam"
     assert data.get("target") == "example.com"
     assert "job_id" in data
 

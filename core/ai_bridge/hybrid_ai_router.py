@@ -1,7 +1,7 @@
 """
 Hybrid AI Router (Local Ollama <-> Online Cloud with Auto-Fallback)
 Mediates between the Security Agent and AI Models:
-1. Applies Defensive Framing to prevent false-positive safety refusals in online LLMs.
+1. Preserves the requested cybersecurity mode and terminology for every model.
 2. Invokes Online Cloud AI (Gemini / Claude / OpenRouter).
 3. Inspects for refusal signatures via RefusalDetector.
 4. Auto-falls back to Local Ollama models (Qwen2.5-Coder, DeepSeek, WhiteRabbitNeo) if online model refuses.
@@ -34,7 +34,7 @@ class AIBridgeResponse:
     fallback_triggered: bool
     refusal_encountered: bool
     latency_ms: float
-    raw_prompt_reframed: bool = True
+    raw_prompt_reframed: bool = False
 
 
 class HybridAIRouter:
@@ -139,7 +139,7 @@ class HybridAIRouter:
             fallback_triggered=fallback_triggered,
             refusal_encountered=refusal_encountered,
             latency_ms=latency_ms,
-            raw_prompt_reframed=True
+            raw_prompt_reframed=False
         )
 
         self.call_history.append(bridge_resp)

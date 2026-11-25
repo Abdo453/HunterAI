@@ -122,7 +122,7 @@ def cmd_issue(args: argparse.Namespace) -> int:
     print()
     print("Ready. Autonomous entry points:")
     print(f"    python pentest.py autopilot {verified.scope[0].value}")
-    print("    /abh-network-killchain  (OpenCode agent executes the full chain)")
+    print("    hunterai-redteam        (central project skill routes the requested chain)")
     print(f"    python scripts/authorize_full_power.py --check <target>   # verify in-scope")
     return 0
 

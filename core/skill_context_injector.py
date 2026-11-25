@@ -2,8 +2,7 @@
 """
 Skill Context Injector (Internal Semantic RAG)
 ==============================================
-يقوم بالبحث الذكي في ترسانة المهارات (600 مهارة في .opencode/skills)
-واستخراج التكتيكات والأوامر الأكثر صلة بالمهمة وحقنها مباشرة في سياق النموذج المناسب.
+يوجّه المهام عبر مهارة HunterAI المركزية ويحمّل المرجع الضيق المطابق للمهمة.
 """
 
 import json
@@ -17,44 +16,13 @@ AGENTS_SKILLS_DIR = BASE_DIR / ".agents" / "skills"
 MANIFEST_PATH = SKILLS_DIR / "MANIFEST.json"
 
 ROLE_KEYWORDS = {
-    "dialogue": [
-        "agent-browser", "browser", "recon", "osint", "crawl", "subdomain", "endpoint",
-        "url", "mapping", "passive", "dns", "discovery", "intelligence", "teach"
-    ],
-    "coder": [
-        "skill-creator", "tdd", "teach", "script", "code", "forge", "exploit", "python",
-        "automation", "sast", "semgrep", "review", "fuzzing", "ci/cd", "development"
-    ],
-    "redteam": [
-        "web-api-graphql-pentest", "modern-web-exploit-chains", "hack", "api-fuzzing-bug-bounty", "security-fuzzing", "security-payloads",
-        "security-patterns", "security-passwords", "security-webshells", "burp",
-        "waf", "bypass", "idor", "ssrf", "injection", "gate", "triage", "token",
-        "jwt", "race", "tampering", "xss"
-    ],
-    "deep_thinker": [
-        "abh-network-killchain", "network-segmentation", "vlan", "firewall", "wireshark",
-        "scapy", "packet", "grill-me", "llm-testing", "threat", "modeling", "apt",
-        "killchain", "analysis", "logic", "strategy", "risk", "mitre", "decision", "attack-path"
-    ],
-    "cve_hunter": [
-        "network-services-pentest", "metasploit-automation", "linux-privesc-arsenal",
-        "abh-network-killchain", "network", "port", "nmap", "naabu", "smb", "rpc", "nfs",
-        "telnet", "ftp", "vnc", "snmp", "service", "active-directory", "adcs", "kerberos",
-        "security-webshells", "security-patterns", "cve", "vulnerability", "scan", "audit", "c2"
-    ],
-    "adversary_chainer": [
-        "container-cloud-escape", "active-directory-attacks", "infrastructure-pivoting", "linux-privesc-arsenal", "metasploit-automation",
-        "abh-network-killchain", "lateral", "pivot", "tunnel", "socks5", "chisel",
-        "impacket", "netexec", "smbexec", "psexec", "privesc", "chain", "escape",
-        "escalation", "kerberoasting", "persistence", "dcsync", "pass-the-ticket",
-        "security-payloads", "security-passwords", "security-usernames"
-    ],
-    "network_analyst": [
-        "network-services-pentest", "infrastructure-pivoting", "metasploit-automation", "linux-privesc-arsenal",
-        "abh-network-killchain", "network", "port", "nmap", "naabu", "netexec", "impacket",
-        "smb", "rpc", "nfs", "telnet", "ftp", "ssh", "vnc", "snmp", "active-directory",
-        "kerberos", "ldap", "wireshark", "scapy", "lateral", "pivot", "cve", "audit"
-    ]
+    "dialogue": ["browser", "recon", "osint", "mapping", "discovery"],
+    "coder": ["code", "script", "automation", "fuzz", "build", "patch"],
+    "redteam": ["red team", "pentest", "exploit", "bypass", "jailbreak", "injection"],
+    "deep_thinker": ["analysis", "threat", "logic", "strategy", "attack path"],
+    "cve_hunter": ["cve", "vulnerability", "variant", "exploit", "scan"],
+    "adversary_chainer": ["chain", "pivot", "escalation", "identity", "cloud"],
+    "network_analyst": ["network", "protocol", "packet", "service", "identity"],
 }
 
 class SkillContextInjector:
@@ -141,15 +109,34 @@ class SkillContextInjector:
                 scored_skills.append((score, s))
 
         scored_skills.sort(key=lambda x: x[0], reverse=True)
-        return [item[1] for item in scored_skills[:limit]]
+        selected = [item[1] for item in scored_skills[:limit]]
+        if not selected:
+            primary = next((item for item in self.skills if item.get("name") == "hunterai-redteam"), None)
+            if primary:
+                selected = [primary]
+        return selected
 
-    def extract_skill_summary(self, skill_name: str, max_chars: int = 600) -> str:
+    @staticmethod
+    def _route_for_query(skill: Dict[str, Any], query: str) -> Optional[str]:
+        query_lower = query.lower()
+        ranked = []
+        for route in skill.get("routes", []):
+            score = sum(1 for keyword in route.get("keywords", []) if keyword.lower() in query_lower)
+            if score:
+                ranked.append((score, route.get("path", "")))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return ranked[0][1] if ranked else None
+
+    def extract_skill_summary(self, skill: Dict[str, Any], query: str = "", max_chars: int = 1200) -> str:
         """
         قراءة التعليمات الأساسية من ملف SKILL.md للمهارة
         """
-        skill_file = SKILLS_DIR / skill_name / "SKILL.md"
+        skill_name = skill.get("name", "")
+        skill_dir = SKILLS_DIR / skill_name
+        skill_file = skill_dir / "SKILL.md"
         if not skill_file.exists():
-            skill_file = AGENTS_SKILLS_DIR / skill_name / "SKILL.md"
+            skill_dir = AGENTS_SKILLS_DIR / skill_name
+            skill_file = skill_dir / "SKILL.md"
         if not skill_file.exists():
             return ""
 
@@ -175,7 +162,14 @@ class SkillContextInjector:
                 if char_count >= max_chars:
                     break
 
-            return "\n".join(summary_lines[:15])
+            summary = "\n".join(summary_lines[:20])
+            route = self._route_for_query(skill, query)
+            if route:
+                reference = (skill_dir / route).resolve(strict=False)
+                if reference.is_relative_to(skill_dir.resolve()) and reference.is_file():
+                    routed_text = reference.read_text(encoding="utf-8", errors="ignore")
+                    summary = f"{summary}\n\n[Routed reference: {route}]\n{routed_text[:max_chars]}"
+            return summary
         except Exception:
             return ""
 
@@ -195,7 +189,7 @@ class SkillContextInjector:
         for skill in relevant:
             name = skill.get("name", "")
             title = skill.get("title", name)
-            summary = self.extract_skill_summary(name, max_chars=400)
+            summary = self.extract_skill_summary(skill, query=query, max_chars=1600)
             if not summary:
                 summary = skill.get("description", "")[:250]
 

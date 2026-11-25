@@ -5,7 +5,7 @@ Validates:
 1. CLI argument parsing for `pentest web`, `pentest ui`, `pentest opencode`, `pentest opencode-ui`
 2. Support for `--web` and `--opencode` flags in `pentest all` and `pentest run`
 3. Web application routes (`/opencode`, `/api/opencode/skills`, `/api/opencode/mcp-status`, `/api/opencode/execute`)
-4. OpenCode manifest (217 skills across 5 packs) and MCP config integrity
+4. Central project skill manifest and MCP config integrity
 """
 
 import json
@@ -68,15 +68,16 @@ def test_opencode_web_routes(test_client):
     res_page = test_client.get("/opencode")
     assert res_page.status_code == 200
     assert "OpenCode Studio" in res_page.text
-    assert "skills-count-badge" in res_page.text
+    assert "skillsCountText" in res_page.text
 
     # 2. GET /api/opencode/skills
     res_skills = test_client.get("/api/opencode/skills")
     assert res_skills.status_code == 200
     data_skills = res_skills.json()
-    assert data_skills["count"] >= 217
+    assert data_skills["count"] == 1
     assert len(data_skills["skills"]) == data_skills["count"]
     assert "library_inventory" in data_skills
+    assert data_skills["skills"][0]["name"] == "hunterai-redteam"
 
     # 3. GET /api/opencode/mcp-status
     res_mcp = test_client.get("/api/opencode/mcp-status")
@@ -95,24 +96,31 @@ def test_opencode_execute_endpoint(test_client):
 
     # 2. CORS skill execution via ABHToolBridge
     res_cors = test_client.post("/api/opencode/execute", json={
-        "skill_name": "abh-cors-audit",
+        "skill_name": "hunterai-redteam",
+        "task": "cors audit",
         "target": "https://example.com"
     })
     assert res_cors.status_code == 200
     data_cors = res_cors.json()
     assert data_cors["status"] == "ok"
     assert "job_id" in data_cors
-    assert "CORS" in data_cors["output"]
+    assert "CORS Scan finished" in data_cors["output"]
 
     # 3. General skill execution
     res_gen = test_client.post("/api/opencode/execute", json={
-        "skill_name": "acs-reconnaissance",
+        "skill_name": "hunterai-redteam",
         "target": "target.com"
     })
     assert res_gen.status_code == 200
     data_gen = res_gen.json()
     assert data_gen["status"] == "ok"
     assert "target.com" in data_gen["output"]
+
+    legacy = test_client.post("/api/opencode/execute", json={
+        "skill_name": "acs-reconnaissance",
+        "target": "target.com",
+    })
+    assert legacy.status_code == 404
 
 
 def test_manifest_and_mcp_config_integrity():
@@ -123,16 +131,11 @@ def test_manifest_and_mcp_config_integrity():
     manifest_file = repo_root / ".opencode" / "skills" / "MANIFEST.json"
     assert manifest_file.exists()
     mdata = json.loads(manifest_file.read_text(encoding="utf-8"))
-    assert mdata["count"] >= 217
+    assert mdata["schema"] == "hunterai-active-skills/1"
+    assert mdata["count"] == 1
     assert len(mdata["skills"]) == mdata["count"]
 
-    # Verify all 5 packs exist
-    packs = {s["pack"] for s in mdata["skills"]}
-    assert "agentic-bug-hunter" in packs
-    assert "anthropic-cyber" in packs
-    assert "trailofbits" in packs
-    assert "briiirussell" in packs
-    assert "anthropics-official" in packs
+    assert mdata["primary"] == "hunterai-redteam"
 
     # Check opencode.json
     opencode_cfg = repo_root / "opencode.json"

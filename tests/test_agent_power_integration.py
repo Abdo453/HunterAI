@@ -5,7 +5,7 @@ Validates the holistic autonomous cognitive power of the PentestAI-Unified agent
 2. Cognitive SecLists & Wordlist Intelligence Engine
 3. Automated Target Desktop Exporter (Kali Linux & Cross-Platform)
 4. 7-Question Validation Gate & PoC Verification Rigor
-5. OpenCode 217 Skills Arsenal & ABH Specialist Tools Bridge
+5. Central HunterAI Red-Team Skill & ABH Tool Bridge
 6. Strict Scope Enforcer & Safety Boundaries
 """
 
@@ -183,16 +183,19 @@ def test_7_question_validation_gate_filters_noise():
 # ── 5. OpenCode Skills & ABH Tool Bridge Tests ───────────────────────────────
 
 def test_opencode_curated_skills_manifest():
-    """Verify OpenCode MANIFEST.json registers curated cybersecurity skill catalog."""
+    """Verify the generated manifest exposes only the reviewed project skill."""
     manifest_path = Path(".opencode/skills/MANIFEST.json")
     assert manifest_path.is_file(), "MANIFEST.json not found in .opencode/skills"
 
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert "skills" in data
-    assert len(data["skills"]) >= 200
+    assert data["schema"] == "hunterai-active-skills/1"
+    assert data["primary"] == "hunterai-redteam"
+    assert data["count"] == 1
+    assert len(data["skills"]) == 1
 
     skill_names = [s["name"] for s in data["skills"]]
-    assert any("abh-" in name for name in skill_names)
+    assert skill_names == ["hunterai-redteam"]
 
 
 def test_abh_tool_bridge_scanners():

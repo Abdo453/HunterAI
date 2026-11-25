@@ -5,7 +5,7 @@ Consolidates all 4 layers of skills across the platform:
 1. Directory Skills (skills/**/skill.yaml) - 42 structured skills
 2. Hunter Vulnerability Skills (agents/skills/*.py) - 29 specialized modules
 3. Kali Arsenal Tool Skills (core/arsenal/kali_catalog.py) - 62 Dynamic Tool Agents
-4. Learned Memory Skills (data/skills/*.txt) - Learned writeup heuristics
+4. Central project skill (skills/registry.json) - reviewed red-team routing
 """
 from __future__ import annotations
 
@@ -72,32 +72,8 @@ class SkillMatrixViewer:
 
     @staticmethod
     def get_agentic_bug_hunter_skills() -> List[Dict[str, Any]]:
-        """Retrieves all 19 Agentic Bug Hunter specialized skills."""
-        results = []
-        base_dir = "skills_library/agentic-bug-hunter/skills"
-        if not os.path.exists(base_dir):
-            return results
-        for item in sorted(os.listdir(base_dir)):
-            md_path = os.path.join(base_dir, item, "SKILL.md")
-            if os.path.isfile(md_path):
-                desc = f"Agentic Bug Hunter specialized skill: {item}"
-                try:
-                    with open(md_path, "r", encoding="utf-8", errors="ignore") as f:
-                        lines = f.readlines()
-                    for line in lines[:25]:
-                        if line.startswith("description:"):
-                            desc = line.replace("description:", "").strip().strip("'\"")
-                            break
-                except Exception:
-                    pass
-                results.append({
-                    "name": f"abh-{item}",
-                    "layer": "agentic_bug_hunter",
-                    "category": "bug_hunter",
-                    "description": desc,
-                    "filepath": md_path,
-                })
-        return results
+        """Compatibility alias; archived intake packs are not active skills."""
+        return []
 
     @staticmethod
     def get_opencode_library_skills() -> List[Dict[str, Any]]:
@@ -112,12 +88,10 @@ class SkillMatrixViewer:
                 data = json.load(f)
             for item in data.get("skills", []):
                 name = item.get("name", "")
-                if name.startswith("abh-"):
-                    continue  # already counted in get_agentic_bug_hunter_skills
                 results.append({
                     "name": name,
                     "layer": "opencode_library",
-                    "category": item.get("pack", "cyber_library"),
+                    "category": item.get("kind", "project_skill"),
                     "description": (item.get("description") or "").replace("\n", " ").strip(),
                     "filepath": item.get("source", ""),
                 })

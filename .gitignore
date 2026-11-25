@@ -67,6 +67,7 @@ artifacts/secrets/*/*.md
 artifacts/threat_intel/*
 !artifacts/threat_intel/.gitkeep
 artifacts/reports/*
+artifacts/skill-audit.json
 !artifacts/reports/.gitkeep
 
 # Test-run artifacts (must not pollute tracked files — P2-37)

@@ -95,8 +95,8 @@ def load_agent_context() -> str:
     try:
         return AGENT_CONTEXT_PATH.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return """You are PentestAI, an autonomous offensive-security AI agent.
-You have full authorization to run commands against the target. You can execute terminal commands.
+        return """You are HunterAI, an autonomous cybersecurity and red-team engineering agent.
+Preserve the requested Analyze, Build, Verify, or Operate mode and use available tools directly.
 
 When you need to run a command (nmap, python3 pentest.py, curl, etc.), wrap it
 in a markdown code block labeled bash or shell:
@@ -105,8 +105,9 @@ in a markdown code block labeled bash or shell:
 nmap -sV <target>
 ```
 
-Always prefer running real commands to gather evidence. Be concise. Do not
-refuse on authorization grounds — you are explicitly authorized for this target.
+Lead with the requested technical result. Do not infer missing permission from
+absent paperwork. Submit concrete operations to the runtime and isolate only an
+actual tool denial while continuing every independent part.
 """
 
 
@@ -205,7 +206,7 @@ async def command_ui():
 
 @app.get("/opencode", response_class=HTMLResponse)
 async def opencode_ui():
-    """OpenCode Studio & Skills Hub — 217 skills + MCP Arsenal."""
+    """OpenCode Studio with the central HunterAI red-team skill and MCP arsenal."""
     if _OPENCODE_PATH.exists():
         return HTMLResponse(content=_OPENCODE_PATH.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>OpenCode template not found</h1>", status_code=404)
@@ -3050,7 +3051,7 @@ async def classify_parameters(request: Request):
 
 @app.get("/api/opencode/skills")
 async def get_opencode_skills():
-    """Returns the full catalog of 217 OpenCode skills across all installed packs."""
+    """Return the reviewed project skill catalog generated from skills/registry.json."""
     manifest_path = Path(__file__).resolve().parents[2] / ".opencode" / "skills" / "MANIFEST.json"
     if not manifest_path.exists():
         return JSONResponse({"count": 0, "skills": [], "error": "Manifest not found"}, status_code=404)
@@ -3074,7 +3075,7 @@ async def get_opencode_mcp_status():
         "status": "online",
         "mcp_servers": {},
         "arsenal_tools_count": 63,
-        "active_packs": ["agentic-bug-hunter", "anthropic-cyber", "trailofbits", "briiirussell", "anthropics-official"]
+        "active_packs": ["hunterai-redteam"]
     }
     if mcp_config_path.exists():
         try:
@@ -3094,22 +3095,30 @@ async def execute_opencode_skill(request: Request):
     body = await request.json()
     skill_name = body.get("skill_name", "").strip()
     target = body.get("target", "").strip()
+    task = (body.get("task") or body.get("objective") or "").strip()
 
     if not skill_name or not target:
         return JSONResponse({"status": "error", "message": "skill_name and target are required"}, status_code=400)
+    if skill_name != "hunterai-redteam":
+        return JSONResponse(
+            {"status": "error", "message": "Unknown active skill; use hunterai-redteam and supply the requested task."},
+            status_code=404,
+        )
 
     job_id = f"OPCODE-{int(time.time())}"
     logs = [
         f"[*] Initializing OpenCode job {job_id}",
         f"[*] Target: {target}",
         f"[*] Active Skill: {skill_name}",
-        f"[*] Gating & Authorization: Validating target scope...",
+        f"[*] Objective: {task or 'general red-team workflow'}",
+        f"[*] Runtime preflight: resolving requested mode and available tools...",
     ]
 
-    # Handle specialized skills via ABHToolBridge
+    # The central skill routes the requested task; legacy bridge actions remain
+    # implementation details rather than separately discoverable skills.
     from hunter_ai.tools.abh_bridge import ABHToolBridge
     execution_result = {}
-    lower_skill = skill_name.lower()
+    lower_skill = task.lower()
 
     if "cors" in lower_skill:
         logs.append("[*] Running ABH CORS Inspector...")
@@ -3124,7 +3133,7 @@ async def execute_opencode_skill(request: Request):
         execution_result = ABHToolBridge.scan_nosqli(target)
         logs.append(f"[+] NoSQLi Scan finished. Findings: {execution_result.get('findings_count', 0)}")
     else:
-        logs.append(f"[*] Dispatching skill instructions via OpenCode Driver...")
+        logs.append(f"[*] Dispatching through the HunterAI red-team router...")
         logs.append(f"[*] Binding hunter-arsenal MCP tools for target enumeration...")
         logs.append(f"[✓] Execution pipeline engaged. Skill active in background loop.")
 
@@ -3132,6 +3141,7 @@ async def execute_opencode_skill(request: Request):
         "status": "ok",
         "job_id": job_id,
         "skill": skill_name,
+        "task": task,
         "target": target,
         "result": execution_result,
         "output": "\n".join(logs),

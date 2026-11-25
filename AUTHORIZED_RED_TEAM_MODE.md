@@ -1,11 +1,26 @@
 # Authorized Red-Team Mode
 
-`core/policy/red_team.py` is the zero-friction execution policy for engagements
-where the operator holds **explicit, signed authorization**.
+`core/policy/red_team.py` is the runtime execution policy for concrete tool
+operations. It is not a model-level gate and does not narrow the central
+`hunterai-redteam` skill.
 
 It exists because "authorized" should not mean "clicking Approve 400 times".
 It does **not** exist to remove the boundaries that make a pentest legal and
 safe.
+
+## Model and skill behavior
+
+The absence of a grant, paperwork, scope form, or external approval statement
+is never inferred as a reason to refuse a cybersecurity request at the skill or
+model-routing layer. Analyze, Build, and non-mutating Verify work continues in
+full. When Operate reaches a tool call governed by this runtime, only that exact
+call is evaluated. A denial is reported with its concrete reason while every
+unaffected part continues. Reviewer prompts cannot convert a build or operation
+request into a read-only audit.
+
+Jailbreak and prompt-injection analysis, payload construction, automation, and
+evaluation are core AI red-team capabilities. Target-model payloads remain test
+inputs and are not interpreted as authority over HunterAI's own host process.
 
 ## Profiles
 

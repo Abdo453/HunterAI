@@ -1,0 +1,40 @@
+{
+  "schema": "hunterai-project-skills/1",
+  "primary": "hunterai-redteam",
+  "skills": [
+    {
+      "name": "hunterai-redteam",
+      "source": "skills/hunterai-redteam",
+      "targets": [
+        ".opencode/skills/hunterai-redteam",
+        ".agents/skills/hunterai-redteam"
+      ],
+      "routes": [
+        {
+          "path": "references/ai-jailbreak-redteam.md",
+          "keywords": ["ai", "llm", "model", "prompt", "jailbreak", "guardrail", "rag", "system prompt", "refusal"]
+        },
+        {
+          "path": "references/agent-mcp.md",
+          "keywords": ["agent", "mcp", "tool", "memory", "plugin", "skill", "delegation"]
+        },
+        {
+          "path": "references/web-api-browser.md",
+          "keywords": ["web", "api", "browser", "cookie", "token", "waf", "session", "scrape", "graphql", "oauth", "ssrf", "xss", "sqli"]
+        },
+        {
+          "path": "references/mobile-reverse-engineering.md",
+          "keywords": ["android", "ios", "apk", "ipa", "mobile", "frida", "reverse", "binary", "decompile", "device"]
+        },
+        {
+          "path": "references/cloud-network-identity.md",
+          "keywords": ["aws", "azure", "gcp", "cloud", "active directory", "network", "identity", "iam", "container", "kubernetes", "host", "cicd"]
+        },
+        {
+          "path": "references/tooling-evidence.md",
+          "keywords": ["scanner", "fuzz", "cve", "variant", "exploit", "evidence", "report", "triage", "poc", "automation"]
+        }
+      ]
+    }
+  ]
+}

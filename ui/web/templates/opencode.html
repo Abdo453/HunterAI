@@ -643,7 +643,7 @@
       <!-- Skills Count -->
       <div class="status-badge badge-cyan" onclick="switchDrawerTab('skills')">
         <span>🎯</span>
-        <span id="skillsCountText">217 مهارة نشطة</span>
+        <span id="skillsCountText">مهارة مركزية نشطة</span>
       </div>
 
       <!-- MCP Arsenal -->
@@ -685,9 +685,9 @@
       <div id="btn-explorer" class="activity-btn active" onclick="switchDrawerTab('explorer')" title="مستكشف الملفات (Files Explorer)">
         📁
       </div>
-      <div id="btn-skills" class="activity-btn" onclick="switchDrawerTab('skills')" title="مستكشف المهارات (217+ Skills)">
+      <div id="btn-skills" class="activity-btn" onclick="switchDrawerTab('skills')" title="مستكشف المهارة المركزية">
         🎯
-        <span class="badge-count">217</span>
+        <span class="badge-count">1</span>
       </div>
       <div id="btn-burp" class="activity-btn" onclick="switchDrawerTab('burp')" title="لوحة Burp Suite والترافيك المباشر">
         🦊
@@ -728,9 +728,9 @@
 
       <!-- Drawer View 2: Skills Hub -->
       <div id="drawerView-skills" class="drawer-content" style="display:none;">
-        <input type="text" id="skillSearchInput" class="repeater-input" style="width:100%;font-size:11px;margin-bottom:6px;" placeholder="بحث في 217 مهارة..." oninput="filterSkills()">
+        <input type="text" id="skillSearchInput" class="repeater-input" style="width:100%;font-size:11px;margin-bottom:6px;" placeholder="بحث في مسارات المهارة المركزية..." oninput="filterSkills()">
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
-          <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('all')">الكل (217)</button>
+          <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('all')">الكل</button>
           <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('agentic-bug-hunter')">Bug Hunter</button>
           <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('anthropic-cyber')">Cyber</button>
           <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('trailofbits')">TrailOfBits</button>
@@ -901,7 +901,7 @@ Accept: */*
         <div id="dockOutputBox" class="dock-body">
 [*] PentestAI OpenCode Pro Studio Initialized.
 [*] Workspace: E:\Agant\PentestAI-Unified
-[*] Active Engine: Monaco Code Editor + Burp Suite Interceptor + 217 Skills Matrix.
+[*] Active Engine: Monaco Code Editor + Burp Suite Interceptor + HunterAI Red-Team Router.
 [*] Ready.
         </div>
 
@@ -1207,7 +1207,7 @@ Accept: */*
       renderFileTree(filtered);
     }
 
-    // ── 5. Skills Hub (217+ Skills) ─────────────────────────────────────────
+    // ── 5. Central Project Skill Hub ─────────────────────────────────────────
     async function loadSkills() {
       try {
         const res = await fetch('/api/opencode/skills');
@@ -1619,7 +1619,7 @@ Accept: */*
 
       const titles = {
         'explorer': 'مستكشف الملفات (Explorer)',
-        'skills': 'مستكشف المهارات (217+ Skills)',
+        'skills': 'مستكشف المهارة المركزية',
         'burp': 'لوحة Burp Suite والترافيك',
         'agent': 'مساعد الأجنت الذكي (AI Co-Pilot)',
         'arsenal': 'ترسانة أدوات كالي (MCP Arsenal)'

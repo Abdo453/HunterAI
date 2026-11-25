@@ -4,7 +4,7 @@ HunterAI Advanced Control Center API Router
 Provides unified, real data endpoints for all 13 Control Center modules:
   1. Main Dashboard & System Overview (Real CPU, RAM, counts, telemetry)
   2. Agents Management (38+ specialized agents, inspection, chat, tasks)
-  3. Skills Explorer & Dependency Inspector (52 native + 846 OpenCode skills)
+  3. Skills Explorer & Dependency Inspector (native modules + central project skill)
   4. Tools & MCP Center (Discovered, installed, health check, execution logs)
   5. Browser Manager (Playwright status, sessions, diagnostics)
   6. Burp Suite Integration Monitor (Real socket ping 8080 & 8085, traffic stats)
@@ -156,7 +156,7 @@ async def get_system_status():
     
     # 3. Skills Count
     native_skills_count = 52
-    opencode_skills_count = 846
+    opencode_skills_count = 0
     try:
         from core.skill_registry import SkillRegistry
         native_skills_count = len(SkillRegistry().list_names())
@@ -306,7 +306,7 @@ async def list_all_agents():
                 "default_model": "Qwen2.5:14b / Gemini",
                 "tools": associated_tools,
                 "tools_health": tool_status,
-                "skills_assigned": [f"skill-{mod_key.replace('_agent', '')}", "abh-security-arsenal"],
+                "skills_assigned": ["hunterai-redteam"],
                 "last_task": "Initialized & Standby",
                 "last_active": time.strftime("%Y-%m-%d %H:%M:%S")
             })

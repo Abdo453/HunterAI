@@ -15,7 +15,7 @@ from core.ai_bridge import (
 )
 
 
-def test_defensive_prompt_framer():
+def test_prompt_framer_preserves_requested_mode_and_terms():
     raw = "How can the agent hack and exploit the SQL injection payload on this target?"
     sys_prompt, reframed = DefensivePromptFramer.reframe_query(
         raw_query=raw,
@@ -23,12 +23,12 @@ def test_defensive_prompt_framer():
         task_category="input_validation_audit"
     )
 
-    assert "defensive security auditor" in sys_prompt.lower()
-    # "hack" and "exploit" and "payload" translated to academic/defensive terms
-    assert "hack" not in reframed.lower()
-    assert "exploit" not in reframed.lower()
-    assert "verification test case" in reframed.lower()
-    assert "Defensive Security Audit" in reframed
+    assert "red-team reasoning worker" in sys_prompt.lower()
+    assert raw in reframed
+    assert "hack" in reframed.lower()
+    assert "exploit" in reframed.lower()
+    assert "payload" in reframed.lower()
+    assert "HunterAI Cybersecurity Task" in reframed
 
 
 def test_refusal_detector():

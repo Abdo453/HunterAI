@@ -6,7 +6,7 @@
 #  Usage:
 #    .\install_agent.ps1                       # full default install (core skills)
 #    .\install_agent.ps1 -Profiles core,redteam
-#    .\install_agent.ps1 -Full                 # install ALL skills in the library
+#    .\install_agent.ps1 -Full                 # compatibility flag; centralized catalog remains active
 #    .\install_agent.ps1 -KaliTools            # also install Kali arsenal (WSL/bash)
 #    .\install_agent.ps1 -CheckOnly            # verify environment only
 # =====================================================================
@@ -80,46 +80,25 @@ if ($Uvx) {
 }
 
 # ---------------------------------------------------------------
-Step 4 "Skills library packs (skills_library/)"
-$Packs = @(
-    @{ Dir="skills_library/anthropic-cyber"; Url="https://github.com/mukul975/Anthropic-Cybersecurity-Skills.git" },
-    @{ Dir="skills_library/trailofbits";     Url="https://github.com/trailofbits/skills.git" },
-    @{ Dir="skills_library/briiirussell";    Url="https://github.com/briiirussell/cybersecurity-skills.git" },
-    @{ Dir="skills_library/anthropics";      Url="https://github.com/anthropics/skills.git" },
-    @{ Dir="skills_library/microsoft";       Url="https://github.com/microsoft/skills.git" }
-)
-foreach ($p in $Packs) {
-    if ($CheckOnly) {
-        Warnm "check-only: $($p.Dir)"
-        continue
-    }
-    if (Test-Path $p.Dir) {
-        & git -C $p.Dir pull --ff-only 2>$null
-        if ($LASTEXITCODE -eq 0) { Ok "updated $($p.Dir)" }
-        else { Warnm "pull failed for $($p.Dir) (keeping local copy)" }
-    } else {
-        Write-Host "   cloning $($p.Url) ..." -ForegroundColor DarkCyan
-        & git clone --depth 1 $p.Url $p.Dir 2>$null
-        if ($LASTEXITCODE -ne 0) { Fail "clone failed: $($p.Url)" }
-        Ok "cloned $($p.Dir)"
-    }
-}
+Step 4 "Reviewed project skill registry"
+if (-not (Test-Path "skills/registry.json")) { Fail "skills/registry.json missing" }
+if (-not (Test-Path "skills/hunterai-redteam/SKILL.md")) { Fail "canonical hunterai-redteam skill missing" }
+Ok "canonical project registry found; community packages are intake material, not active skills"
 
 # ---------------------------------------------------------------
-Step 5 "Installing active skills -> .opencode/skills/"
+Step 5 "Synchronizing centralized skills -> .opencode/skills and .agents/skills"
 $SkillArgs = @()
 if ($Full) { $SkillArgs += "--full" } else { $SkillArgs += @("--profiles", $Profiles) }
 if ($SkipSkills) {
     Warnm "skipped by flag"
 } elseif ($CheckOnly) {
-    $cnt = 0
-    if (Test-Path .opencode/skills) { $cnt = (Get-ChildItem .opencode/skills -Directory).Count }
-    Warnm "check-only: $cnt skills currently active"
+    & python tools/install_opencode_skills.py --check
+    if ($LASTEXITCODE -ne 0) { Fail "project skill registry check failed" }
+    Ok "project skill registry and mirrors are synchronized"
 } else {
     & python tools/install_opencode_skills.py --clean @SkillArgs
     if ($LASTEXITCODE -ne 0) { Fail "skill installer failed" }
-    $label = if ($Full) { "FULL" } else { $Profiles }
-    Ok "skills installed (profiles: $label)"
+    Ok "centralized HunterAI red-team skill installed"
 }
 
 # ---------------------------------------------------------------

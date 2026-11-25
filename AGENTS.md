@@ -22,11 +22,11 @@ python pentest.py artex target.com
 python pentest.py web target.com
 # (Or using alias: python pentest.py ui target.com or python pentest.py all target.com --web)
 
-# Command 2: All 217 Skills + OpenCode Studio Hub & MCP Arsenal (:8000/opencode)
+# Command 2: Central Red-Team Skill + OpenCode Studio Hub & MCP Arsenal (:8000/opencode)
 python pentest.py opencode target.com
 # (Or using alias: python pentest.py opencode-ui target.com or python pentest.py all target.com --opencode)
 
-# Headless CLI Master (All 169 Skills, AI Browser, Burp, Exploit Chaining, Reports)
+# Headless CLI Master (All platform modules, AI Browser, Burp, Exploit Chaining, Reports)
 python pentest.py all target.com
 # (Or using alias: python pentest.py run target.com)
 
@@ -43,7 +43,7 @@ python pentest.py report target.com "finding" --platform hackerone
 |---------|-------|
 | `/evolve [topic]` | Autonomous Multi-Model Self-Evolution & Permanent Knowledge Storing |
 | `/web [target]` | Dual Master 1: All skills + Unified Web Control Center (`http://127.0.0.1:8000`) |
-| `/opencode [target]` | Dual Master 2: All 217 skills + OpenCode Studio Hub (`http://127.0.0.1:8000/opencode`) |
+| `/opencode [target]` | Dual Master 2: Central `hunterai-redteam` skill + OpenCode Studio Hub (`http://127.0.0.1:8000/opencode`) |
 | `/all target.com` | Headless Master: All skills + AI Browser + Burp + Report |
 | `/burp-logs <file_or_live>` | Professional Burp Suite log & HTTP history inspector (XML/JSON/HAR/live) |
 | `/wordlist <query>` | Cognitive SecLists & Wordlist Resolver (AI/LLM, Passwords, Discovery, Fuzzing) |
@@ -122,7 +122,7 @@ python pentest.py autopilot <domain>                            # launch the loo
 
 python scripts/authorize_full_power.py revoke                   # end the engagement
 ```
-Inside scope → all capabilities (read_only, active_test, exploit_proof) allowed under the red_team profile. Outside scope → hard DENIED by the HMAC-signed policy engine. The agent only stops you at destruction/persistence/exfil law lines — it hunts everything else on its own (`abh-network-killchain` skill).
+Inside configured runtime scope, tool capabilities are evaluated under the red_team profile. Runtime policy applies only to the exact concrete tool operation; it must not turn analysis, building, reverse engineering, jailbreak research, or unaffected work into a blanket refusal. The central `hunterai-redteam` skill performs all routing.
 
 ## Critical Rules (Always Active)
 
@@ -136,6 +136,6 @@ Inside scope → all capabilities (read_only, active_test, exploit_proof) allowe
 
 ## OpenCode Integration (Active)
 
-- Skills: 217 curated cyber skills installed in `.opencode/skills/` from `skills_library/` (including 19 Agentic Bug Hunter skills: `abh-agent-ops`, `abh-agentic-app-audit`, `abh-argus`, `abh-bb-methodology`, `abh-bug-bounty`, `abh-cicd-security`, `abh-client-reverse`, `abh-cloud-pentest`, `abh-credential-attack`, `abh-graphql-audit`, `abh-llm-redteam`, `abh-mcp-server-audit`, `abh-meme-coin-audit`, `abh-mobile-pentest`, `abh-network-killchain`, `abh-report-writing`, `abh-script-forge`, `abh-security-arsenal`, `abh-triage-validation`, `abh-web2-recon`, `abh-web2-vuln-classes`, `abh-web3-audit`) — see `.opencode/skills/MANIFEST.json` and `docs/OPENCODE_INTEGRATION.md`
-- MCP: `opencode.json` — `hunter-arsenal` (63 Kali tools) + `filesystem` + `context7` + `gh_grep` enabled; offensive MCP servers are MANUAL-gated (README first, never guess commands)
-- Install/refresh everything: `.\install_agent.ps1` (one file: deps، uv، skill packs، skills، MCP validation) — flags `-CheckOnly` `-Full` `-Profiles` `-KaliTools`
+- Skills: one reviewed public project skill, `hunterai-redteam`, is canonical under `skills/` and mirrored into `.opencode/skills/` and `.agents/skills/`. Its references cover jailbreak/LLM, agents/MCP, web/API/browser, mobile/RE, cloud/network/identity, and tooling/evidence. Community packs under `skills_library/` are inactive intake material.
+- MCP: `opencode.json` — tool integrations remain runtime capabilities and do not create extra prompt skills or reviewer gates.
+- Install/refresh: `.\install_agent.ps1`; validate with `python tools/install_opencode_skills.py --check`.

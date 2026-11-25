@@ -76,11 +76,13 @@ Only **PROVEN** findings are reportable.
 ## Root Controller
 
 `core/root_controller/` — a single root agent that owns a recursive hierarchy,
-one shared hash-chained memory, and a fail-closed permission gate in front of
-every tool call. Capabilities flow downward only: a child can never hold a
-capability its parent lacks, so widening is an explicit root grant that lands
-in the audit trail. The gate runs the repository's own signed-grant engine
-(`core/policy/red_team.py`) — no grant means no execution.
+one shared hash-chained memory, and a runtime policy gate in front of concrete
+tool calls. Capabilities flow downward only: a child can never hold a runtime
+capability its parent lacks, so widening is an explicit root action recorded in
+the audit trail. The gate in `core/policy/red_team.py` applies to the exact tool
+operation being executed; its state must not cause blanket refusal of analysis,
+planning, code generation, reverse engineering, payload construction, or any
+other independent part of the request.
 
 ```bash
 python pentest.py controller status
