@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -45,10 +46,12 @@ func (v *VulnWorker) Execute(ctx context.Context, engagementID, targetID string,
 	tx, err := v.db.BeginTx(ctx, nil)
 	if err == nil {
 		stmt, err := tx.PrepareContext(ctx,
-			`INSERT INTO findings (engagement_id, target_id, title, vuln_class, severity, cvss_score, endpoint, poc_details, status)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'TRIAGED')`,
+			`INSERT INTO findings (engagement_id, target_id, title, vuln_class, severity, confidence, cvss_score, endpoint, evidence, poc_details, status)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'TRIAGED')`,
 		)
 		if err == nil {
+			engParam := sql.NullString{String: engagementID, Valid: engagementID != ""}
+			targetParam := sql.NullString{String: targetID, Valid: targetID != ""}
 			for _, f := range findings {
 				pocMap := map[string]interface{}{
 					"template_id":  f.TemplateID,
@@ -71,14 +74,21 @@ func (v *VulnWorker) Execute(ctx context.Context, engagementID, targetID string,
 					cvss = 3.0
 				}
 
+				evidence := f.CurlCommand
+				if evidence == "" {
+					evidence = f.MatchedAt
+				}
+
 				_, _ = stmt.ExecContext(ctx,
-					engagementID,
-					targetID,
+					engParam,
+					targetParam,
 					f.Info.Name,
 					f.TemplateID,
 					sev,
+					0.90,
 					cvss,
 					f.MatchedAt,
+					evidence,
 					string(pocBytes),
 				)
 			}

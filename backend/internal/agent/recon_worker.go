@@ -39,7 +39,7 @@ func (r *ReconWorker) Execute(ctx context.Context, targetDomain string) (*ReconR
 		 VALUES ($1, $2, $3, 'ACTIVE')
 		 ON CONFLICT (code) DO UPDATE SET status = 'ACTIVE'
 		 RETURNING id`,
-		"ENG-"+fmt.Sprintf("%X", time.Now().Unix())[:8],
+		fmt.Sprintf("ENG-%08X", time.Now().Unix()),
 		"https://"+targetDomain,
 		targetDomain,
 	).Scan(&engagementID)
@@ -71,7 +71,7 @@ func (r *ReconWorker) Execute(ctx context.Context, targetDomain string) (*ReconR
 	subs, err := r.subfinder.Enumerate(ctx, targetDomain)
 	if err != nil {
 		if taskID != "" {
-			_, _ = r.db.ExecContext(ctx, "UPDATE tasks SET status = 'FAILED' WHERE id = $1", taskID)
+			_, _ = r.db.ExecContext(ctx, "UPDATE tasks SET status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", taskID)
 		}
 		return nil, err
 	}
