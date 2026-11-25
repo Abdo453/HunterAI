@@ -1,0 +1,20 @@
+from enum import Enum
+
+# Burp Gateway
+BURP_GATEWAY_HOST = "127.0.0.1"
+BURP_GATEWAY_PORT = 8085
+
+# Code Intelligence
+SHANNON_ENTROPY_ADMISSION = 3.3
+SHANNON_ENTROPY_REJECTION = 3.2  # Keep gap but document it
+
+# Evidence Court
+class CourtVerdict(str, Enum):
+    CONFIRMED = "CONFIRMED"
+    FALSE_POSITIVE = "FALSE_POSITIVE"
+    UNVERIFIED_SIGNAL = "UNVERIFIED_SIGNAL"
+    DISPROVED = "DISPROVED"
+    INCONCLUSIVE = "INCONCLUSIVE"
+    BLOCKED = "BLOCKED"
+    OUT_OF_SCOPE = "OUT_OF_SCOPE"
+    DUPLICATE = "DUPLICATE"

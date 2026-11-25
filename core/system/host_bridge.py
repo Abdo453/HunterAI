@@ -16,6 +16,8 @@ import urllib.error
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.constants import BURP_GATEWAY_PORT
+
 logger = logging.getLogger("hunter_ai.host_bridge")
 
 
@@ -25,7 +27,7 @@ class HostGuard:
     """
     def __init__(self, allowed_root: Path, allowed_ports: Optional[List[int]] = None):
         self.allowed_root = allowed_root.resolve()
-        self.allowed_ports = allowed_ports or [80, 443, 8080, 8443, 8085, 8719, 11434]
+        self.allowed_ports = allowed_ports or [80, 443, 8080, 8443, BURP_GATEWAY_PORT, 8719, 11434]
 
     def validate_file_path(self, path: str | Path, allow_write: bool = False) -> Tuple[bool, Optional[str]]:
         try:

@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
+from core.constants import BURP_GATEWAY_HOST, BURP_GATEWAY_PORT
 from core.scope_enforcer import ScopeEnforcer
 from core.scope_guard import ScopeGuard
 
@@ -133,7 +134,7 @@ class BurpFinding:
 @dataclass
 class BurpAdapterConfig:
     """إعداد محول بورب."""
-    gateway_base_url: str = "http://127.0.0.1:8085"
+    gateway_base_url: str = f"http://{BURP_GATEWAY_HOST}:{BURP_GATEWAY_PORT}"
     timeout_s: float = 10.0
     max_retries: int = 2
     retry_backoff_s: float = 1.0
@@ -252,7 +253,7 @@ class BurpAdapter:
             "integration_mode": "burp_extension_to_local_gateway",
             "note": (
                 "Burp Suite no official public REST API. Integration via BApp extension "
-                "forwarding traffic to HunterAI local gateway (127.0.0.1:8085)."
+                f"forwarding traffic to HunterAI local gateway ({BURP_GATEWAY_HOST}:{BURP_GATEWAY_PORT})."
             ),
             "available": health["available"],
             "operations": {

@@ -37,6 +37,7 @@ from core.cognitive.mission_critic import (
 
 
 import asyncio
+import concurrent.futures
 import logging
 import time
 import uuid
@@ -392,6 +393,19 @@ class OmniHunterEngine:
             logger.warning("[OmniHunter] Could not resume engagement %s: %s", engagement_id, exc)
         return False
 
+    def _run_async_safely(self, coro: Any) -> Any:
+        """Run an async coroutine safely whether inside or outside an existing event loop."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                return executor.submit(asyncio.run, coro).result()
+        else:
+            return asyncio.run(coro)
+
     def get_target_context(self, target: Optional[str] = None) -> Any:
         """Constructs rich situational TargetContext from live discovered surface."""
         from core.arsenal.ai_command_synthesizer import TargetContext
@@ -677,7 +691,7 @@ class OmniHunterEngine:
                         }
                     )
                     dom_skill = DOMXSSHunterSkill()
-                    dom_res = asyncio.run(dom_skill.execute(dom_ctx))
+                    dom_res = self._run_async_safely(dom_skill.execute(dom_ctx))
                     if dom_res.findings:
                         for df in dom_res.findings:
                             if "FALLBACK SYNTHETIC" in str(df.get("evidence", "")) and not self.config.force_tool_fallback:
@@ -764,7 +778,7 @@ class OmniHunterEngine:
                         }
                     )
                     insp_skill = BurpLogInspectorSkill()
-                    insp_res = asyncio.run(insp_skill.execute(insp_ctx))
+                    insp_res = self._run_async_safely(insp_skill.execute(insp_ctx))
                     if insp_res.success and (
                         not insp_res.metadata.get("synthetic_fallback") or self.config.force_tool_fallback
                     ):
@@ -801,7 +815,7 @@ class OmniHunterEngine:
                         extra={"requests": [{"url": ep, "method": "GET"} for ep in self.surface["endpoints"][:8]]}
                     )
                     mut_skill = RequestMutatorSkill()
-                    mut_res = asyncio.run(mut_skill.execute(mut_ctx))
+                    mut_res = self._run_async_safely(mut_skill.execute(mut_ctx))
                     if mut_res.findings:
                         for mf in mut_res.findings:
                             self.confirmed_findings.append({
@@ -834,7 +848,7 @@ class OmniHunterEngine:
                 for ep_url in endpoints_to_probe:
                     for sk in elite_skills:
                         try:
-                            sk_res = asyncio.run(sk.run(ep_url, param_name=""))
+                            sk_res = self._run_async_safely(sk.run(ep_url, param_name=""))
                             is_fallback = bool(getattr(sk_res, "fallback_used", False)) or (
                                 "Synthetic/Offline" in str(getattr(sk_res, "title", ""))
                             )
@@ -858,7 +872,7 @@ class OmniHunterEngine:
                 takeover_skill = SubdomainTakeoverSkill()
                 for sub_host in (self.surface.get("subdomains") or [])[:6]:
                     try:
-                        to_res = asyncio.run(takeover_skill.run(sub_host, param_name="host"))
+                        to_res = self._run_async_safely(takeover_skill.run(sub_host, param_name="host"))
                         if to_res.verified:
                             self.confirmed_findings.append({
                                 "vuln_class": "SUBDOMAIN_TAKEOVER",
@@ -880,7 +894,7 @@ class OmniHunterEngine:
                 for ep_url in endpoints_to_probe:
                     if any(kw in ep_url.lower() for kw in ["redeem", "cart", "coupon", "transfer", "like", "vote", "apply", "checkout", "login", "register", "order"]):
                         try:
-                            race_res = asyncio.run(race_engine.run_synchronized_race(ep_url, method="POST", concurrency=8))
+                            race_res = self._run_async_safely(race_engine.run_synchronized_race(ep_url, method="POST", concurrency=8))
                             if race_res.is_vulnerable and race_res.violation_report:
                                 self.confirmed_findings.append({
                                     "vuln_class": "RACE_CONDITION",
@@ -992,7 +1006,7 @@ class OmniHunterEngine:
                         p_name = pt_dict.get("param") or pt_dict.get("name") or ""
                         if not p_name:
                             continue
-                        sk_res = asyncio.run(reg.run_best(p_url, p_name, proxy=self.config.proxy))
+                        sk_res = self._run_async_safely(reg.run_best(p_url, p_name, proxy=self.config.proxy))
                         if sk_res and getattr(sk_res, "verified", False):
                             is_fb = bool(getattr(sk_res, "fallback_used", False)) or (
                                 "Synthetic/Offline" in str(getattr(sk_res, "title", ""))
@@ -1112,7 +1126,7 @@ class OmniHunterEngine:
                     extra={"findings": self.confirmed_findings}
                 )
                 ec_skill = ExploitChainBuilderSkill()
-                ec_res = asyncio.run(ec_skill.execute(ec_ctx))
+                ec_res = self._run_async_safely(ec_skill.execute(ec_ctx))
                 self.exploit_chains = ec_res.metadata.get("chains", [])
                 if self.exploit_chains:
                     logger.info("[OmniHunter] Successfully assembled %d multi-step exploit chains!", len(self.exploit_chains))
@@ -1320,7 +1334,7 @@ class OmniHunterEngine:
                     },
                 )
                 rl_skill = ReasoningLoopSkill()
-                rl_res = asyncio.run(rl_skill.execute(rl_ctx))
+                rl_res = self._run_async_safely(rl_skill.execute(rl_ctx))
                 if rl_res.raw_output.get("target_graph"):
                     self.surface["target_graph"] = json.loads(rl_res.raw_output["target_graph"])
                 if rl_res.raw_output.get("decision"):

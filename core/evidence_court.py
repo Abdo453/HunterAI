@@ -28,20 +28,24 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from core.constants import CourtVerdict as _BaseCourtVerdict
 from core.poe_engine import ProofOfExecutionEngine
 
 logger = logging.getLogger("hunter_ai.evidence_court")
 
 
 class CourtVerdict(str, Enum):
-    CONFIRMED = "CONFIRMED"
+    CONFIRMED = _BaseCourtVerdict.CONFIRMED.value
+    # Preserve UNVERIFIED="UNVERIFIED" for backwards compatibility with existing
+    # court/arena tests and BurpIssueExporter, alongside UNVERIFIED_SIGNAL from core.constants.
     UNVERIFIED = "UNVERIFIED"
-    FALSE_POSITIVE = "FALSE_POSITIVE"
-    DISPROVED = "DISPROVED"
-    INCONCLUSIVE = "INCONCLUSIVE"
-    BLOCKED = "BLOCKED"
-    OUT_OF_SCOPE = "OUT_OF_SCOPE"
-    DUPLICATE = "DUPLICATE"
+    UNVERIFIED_SIGNAL = _BaseCourtVerdict.UNVERIFIED_SIGNAL.value
+    FALSE_POSITIVE = _BaseCourtVerdict.FALSE_POSITIVE.value
+    DISPROVED = _BaseCourtVerdict.DISPROVED.value
+    INCONCLUSIVE = _BaseCourtVerdict.INCONCLUSIVE.value
+    BLOCKED = _BaseCourtVerdict.BLOCKED.value
+    OUT_OF_SCOPE = _BaseCourtVerdict.OUT_OF_SCOPE.value
+    DUPLICATE = _BaseCourtVerdict.DUPLICATE.value
 
 
 @dataclass

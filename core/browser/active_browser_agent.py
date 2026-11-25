@@ -18,7 +18,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 from core.autonomous_hunter import (
@@ -29,6 +29,16 @@ from core.autonomous_hunter import (
     save_intercepted_api,
     trigger_exploit,
 )
+from core.browser.session import (
+    extract_api_endpoints_from_html,
+    is_api_endpoint_url,
+    publish_browser_endpoint,
+)
+
+try:
+    from core.burp_gateway.event_stream import BurpLiveEventStream
+except ImportError:  # pragma: no cover - avoids circular import during partial package init
+    BurpLiveEventStream = Any  # type: ignore[misc, assignment]
 
 logger = logging.getLogger("hunter_ai.active_browser_agent")
 
@@ -92,6 +102,7 @@ class ActiveBrowserAgent:
         timeout_secs: float = 45.0,
         screenshots_dir: str = "data/screenshots",
         on_progress: Optional[Callable[[str], Any]] = None,
+        event_stream: Optional[BurpLiveEventStream] = None,
     ):
         self.headless = headless
         self.max_actions = max_actions
@@ -99,10 +110,83 @@ class ActiveBrowserAgent:
         self.screenshots_dir = Path(screenshots_dir)
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
         self.on_progress = on_progress
+        self.event_stream = event_stream
 
         self._actions_log: List[BrowserInteractionEvent] = []
         self._intercepted_apis: List[Dict[str, Any]] = []
         self._visited_urls: Set[str] = set()
+        self._published_endpoint_keys: Set[Tuple[int, str, str]] = set()
+        self._last_target_url: str = ""
+
+    def _publish_endpoint_event(
+        self,
+        url: str,
+        method: str = "GET",
+        resource_type: str = "",
+        target_url: str = "",
+    ) -> bool:
+        """Emit a deduplicated browser_endpoint_discovered event to event_stream."""
+        return publish_browser_endpoint(
+            event_stream=self.event_stream,
+            url=url,
+            method=method,
+            source="browser",
+            resource_type=resource_type,
+            target_url=target_url or self._last_target_url,
+            published_keys=self._published_endpoint_keys,
+        )
+
+    def _extract_api_endpoints(
+        self,
+        html: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Extract API endpoints from HTML/DOM and intercepted network calls, publishing to event_stream."""
+        extracted: List[Dict[str, Any]] = []
+        seen_pairs: Set[Tuple[str, str]] = set()
+        known_intercepted: Set[Tuple[str, str]] = set()
+
+        for api in list(self._intercepted_apis):
+            url = api.get("url", "")
+            method = (api.get("method") or "GET").upper()
+            if not url:
+                continue
+            key = (method, url)
+            known_intercepted.add(key)
+            if key not in seen_pairs:
+                seen_pairs.add(key)
+                extracted.append({
+                    "url": url,
+                    "method": method,
+                    "resource_type": api.get("resource_type", ""),
+                    "source": "browser",
+                })
+
+        if html is not None:
+            resolved_base = base_url or self._last_target_url
+            for ep in extract_api_endpoints_from_html(html, resolved_base):
+                key = (ep["method"], ep["url"])
+                if key not in seen_pairs:
+                    seen_pairs.add(key)
+                    extracted.append(ep)
+                if key not in known_intercepted:
+                    known_intercepted.add(key)
+                    self._intercepted_apis.append({
+                        "method": ep["method"],
+                        "url": ep["url"],
+                        "resource_type": ep.get("resource_type", "script"),
+                        "headers": {},
+                    })
+
+        for ep in extracted:
+            self._publish_endpoint_event(
+                url=ep["url"],
+                method=ep["method"],
+                resource_type=ep.get("resource_type", ""),
+                target_url=base_url or self._last_target_url,
+            )
+
+        return extracted
 
     async def _emit(self, msg: str) -> None:
         logger.info("[ActiveBrowser] %s", msg)
@@ -126,6 +210,7 @@ class ActiveBrowserAgent:
         and intercepts background traffic.
         """
         t0 = time.time()
+        self._last_target_url = target_url
         base_host = (urlparse(target_url).hostname or "").lower()
 
         if not PLAYWRIGHT_READY:
@@ -167,35 +252,36 @@ class ActiveBrowserAgent:
             # ── 1. Intercept Network Requests (XHR, Fetch, APIs) ──────────────
             def handle_request(req: PlaywrightRequest):
                 url = req.url
-                p = urlparse(url)
-                # Ignore static images and fonts
-                if any(ext in p.path.lower() for ext in [".png", ".jpg", ".jpeg", ".gif", ".svg", ".woff", ".woff2", ".ttf"]):
+                if not is_api_endpoint_url(url, req.resource_type):
                     return
-                # Capture API calls
-                is_api = any(kw in p.path.lower() for kw in ["/api/", "/v1/", "/v2/", "/graphql", "/auth", "/user", "/data", "/json"])
-                if is_api or req.resource_type in ["fetch", "xhr"]:
-                    self._intercepted_apis.append({
-                        "method": req.method,
-                        "url": url,
-                        "resource_type": req.resource_type,
-                        "headers": dict(req.headers),
-                    })
+                self._intercepted_apis.append({
+                    "method": req.method,
+                    "url": url,
+                    "resource_type": req.resource_type,
+                    "headers": dict(req.headers),
+                })
+                self._publish_endpoint_event(
+                    url=url,
+                    method=req.method,
+                    resource_type=req.resource_type,
+                    target_url=target_url,
+                )
 
-                    # Auto-handover to Exploit Engine: persist + push to Vector Memory
-                    # (network exploitation is deferred to post-exploration to avoid blocking the browser)
-                    try:
-                        _api = InterceptedAPI(
-                            url=url,
-                            method=req.method,
-                            headers=dict(req.headers),
-                            body=None,
-                            params={},
-                            source="active_browser_agent",
-                        )
-                        save_intercepted_api(_api)
-                        push_to_vector_memory(_api, [])
-                    except Exception:
-                        pass
+                # Auto-handover to Exploit Engine: persist + push to Vector Memory
+                # (network exploitation is deferred to post-exploration to avoid blocking the browser)
+                try:
+                    _api = InterceptedAPI(
+                        url=url,
+                        method=req.method,
+                        headers=dict(req.headers),
+                        body=None,
+                        params={},
+                        source="active_browser_agent",
+                    )
+                    save_intercepted_api(_api)
+                    push_to_vector_memory(_api, [])
+                except Exception:
+                    pass
 
             page.on("request", handle_request)
 
@@ -208,6 +294,7 @@ class ActiveBrowserAgent:
             await page.wait_for_timeout(1500)
             page_title = await page.title()
             await self._emit(f"📄 Loaded page: '{page_title}' | URL: {page.url}")
+            self._extract_api_endpoints(html=await page.content(), base_url=page.url)
 
             # ── 3. Harvest Forms and Inputs ───────────────────────────────────
             discovered_forms: List[Dict[str, Any]] = []
@@ -289,6 +376,9 @@ class ActiveBrowserAgent:
                         self._visited_urls.add(page.url)
                 except Exception as click_err:
                     logger.debug("Click exception: %s", click_err)
+
+            # Extract any new endpoints revealed by interactive actions before screenshot
+            self._extract_api_endpoints(html=await page.content(), base_url=page.url)
 
             # ── 5. Extract Session State & Screenshot ─────────────────────────
             cookies = await context.cookies()
@@ -383,12 +473,18 @@ def run_browser_exploration_sync(
     headers: Optional[Dict[str, str]] = None,
     headless: bool = True,
     timeout_secs: float = 30.0,
+    event_stream: Optional[BurpLiveEventStream] = None,
 ) -> ActiveBrowserReport:
     """Synchronous runner for ActiveBrowserAgent, safely executed in an isolated thread."""
     import concurrent.futures
 
     def _worker():
-        agent = ActiveBrowserAgent(headless=headless, max_actions=15, timeout_secs=timeout_secs)
+        agent = ActiveBrowserAgent(
+            headless=headless,
+            max_actions=15,
+            timeout_secs=timeout_secs,
+            event_stream=event_stream,
+        )
         return asyncio.run(agent.explore_and_interact(target_url, auth_cookies=cookies, auth_headers=headers))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
@@ -397,6 +493,6 @@ def run_browser_exploration_sync(
             return future.result(timeout=timeout_secs + 5.0)
         except Exception as exc:
             logger.warning("[ActiveBrowserSync] Exploration timed out or errored: %s", exc)
-            agent = ActiveBrowserAgent()
+            agent = ActiveBrowserAgent(event_stream=event_stream)
             return agent._fallback_exploration(target_url, str(exc))
 

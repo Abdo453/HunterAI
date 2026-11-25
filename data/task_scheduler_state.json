@@ -15,16 +15,39 @@
     "status": "DONE",
     "retry_count": 0,
     "max_retries": 2,
+    "result": null,
+    "review_notes": "",
+    "review_passed": null,
+    "created_at": 1795560822.6694417,
+    "started_at": null,
+    "completed_at": null
+  },
+  {
+    "task_id": "TASK-171D03",
+    "title": "E2E Subdomain Recon",
+    "team": "RECON",
+    "owner_agent": "Executor",
+    "reviewer_agent": "Reviewer_RECON",
+    "target": "example.com",
+    "action": "subdomain_enum",
+    "parameters": {},
+    "priority": 1,
+    "depends_on": [],
+    "success_criteria": [],
+    "scope_verified": false,
+    "status": "DONE",
+    "retry_count": 0,
+    "max_retries": 2,
     "result": {
-      "execution_id": "EXEC-86CED0",
-      "task_id": "TASK-45B2AD",
+      "execution_id": "EXEC-B788B4",
+      "task_id": "TASK-171D03",
       "tool_name": "subdomain_enum",
       "action": "subdomain_enum",
       "target": "example.com",
       "parameters": {},
       "success": true,
       "exit_code": 0,
-      "duration_ms": 0.0,
+      "duration_ms": 0.01,
       "raw_output": "{\"subdomains\": [\"api.example.com\", \"admin.example.com\", \"auth.example.com\"], \"live_hosts\": [\"api.example.com\", \"auth.example.com\"]}",
       "normalized_data": {
         "subdomains": [
@@ -39,17 +62,18 @@
       },
       "errors": [],
       "warnings": [],
+      "error_category": "",
       "evidence_artifacts": [],
       "covered_items": [],
       "coverage_limits": [],
       "unresolved_unknowns": [],
       "recommended_next_steps": [],
-      "timestamp": 1792107989.470912
+      "timestamp": 1795560822.6705499
     },
     "review_notes": "Execution verified successfully.",
     "review_passed": true,
-    "created_at": 1792107989.469906,
-    "started_at": 1792107989.470912,
-    "completed_at": 1792107989.470912
+    "created_at": 1795560822.6696155,
+    "started_at": 1795560822.6704714,
+    "completed_at": 1795560822.6705608
   }
 ]

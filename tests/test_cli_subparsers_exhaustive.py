@@ -125,7 +125,15 @@ def test_exhaustive_all_88_subcommands_parse(parser):
         'waf-semantic': ['https://example.com', 'SELECT *'],
         'web': ['example.com'],
         'web3-audit': ['contracts/Token.sol'],
-        'wordlist': ['ai diverge']
+        'wordlist': ['ai diverge'],
+        'artex': ['example.com'],
+        'cache-clear': [],
+        'evolve': [],
+        'master': ['status'],
+        'network': ['example.com'],
+        'observe': ['https://example.com'],
+        'pro': ['example.com'],
+        'unified': ['example.com'],
     }
 
     subparsers_action = [a for a in parser._actions if a.dest == "command"][0]

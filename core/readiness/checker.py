@@ -30,6 +30,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from core.constants import BURP_GATEWAY_HOST, BURP_GATEWAY_PORT
+
 log = logging.getLogger("hunter_ai.readiness")
 
 
@@ -129,8 +131,8 @@ class ReadinessChecker:
         tls_timeout: float = 0.8,
         burp_proxy: str = "127.0.0.1",
         burp_proxy_port: int = 8080,
-        gateway_host: str = "127.0.0.1",
-        gateway_port: int = 8085,
+        gateway_host: str = BURP_GATEWAY_HOST,
+        gateway_port: int = BURP_GATEWAY_PORT,
         ollama_host: Optional[str] = None,
         config_path: Path = Path("config/tools.yaml"),
         manifest_path: Path = Path("environment/manifest.json"),

@@ -6,9 +6,17 @@ Allows Burp Suite to import HunterAI confirmed vulnerabilities into the Target I
 """
 from __future__ import annotations
 
+from enum import Enum
+import json
 import logging
-from typing import Any, Dict, List
+import os
+from pathlib import Path
+import re
+import threading
+import time
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
+import uuid
 
 logger = logging.getLogger("hunter_ai.issue_exporter")
 
@@ -30,6 +38,22 @@ class BurpIssueExporter:
         "MEDIUM": "Tentative",
         "UNVERIFIED": "Tentative",
     }
+
+    def __init__(
+        self,
+        output_dir: Optional[Union[str, Path]] = "data/exports/burp_issues",
+    ) -> None:
+        """Initialize the exporter and ensure the export directory exists."""
+        self.output_dir: Optional[Path] = (
+            Path(output_dir)
+            if output_dir is not None and str(output_dir).strip() != ""
+            else None
+        )
+        if self.output_dir is not None:
+            os.makedirs(self.output_dir, exist_ok=True)
+        self.exported_issues: List[Dict[str, Any]] = []
+        self.last_export_path: Optional[Path] = None
+        self._lock = threading.Lock()
 
     @classmethod
     def format_finding_for_burp(cls, finding: Dict[str, Any]) -> Dict[str, Any]:
@@ -79,3 +103,98 @@ class BurpIssueExporter:
     @classmethod
     def export_all(cls, findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return [cls.format_finding_for_burp(f) for f in findings]
+
+    @staticmethod
+    def _normalize_finding(finding_data: Any) -> Dict[str, Any]:
+        """Normalize finding payloads without mutating caller state."""
+        if not finding_data:
+            raw: Dict[str, Any] = {}
+        elif hasattr(finding_data, "to_dict") and callable(finding_data.to_dict):
+            raw = dict(finding_data.to_dict())
+        else:
+            raw = dict(finding_data)
+
+        if "endpoint" not in raw and "target" not in raw:
+            fallback_url = raw.get("url") or raw.get("target_url")
+            if fallback_url:
+                raw["endpoint"] = fallback_url
+
+        sev = raw.get("severity")
+        if isinstance(sev, Enum):
+            sev = str(sev.value)
+            raw["severity"] = sev
+        if isinstance(sev, str) and sev not in BurpIssueExporter.SEVERITY_MAP:
+            cap_sev = sev.strip().capitalize()
+            if cap_sev in BurpIssueExporter.SEVERITY_MAP:
+                raw["severity"] = cap_sev
+
+        verdict = raw.get("lifecycle_verdict")
+        if isinstance(verdict, Enum):
+            raw["lifecycle_verdict"] = str(verdict.value)
+
+        return raw
+
+    @staticmethod
+    def _resolve_issue_id(finding_data: Dict[str, Any]) -> str:
+        """Derive a path-safe filename stem that will not collide with issues.json."""
+        raw_id = finding_data.get("finding_id") or finding_data.get("id")
+        if raw_id:
+            safe_id = re.sub(r"[^A-Za-z0-9_-]+", "_", str(raw_id)).strip("_-")
+            if safe_id:
+                if safe_id.lower() == "issues":
+                    return "finding_issues"
+                return safe_id
+        return f"issue_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
+
+    def _persist_issue(self, issue: Dict[str, Any], issue_id: str) -> Optional[Path]:
+        """Persist an individual issue file and append it to the issues.json index."""
+        output_dir = getattr(self, "output_dir", None)
+        if output_dir is None:
+            return None
+
+        os.makedirs(output_dir, exist_ok=True)
+        issue_path = output_dir / f"{issue_id}.json"
+        issue_path.write_text(
+            json.dumps(issue, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+
+        index_path = output_dir / "issues.json"
+        existing_issues: List[Dict[str, Any]] = []
+        if index_path.exists():
+            try:
+                loaded = json.loads(index_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, list):
+                    existing_issues = loaded
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning("Failed to read existing issues index %s: %s", index_path, exc)
+
+        existing_issues.append(issue)
+        index_path.write_text(
+            json.dumps(existing_issues, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        return issue_path
+
+    def export_finding(self, finding_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Format a confirmed finding for Burp Suite and persist it as JSON."""
+        normalized = self._normalize_finding(finding_data)
+        issue = self.format_finding_for_burp(normalized)
+        issue_id = self._resolve_issue_id(normalized)
+
+        lock = getattr(self, "_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._lock = lock
+
+        with lock:
+            if not hasattr(self, "exported_issues"):
+                self.exported_issues = []
+            self.exported_issues.append(issue)
+            saved_path = self._persist_issue(issue, issue_id)
+            self.last_export_path = saved_path
+
+        result = dict(issue)
+        if saved_path is not None:
+            result["export_path"] = str(saved_path)
+        return result

@@ -1,0 +1,11 @@
+{
+  "entry_id": "a0b51674",
+  "memory_type": "working",
+  "target": "test.com",
+  "key": "test_key",
+  "value": "test_value_123",
+  "created_at": 1795273981.3806994,
+  "updated_at": 1795273981.3807025,
+  "access_count": 1,
+  "ttl_seconds": null
+}

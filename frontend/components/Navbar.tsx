@@ -42,7 +42,7 @@ export default function Navbar({ onScan, isScanning }: NavbarProps) {
           <div className="relative flex-1">
             <input
               type="text"
-              placeholder="Target domain (e.g. wolt.com, example.com)..."
+              placeholder="Target domain (e.g. example.com)..."
               value={targetInput}
               onChange={(e) => setTargetInput(e.target.value)}
               className="w-full bg-[#1e293b]/80 border border-gray-700 rounded-lg px-4 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors"

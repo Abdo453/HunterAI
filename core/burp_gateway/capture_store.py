@@ -21,11 +21,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import tempfile
 import time
+import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger("hunter_ai.capture_store")
@@ -102,21 +104,27 @@ class CapturedTransaction:
 class CaptureStore:
     """Persistent engagement filesystem manager"""
 
-    def __init__(self, target: str, base_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        target: str,
+        base_dir: Optional[Union[str, Path]] = "data/engagements/default",
+    ):
         parsed = urlparse(target if "://" in target else f"http://{target}")
         self.target_host = (parsed.hostname or target).lower().replace(":", "_").replace(".", "_")
-        # Use a fresh temporary engagement by default.  Persisting a target's
-        # traffic is opt-in through an explicit base_dir.
+        if isinstance(base_dir, str) and not base_dir.strip():
+            base_dir = "data/engagements/default"
+        # Persist by default under data/engagements/default; passing base_dir=None
+        # explicitly opts into an isolated temporary session-only directory.
         self._session_only = base_dir is None
         storage_root = Path(base_dir) if base_dir is not None else Path(tempfile.mkdtemp(prefix="hunterai-engagement-"))
+        self.base_dir = storage_root
         self.root_dir = storage_root / self.target_host
 
-        # Create subdirectories
-        (self.root_dir / "requests").mkdir(parents=True, exist_ok=True)
-        (self.root_dir / "responses").mkdir(parents=True, exist_ok=True)
-        (self.root_dir / "evidence").mkdir(parents=True, exist_ok=True)
-        (self.root_dir / "findings").mkdir(parents=True, exist_ok=True)
-        (self.root_dir / "cases").mkdir(parents=True, exist_ok=True)
+        # Explicitly create base, root, and engagement subdirectories
+        os.makedirs(self.base_dir, exist_ok=True)
+        os.makedirs(self.root_dir, exist_ok=True)
+        for subdir in ("requests", "responses", "evidence", "findings", "cases"):
+            os.makedirs(self.root_dir / subdir, exist_ok=True)
 
         self.scope_file = self.root_dir / "scope.json"
         self.endpoints_file = self.root_dir / "endpoints.json"
@@ -141,27 +149,118 @@ class CaptureStore:
         self._browser_action_index: Dict[str, List[str]] = {}  # browser_action_id -> [tx_id, ...]
 
         if not self._session_only:
-            self._load_existing()
+            self.load_previous_session()
 
-    def _load_existing(self):
+    def _load_json_file(self, path: Path) -> Any:
+        """Safely read and decode a JSON file, returning None on missing or corrupt data."""
+        if not path.exists():
+            return None
         try:
-            if self.endpoints_file.exists():
-                with open(self.endpoints_file, "r", encoding="utf-8") as f:
-                    self.endpoints = set(json.load(f))
-            if self.parameters_file.exists():
-                with open(self.parameters_file, "r", encoding="utf-8") as f:
-                    self.parameters = set(json.load(f))
-            if self.identities_file.exists():
-                with open(self.identities_file, "r", encoding="utf-8") as f:
-                    self.identities = json.load(f)
-            if self.hypotheses_file.exists():
-                with open(self.hypotheses_file, "r", encoding="utf-8") as f:
-                    self.hypotheses = json.load(f)
-            if self.timeline_file.exists():
-                with open(self.timeline_file, "r", encoding="utf-8") as f:
-                    self.timeline = json.load(f)
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
         except Exception as e:
-            logger.debug(f"Non-critical load error in CaptureStore: {e}")
+            logger.debug(f"Non-critical load error in CaptureStore ({path}): {e}")
+            return None
+
+    @staticmethod
+    def _merge_unique_dicts(target_list: List[Dict[str, Any]], items: Any) -> None:
+        """Merge list-of-dict records into target_list without inserting duplicates."""
+        if not isinstance(items, list):
+            return
+        seen = {
+            json.dumps(item, sort_keys=True, default=str)
+            for item in target_list
+            if isinstance(item, dict)
+        }
+        for item in items:
+            if isinstance(item, dict):
+                key = json.dumps(item, sort_keys=True, default=str)
+                if key not in seen:
+                    seen.add(key)
+                    target_list.append(item)
+
+    def load_previous_session(self) -> None:
+        """Reload persisted engagement indices, findings, and transactions from disk."""
+        endpoints_data = self._load_json_file(self.endpoints_file)
+        if isinstance(endpoints_data, list):
+            self.endpoints.update(str(item) for item in endpoints_data)
+
+        parameters_data = self._load_json_file(self.parameters_file)
+        if isinstance(parameters_data, list):
+            self.parameters.update(str(item) for item in parameters_data)
+
+        technologies_data = self._load_json_file(self.technologies_file)
+        if isinstance(technologies_data, list):
+            self.technologies.update(str(item) for item in technologies_data)
+
+        identities_data = self._load_json_file(self.identities_file)
+        if isinstance(identities_data, dict):
+            self.identities.update(identities_data)
+
+        self._merge_unique_dicts(self.hypotheses, self._load_json_file(self.hypotheses_file))
+        self._merge_unique_dicts(self.tests, self._load_json_file(self.tests_file))
+        self._merge_unique_dicts(self.timeline, self._load_json_file(self.timeline_file))
+
+        # Reload persisted findings from findings/*.json without duplicating existing IDs
+        findings_dir = self.root_dir / "findings"
+        if findings_dir.exists():
+            seen_finding_ids = {
+                f.get("id")
+                for f in self.findings
+                if isinstance(f, dict) and f.get("id")
+            }
+            seen_findings_raw = {
+                json.dumps(f, sort_keys=True, default=str)
+                for f in self.findings
+                if isinstance(f, dict)
+            }
+            finding_files = sorted(
+                findings_dir.glob("*.json"),
+                key=lambda p: (p.stat().st_mtime, p.name),
+            )
+            for f_path in finding_files:
+                finding_data = self._load_json_file(f_path)
+                if not isinstance(finding_data, dict):
+                    continue
+                finding_id = finding_data.get("id")
+                if finding_id:
+                    if finding_id in seen_finding_ids:
+                        continue
+                    seen_finding_ids.add(finding_id)
+                else:
+                    serialized = json.dumps(finding_data, sort_keys=True, default=str)
+                    if serialized in seen_findings_raw:
+                        continue
+                    seen_findings_raw.add(serialized)
+                self.findings.append(finding_data)
+
+        # Reload persisted HTTP transactions and lineage/trace indices
+        requests_dir = self.root_dir / "requests"
+        if requests_dir.exists():
+            loaded_txs: List[CapturedTransaction] = []
+            for req_path in sorted(requests_dir.glob("*.json")):
+                stem = req_path.stem
+                tx = self.transactions.get(stem) or self._load_transaction_from_disk(stem)
+                if tx is not None:
+                    loaded_txs.append(tx)
+            loaded_txs.sort(key=lambda t: t.timestamp)
+            for tx in loaded_txs:
+                if tx.tx_id and tx.tx_id not in self.transactions:
+                    self.transactions[tx.tx_id] = tx
+                if tx.request_id and tx.request_id not in self.transactions:
+                    self.transactions[tx.request_id] = tx
+                if tx.trace_id:
+                    trace_bucket = self._trace_index.setdefault(tx.trace_id, [])
+                    if tx.tx_id not in trace_bucket:
+                        trace_bucket.append(tx.tx_id)
+                if tx.browser_action_id:
+                    action_bucket = self._browser_action_index.setdefault(tx.browser_action_id, [])
+                    if tx.tx_id not in action_bucket:
+                        action_bucket.append(tx.tx_id)
+
+    def _load_existing(self) -> None:
+        """Backwards-compatible alias for load_previous_session()."""
+        self.load_previous_session()
 
     def save_scope(self, in_scope: List[str], out_of_scope: List[str]):
         with open(self.scope_file, "w", encoding="utf-8") as f:
@@ -271,11 +370,8 @@ class CaptureStore:
         self._flush_indices()
         return tx.tx_id
 
-    def get_transaction(self, request_id: str) -> Optional[CapturedTransaction]:
-        """Retrieves a transaction from cache or disk"""
-        if request_id in self.transactions:
-            return self.transactions[request_id]
-
+    def _load_transaction_from_disk(self, request_id: str) -> Optional[CapturedTransaction]:
+        """Reads a single transaction's request/response files from disk."""
         req_path = self.root_dir / "requests" / f"{request_id}.json"
         resp_path = self.root_dir / "responses" / f"{request_id}.json"
         if not req_path.exists():
@@ -289,7 +385,7 @@ class CaptureStore:
                 with open(resp_path, "r", encoding="utf-8") as f:
                     resp_data = json.load(f)
 
-            tx = CapturedTransaction(
+            return CapturedTransaction(
                 tx_id=r_data.get("tx_id", request_id),
                 request_id=r_data.get("request_id", request_id),
                 target_host=self.target_host,
@@ -311,13 +407,27 @@ class CaptureStore:
                 endpoint_id=r_data.get("endpoint_id", ""),
                 parameter_ids=r_data.get("parameter_ids", []),
                 trace_id=r_data.get("trace_id", ""),
-                browser_action_id=r_data.get("browser_action_id", "")
+                browser_action_id=r_data.get("browser_action_id", ""),
             )
-            self.transactions[request_id] = tx
-            return tx
         except Exception as e:
             logger.debug(f"Failed to load transaction {request_id}: {e}")
             return None
+
+    def get_transaction(self, request_id: str) -> Optional[CapturedTransaction]:
+        """Retrieves a transaction from cache or disk"""
+        if request_id in self.transactions:
+            return self.transactions[request_id]
+
+        tx = self._load_transaction_from_disk(request_id)
+        if tx is None:
+            return None
+
+        self.transactions[request_id] = tx
+        if tx.tx_id:
+            self.transactions[tx.tx_id] = tx
+        if tx.request_id:
+            self.transactions[tx.request_id] = tx
+        return tx
 
     def list_transactions(self, limit: Optional[int] = None) -> List[CapturedTransaction]:
         """Returns captured transactions in insertion order without duplicate aliases."""
@@ -403,7 +513,14 @@ class CaptureStore:
     def record_finding(self, finding_dict: Dict[str, Any]):
         finding_id = finding_dict.get("id") or f"fnd_{uuid_snippet()}"
         finding_dict["id"] = finding_id
-        self.findings.append(finding_dict)
+        existing_idx = next(
+            (i for i, existing in enumerate(self.findings) if isinstance(existing, dict) and existing.get("id") == finding_id),
+            None,
+        )
+        if existing_idx is not None:
+            self.findings[existing_idx] = finding_dict
+        else:
+            self.findings.append(finding_dict)
         f_path = self.root_dir / "findings" / f"{finding_id}.json"
         with open(f_path, "w", encoding="utf-8") as f:
             json.dump(finding_dict, f, indent=2)
@@ -449,4 +566,4 @@ class CaptureStore:
 
 
 def uuid_snippet():
-    return hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]
+    return uuid.uuid4().hex[:8]

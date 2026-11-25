@@ -1,1 +1,1 @@
-# web ui package
+"""HunterAI Web UI & API Package"""

@@ -10,6 +10,7 @@ import re
 from typing import List
 
 from core.code_intel.models import SecretCandidate, SecretStatus
+from core.constants import SHANNON_ENTROPY_ADMISSION, SHANNON_ENTROPY_REJECTION
 
 
 class SecretHunter:
@@ -69,7 +70,9 @@ class SecretHunter:
                 if any(p in val.lower() for p in cls.PLACEHOLDERS) or "gtm-" in val.lower():
                     continue
                 ent = cls.calculate_shannon_entropy(val)
-                if ent >= 3.3 and len(val) >= 20:
+                # Intentional hysteresis gap: require SHANNON_ENTROPY_ADMISSION (3.3) to admit
+                # generic candidates, while rejecting below SHANNON_ENTROPY_REJECTION (3.2).
+                if ent >= SHANNON_ENTROPY_ADMISSION and len(val) >= 20:
                     cand = cls._process_candidate("generic_credential", val, source_file, idx, entropy=ent)
                     if cand:
                         results.append(cand)
@@ -89,7 +92,7 @@ class SecretHunter:
         if any(ph in match_str.lower() for ph in cls.PLACEHOLDERS):
             status = SecretStatus.REJECTED
             notes = "Rejected: Placeholder value"
-        elif s_type == "generic_credential" and entropy < 3.2:
+        elif s_type == "generic_credential" and entropy < SHANNON_ENTROPY_REJECTION:
             status = SecretStatus.REJECTED
             notes = f"Rejected: Low entropy for generic credential ({entropy:.2f})"
         else:

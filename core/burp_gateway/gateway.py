@@ -28,6 +28,7 @@ from core.burp_gateway.correlation import BurpCorrelationContext
 from core.burp_gateway.traffic_normalizer import BurpTrafficNormalizer, CanonicalRequest
 from core.burp_gateway.experiment_queue import BurpExperimentQueue, BurpExperimentItem
 from core.burp_gateway.event_stream import BurpLiveEventStream
+from core.constants import BURP_GATEWAY_HOST, BURP_GATEWAY_PORT
 
 
 
@@ -39,8 +40,8 @@ class BurpGateway:
 
     def __init__(
         self,
-        host: str = "127.0.0.1",
-        port: int = 8085,
+        host: str = BURP_GATEWAY_HOST,
+        port: int = BURP_GATEWAY_PORT,
         capture_store: Optional[CaptureStore] = None,
         on_traffic_cb: Optional[Callable] = None,
         task_executor_fn: Optional[Callable[[BurpTask], Any]] = None,

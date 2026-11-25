@@ -60,7 +60,6 @@ sections_to_check = [
     ("sec-burp", "Burp Suite Integration Monitor"),
     ("sec-models", "AI Models Manager"),
     ("sec-targets", "Target & Scope Guard"),
-    ("sec-radar", "Live Target Radar & test.py Analyzer"),
     ("sec-activity", "Live Activity Center"),
     ("sec-results", "Results & Vulnerabilities Explorer"),
     ("sec-diagnostics", "System Diagnostics"),
@@ -110,7 +109,6 @@ api_endpoints = [
     ("GET", "/api/control/burp", None),
     ("GET", "/api/control/models", None),
     ("GET", "/api/control/targets", None),
-    ("GET", "/api/control/test-radar", None),
     ("GET", "/api/control/activity", None),
     ("GET", "/api/control/results", None),
     ("GET", "/api/control/settings", None),
@@ -127,7 +125,6 @@ api_endpoints = [
         "reproducibility": "100% reproducible",
         "vulnerability_class": "idor"
     }),
-    ("POST", "/api/control/test-radar/simulate", {}),
 ]
 
 for method, ep, payload in api_endpoints:

@@ -1,0 +1,23 @@
+{
+  "graph_id": "default",
+  "tasks": {},
+  "stats": {
+    "graph": {
+      "pending": 0,
+      "in_progress": 0,
+      "blocked": 0,
+      "failed": 0,
+      "bypassed": 0,
+      "completed": 0
+    },
+    "memory": {
+      "total_entries": 0,
+      "by_type": {
+        "working": 0,
+        "semantic": 0,
+        "failure_episodic": 0
+      }
+    },
+    "tasks": 0
+  }
+}

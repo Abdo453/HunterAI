@@ -17,7 +17,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 from core.attack_surface_graph import AttackSurfaceGraph, ThirdPartyDependencyFirewall
@@ -28,9 +28,14 @@ from core.browser.dom_diff import DOMDiffEngine
 from core.browser.exploration_memory import ExplorationMemory
 from core.browser.explorer import HumanLikeExplorationEngine, StopReason
 from core.browser.interaction_planner import InteractionPlanner
-from core.browser.session import StatefulBrowserSession
+from core.browser.session import StatefulBrowserSession, publish_browser_endpoint
 from core.browser.state_detector import SemanticAppState, StateDetector
 from core.browser.state_graph import ApplicationStateGraph
+
+try:
+    from core.burp_gateway.event_stream import BurpLiveEventStream
+except ImportError:  # pragma: no cover - avoids circular import during partial package init
+    BurpLiveEventStream = Any  # type: ignore[misc, assignment]
 
 logger = logging.getLogger("hunter_ai.browser_brain_loop")
 
@@ -65,6 +70,7 @@ class BrowserBrainLoop:
         time_budget_sec: float = 90.0,
         coverage_threshold: float = 80.0,
         progress_cb: Optional[Callable[[str], Any]] = None,
+        event_stream: Optional[BurpLiveEventStream] = None,
     ):
         self.target_url = target_url
         self.base_host = (urlparse(target_url).hostname or "target").lower()
@@ -73,18 +79,23 @@ class BrowserBrainLoop:
         self.time_budget_sec = time_budget_sec
         self.coverage_threshold = coverage_threshold
         self.progress_cb = progress_cb
+        self.event_stream = event_stream if event_stream is not None else getattr(session, "event_stream", None)
 
         self.event_bus = event_bus or BrowserEventBus()
         self.memory = ExplorationMemory(self.base_host)
         self.coverage = CoverageEngine(target_url)
         self.state_graph = ApplicationStateGraph(self.base_host)
+        self._published_endpoint_keys: Set[Tuple[int, str, str]] = set()
 
         # Persistent Browser Session
+        if session is not None and self.event_stream is not None and getattr(session, "event_stream", None) is None:
+            session.event_stream = self.event_stream
         self.session = session or StatefulBrowserSession(
             target_url=target_url,
             output_dir=Path(f"data/scans/{self.base_host.replace('.', '_')}/browser"),
             headless=True,
             on_network_event=self._handle_network_traffic,
+            event_stream=self.event_stream,
         )
 
         # Wire event bus to memory and coverage
@@ -126,6 +137,21 @@ class BrowserBrainLoop:
             auth = event.data.get("state", "GUEST")
             self.coverage.register_auth_state(auth)
 
+    def _emit_endpoint_to_stream(self, url: str, method: str = "GET", resource_type: str = "") -> None:
+        stream = self.event_stream or getattr(self.session, "event_stream", None)
+        if not stream:
+            return
+        dedup = getattr(self.session, "_published_endpoint_keys", self._published_endpoint_keys)
+        publish_browser_endpoint(
+            event_stream=stream,
+            url=url,
+            method=method,
+            source="browser",
+            resource_type=resource_type,
+            target_url=self.target_url,
+            published_keys=dedup,
+        )
+
     def _handle_network_traffic(self, req_dict: Dict[str, Any]) -> None:
         url = req_dict.get("url", "")
         if not url or ThirdPartyDependencyFirewall.is_external_dependency(url, self.base_host):
@@ -139,6 +165,11 @@ class BrowserBrainLoop:
                 source_url=url,
                 data={"endpoint": url, "method": req_dict.get("method", "GET")}
             ))
+            self._emit_endpoint_to_stream(
+                url=url,
+                method=req_dict.get("method", "GET"),
+                resource_type=req_dict.get("resource_type", ""),
+            )
 
     async def run_loop(self) -> SensorObservationReport:
         """Executes the Information-Gain exploration loop across pages and states"""
@@ -172,8 +203,12 @@ class BrowserBrainLoop:
         manifest = res.get("manifest", {})
 
         # Populate coverage from explorer results
+        stream = self.event_stream or getattr(self.session, "event_stream", None)
+        dedup = getattr(self.session, "_published_endpoint_keys", self._published_endpoint_keys)
         for u in res.get("endpoints", []):
             self.coverage.register_api(u, observed=True)
+            if stream and not any(k[0] == id(stream) and k[2] == u for k in dedup):
+                self._emit_endpoint_to_stream(url=u, method="GET")
         for j in res.get("js_urls", []):
             self.coverage.register_js(j, analyzed=True)
         for s_id in self.state_graph.states.keys():

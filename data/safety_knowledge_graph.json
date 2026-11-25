@@ -1,9 +1,5 @@
 {
   "nodes": {},
   "edges": [],
-  "in_scope": [
-    "example.com",
-    "https://example.com/search",
-    "https://dashboard.f1.hotgame.win"
-  ]
+  "in_scope": []
 }
