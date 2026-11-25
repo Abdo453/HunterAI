@@ -3,6 +3,7 @@ Policy Engine for Governed Tool Gateway (CyberStrikeAI-Inspired)
 Enforces multi-layer safety arbitration: Scope boundaries, Risk Tiers, Action Rate-Limiting, and Input Sanitization.
 """
 import re
+import shlex
 import logging
 from dataclasses import dataclass
 from typing import Optional, Dict, List
@@ -86,7 +87,7 @@ class PolicyEngine:
         # is always honoured; otherwise the engine routes through the reference
         # StrictScopeEngine.
         if full_permissions is None:
-            full_permissions = unrestricted_mode()
+            full_permissions = unrestricted_mode() if scope_guard is None else False
 
         if scope_guard is not None:
             self.scope_guard = scope_guard
@@ -124,15 +125,19 @@ class PolicyEngine:
         # 1. Classify Risk Tier
         risk_tier, risk_reason = self.risk_classifier.classify_proposal(proposal)
 
-        if unrestricted_mode():
+        if self.full_permissions:
             # Owner full-permissions mode: no destructive-tier block, no scope
             # gate, no active-testing restriction and no rate-limit loop guard.
+            try:
+                sanitized = self._sanitize_command_args(proposal.command_args)
+            except ValueError:
+                sanitized = ""
             return PolicyVerdict(
                 allowed=True,
                 risk_tier=risk_tier,
                 status="APPROVED",
                 reason="Unrestricted owner mode: full execution permissions.",
-                sanitized_args=self._sanitize_command_args(proposal.command_args),
+                sanitized_args=sanitized,
             )
 
         # Rule A: Instantly Block Destructive Commands (TIER 4)
@@ -184,7 +189,17 @@ class PolicyEngine:
             )
 
         # 5. Sanitize Arguments (Prevent shell injection breakouts in tool args)
-        sanitized_args = self._sanitize_command_args(proposal.command_args)
+        try:
+            sanitized_args = self._sanitize_command_args(proposal.command_args)
+        except ValueError as exc:
+            log.warning(f"[PolicyEngine] REJECTED proposal {proposal.id}: Unsafe command_args ({exc}).")
+            return PolicyVerdict(
+                allowed=False,
+                risk_tier=risk_tier,
+                status="BLOCKED_RISK",
+                reason=f"Unsafe command arguments rejected: {exc}",
+                sanitized_args="",
+            )
 
         # Increment count
         self._action_counts[action_key] = current_count + 1
@@ -198,14 +213,28 @@ class PolicyEngine:
             sanitized_args=sanitized_args
         )
 
+    _SHELL_META_TOKENS = (";", "&&", "||", "|", "`", "$(", "${", ">", "<", "\x00")
+
     def _sanitize_command_args(self, raw_args: str) -> str:
         """
         تعقيم الباراميترات لمنع كسر أوامر الشل غير المصرح بها
         """
         if not raw_args:
             return ""
-        # Strip newline/carriage returns and control characters
+        for meta in self._SHELL_META_TOKENS:
+            if meta in raw_args:
+                raise ValueError(f"shell metacharacter {meta!r} is forbidden")
+        # Strip newline/carriage returns and collapse whitespace
         clean = raw_args.replace("\r", " ").replace("\n", " ").strip()
-        # Collapse multiple spaces
         clean = re.sub(r"\s+", " ", clean)
+        if not clean:
+            return ""
+        # Reject unparseable quoting or standalone '&' shell background/chaining
+        try:
+            tokens = shlex.split(clean)
+        except ValueError as exc:
+            raise ValueError(f"malformed argument quoting: {exc}") from exc
+        for tok in tokens:
+            if "&" in tok:
+                raise ValueError("shell metacharacter '&' is forbidden")
         return clean

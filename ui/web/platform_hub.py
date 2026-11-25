@@ -558,20 +558,28 @@ async def start_platform_run(req: RunStartRequest) -> Dict[str, Any]:
         if req.engine not in DRIVERS:
             raise HTTPException(status_code=404, detail=f"Unknown engine '{req.engine}'. Available: {sorted(DRIVERS)}")
 
-    # Resolve engagement & scope
+    # Resolve engagement & scope (never self-authorize target without explicit engagement or non-empty scope)
     eng = store.get_engagement(req.engagement_id) if req.engagement_id else None
-    in_scope = list(req.scope) if req.scope is not None else list((eng or {}).get("in_scope") or ([target] if target else []))
-    out_of_scope = list(req.out_of_scope) if req.out_of_scope is not None else list((eng or {}).get("out_of_scope") or [])
+    if not eng and req.engagement_id:
+        for item in _load_local_engagements_merged(store):
+            if item.get("engagement_id") == req.engagement_id:
+                eng = item
+                break
+    raw_scope = req.scope if req.scope is not None else (eng or {}).get("in_scope") or []
+    in_scope = [str(s).strip() for s in raw_scope if str(s).strip()]
+    raw_out = req.out_of_scope if req.out_of_scope is not None else (eng or {}).get("out_of_scope") or []
+    out_of_scope = [str(s).strip() for s in raw_out if str(s).strip()]
 
     if target:
         policy = evaluate_action_policy(
             action_type="START_RUN",
             target=target,
             tool_name=kind,
-            command_args=req.prompt or req.mode,
+            command_args=req.mode,
             in_scope=in_scope,
             out_of_scope=out_of_scope,
             allow_active_tests=True,
+            rationale=req.prompt or req.mode,
         )
         if not policy["allowed"]:
             raise HTTPException(status_code=403, detail=policy["reason"])
@@ -622,7 +630,7 @@ async def start_platform_run(req: RunStartRequest) -> Dict[str, Any]:
                     if ev.get("name"):
                         store.update_run(run_id, current_phase=str(ev["name"]))
 
-                guard = ScopeGuard(in_scope=in_scope or [target], out_of_scope=out_of_scope)
+                guard = ScopeGuard(in_scope=in_scope, out_of_scope=out_of_scope)
                 runner = ReconPipelineRunner(target, scope_guard=guard, progress_cb=_pipe_cb, session_id=run_id)
                 res = await runner.run()
                 store.update_run(run_id, status="completed", current_phase="DONE", progress=100.0, finished_at=time.time(), meta={"result": res})
@@ -661,10 +669,9 @@ async def start_platform_run(req: RunStartRequest) -> Dict[str, Any]:
             if kind == "omni":
                 from core.engine.omni_hunter_engine import AssessmentConfig, OmniHunterEngine
 
-                clean_domain = target.replace("https://", "").replace("http://", "").split("/")[0]
                 cfg = AssessmentConfig(
                     target_url=target if target.startswith("http") else f"https://{target}",
-                    scope_domains=in_scope or [clean_domain],
+                    scope_domains=in_scope,
                     out_of_scope_domains=out_of_scope,
                     coverage_threshold=req.coverage,
                     max_cycles=req.max_cycles,
@@ -1021,10 +1028,15 @@ async def decide_platform_approval(approval_id: str, req: ApprovalDecideRequest)
                 pass
         return {"status": "ok", "approval": decided, "executed": False}
 
-    # Re-validate ScopeGuard + PolicyEngine before accepting approval
+    # Re-validate ScopeGuard + PolicyEngine before accepting approval (never self-authorize without engagement scope)
     eng = store.get_engagement(existing["engagement_id"]) if existing.get("engagement_id") else None
-    in_scope = list((eng or {}).get("in_scope") or ([existing["target"]] if existing.get("target") else []))
-    out_of_scope = list((eng or {}).get("out_of_scope") or [])
+    if not eng and existing.get("engagement_id"):
+        for item in _load_local_engagements_merged(store):
+            if item.get("engagement_id") == existing["engagement_id"]:
+                eng = item
+                break
+    in_scope = [str(s).strip() for s in ((eng or {}).get("in_scope") or []) if str(s).strip()]
+    out_of_scope = [str(s).strip() for s in ((eng or {}).get("out_of_scope") or []) if str(s).strip()]
 
     policy = evaluate_action_policy(
         action_type=existing["action_type"],
@@ -1076,26 +1088,34 @@ async def decide_platform_approval(approval_id: str, req: ApprovalDecideRequest)
             from core.gateway.schemas import ActionProposal
             from core.gateway.tool_gateway import GovernedToolGateway
             from core.gateway.policy_engine import PolicyEngine
-            from core.copilot_service import _StrictScopeGuardAdapter
+            from core.copilot_service import _StrictScopeGuardAdapter, _validate_target_token
 
             adapter = _StrictScopeGuardAdapter(in_scope=in_scope, out_of_scope=out_of_scope, allow_active_tests=True)
-            gateway = GovernedToolGateway(policy_engine=PolicyEngine(scope_guard=adapter, full_permissions=False))
-            prop = ActionProposal(
-                target=target,
-                tool_name=tool_name,
-                command_args=policy.get("sanitized_args") or "",
-                action_type=act_type,
-                rationale=existing.get("rationale") or "",
-            )
-            res = await gateway.execute_proposal(prop)
-            execution_outcome = {
-                "executed": not res.blocked,
-                "success": res.success,
-                "blocked": res.blocked,
-                "returncode": res.returncode,
-                "error": res.error,
-                "stdout_excerpt": (res.raw_stdout or "")[:800],
-            }
+            policy_engine = PolicyEngine(scope_guard=adapter, full_permissions=False)
+            target_err = _validate_target_token(target)
+            if target_err:
+                execution_outcome = {"executed": False, "blocked": True, "error": target_err}
+            else:
+                safe_args = policy_engine._sanitize_command_args(policy.get("sanitized_args") or "")
+                gateway = GovernedToolGateway(policy_engine=policy_engine)
+                prop = ActionProposal(
+                    target=target,
+                    tool_name=tool_name,
+                    command_args=safe_args,
+                    action_type=act_type,
+                    rationale=existing.get("rationale") or "",
+                )
+                res = await gateway.execute_proposal(prop)
+                execution_outcome = {
+                    "executed": not res.blocked,
+                    "success": res.success,
+                    "blocked": res.blocked,
+                    "returncode": res.returncode,
+                    "error": res.error,
+                    "stdout_excerpt": (res.raw_stdout or "")[:800],
+                }
+        except ValueError as exc:
+            execution_outcome = {"executed": False, "blocked": True, "error": f"Unsafe command arguments rejected: {exc}"}
         except Exception as exc:
             execution_outcome = {"executed": False, "error": str(exc)}
 

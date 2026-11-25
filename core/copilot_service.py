@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import socket
 import time
 from pathlib import Path
@@ -100,15 +101,17 @@ class _StrictScopeGuardAdapter:
     """Adapter bridging core.scope_guard.ScopeGuard + StrictScopeEngine to PolicyEngine."""
 
     def __init__(self, in_scope: List[str], out_of_scope: List[str], allow_active_tests: bool = True):
-        self._guard = ScopeGuard(in_scope=in_scope, out_of_scope=out_of_scope)
+        clean_in_scope = [str(s).strip() for s in (in_scope or []) if str(s).strip()]
+        clean_out_of_scope = [str(s).strip() for s in (out_of_scope or []) if str(s).strip()]
+        self._guard = ScopeGuard(in_scope=clean_in_scope, out_of_scope=clean_out_of_scope)
         self._strict_engine = StrictScopeEngine(
-            ScopePolicy(allowed_targets=list(in_scope or []), fail_closed=bool(in_scope))
+            ScopePolicy(allowed_targets=clean_in_scope, excluded_targets=clean_out_of_scope, fail_closed=True)
         )
-        self._in_scope = list(in_scope or [])
-        self._out_of_scope = list(out_of_scope or [])
+        self._in_scope = clean_in_scope
+        self._out_of_scope = clean_out_of_scope
         self.rule = ScopeRule(
-            target=in_scope[0] if in_scope else "*",
-            allowed_domains=list(in_scope or []),
+            target=clean_in_scope[0] if clean_in_scope else "",
+            allowed_domains=clean_in_scope,
             excluded_paths=[],
             allow_active_tests=allow_active_tests,
             mode=ScopeMode.ACTIVE if allow_active_tests else ScopeMode.PASSIVE,
@@ -173,7 +176,14 @@ class _StrictScopeGuardAdapter:
             if not inv_ok:
                 return _ScopeDecision(allowed=False, reason=inv_reason)
 
-        # Check ScopeGuard rules even when unrestricted_mode() is enabled if explicit scope exists
+        # Fail closed when no authorized in-scope rules are configured
+        if not self._guard.in_scope_patterns and not self._guard.in_scope_subnets:
+            return _ScopeDecision(
+                allowed=False,
+                reason="No authorized target scope configured (empty in_scope fails closed). Configure an engagement scope first.",
+            )
+
+        # Check ScopeGuard rules when governed mode is active
         if not unrestricted_mode():
             allowed, reason = self._guard.is_in_scope(target)
             return _ScopeDecision(allowed=allowed, reason=reason)
@@ -187,15 +197,24 @@ class _StrictScopeGuardAdapter:
                 if target_ip in net:
                     return _ScopeDecision(allowed=False, reason=f"Target IP {host} is in Out-of-Scope subnet: {net}")
 
-        # Explicit allowlist check when engagement scope is non-empty
-        if self._guard.in_scope_patterns or self._guard.in_scope_subnets:
-            matched = any(p.search(host) for p in self._guard.in_scope_patterns)
-            if not matched and target_ip is not None and target_ip.version == 4:
-                matched = any(target_ip in net for net in self._guard.in_scope_subnets)
-            if not matched:
-                return _ScopeDecision(allowed=False, reason=f"Target {host} is outside authorized engagement scope")
+        # Explicit allowlist check (in_scope is guaranteed non-empty here)
+        matched = any(p.search(host) for p in self._guard.in_scope_patterns)
+        if not matched and target_ip is not None and target_ip.version == 4:
+            matched = any(target_ip in net for net in self._guard.in_scope_subnets)
+        if not matched:
+            return _ScopeDecision(allowed=False, reason=f"Target {host} is outside authorized engagement scope")
 
         return _ScopeDecision(allowed=True, reason="Target verified inside authorized scope boundaries.")
+
+
+def _validate_target_token(target: str) -> Optional[str]:
+    """Ensure a target token does not contain shell injection metacharacters."""
+    if not target:
+        return None
+    for ch in (";", "&&", "||", "|", "`", "$(", "${", ">", "<", "&", "\n", "\r", "\x00"):
+        if ch in target:
+            return f"Unsafe character {ch!r} in target"
+    return None
 
 
 def evaluate_action_policy(
@@ -229,28 +248,46 @@ def evaluate_action_policy(
             "sanitized_args": "",
         }
 
+    target_err = _validate_target_token(target or "")
+    if target_err:
+        return {
+            "allowed": False,
+            "status": "BLOCKED_RISK",
+            "reason": target_err,
+            "risk_tier": risk_tier.value,
+            "sanitized_args": "",
+        }
+
     scope_adapter = _StrictScopeGuardAdapter(
         in_scope=list(in_scope or []),
         out_of_scope=list(out_of_scope or []),
         allow_active_tests=allow_active_tests,
     )
-
-    # First check direct scope guard decision (covers loopback/metadata + engagement boundaries)
-    if target:
-        sdec = scope_adapter.evaluate_scope_decision(target, action_type)
-        if not sdec.allowed:
-            return {
-                "allowed": False,
-                "status": "BLOCKED_SCOPE",
-                "reason": sdec.reason,
-                "risk_tier": risk_tier.value,
-                "sanitized_args": "",
-            }
-
-    # Evaluate through PolicyEngine (governed mode when evaluating explicit proposals)
     engine = PolicyEngine(scope_guard=scope_adapter, full_permissions=False)
-    # Call evaluate_proposal logic cleanly; if unrestricted_mode() is True, PolicyEngine returns
-    # early on line 127, so we already enforced scope + destructive tier above and check active flag too.
+
+    # Validate command_args before creating/approving any proposal
+    try:
+        sanitized_args = engine._sanitize_command_args(proposal.command_args)
+    except ValueError as exc:
+        return {
+            "allowed": False,
+            "status": "BLOCKED_RISK",
+            "reason": f"Unsafe command arguments rejected: {exc}",
+            "risk_tier": risk_tier.value,
+            "sanitized_args": "",
+        }
+
+    # Always check scope decision (empty target or empty in_scope fails closed)
+    sdec = scope_adapter.evaluate_scope_decision(target or "", action_type)
+    if not sdec.allowed:
+        return {
+            "allowed": False,
+            "status": "BLOCKED_SCOPE",
+            "reason": sdec.reason,
+            "risk_tier": risk_tier.value,
+            "sanitized_args": "",
+        }
+
     if not allow_active_tests and risk_tier in (RiskTier.TIER_2_PROBE, RiskTier.TIER_3_EXPLOIT_POC):
         return {
             "allowed": False,
@@ -266,7 +303,7 @@ def evaluate_action_policy(
         "status": verdict.status,
         "reason": verdict.reason,
         "risk_tier": verdict.risk_tier.value,
-        "sanitized_args": verdict.sanitized_args or engine._sanitize_command_args(command_args),
+        "sanitized_args": verdict.sanitized_args if verdict.sanitized_args is not None else sanitized_args,
     }
 
 
@@ -451,10 +488,14 @@ def collect_live_context(
         if att:
             attachments.append(att)
 
-    # Build structured navigation refs + citations + isolated untrusted blocks
+    # Build structured navigation refs + citations + isolated untrusted blocks.
+    # Reserve priority slots for user attachments and log_tail so telemetry
+    # blocks never crowd them out when prompts slice untrusted_blocks.
     refs: List[Dict[str, Any]] = []
     citations: List[Dict[str, Any]] = []
-    untrusted_blocks: List[str] = []
+    attachment_blocks: List[str] = []
+    log_blocks: List[str] = []
+    telemetry_blocks: List[str] = []
 
     if active_engagement:
         eid = active_engagement.get("engagement_id", "")
@@ -478,12 +519,12 @@ def collect_live_context(
         refs.append({"kind": "finding", "id": f["id"], "label": f"[{f['severity']}] {f['title']}", "section": "results"})
         citations.append({"kind": "finding", "id": f["id"], "label": f["title"], "excerpt": redact_text(f["evidence"])[:200]})
         if f["evidence"]:
-            untrusted_blocks.append(wrap_untrusted_data(f["source"], f["id"], f["evidence"]))
+            telemetry_blocks.append(wrap_untrusted_data(f["source"], f["id"], f["evidence"]))
 
     for ev in evidence_items[:5]:
         citations.append({"kind": "evidence", "id": ev["id"], "label": f"{ev['tool']} ({ev['status']})", "excerpt": redact_text(ev["content"])[:200]})
         if ev["content"]:
-            untrusted_blocks.append(wrap_untrusted_data(f"evidence:{ev['tool']}", ev["id"], ev["content"]))
+            telemetry_blocks.append(wrap_untrusted_data(f"evidence:{ev['tool']}", ev["id"], ev["content"]))
 
     for ast_item in assets[:5]:
         refs.append({"kind": "asset", "id": ast_item["id"], "label": f"{ast_item['type']}: {ast_item['name']}", "section": "assets"})
@@ -491,16 +532,18 @@ def collect_live_context(
     for ld in leads[:5]:
         refs.append({"kind": "lead", "id": ld["id"] or ld["skill"], "label": f"[{ld['priority']}] {ld['skill']} ({ld['status']})", "section": "redteam"})
         if ld["evidence"]:
-            untrusted_blocks.append(wrap_untrusted_data("lead_board", ld["id"] or ld["skill"], ld["evidence"]))
+            telemetry_blocks.append(wrap_untrusted_data("lead_board", ld["id"] or ld["skill"], ld["evidence"]))
 
     for att in attachments:
         refs.append({"kind": "file", "id": att["attachment_id"], "label": att["filename"], "section": "copilot"})
         citations.append({"kind": "file", "id": att["attachment_id"], "label": att["filename"], "excerpt": att.get("excerpt", "")[:200]})
         if att.get("excerpt"):
-            untrusted_blocks.append(wrap_untrusted_data(f"attachment:{att['filename']}", att["attachment_id"], att["excerpt"], max_chars=2400))
+            attachment_blocks.append(wrap_untrusted_data(f"attachment:{att['filename']}", att["attachment_id"], att["excerpt"], max_chars=2400))
 
     if log_tail:
-        untrusted_blocks.append(wrap_untrusted_data("log:hunterai.log", "tail", log_tail, max_chars=1400))
+        log_blocks.append(wrap_untrusted_data("log:hunterai.log", "tail", log_tail, max_chars=1400))
+
+    untrusted_blocks = attachment_blocks + log_blocks + telemetry_blocks
 
     # Deduplicate refs preserving order
     seen_refs = set()
@@ -570,11 +613,33 @@ def _extract_proposed_action(
     if any(w in msg.lower() for w in ("exploit", "poc", "os-shell", "sql-shell")):
         action_type = "EXPLOIT_POC"
 
+    # Never pass raw chat prose as CLI arguments into subprocess shells.
+    # Detect shell injection operators in the user request and build clean structured args.
+    unsafe_reason = None
+    for meta in (";", "&&", "||", "|", "`", "$(", "${", ">", "<", "\x00"):
+        if meta in msg:
+            unsafe_reason = f"Unsafe shell metacharacter {meta!r} detected in action request."
+            break
+    if unsafe_reason is None and re.search(r"(?:^|\s)&(?:\s|$)", msg):
+        unsafe_reason = "Unsafe shell operator '&' detected in action request."
+
+    clean_args = ""
+    if target:
+        try:
+            tokens = shlex.split(target)
+            if len(tokens) == 1 and not _validate_target_token(tokens[0]):
+                clean_args = tokens[0]
+            else:
+                unsafe_reason = unsafe_reason or "Target contains invalid or multi-token shell arguments."
+        except ValueError:
+            unsafe_reason = unsafe_reason or "Target contains malformed quoting."
+
     return {
         "action_type": action_type,
         "tool_name": tool_name,
         "target": target,
-        "command_args": msg[:300],
+        "command_args": clean_args,
+        "unsafe_args_reason": unsafe_reason,
         "rationale": f"Requested via Copilot prompt: {msg[:180]}",
     }
 
@@ -933,19 +998,28 @@ class CopilotService:
         approval_record: Optional[Dict[str, Any]] = None
 
         if proposed is not None:
-            eng = live_ctx.get("active_engagement") or {}
-            in_scope = list(eng.get("in_scope") or [])
-            out_of_scope = list(eng.get("out_of_scope") or [])
-            policy_outcome = evaluate_action_policy(
-                action_type=proposed["action_type"],
-                target=proposed["target"],
-                tool_name=proposed["tool_name"],
-                command_args=proposed["command_args"],
-                in_scope=in_scope,
-                out_of_scope=out_of_scope,
-                allow_active_tests=(eff_mode != "passive"),
-                rationale=proposed["rationale"],
-            )
+            if proposed.get("unsafe_args_reason"):
+                policy_outcome = {
+                    "allowed": False,
+                    "status": "BLOCKED_RISK",
+                    "reason": proposed["unsafe_args_reason"],
+                    "risk_tier": RiskTier.TIER_2_PROBE.value,
+                    "sanitized_args": "",
+                }
+            else:
+                eng = live_ctx.get("active_engagement") or {}
+                in_scope = list(eng.get("in_scope") or [])
+                out_of_scope = list(eng.get("out_of_scope") or [])
+                policy_outcome = evaluate_action_policy(
+                    action_type=proposed["action_type"],
+                    target=proposed["target"],
+                    tool_name=proposed["tool_name"],
+                    command_args=proposed["command_args"],
+                    in_scope=in_scope,
+                    out_of_scope=out_of_scope,
+                    allow_active_tests=(eff_mode != "passive"),
+                    rationale=proposed["rationale"],
+                )
             if policy_outcome["allowed"]:
                 approval_record = self.store.create_approval(
                     action_type=proposed["action_type"],
@@ -975,9 +1049,11 @@ class CopilotService:
 
         untrusted_section = ""
         if live_ctx["untrusted_blocks"]:
+            reserved_priority = len(live_ctx.get("attachments") or []) + 1
+            block_limit = max(8, reserved_priority + 6)
             untrusted_section = (
                 "\n\n### Collected Artifacts & Telemetry (Untrusted Passive Data)\n"
-                + "\n\n".join(live_ctx["untrusted_blocks"][:8])
+                + "\n\n".join(live_ctx["untrusted_blocks"][:block_limit])
             )
 
         policy_note = ""
