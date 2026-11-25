@@ -1,834 +1,335 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PentestAI · OpenCode Studio Pro & Cyber Agent IDE</title>
-  <link rel="stylesheet" href="/static/style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
-  <!-- Monaco Editor AMD Loader -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
-
-  <style>
-    :root {
-      --bg-base: #06090e;
-      --bg-panel: #0b1019;
-      --bg-card: rgba(16, 24, 38, 0.95);
-      --bg-active: rgba(0, 240, 255, 0.12);
-      --border-color: rgba(0, 240, 255, 0.14);
-      --border-subtle: rgba(255, 255, 255, 0.08);
-      --cyan: #00f0ff;
-      --cyan-glow: rgba(0, 240, 255, 0.35);
-      --green: #00ff88;
-      --yellow: #ffd000;
-      --red: #ff3366;
-      --purple: #b537f2;
-      --text-main: #e2e8f0;
-      --text-muted: #8892b0;
-      --font-code: "JetBrains Mono", Consolas, Monaco, monospace;
-      --font-ui: "Tajawal", -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-
-    * { box-sizing: border-box; }
-    body {
-      background: var(--bg-base);
-      color: var(--text-main);
-      font-family: var(--font-ui);
-      margin: 0;
-      padding: 0;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      user-select: none;
-    }
-
-    .mono { font-family: var(--font-code); }
-
-    /* ── Top Header ────────────────────────────────────────────── */
-    .ide-header {
-      background: rgba(10, 15, 24, 0.98);
-      border-bottom: 1px solid var(--border-color);
-      height: 48px;
-      padding: 0 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-shrink: 0;
-      z-index: 100;
-    }
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .ide-logo {
-      font-size: 16px;
-      font-weight: 800;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .ide-logo span { color: var(--cyan); }
-    .project-pill {
-      font-size: 11px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-subtle);
-      padding: 3px 10px;
-      border-radius: 4px;
-      color: #94a3b8;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .header-center {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .status-badge {
-      font-size: 11px;
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      border: 1px solid transparent;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .status-badge:hover { filter: brightness(1.2); }
-    .badge-cyan { background: rgba(0, 240, 255, 0.12); color: var(--cyan); border-color: rgba(0, 240, 255, 0.3); }
-    .badge-green { background: rgba(0, 255, 136, 0.12); color: var(--green); border-color: rgba(0, 255, 136, 0.3); }
-    .badge-yellow { background: rgba(255, 208, 0, 0.12); color: var(--yellow); border-color: rgba(255, 208, 0, 0.3); }
-    .badge-red { background: rgba(255, 51, 102, 0.12); color: var(--red); border-color: rgba(255, 51, 102, 0.3); }
-    .badge-purple { background: rgba(181, 55, 242, 0.12); color: var(--purple); border-color: rgba(181, 55, 242, 0.3); }
-
-    .pulse-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: currentColor;
-      box-shadow: 0 0 8px currentColor;
-    }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .model-select {
-      background: rgba(0, 0, 0, 0.6);
-      border: 1px solid var(--border-color);
-      color: var(--cyan);
-      font-size: 11px;
-      font-weight: 700;
-      border-radius: 6px;
-      padding: 4px 10px;
-      outline: none;
-      font-family: var(--font-code);
-    }
-    .btn-action {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--border-subtle);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 5px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s;
-    }
-    .btn-action:hover {
-      background: rgba(0, 240, 255, 0.15);
-      border-color: var(--cyan);
-      color: var(--cyan);
-    }
-    .btn-action.primary {
-      background: linear-gradient(135deg, #00f0ff, #0088ff);
-      color: #030712;
-      border: none;
-      font-weight: 800;
-    }
-    .btn-action.primary:hover {
-      box-shadow: 0 0 15px var(--cyan-glow);
-    }
-
-    /* ── Main IDE Layout ───────────────────────────────────────── */
-    .ide-body {
-      flex: 1;
-      display: flex;
-      overflow: hidden;
-      position: relative;
-    }
-
-    /* Activity Bar (Icons Column) */
-    .activity-bar {
-      width: 50px;
-      background: #080c14;
-      border-left: 1px solid var(--border-subtle);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 10px 0;
-      gap: 8px;
-      flex-shrink: 0;
-      z-index: 50;
-    }
-    .activity-btn {
-      width: 38px;
-      height: 38px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      color: #64748b;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: 1px solid transparent;
-      position: relative;
-    }
-    .activity-btn:hover {
-      color: #cbd5e1;
-      background: rgba(255, 255, 255, 0.05);
-    }
-    .activity-btn.active {
-      color: var(--cyan);
-      background: rgba(0, 240, 255, 0.12);
-      border-color: rgba(0, 240, 255, 0.3);
-      box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
-    }
-    .activity-btn .badge-count {
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      background: var(--cyan);
-      color: #000;
-      font-size: 9px;
-      font-weight: 900;
-      padding: 1px 4px;
-      border-radius: 8px;
-    }
-
-    /* Side Drawer Panel */
-    .side-drawer {
-      width: 320px;
-      background: var(--bg-panel);
-      border-left: 1px solid var(--border-subtle);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      transition: width 0.2s ease;
-      overflow: hidden;
-    }
-    .side-drawer.collapsed {
-      width: 0 !important;
-      border: none !important;
-    }
-    .drawer-header {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border-subtle);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 12px;
-      font-weight: 700;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .drawer-actions {
-      display: flex;
-      gap: 6px;
-    }
-    .drawer-btn-icon {
-      background: none;
-      border: none;
-      color: #64748b;
-      cursor: pointer;
-      font-size: 13px;
-      padding: 2px 4px;
-      border-radius: 4px;
-    }
-    .drawer-btn-icon:hover { color: var(--cyan); background: rgba(255,255,255,0.06); }
-
-    .drawer-content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    /* File Explorer Tree Items */
-    .tree-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      cursor: pointer;
-      color: #cbd5e1;
-      transition: all 0.15s;
-      font-family: var(--font-code);
-      user-select: none;
-    }
-    .tree-item:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: #fff;
-    }
-    .tree-item.active {
-      background: var(--bg-active);
-      color: var(--cyan);
-      border: 1px solid rgba(0, 240, 255, 0.25);
-    }
-    .tree-item .icon { font-size: 14px; }
-    .tree-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-    /* Skills List in Drawer */
-    .skill-card {
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      padding: 8px 10px;
-      cursor: pointer;
-      transition: all 0.15s;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .skill-card:hover, .skill-card.active {
-      border-color: var(--cyan);
-      background: rgba(0, 240, 255, 0.08);
-    }
-    .skill-card-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .skill-card-title {
-      font-weight: 700;
-      font-size: 12px;
-      color: #fff;
-    }
-    .skill-card-pack {
-      font-size: 9px;
-      padding: 1px 6px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.08);
-      color: #94a3b8;
-    }
-    .skill-card-desc {
-      font-size: 10px;
-      color: #64748b;
-      line-height: 1.3;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-
-    /* Burp Traffic List in Drawer */
-    .traffic-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-family: var(--font-code);
-      cursor: pointer;
-      border-bottom: 1px solid rgba(255,255,255,0.03);
-    }
-    .traffic-row:hover { background: rgba(0, 240, 255, 0.06); }
-    .badge-method {
-      font-size: 9px;
-      font-weight: 800;
-      padding: 2px 5px;
-      border-radius: 3px;
-    }
-    .method-get { background: rgba(0, 255, 136, 0.15); color: var(--green); }
-    .method-post { background: rgba(0, 240, 255, 0.15); color: var(--cyan); }
-    .method-put { background: rgba(255, 208, 0, 0.15); color: var(--yellow); }
-    .method-delete { background: rgba(255, 51, 102, 0.15); color: var(--red); }
-
-    /* ── Main Workspace Area (Center) ──────────────────────────── */
-    .ide-workspace {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: #080c14;
-    }
-
-    /* Tabs Bar */
-    .tabs-bar {
-      height: 38px;
-      background: #070a10;
-      border-bottom: 1px solid var(--border-subtle);
-      display: flex;
-      align-items: center;
-      overflow-x: auto;
-      padding: 0 4px;
-      gap: 2px;
-      flex-shrink: 0;
-    }
-    .editor-tab {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 0 14px;
-      height: 32px;
-      border-radius: 6px 6px 0 0;
-      font-size: 12px;
-      color: #94a3b8;
-      background: transparent;
-      border: 1px solid transparent;
-      border-bottom: none;
-      cursor: pointer;
-      font-family: var(--font-code);
-      white-space: nowrap;
-      transition: all 0.15s;
-    }
-    .editor-tab:hover {
-      background: rgba(255, 255, 255, 0.04);
-      color: #e2e8f0;
-    }
-    .editor-tab.active {
-      background: #0b1019;
-      color: var(--cyan);
-      border-color: var(--border-subtle);
-      border-top: 2px solid var(--cyan);
-    }
-    .editor-tab .close-btn {
-      font-size: 13px;
-      border-radius: 50%;
-      width: 16px;
-      height: 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: #64748b;
-      margin-right: -4px;
-    }
-    .editor-tab .close-btn:hover {
-      background: rgba(255, 51, 102, 0.2);
-      color: var(--red);
-    }
-    .editor-tab .dirty-indicator {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--yellow);
-      display: none;
-    }
-    .editor-tab.is-dirty .dirty-indicator { display: inline-block; }
-
-    /* Work Area Views */
-    .view-container {
-      flex: 1;
-      display: none;
-      position: relative;
-      overflow: hidden;
-    }
-    .view-container.active {
-      display: flex;
-      flex-direction: column;
-    }
-
-    #monaco-editor-box {
-      width: 100%;
-      height: 100%;
-    }
-
-    /* Burp Suite Repeater View */
-    .repeater-view {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      padding: 12px;
-      overflow: hidden;
-      background: #090d16;
-    }
-    .repeater-pane {
-      background: var(--bg-card);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .repeater-pane-header {
-      padding: 8px 12px;
-      background: rgba(0, 0, 0, 0.4);
-      border-bottom: 1px solid var(--border-subtle);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .repeater-toolbar {
-      padding: 8px 12px;
-      background: rgba(0, 0, 0, 0.25);
-      border-bottom: 1px solid var(--border-subtle);
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .repeater-input {
-      background: rgba(0, 0, 0, 0.5);
-      border: 1px solid var(--border-subtle);
-      border-radius: 4px;
-      padding: 6px 10px;
-      color: #fff;
-      font-size: 12px;
-      font-family: var(--font-code);
-      outline: none;
-    }
-    .repeater-input:focus { border-color: var(--cyan); }
-    .raw-http-editor {
-      flex: 1;
-      background: #05080f;
-      border: none;
-      color: #e2e8f0;
-      font-family: var(--font-code);
-      font-size: 12px;
-      padding: 12px;
-      line-height: 1.5;
-      resize: none;
-      outline: none;
-      white-space: pre;
-    }
-
-    /* ── Bottom Dock (Terminal / Logs) ─────────────────────────── */
-    .ide-dock {
-      height: 220px;
-      background: #080c14;
-      border-top: 1px solid var(--border-subtle);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      transition: height 0.2s ease;
-    }
-    .ide-dock.collapsed {
-      height: 32px !important;
-    }
-    .dock-header {
-      height: 32px;
-      background: #06090e;
-      border-bottom: 1px solid var(--border-subtle);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 12px;
-    }
-    .dock-tabs {
-      display: flex;
-      gap: 4px;
-      height: 100%;
-    }
-    .dock-tab {
-      padding: 0 10px;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      color: #64748b;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-    }
-    .dock-tab:hover { color: #cbd5e1; }
-    .dock-tab.active {
-      color: var(--cyan);
-      border-bottom-color: var(--cyan);
-      background: rgba(0, 240, 255, 0.05);
-    }
-    .dock-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px 12px;
-      font-family: var(--font-code);
-      font-size: 11px;
-      color: var(--green);
-      white-space: pre-wrap;
-      background: #05070c;
-    }
-    .dock-cli-bar {
-      height: 34px;
-      background: #090e17;
-      border-top: 1px solid var(--border-subtle);
-      display: flex;
-      align-items: center;
-      padding: 0 8px;
-      gap: 8px;
-    }
-    .dock-cli-input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: #fff;
-      font-family: var(--font-code);
-      font-size: 12px;
-      outline: none;
-    }
-
-    /* ── Toast Notifications ───────────────────────────────────── */
-    #toast-container {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      pointer-events: none;
-    }
-    .toast {
-      background: rgba(16, 24, 38, 0.95);
-      border: 1px solid var(--cyan);
-      box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
-      color: #fff;
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      animation: slide-in 0.25s ease-out;
-      pointer-events: auto;
-    }
-    @keyframes slide-in {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-  </style>
+  <title>HunterAI · OpenCode Studio</title>
+  <link rel="stylesheet" href="/static/fonts.css">
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="stylesheet" href="/static/opencode-studio.css">
 </head>
 <body>
 
   <!-- Top Header Navigation -->
   <header class="ide-header">
     <div class="header-left">
-      <div class="ide-logo">
-        <span>⚡</span> PentestAI · OpenCode Pro Studio
+      <button type="button" id="mobileDrawerToggle" class="btn-action mobile-only" aria-label="تبديل القائمة الجانبية" aria-expanded="false" aria-controls="sideDrawer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+
+      <div class="ide-brand">
+        <span class="ide-brand-mark" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+        </span>
+        <h1 class="ide-title">OpenCode Studio</h1>
       </div>
-      <div class="project-pill mono">
-        <span>📁</span> PentestAI-Unified
+
+      <div class="project-pill mono" title="Active workspace">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span id="workspacePillText" class="project-pill-text">HunterAI Workspace</span>
+      </div>
+
+      <div class="engagement-picker">
+        <label for="engagementSelector" class="sr-only" data-studio-i18n="engagementLabel">Active Engagement</label>
+        <select id="engagementSelector" class="studio-select" aria-label="Active Engagement">
+          <option value="">HunterAI Workspace</option>
+        </select>
       </div>
     </div>
 
     <!-- Live Status Indicators -->
     <div class="header-center">
-      <!-- Burp Suite Proxy Status -->
-      <div id="burpStatusPill" class="status-badge badge-yellow" onclick="checkBurpStatus(true)" title="فحص حالة Burp Suite Proxy">
-        <span class="pulse-dot"></span>
+      <button type="button" id="burpStatusPill" class="status-badge badge-warning" title="فحص حالة Burp Suite Proxy">
+        <span class="pulse-dot" aria-hidden="true"></span>
         <span id="burpStatusText">Burp Proxy (8080): جارِ الفحص...</span>
-      </div>
+      </button>
 
-      <!-- Skills Count -->
-      <div class="status-badge badge-cyan" onclick="switchDrawerTab('skills')">
-        <span>🎯</span>
+      <button type="button" id="skillsBadgeBtn" class="status-badge badge-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"></circle>
+          <circle cx="12" cy="12" r="4"></circle>
+        </svg>
         <span id="skillsCountText">مهارة مركزية نشطة</span>
-      </div>
+      </button>
 
-      <!-- MCP Arsenal -->
-      <div class="status-badge badge-purple" onclick="switchDrawerTab('arsenal')">
-        <span>🛠️</span>
-        <span>63 أداة كالي (hunter-arsenal)</span>
-      </div>
+      <button type="button" id="arsenalBadgeBtn" class="status-badge badge-ai">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+        </svg>
+        <span id="arsenalCountText">ترسانة MCP</span>
+      </button>
+
+      <span id="activeRunBadge" class="project-pill" hidden>
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <span id="activeRunText"></span>
+      </span>
     </div>
 
     <!-- Right Controls -->
     <div class="header-right">
-      <!-- AI Model Switcher -->
-      <select id="modelSelector" class="model-select">
-        <option value="gemini">Gemini 3.8 Flash (السحابي السريع)</option>
-        <option value="deepseek">DeepSeek Chat / Coder</option>
-        <option value="ollama">Ollama (qwen2.5:14b محلي)</option>
+      <label for="modelSelector" class="sr-only" data-studio-i18n="modelLabel">AI Provider</label>
+      <select id="modelSelector" class="studio-select mono" aria-label="AI Provider">
+        <option value="gemini">Gemini Flash</option>
+        <option value="deepseek">DeepSeek Coder</option>
+        <option value="ollama">Ollama (qwen2.5:14b)</option>
         <option value="nvidia">Nvidia Nemotron 120B</option>
       </select>
 
-      <button class="btn-action" onclick="saveCurrentFile()" title="حفظ الملف الحالي (Ctrl+S)">
-        <span>💾</span> حفظ
+      <button type="button" id="saveFileBtn" class="btn-action" title="حفظ الملف الحالي (Ctrl+S)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+        <span data-studio-i18n="save">حفظ</span>
       </button>
 
-      <button class="btn-action primary" onclick="openBurpRepeaterTab()">
-        <span>🦊</span> Burp Repeater
+      <button type="button" id="openRepeaterBtn" class="btn-action primary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polyline points="17 1 21 5 17 9"></polyline>
+          <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+          <polyline points="7 23 3 19 7 15"></polyline>
+          <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+        </svg>
+        <span data-studio-i18n="repeater">Burp Repeater</span>
       </button>
 
-      <a href="/" class="btn-action" style="text-decoration:none;" target="_blank" title="فتح الرادار الرئيسي">
-        <span>🌐</span> الرادار ↗
+      <button type="button" id="copilotToggleBtn" class="btn-action" data-hunter-copilot-toggle aria-label="AI Copilot (Ctrl+J)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span data-studio-i18n="copilot">Copilot</span>
+        <kbd class="kbd-hint">Ctrl+J</kbd>
+      </button>
+
+      <button type="button" id="langToggleBtn" class="btn-action" aria-label="تبديل اللغة">
+        <span id="langToggleLabel">EN</span>
+      </button>
+
+      <button type="button" id="themeToggleBtn" class="btn-action" aria-label="تبديل المظهر">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+        </svg>
+      </button>
+
+      <a id="backToControlCenterLink" href="/?theme=dark&lang=ar" class="btn-action">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="14" y="14" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+        </svg>
+        <span data-studio-i18n="controlCenter">مركز التحكم</span>
       </a>
     </div>
   </header>
 
   <!-- Main IDE Workspace Container -->
   <div class="ide-body">
-    
-    <!-- Left Activity Bar (Icons) -->
-    <aside class="activity-bar">
-      <div id="btn-explorer" class="activity-btn active" onclick="switchDrawerTab('explorer')" title="مستكشف الملفات (Files Explorer)">
-        📁
-      </div>
-      <div id="btn-skills" class="activity-btn" onclick="switchDrawerTab('skills')" title="مستكشف المهارة المركزية">
-        🎯
-        <span class="badge-count">1</span>
-      </div>
-      <div id="btn-burp" class="activity-btn" onclick="switchDrawerTab('burp')" title="لوحة Burp Suite والترافيك المباشر">
-        🦊
-      </div>
-      <div id="btn-agent" class="activity-btn" onclick="switchDrawerTab('agent')" title="مساعد الأجنت الذكي (AI Co-Pilot)">
-        🤖
-      </div>
-      <div id="btn-arsenal" class="activity-btn" onclick="switchDrawerTab('arsenal')" title="ترسانة أدوات كالي (MCP Tools)">
-        🛠️
-      </div>
-      <div style="flex:1;"></div>
-      <div class="activity-btn" onclick="toggleDrawer()" title="إخفاء / إظهار القائمة الجانبية (Ctrl+B)">
-        ↔️
-      </div>
+
+    <!-- Left Activity Bar (Accessible Tablist) -->
+    <aside class="activity-bar" role="tablist" aria-orientation="vertical" aria-label="أدوات بيئة العمل">
+      <button type="button" id="btn-explorer" class="activity-btn active" role="tab" aria-selected="true" aria-controls="drawerView-explorer" data-drawer-tab="explorer" title="مستكشف الملفات (Explorer)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </button>
+
+      <button type="button" id="btn-skills" class="activity-btn" role="tab" aria-selected="false" aria-controls="drawerView-skills" data-drawer-tab="skills" title="مستكشف المهارة المركزية">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"></circle>
+          <circle cx="12" cy="12" r="4"></circle>
+        </svg>
+        <span id="skillsActivityCount" class="badge-count">1</span>
+      </button>
+
+      <button type="button" id="btn-burp" class="activity-btn" role="tab" aria-selected="false" aria-controls="drawerView-burp" data-drawer-tab="burp" title="لوحة Burp Suite والترافيك المباشر">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+      </button>
+
+      <button type="button" id="btn-agent" class="activity-btn" role="tab" aria-selected="false" aria-controls="drawerView-agent" data-drawer-tab="agent" title="مساعد الأجنت الذكي">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </button>
+
+      <button type="button" id="btn-arsenal" class="activity-btn" role="tab" aria-selected="false" aria-controls="drawerView-arsenal" data-drawer-tab="arsenal" title="ترسانة أدوات MCP">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+        </svg>
+      </button>
+
+      <div class="activity-rail-spacer"></div>
+
+      <button type="button" id="toggleDrawerRailBtn" class="activity-btn" aria-expanded="true" aria-controls="sideDrawer" title="إخفاء / إظهار القائمة الجانبية (Ctrl+B)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+          <line x1="9" y1="3" x2="9" y2="21"></line>
+        </svg>
+      </button>
     </aside>
 
+    <!-- Mobile Drawer Backdrop -->
+    <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
+
     <!-- Collapsible Side Drawer Panel -->
-    <aside id="sideDrawer" class="side-drawer">
-      
+    <aside id="sideDrawer" class="side-drawer" aria-label="لوحة الاستكشاف الجانبية">
+
       <!-- Drawer Header -->
       <div class="drawer-header">
-        <span id="drawerTitle">مستكشف الملفات (Explorer)</span>
+        <h2 id="drawerTitle" class="drawer-title">مستكشف الملفات (Explorer)</h2>
         <div class="drawer-actions">
-          <button class="drawer-btn-icon" onclick="refreshCurrentDrawer()" title="تحديث">🔄</button>
-          <button class="drawer-btn-icon" onclick="toggleDrawer()" title="طي القائمة">✖</button>
+          <button type="button" id="refreshDrawerBtn" class="drawer-btn-icon" title="تحديث">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+          </button>
+          <button type="button" id="closeDrawerBtn" class="drawer-btn-icon" title="طي القائمة">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
       </div>
 
       <!-- Drawer View 1: File Explorer -->
-      <div id="drawerView-explorer" class="drawer-content">
-        <div style="padding:4px 0 8px;">
-          <input type="text" id="fileSearchInput" class="repeater-input" style="width:100%;font-size:11px;" placeholder="بحث في ملفات المشروع..." oninput="filterFileTree()">
+      <div id="drawerView-explorer" class="drawer-content" role="tabpanel" aria-labelledby="btn-explorer">
+        <div class="drawer-search-wrap">
+          <label for="fileSearchInput" class="sr-only" data-studio-i18n="searchFiles">Search project files</label>
+          <input type="text" id="fileSearchInput" class="repeater-input ltr-isolate" dir="ltr" placeholder="بحث في ملفات المشروع...">
         </div>
-        <div id="fileTreeContainer">
-          <div style="color:#64748b;padding:10px;text-align:center;">جاري تحميل شجرة الملفات...</div>
+        <div id="fileTreeContainer" class="file-tree-list ltr-isolate" dir="ltr">
+          <div class="drawer-empty-msg">جاري تحميل شجرة الملفات...</div>
         </div>
       </div>
 
       <!-- Drawer View 2: Skills Hub -->
-      <div id="drawerView-skills" class="drawer-content" style="display:none;">
-        <input type="text" id="skillSearchInput" class="repeater-input" style="width:100%;font-size:11px;margin-bottom:6px;" placeholder="بحث في مسارات المهارة المركزية..." oninput="filterSkills()">
-        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
-          <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('all')">الكل</button>
-          <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="setSkillFilter('project_primary')">HunterAI RedTeam (المركزية)</button>
+      <div id="drawerView-skills" class="drawer-content" role="tabpanel" aria-labelledby="btn-skills" hidden>
+        <label for="skillSearchInput" class="sr-only" data-studio-i18n="searchSkills">Search central skill workflows</label>
+        <input type="text" id="skillSearchInput" class="repeater-input" placeholder="بحث في مسارات المهارة المركزية...">
+        <div id="skillFilterGroup" class="skill-filter-row">
+          <button type="button" class="btn-action compact is-active" data-skill-filter="all" data-studio-i18n="filterAll">الكل</button>
+          <button type="button" class="btn-action compact" data-skill-filter="project_primary">HunterAI RedTeam</button>
         </div>
-        <div id="skillsListContainer" style="display:flex;flex-direction:column;gap:6px;">
-          <div style="color:#64748b;padding:10px;text-align:center;">جاري تحميل المهارات...</div>
+        <div id="skillsListContainer" class="skills-list">
+          <div class="drawer-empty-msg">جاري تحميل المهارات...</div>
         </div>
       </div>
 
       <!-- Drawer View 3: Burp Suite Traffic & Controls -->
-      <div id="drawerView-burp" class="drawer-content" style="display:none;">
-        <div style="background:rgba(0,0,0,0.3);padding:10px;border-radius:6px;border:1px solid var(--border-subtle);margin-bottom:8px;">
-          <div style="font-weight:bold;color:var(--cyan);font-size:12px;margin-bottom:4px;">حالة اتصال Burp Suite</div>
-          <div id="burpDetailedStatus" style="font-size:11px;color:#94a3b8;line-height:1.4;">
-            جاري فحص المنافذ (8080 / 8085)...
+      <div id="drawerView-burp" class="drawer-content" role="tabpanel" aria-labelledby="btn-burp" hidden>
+        <div class="burp-card">
+          <div class="burp-card-title" data-studio-i18n="burpConnection">حالة اتصال Burp Suite</div>
+          <div id="burpDetailedStatus" class="burp-detail-list">
+            <span>جاري فحص المنافذ (8080 / 8085)...</span>
           </div>
-          <button class="btn-action primary" style="width:100%;margin-top:8px;font-size:11px;justify-content:center;" onclick="openBurpRepeaterTab()">
-            <span>⚡</span> تشغيل أداة Burp Repeater المدمجة
+          <button type="button" id="drawerOpenRepeaterBtn" class="btn-action primary compact">
+            <span data-studio-i18n="openRepeater">تشغيل Burp Repeater</span>
           </button>
         </div>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0;">
-          <span style="font-size:11px;font-weight:bold;color:#fff;">ترافيك البروكسي الحديث (HTTP Traffic)</span>
-          <button class="drawer-btn-icon" onclick="loadBurpTraffic()" title="تحديث الترافيك">🔄</button>
+        <div class="burp-traffic-header">
+          <span class="burp-traffic-title" data-studio-i18n="httpTraffic">ترافيك البروكسي الحديث (HTTP)</span>
+          <button type="button" id="refreshBurpTrafficBtn" class="drawer-btn-icon" title="تحديث الترافيك">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+          </button>
         </div>
-        <div id="burpTrafficContainer" style="display:flex;flex-direction:column;gap:4px;">
-          <div style="color:#64748b;padding:10px;text-align:center;">جاري جلب حركة المرور...</div>
+        <div id="burpTrafficContainer" class="burp-traffic-list ltr-isolate" dir="ltr">
+          <div class="drawer-empty-msg">جاري جلب حركة المرور...</div>
         </div>
       </div>
 
       <!-- Drawer View 4: Agent Co-Pilot -->
-      <div id="drawerView-agent" class="drawer-content" style="display:none;">
-        <div style="background:rgba(0,0,0,0.4);border-radius:6px;padding:10px;border:1px solid var(--border-subtle);margin-bottom:8px;">
-          <div style="font-weight:bold;color:var(--cyan);font-size:12px;">مساعد الأجنت البرمجي (AI Co-Pilot)</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:4px;">اختر أمراً سريعاً لتنفيذه مع الملف المفتوح:</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;">
-            <button class="btn-action" style="font-size:10px;padding:3px 6px;" onclick="askAgentPrompt('اشرح الكود المفتوح وحدد نقاط القوة والضعف')">🔍 شرح الكود</button>
-            <button class="btn-action" style="font-size:10px;padding:3px 6px;" onclick="askAgentPrompt('افحص الكود أو الطلب بحثاً عن ثغرات أمنية (IDOR, SQLi, SSRF, XSS)')">🛡️ فحص أمني</button>
-            <button class="btn-action" style="font-size:10px;padding:3px 6px;" onclick="askAgentPrompt('اقترح استغلال PoC ومحاكاة هجوم لهذه الثغرة')">💥 توليد Exploit</button>
-            <button class="btn-action" style="font-size:10px;padding:3px 6px;" onclick="askAgentPrompt('قم بتحسين الكود وتصحيح الأخطاء وإعادة كتابته باحترافية')">✨ تحسين الكود</button>
+      <div id="drawerView-agent" class="drawer-content" role="tabpanel" aria-labelledby="btn-agent" hidden>
+        <div class="agent-quick-box">
+          <div class="agent-quick-title" data-studio-i18n="agentQuickTitle">مساعد الكود والأمان</div>
+          <div class="agent-quick-sub" data-studio-i18n="agentQuickSub">اختر أمراً سريعاً لتنفيذه مع الملف المفتوح:</div>
+          <div id="agentQuickPrompts" class="agent-quick-grid">
+            <button type="button" class="btn-action compact" data-prompt="اشرح الكود المفتوح وحدد نقاط القوة والضعف" data-studio-i18n="promptExplain">شرح الكود</button>
+            <button type="button" class="btn-action compact" data-prompt="افحص الكود أو الطلب بحثاً عن ثغرات أمنية (IDOR, SQLi, SSRF, XSS)" data-studio-i18n="promptAudit">فحص أمني</button>
+            <button type="button" class="btn-action compact" data-prompt="اقترح PoC آمن للتحقق من الثغرة وتأكيد أثرها" data-studio-i18n="promptPoc">توليد PoC</button>
+            <button type="button" class="btn-action compact" data-prompt="قم بتحسين الكود وتصحيح الأخطاء وإعادة كتابته باحترافية" data-studio-i18n="promptRefactor">تحسين الكود</button>
           </div>
+          <button type="button" class="btn-action primary compact" data-hunter-copilot-toggle>
+            <span data-studio-i18n="openFullCopilot">فتح Copilot المتزامن (Ctrl+J)</span>
+          </button>
         </div>
-        <div id="agentChatHistory" style="flex:1;overflow-y:auto;background:rgba(0,0,0,0.3);border-radius:6px;padding:8px;font-size:12px;line-height:1.5;display:flex;flex-direction:column;gap:8px;">
-          <div style="color:#64748b;text-align:center;margin-top:20px;">مرحباً بك! أنا مساعد PentestAI. يمكنك توجيهي لتحليل الكود أو إرسال طلبات Burp لفحصها.</div>
+        <div id="agentChatHistory" class="agent-chat-history" aria-live="polite">
+          <div class="drawer-empty-msg" data-studio-i18n="agentWelcome">مرحباً بك في HunterAI Studio. يمكنك توجيهي لتحليل الكود أو فحص طلبات Burp.</div>
         </div>
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <input type="text" id="agentPromptInput" class="repeater-input" style="flex:1;font-size:12px;" placeholder="اكتب سؤالاً أو توجيهاً للأجنت..." onkeydown="if(event.key==='Enter') sendAgentChat()">
-          <button class="btn-action primary" onclick="sendAgentChat()">إرسال</button>
+        <div class="agent-input-row">
+          <label for="agentPromptInput" class="sr-only" data-studio-i18n="agentPromptLabel">Prompt for agent</label>
+          <input type="text" id="agentPromptInput" class="repeater-input" placeholder="اكتب سؤالاً أو توجيهاً للأجنت...">
+          <button type="button" id="sendAgentChatBtn" class="btn-action primary compact" data-studio-i18n="send">إرسال</button>
         </div>
       </div>
 
-      <!-- Drawer View 5: MCP & Kali Arsenal -->
-      <div id="drawerView-arsenal" class="drawer-content" style="display:none;">
-        <input type="text" id="toolSearchInput" class="repeater-input" style="width:100%;font-size:11px;margin-bottom:8px;" placeholder="بحث في أدوات كالي (Nmap, Nuclei, Ffuf...)" oninput="filterArsenalTools()">
-        <div id="arsenalToolsContainer" style="display:flex;flex-direction:column;gap:4px;">
-          <div style="color:#64748b;padding:10px;text-align:center;">جاري تحميل الأدوات...</div>
+      <!-- Drawer View 5: MCP & Arsenal -->
+      <div id="drawerView-arsenal" class="drawer-content" role="tabpanel" aria-labelledby="btn-arsenal" hidden>
+        <label for="toolSearchInput" class="sr-only" data-studio-i18n="searchTools">Search MCP arsenal tools</label>
+        <input type="text" id="toolSearchInput" class="repeater-input ltr-isolate" dir="ltr" placeholder="Search arsenal tools (nmap, nuclei, ffuf...)">
+        <div id="arsenalToolsContainer" class="arsenal-list">
+          <div class="drawer-empty-msg">جاري تحميل الأدوات...</div>
         </div>
       </div>
 
     </aside>
 
+    <div id="drawerResizeHandle" class="resize-handle-v" role="separator" aria-orientation="vertical" tabindex="0" aria-label="تغيير عرض القائمة الجانبية"></div>
+
     <!-- Center Work Area -->
     <main class="ide-workspace">
-      
+
       <!-- Open Tabs Bar -->
-      <div class="tabs-bar" id="tabsBar">
-        <!-- Tabs dynamically injected here -->
-      </div>
+      <div class="tabs-bar ltr-isolate" dir="ltr" id="tabsBar" role="tablist" aria-label="الملفات المفتوحة"></div>
 
       <!-- View Container 1: Monaco Code Editor -->
-      <div id="codeEditorView" class="view-container active">
+      <div id="codeEditorView" class="view-container active ltr-isolate" dir="ltr">
         <div id="monaco-editor-box"></div>
       </div>
 
       <!-- View Container 2: Dedicated Burp Repeater -->
       <div id="burpRepeaterView" class="view-container">
         <div class="repeater-view">
-          
+
           <!-- Left: Raw HTTP Request -->
-          <div class="repeater-pane">
+          <section class="repeater-pane" aria-label="Raw HTTP Request">
             <div class="repeater-pane-header">
-              <span style="color:var(--cyan);">الطلب المباشر (Raw HTTP Request)</span>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;">
-                  <input type="checkbox" id="routeBurpCheckbox" checked>
-                  توجيه عبر Burp Proxy (8080)
-                </label>
-              </div>
+              <h2 class="repeater-pane-title" data-studio-i18n="rawRequest">الطلب المباشر (Raw HTTP Request)</h2>
+              <label class="repeater-proxy-label">
+                <input type="checkbox" id="routeBurpCheckbox" checked>
+                <span data-studio-i18n="routeViaBurp">توجيه عبر Burp Proxy (8080)</span>
+              </label>
             </div>
 
-            <!-- Toolbar -->
             <div class="repeater-toolbar">
-              <input type="text" id="repeaterTargetUrl" class="repeater-input" style="flex:1;" placeholder="الرابط الهدف (اختياري، مثال: https://httpbin.org/get)">
-              
-              <button class="btn-action primary" onclick="sendBurpRepeaterRequest()" title="إرسال الطلب (Ctrl+Enter)">
-                <span>🚀</span> إرسال الطلب
+              <label for="repeaterTargetUrl" class="sr-only" data-studio-i18n="targetUrlLabel">Target URL</label>
+              <input type="text" id="repeaterTargetUrl" class="repeater-input repeater-url-input ltr-isolate" dir="ltr" placeholder="https://example.com/api">
+
+              <button type="button" id="sendRepeaterBtn" class="btn-action primary compact" title="إرسال الطلب (Ctrl+Enter)">
+                <span data-studio-i18n="sendRequest">إرسال الطلب</span>
               </button>
 
-              <select class="model-select" onchange="loadRepeaterPreset(this.value)">
-                <option value="">نماذج جاهزة (Presets)...</option>
+              <label for="repeaterPresetSelect" class="sr-only" data-studio-i18n="presetsLabel">Request Presets</label>
+              <select id="repeaterPresetSelect" class="studio-select mono" aria-label="Request Presets">
+                <option value="">Presets...</option>
                 <option value="get">GET Root Request</option>
                 <option value="post_json">POST JSON API</option>
                 <option value="sqli">SQLi Boolean Differential</option>
@@ -837,849 +338,1801 @@
               </select>
             </div>
 
-            <!-- Editor -->
-            <textarea id="rawHttpRequestText" class="raw-http-editor" spellcheck="false" placeholder="GET / HTTP/1.1
-Host: www.target.com
-User-Agent: Mozilla/5.0 (PentestAI-Pro)
+            <label for="rawHttpRequestText" class="sr-only" data-studio-i18n="rawRequestLabel">Raw HTTP Request Text</label>
+            <textarea id="rawHttpRequestText" class="raw-http-editor ltr-isolate" dir="ltr" spellcheck="false" placeholder="GET / HTTP/1.1
+Host: example.com
+User-Agent: Mozilla/5.0 (HunterAI-Studio)
 Accept: */*
 
 "></textarea>
-          </div>
+          </section>
 
           <!-- Right: Raw HTTP Response & Agent Audit -->
-          <div class="repeater-pane">
+          <section class="repeater-pane" aria-label="HTTP Response">
             <div class="repeater-pane-header">
-              <span style="color:var(--green);">الاستجابة والرد (HTTP Response)</span>
-              <div id="repeaterMetrics" style="display:flex;gap:8px;font-size:11px;font-family:var(--font-code);">
-                <span id="responseStatusPill" class="status-badge badge-cyan" style="display:none;">---</span>
-                <span id="responseElapsedPill" style="color:#94a3b8;">-- ms</span>
-                <span id="responseBytesPill" style="color:#94a3b8;">-- B</span>
+              <h2 class="repeater-pane-title response-title" data-studio-i18n="httpResponse">الاستجابة والرد (HTTP Response)</h2>
+              <div id="repeaterMetrics" class="repeater-metrics ltr-isolate" dir="ltr">
+                <span id="responseStatusPill" class="status-badge badge-primary" hidden>---</span>
+                <span id="responseElapsedPill" class="repeater-metric-item">-- ms</span>
+                <span id="responseBytesPill" class="repeater-metric-item">-- B</span>
               </div>
             </div>
 
-            <!-- Sub Toolbar -->
-            <div class="repeater-toolbar" style="justify-content:space-between;">
-              <div style="display:flex;gap:6px;">
-                <button class="btn-action" onclick="copyRepeaterResponse()">📋 نسخ الرد</button>
-                <button class="btn-action primary" onclick="auditCurrentRepeaterWithAgent()" title="تحليل بالذكاء الاصطناعي">
-                  <span>🤖</span> فحص بالـ AI Agent
+            <div class="repeater-toolbar split">
+              <div class="repeater-toolbar-group">
+                <button type="button" id="copyRepeaterRespBtn" class="btn-action compact" data-studio-i18n="copyResponse">نسخ الرد</button>
+                <button type="button" id="auditRepeaterBtn" class="btn-action primary compact" title="تحليل بالذكاء الاصطناعي">
+                  <span data-studio-i18n="aiAudit">فحص بالـ AI Agent</span>
                 </button>
               </div>
-              <span id="auditSkillLabel" style="font-size:11px;color:var(--cyan);font-weight:bold;"></span>
+              <span id="auditSkillLabel" class="audit-skill-label"></span>
             </div>
 
-            <!-- Response Display Area -->
-            <textarea id="rawHttpResponseText" class="raw-http-editor" readonly spellcheck="false" placeholder="في انتظار إرسال الطلب... اضغط 'إرسال الطلب' أو Ctrl+Enter لرؤية الاستجابة لحظياً."></textarea>
-          </div>
+            <label for="rawHttpResponseText" class="sr-only" data-studio-i18n="httpResponseLabel">Raw HTTP Response Text</label>
+            <textarea id="rawHttpResponseText" class="raw-http-editor ltr-isolate" dir="ltr" readonly spellcheck="false" placeholder="Waiting for request execution (Ctrl+Enter)..."></textarea>
+          </section>
 
         </div>
       </div>
 
+      <div id="dockResizeHandle" class="resize-handle-h" role="separator" aria-orientation="horizontal" tabindex="0" aria-label="تغيير ارتفاع الطرفية السفلية"></div>
+
       <!-- Bottom Dock: Interactive Terminal & Execution Logs -->
       <footer id="bottomDock" class="ide-dock">
         <div class="dock-header">
-          <div class="dock-tabs">
-            <div id="dockTab-term" class="dock-tab active" onclick="switchDockTab('term')">
-              <span>💻</span> الطرفية التفاعلية (Terminal)
-            </div>
-            <div id="dockTab-agent" class="dock-tab" onclick="switchDockTab('agent')">
-              <span>🤖</span> سجل الأجنت المباشر (Agent Logs)
-            </div>
-            <div id="dockTab-burp" class="dock-tab" onclick="switchDockTab('burp')">
-              <span>🦊</span> أحداث Burp Sensor
-            </div>
+          <div class="dock-tabs" role="tablist" aria-label="تبويبات الطرفية والسجلات">
+            <button type="button" id="dockTab-term" class="dock-tab active" role="tab" aria-selected="true" aria-controls="dockOutputBox" data-dock-tab="term">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+              </svg>
+              <span data-studio-i18n="dockTerm">الطرفية التفاعلية (Terminal)</span>
+            </button>
+            <button type="button" id="dockTab-agent" class="dock-tab" role="tab" aria-selected="false" aria-controls="dockOutputBox" data-dock-tab="agent">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <span data-studio-i18n="dockAgent">سجل الأجنت (Agent Logs)</span>
+            </button>
+            <button type="button" id="dockTab-burp" class="dock-tab" role="tab" aria-selected="false" aria-controls="dockOutputBox" data-dock-tab="burp">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span data-studio-i18n="dockBurp">أحداث Burp Sensor</span>
+            </button>
           </div>
-          <div style="display:flex;gap:6px;">
-            <button class="drawer-btn-icon" onclick="clearDockOutput()" title="مسح">🧹</button>
-            <button class="drawer-btn-icon" onclick="toggleDockSize()" title="تكبير / تصغير">↕️</button>
+          <div class="dock-header-actions">
+            <button type="button" id="clearDockBtn" class="drawer-btn-icon" title="مسح السجل">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+              </svg>
+            </button>
+            <button type="button" id="toggleDockSizeBtn" class="drawer-btn-icon" title="تكبير / تصغير">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+            </button>
+            <button type="button" id="collapseDockBtn" class="drawer-btn-icon" title="طي / فتح الطرفية">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
           </div>
         </div>
 
         <!-- Terminal Output Box -->
-        <div id="dockOutputBox" class="dock-body">
-[*] PentestAI OpenCode Pro Studio Initialized.
-[*] Workspace: E:\Agant\PentestAI-Unified
+        <div id="dockOutputBox" class="dock-body ltr-isolate" dir="ltr" aria-live="polite">[*] HunterAI OpenCode Studio initialized.
+[*] Workspace: Active Engagement Sync
 [*] Active Engine: Monaco Code Editor + Burp Suite Interceptor + HunterAI Red-Team Router.
-[*] Ready.
-        </div>
+[*] Ready.</div>
 
         <!-- Terminal Input Bar -->
-        <div class="dock-cli-bar">
-          <span style="color:var(--cyan);font-family:var(--font-code);font-weight:bold;">$</span>
-          <input type="text" id="terminalCmdInput" class="dock-cli-input" placeholder="تشغيل أمر في بيئة العمل (مثال: python pentest.py hunt target.com أو nmap -sV target)..." onkeydown="if(event.key==='Enter') executeTerminalCmd()">
-          <button class="btn-action primary" style="padding:2px 8px;font-size:11px;" onclick="executeTerminalCmd()">تنفيذ ⏎</button>
+        <div class="dock-cli-bar ltr-isolate" dir="ltr">
+          <span class="dock-cli-prompt" aria-hidden="true">$</span>
+          <label for="terminalCmdInput" class="sr-only" data-studio-i18n="terminalInputLabel">Terminal command</label>
+          <input type="text" id="terminalCmdInput" class="dock-cli-input ltr-isolate" dir="ltr" placeholder="python pentest.py hunt example.com">
+          <button type="button" id="runTerminalCmdBtn" class="btn-action primary compact" data-studio-i18n="execute">تنفيذ</button>
         </div>
       </footer>
 
     </main>
 
+    <!-- Persistent Synchronized Copilot Drawer Mount -->
+    <div id="hunterCopilotMount"></div>
+
   </div>
 
-  <!-- Toast Notification Container -->
-  <div id="toast-container"></div>
+  <!-- Accessible Skill Execution Modal (Replaces native prompt dialog) -->
+  <div id="skillRunModal" class="studio-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="skillRunModalTitle" hidden>
+    <div class="studio-modal">
+      <div class="studio-modal-header">
+        <h2 id="skillRunModalTitle" class="studio-modal-title" data-studio-i18n="runSkillTitle">تشغيل المهارة على هدف</h2>
+        <button type="button" id="closeSkillModalBtn" class="drawer-btn-icon" aria-label="إغلاق">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <form id="skillRunForm">
+        <div class="studio-modal-body">
+          <div class="studio-modal-label" data-studio-i18n="selectedSkill">المهارة المختارة</div>
+          <div id="skillRunModalSkillName" class="studio-modal-skill ltr-isolate" dir="ltr"></div>
+          <label for="skillRunTargetInput" class="studio-modal-label" data-studio-i18n="targetPromptLabel">الهدف (URL أو Domain في النطاق المصرح به)</label>
+          <input type="text" id="skillRunTargetInput" class="repeater-input ltr-isolate" dir="ltr" required placeholder="https://example.com">
+        </div>
+        <div class="studio-modal-footer">
+          <button type="button" id="cancelSkillModalBtn" class="btn-action compact" data-studio-i18n="cancel">إلغاء</button>
+          <button type="submit" id="confirmSkillRunBtn" class="btn-action primary compact" data-studio-i18n="runNow">تنفيذ</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-  <!-- ── Core JavaScript Controller ──────────────────────────────────────── -->
+  <!-- Fallback Toast Notification Container -->
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Self-Hosted Core Scripts (DOMPurify loaded before Monaco AMD loader) -->
+  <script src="/static/vendor/dompurify/purify.min.js"></script>
+  <script src="/static/ui-core.js"></script>
+  <script src="/static/platform-client.js"></script>
+  <script src="/static/copilot-drawer.js"></script>
+  <script src="/static/vendor/monaco/vs/loader.min.js"></script>
+
+  <!-- OpenCode Studio Controller -->
   <script>
-    // State Management
-    let editor = null;
-    let openTabs = [];
-    let activeTabId = null;
-    let allTreeItems = [];
-    let allSkills = [];
-    let currentSkillFilter = 'all';
-    let currentDockTab = 'term';
+    (() => {
+      'use strict';
 
-    // ── 1. Monaco Editor Initialization ─────────────────────────────────────
-    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
-
-    require(['vs/editor/editor.main'], function () {
-      editor = monaco.editor.create(document.getElementById('monaco-editor-box'), {
-        value: '# مرحباً بك في PentestAI OpenCode Pro Studio\n# اختر أي ملف من القائمة الجانبية لتعديله أو افتح أداة Burp Repeater\n\nprint("OpenCode Studio Pro is Ready!")\n',
-        language: 'python',
-        theme: 'vs-dark',
-        automaticLayout: true,
-        fontSize: 13,
-        fontFamily: 'JetBrains Mono, Consolas, monospace',
-        minimap: { enabled: true },
-        scrollBeyondLastLine: false,
-        lineNumbers: 'on',
-        cursorBlinking: 'smooth',
-      });
-
-      // Track unsaved changes
-      editor.onDidChangeModelContent(() => {
-        if (activeTabId && !activeTabId.startsWith('special:')) {
-          const tab = openTabs.find(t => t.id === activeTabId);
-          if (tab && !tab.isDirty) {
-            tab.isDirty = true;
-            renderTabs();
+      const STUDIO_I18N = {
+        ar: {
+          save: 'حفظ',
+          repeater: 'Burp Repeater',
+          copilot: 'Copilot',
+          controlCenter: 'مركز التحكم',
+          engagementLabel: 'المهمة النشطة',
+          modelLabel: 'مزود الذكاء الاصطناعي',
+          searchFiles: 'بحث في ملفات المشروع...',
+          searchSkills: 'بحث في مسارات المهارة المركزية...',
+          filterAll: 'الكل',
+          burpConnection: 'حالة اتصال Burp Suite',
+          openRepeater: 'تشغيل Burp Repeater',
+          httpTraffic: 'ترافيك البروكسي الحديث (HTTP)',
+          agentQuickTitle: 'مساعد الكود والأمان',
+          agentQuickSub: 'اختر أمراً سريعاً لتنفيذه مع الملف المفتوح:',
+          promptExplain: 'شرح الكود',
+          promptAudit: 'فحص أمني',
+          promptPoc: 'توليد PoC',
+          promptRefactor: 'تحسين الكود',
+          openFullCopilot: 'فتح Copilot المتزامن (Ctrl+J)',
+          agentWelcome: 'مرحباً بك في HunterAI Studio. يمكنك توجيهي لتحليل الكود أو فحص طلبات Burp.',
+          agentPromptLabel: 'اكتب سؤالاً أو توجيهاً للأجنت...',
+          send: 'إرسال',
+          searchTools: 'بحث في أدوات MCP (nmap, nuclei, ffuf...)',
+          rawRequest: 'الطلب المباشر (Raw HTTP Request)',
+          routeViaBurp: 'توجيه عبر Burp Proxy (8080)',
+          sendRequest: 'إرسال الطلب',
+          httpResponse: 'الاستجابة والرد (HTTP Response)',
+          copyResponse: 'نسخ الرد',
+          aiAudit: 'فحص بالـ AI Agent',
+          dockTerm: 'الطرفية التفاعلية (Terminal)',
+          dockAgent: 'سجل الأجنت (Agent Logs)',
+          dockBurp: 'أحداث Burp Sensor',
+          execute: 'تنفيذ',
+          runSkillTitle: 'تشغيل المهارة على هدف',
+          selectedSkill: 'المهارة المختارة',
+          targetPromptLabel: 'الهدف (URL أو Domain في النطاق المصرح به)',
+          cancel: 'إلغاء',
+          runNow: 'تنفيذ',
+          defaultWorkspace: 'مساحة عمل HunterAI',
+          arsenalLabel: 'ترسانة MCP',
+          skillsActiveSuffix: 'مهارة نشطة',
+          arsenalActiveSuffix: 'أداة MCP',
+          burpChecking: 'Burp Proxy (8080): جارِ الفحص...',
+          burpOnline: 'Burp Proxy (8080): متصل',
+          burpOffline: 'Burp Proxy (8080): غير متصل',
+          burpOnlineDetail: 'متصل (127.0.0.1:8080)',
+          burpOfflineDetail: 'غير متصل (افتح Burp أو أرسل مباشرة)',
+          agentReadyDetail: 'جاهز (127.0.0.1:8085)',
+          agentIdleDetail: 'خامل',
+          openInEditor: 'فتح في المحرر',
+          runSkill: 'تشغيل المهارة',
+          noFiles: 'لا توجد ملفات مطابقة.',
+          noSkills: 'لا توجد مهارات مطابقة.',
+          noTools: 'لا توجد أدوات متاحة.',
+          noTraffic: 'لا يوجد ترافيك مسجل بعد.',
+          loadingFiles: 'جاري تحميل شجرة الملفات...',
+          loadingSkills: 'جاري تحميل المهارات...',
+          loadingTools: 'جاري تحميل الأدوات...',
+          loadingTraffic: 'جاري جلب حركة المرور...',
+          specialPanelNotice: 'هذه اللوحة خاصة، لا تحتاج إلى حفظ كملف.',
+          savedFile: 'تم حفظ الملف بنجاح: ',
+          saveFailed: 'فشل الحفظ: ',
+          readFailed: 'فشل قراءة الملف: ',
+          networkError: 'خطأ في الشبكة',
+          copied: 'تم نسخ الاستجابة إلى الحافظة.',
+          copyFailed: 'تعذر النسخ إلى الحافظة.',
+          needRequest: 'يرجى إدخال نص الطلب HTTP أولاً.',
+          needReqAndResp: 'يرجى التأكد من وجود طلب واستجابة أولاً قبل الفحص.',
+          sendingReq: 'جاري إرسال طلب HTTP...',
+          auditingReq: 'جاري تحليل الطلب والاستجابة أمنياً...',
+          auditDone: 'اكتمل الفحص الأمني',
+          auditError: 'خطأ في الفحص',
+          engagementSwitched: 'تم تبديل المهمة النشطة.',
+          drawerTitles: {
+            explorer: 'مستكشف الملفات (Explorer)',
+            skills: 'مستكشف المهارة المركزية',
+            burp: 'لوحة Burp Suite والترافيك',
+            agent: 'مساعد الكود والأمان',
+            arsenal: 'ترسانة أدوات MCP'
+          }
+        },
+        en: {
+          save: 'Save',
+          repeater: 'Burp Repeater',
+          copilot: 'Copilot',
+          controlCenter: 'Control Center',
+          engagementLabel: 'Active Engagement',
+          modelLabel: 'AI Provider',
+          searchFiles: 'Search project files...',
+          searchSkills: 'Search central skill workflows...',
+          filterAll: 'All',
+          burpConnection: 'Burp Suite Connection',
+          openRepeater: 'Open Burp Repeater',
+          httpTraffic: 'Recent Proxy Traffic (HTTP)',
+          agentQuickTitle: 'Code & Security Assistant',
+          agentQuickSub: 'Run a quick action on the active file:',
+          promptExplain: 'Explain Code',
+          promptAudit: 'Security Audit',
+          promptPoc: 'Draft Safe PoC',
+          promptRefactor: 'Refactor Code',
+          openFullCopilot: 'Open Synced Copilot (Ctrl+J)',
+          agentWelcome: 'Welcome to HunterAI Studio. Ask for code analysis or Burp request review.',
+          agentPromptLabel: 'Ask a question or instruct the agent...',
+          send: 'Send',
+          searchTools: 'Search MCP tools (nmap, nuclei, ffuf...)',
+          rawRequest: 'Raw HTTP Request',
+          routeViaBurp: 'Route via Burp Proxy (8080)',
+          sendRequest: 'Send Request',
+          httpResponse: 'HTTP Response',
+          copyResponse: 'Copy Response',
+          aiAudit: 'AI Security Audit',
+          dockTerm: 'Interactive Terminal',
+          dockAgent: 'Agent Logs',
+          dockBurp: 'Burp Sensor Events',
+          execute: 'Run',
+          runSkillTitle: 'Execute Skill Against Target',
+          selectedSkill: 'Selected Skill',
+          targetPromptLabel: 'Authorized Target (URL or Domain)',
+          cancel: 'Cancel',
+          runNow: 'Execute',
+          defaultWorkspace: 'HunterAI Workspace',
+          arsenalLabel: 'MCP Arsenal',
+          skillsActiveSuffix: 'active skills',
+          arsenalActiveSuffix: 'MCP tools',
+          burpChecking: 'Burp Proxy (8080): Checking...',
+          burpOnline: 'Burp Proxy (8080): Connected',
+          burpOffline: 'Burp Proxy (8080): Offline',
+          burpOnlineDetail: 'Connected (127.0.0.1:8080)',
+          burpOfflineDetail: 'Offline (start Burp or send directly)',
+          agentReadyDetail: 'Ready (127.0.0.1:8085)',
+          agentIdleDetail: 'Standby',
+          openInEditor: 'Open in Editor',
+          runSkill: 'Run Skill',
+          noFiles: 'No matching files.',
+          noSkills: 'No matching skills.',
+          noTools: 'No tools available.',
+          noTraffic: 'No proxy traffic recorded yet.',
+          loadingFiles: 'Loading file tree...',
+          loadingSkills: 'Loading skills...',
+          loadingTools: 'Loading arsenal tools...',
+          loadingTraffic: 'Loading traffic...',
+          specialPanelNotice: 'This panel is virtual and does not save as a file.',
+          savedFile: 'Saved file: ',
+          saveFailed: 'Save failed: ',
+          readFailed: 'Failed to read file: ',
+          networkError: 'Network error',
+          copied: 'Response copied to clipboard.',
+          copyFailed: 'Clipboard copy failed.',
+          needRequest: 'Enter a raw HTTP request first.',
+          needReqAndResp: 'Send a request first so both request and response exist.',
+          sendingReq: 'Sending HTTP request...',
+          auditingReq: 'Running AI security audit on request/response...',
+          auditDone: 'Security audit complete',
+          auditError: 'Audit failed',
+          engagementSwitched: 'Active engagement updated.',
+          drawerTitles: {
+            explorer: 'File Explorer',
+            skills: 'Central Skill Hub',
+            burp: 'Burp Suite & Traffic',
+            agent: 'Code & Security Assistant',
+            arsenal: 'MCP Tool Arsenal'
           }
         }
-      });
+      };
 
-      // Keyboard shortcut Ctrl+S
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function () {
-        saveCurrentFile();
-      });
+      const state = {
+        editor: null,
+        openTabs: [],
+        activeTabId: null,
+        allTreeItems: [],
+        allSkills: [],
+        allTools: [],
+        currentSkillFilter: 'all',
+        currentDrawerTab: 'explorer',
+        currentDockTab: 'term',
+        activeEngagementTarget: '',
+        pendingSkillName: '',
+        modalReturnFocus: null,
+        burpPoller: null
+      };
 
-      // Keyboard shortcut Ctrl+Enter in editor
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, function () {
-        if (activeTabId === 'special:repeater') {
-          sendBurpRepeaterRequest();
+      function getLang() {
+        if (window.HunterCore && typeof window.HunterCore.getLang === 'function') {
+          return window.HunterCore.getLang() === 'en' ? 'en' : 'ar';
         }
-      });
-
-      // Open initial default file
-      openFileInTab('pentest.py');
-    });
-
-    // ── 2. Tab Management ───────────────────────────────────────────────────
-    function openFileInTab(filePath, isSpecial = false, specialContent = '') {
-      const tabId = isSpecial ? filePath : filePath;
-      let existing = openTabs.find(t => t.id === tabId);
-
-      if (!existing) {
-        const name = isSpecial ? (tabId === 'special:repeater' ? '🦊 Burp Repeater' : 'Studio') : filePath.split('/').pop();
-        const ext = filePath.split('.').pop().toLowerCase();
-        
-        existing = {
-          id: tabId,
-          name: name,
-          path: filePath,
-          isSpecial: isSpecial,
-          isDirty: false,
-          content: specialContent,
-          extension: ext
-        };
-        openTabs.push(existing);
+        return document.documentElement.lang === 'en' ? 'en' : 'ar';
       }
 
-      switchToTab(tabId);
-    }
-
-    async function switchToTab(tabId) {
-      activeTabId = tabId;
-      const tab = openTabs.find(t => t.id === tabId);
-      if (!tab) return;
-
-      renderTabs();
-
-      if (tab.isSpecial && tab.id === 'special:repeater') {
-        document.getElementById('codeEditorView').classList.remove('active');
-        document.getElementById('burpRepeaterView').classList.add('active');
-        return;
+      function getTheme() {
+        if (window.HunterCore && typeof window.HunterCore.getTheme === 'function') {
+          return window.HunterCore.getTheme() === 'light' ? 'light' : 'dark';
+        }
+        return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
       }
 
-      document.getElementById('burpRepeaterView').classList.remove('active');
-      document.getElementById('codeEditorView').classList.add('active');
+      function t(key) {
+        const lang = getLang();
+        return (STUDIO_I18N[lang] && STUDIO_I18N[lang][key]) || STUDIO_I18N.en[key] || key;
+      }
 
-      // Load file content if not loaded yet
-      if (tab.content === undefined || tab.content === '') {
-        try {
-          const res = await fetch(`/api/editor/file?path=${encodeURIComponent(tab.path)}`);
-          const data = await res.json();
-          if (data.status === 'ok') {
-            tab.content = data.content;
-            tab.extension = data.extension ? data.extension.replace('.', '') : 'text';
-          } else {
-            showToast(`فشل قراءة الملف: ${data.message || data.detail}`, 'error');
-            return;
-          }
-        } catch (err) {
-          showToast(`خطأ في الشبكة: ${err}`, 'error');
+      function uiEl(tag, attrs, children) {
+        if (window.HunterCore && typeof window.HunterCore.el === 'function') {
+          return window.HunterCore.el(tag, attrs || {}, children || []);
+        }
+        const node = document.createElement(tag);
+        if (attrs) {
+          Object.entries(attrs).forEach(([k, v]) => {
+            if (v === undefined || v === null || v === false) return;
+            if (k === 'class') node.className = String(v);
+            else if (v === true) node.setAttribute(k, '');
+            else node.setAttribute(k, String(v));
+          });
+        }
+        const items = Array.isArray(children) ? children : [children];
+        items.forEach((child) => {
+          if (child === undefined || child === null) return;
+          node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+        });
+        return node;
+      }
+
+      function clearNode(node) {
+        if (!node) return;
+        while (node.firstChild) node.removeChild(node.firstChild);
+      }
+
+      function showToast(message, type) {
+        const level = type || 'info';
+        if (window.HunterCore && typeof window.HunterCore.toast === 'function') {
+          window.HunterCore.toast(String(message), level);
           return;
         }
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const item = uiEl('div', { class: 'toast toast-' + level }, [
+          uiEl('span', {}, [String(message)])
+        ]);
+        container.appendChild(item);
+        setTimeout(() => {
+          item.remove();
+        }, 3500);
       }
 
-      if (editor) {
-        const lang = getMonacoLanguage(tab.extension);
-        const oldModel = editor.getModel();
-        const newModel = monaco.editor.createModel(tab.content, lang);
-        editor.setModel(newModel);
-        if (oldModel) oldModel.dispose();
-      }
-    }
-
-    function closeTab(tabId, event) {
-      if (event) event.stopPropagation();
-      const idx = openTabs.findIndex(t => t.id === tabId);
-      if (idx === -1) return;
-
-      openTabs.splice(idx, 1);
-      if (activeTabId === tabId) {
-        if (openTabs.length > 0) {
-          const nextTab = openTabs[Math.max(0, idx - 1)];
-          switchToTab(nextTab.id);
-        } else {
-          activeTabId = null;
-          if (editor) editor.setValue('');
-        }
-      }
-      renderTabs();
-    }
-
-    function renderTabs() {
-      const container = document.getElementById('tabsBar');
-      container.innerHTML = '';
-
-      openTabs.forEach(t => {
-        const div = document.createElement('div');
-        div.className = `editor-tab ${t.id === activeTabId ? 'active' : ''} ${t.isDirty ? 'is-dirty' : ''}`;
-        div.onclick = () => switchToTab(t.id);
-
-        const icon = getFileIcon(t.extension || 'txt');
-        div.innerHTML = `
-          <span>${icon}</span>
-          <span>${escapeHtml(t.name)}</span>
-          <span class="dirty-indicator"></span>
-          <span class="close-btn" onclick="closeTab('${t.id}', event)">×</span>
-        `;
-        container.appendChild(div);
-      });
-    }
-
-    function getMonacoLanguage(ext) {
-      const map = {
-        'py': 'python',
-        'js': 'javascript',
-        'json': 'json',
-        'md': 'markdown',
-        'html': 'html',
-        'css': 'css',
-        'yaml': 'yaml',
-        'yml': 'yaml',
-        'sh': 'shell',
-        'bat': 'bat',
-        'txt': 'plaintext',
-        'http': 'plaintext'
-      };
-      return map[ext] || 'plaintext';
-    }
-
-    function getFileIcon(ext) {
-      const icons = {
-        'py': '🐍',
-        'js': '📜',
-        'json': '⚙️',
-        'md': '📝',
-        'html': '🌐',
-        'css': '🎨',
-        'yaml': '📋',
-        'yml': '📋',
-        'sh': '🐚',
-        'bat': '🦇',
-        'txt': '📄'
-      };
-      return icons[ext] || '📄';
-    }
-
-    // ── 3. Save File API ────────────────────────────────────────────────────
-    async function saveCurrentFile() {
-      if (!activeTabId) return;
-      const tab = openTabs.find(t => t.id === activeTabId);
-      if (!tab) return;
-
-      if (tab.isSpecial) {
-        showToast('هذه اللوحة خاصة، لا تحتاج إلى حفظ كملف.', 'info');
-        return;
-      }
-
-      const content = editor.getValue();
-      try {
-        const res = await fetch('/api/editor/file/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: tab.path, content: content })
+      function updateBackLink() {
+        const link = document.getElementById('backToControlCenterLink');
+        if (!link) return;
+        const params = new URLSearchParams({
+          theme: getTheme(),
+          lang: getLang()
         });
-        const data = await res.json();
-        if (data.status === 'ok') {
-          tab.isDirty = false;
-          tab.content = content;
-          renderTabs();
-          showToast(`تم حفظ الملف: ${tab.name} بنجاح! 💾`, 'success');
-          appendDockLog(`[✓] File saved: ${tab.path} (${data.size} bytes)`);
-        } else {
-          showToast(`فشل الحفظ: ${data.detail || data.message}`, 'error');
+        link.setAttribute('href', '/?' + params.toString());
+      }
+
+      function syncMonacoTheme() {
+        if (window.monaco && window.monaco.editor) {
+          window.monaco.editor.setTheme(getTheme() === 'light' ? 'vs' : 'vs-dark');
         }
-      } catch (err) {
-        showToast(`خطأ أثناء الحفظ: ${err}`, 'error');
-      }
-    }
-
-    // ── 4. File Tree Explorer ───────────────────────────────────────────────
-    async function loadFileTree() {
-      try {
-        const res = await fetch('/api/editor/tree');
-        const data = await res.json();
-        if (data.status === 'ok') {
-          allTreeItems = data.items || [];
-          renderFileTree(allTreeItems);
-        }
-      } catch (err) {
-        document.getElementById('fileTreeContainer').innerHTML = 
-          `<div style="color:var(--red);padding:10px;">فشل تحميل شجرة الملفات: ${err}</div>`;
-      }
-    }
-
-    function renderFileTree(items) {
-      const container = document.getElementById('fileTreeContainer');
-      container.innerHTML = '';
-
-      if (!items || items.length === 0) {
-        container.innerHTML = '<div style="color:#64748b;padding:10px;text-align:center;">لا توجد ملفات.</div>';
-        return;
       }
 
-      // Show top-level files and direct directories first
-      items.slice(0, 300).forEach(item => {
-        const div = document.createElement('div');
-        div.className = `tree-item ${activeTabId === item.path ? 'active' : ''}`;
-        
-        const isDir = item.type === 'directory';
-        const icon = isDir ? '📁' : getFileIcon(item.ext ? item.ext.replace('.', '') : 'txt');
+      function applyStudioTranslations() {
+        const lang = getLang();
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
 
-        div.innerHTML = `
-          <span class="icon">${icon}</span>
-          <span class="name" title="${escapeHtml(item.path)}">${escapeHtml(item.name)}</span>
-        `;
-
-        div.onclick = () => {
-          if (!isDir) {
-            openFileInTab(item.path);
-          } else {
-            showToast(`المجلد: ${item.path}`, 'info');
+        document.querySelectorAll('[data-studio-i18n]').forEach((el) => {
+          const key = el.getAttribute('data-studio-i18n');
+          if (key && STUDIO_I18N[lang][key]) {
+            el.textContent = STUDIO_I18N[lang][key];
           }
-        };
-
-        container.appendChild(div);
-      });
-    }
-
-    function filterFileTree() {
-      const q = document.getElementById('fileSearchInput').value.toLowerCase().trim();
-      if (!q) {
-        renderFileTree(allTreeItems);
-        return;
-      }
-      const filtered = allTreeItems.filter(i => i.name.toLowerCase().includes(q) || i.path.toLowerCase().includes(q));
-      renderFileTree(filtered);
-    }
-
-    // ── 5. Central Project Skill Hub ─────────────────────────────────────────
-    async function loadSkills() {
-      try {
-        const res = await fetch('/api/opencode/skills');
-        const data = await res.json();
-        allSkills = data.skills || [];
-        document.getElementById('skillsCountText').textContent = `${allSkills.length} مهارة نشطة`;
-        renderSkills();
-      } catch (err) {
-        document.getElementById('skillsListContainer').innerHTML = 
-          `<div style="color:var(--red);padding:10px;">فشل تحميل المهارات: ${err}</div>`;
-      }
-    }
-
-    function renderSkills() {
-      const container = document.getElementById('skillsListContainer');
-      container.innerHTML = '';
-      const q = document.getElementById('skillSearchInput').value.toLowerCase().trim();
-
-      const filtered = allSkills.filter(s => {
-        const packLabel = s.pack || s.kind || 'project_primary';
-        const matchesPack = (currentSkillFilter === 'all') || (packLabel === currentSkillFilter);
-        const matchesQ = !q || s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q));
-        return matchesPack && matchesQ;
-      });
-
-      if (filtered.length === 0) {
-        container.innerHTML = '<div style="color:#64748b;padding:10px;text-align:center;">لا توجد مهارات مطابقة.</div>';
-        return;
-      }
-
-      filtered.slice(0, 100).forEach(s => {
-        const packLabel = s.pack || s.kind || 'project_primary';
-        const card = document.createElement('div');
-        card.className = 'skill-card';
-        card.innerHTML = `
-          <div class="skill-card-top">
-            <span class="skill-card-title">${escapeHtml(s.name)}</span>
-            <span class="skill-card-pack">${escapeHtml(packLabel)}</span>
-          </div>
-          <div class="skill-card-desc">${escapeHtml(s.description || 'No description')}</div>
-          <div style="display:flex;gap:4px;margin-top:4px;">
-            <button class="btn-action" style="padding:2px 6px;font-size:10px;" onclick="openSkillInEditor('${s.name}', event)">📝 فتح في المحرر</button>
-            <button class="btn-action primary" style="padding:2px 6px;font-size:10px;" onclick="quickRunSkill('${s.name}', event)">🚀 تشغيل المهارة</button>
-          </div>
-        `;
-        container.appendChild(card);
-      });
-    }
-
-    function setSkillFilter(pack) {
-      currentSkillFilter = pack;
-      renderSkills();
-    }
-
-    function filterSkills() {
-      renderSkills();
-    }
-
-    async function openSkillInEditor(skillName, event) {
-      if (event) event.stopPropagation();
-      showToast(`جاري فتح ملف المهارة: ${skillName}...`, 'info');
-      try {
-        const res = await fetch(`/api/opencode/skill-file?name=${encodeURIComponent(skillName)}`);
-        const data = await res.json();
-        if (data.status === 'ok') {
-          openFileInTab(data.path, false, data.content);
-          showToast(`تم فتح مهارة '${skillName}' في المحرر!`, 'success');
-        } else {
-          showToast(`فشل فتح المهارة: ${data.detail}`, 'error');
-        }
-      } catch (err) {
-        showToast(`خطأ: ${err}`, 'error');
-      }
-    }
-
-    async function quickRunSkill(skillName, event) {
-      if (event) event.stopPropagation();
-      const target = prompt(`أدخل الهدف لتشغيل مهارة [${skillName}] ضده:`, 'https://target.com');
-      if (!target) return;
-
-      appendDockLog(`\n[+] Quick Running Skill: ${skillName} -> Target: ${target}`);
-      try {
-        const res = await fetch('/api/opencode/execute', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ skill_name: skillName, target: target })
         });
-        const data = await res.json();
-        appendDockLog(`[✓] Job ID: ${data.job_id || 'EXEC'}`);
-        if (data.output) appendDockLog(data.output);
-        showToast(`تم تشغيل المهارة ${skillName} بنجاح!`, 'success');
-      } catch (err) {
-        appendDockLog(`[-] Error running skill: ${err}`);
-      }
-    }
 
-    // ── 6. Burp Suite Hub & Repeater ────────────────────────────────────────
-    async function checkBurpStatus(showNotice = false) {
-      try {
-        const res = await fetch('/api/burp/status');
-        const data = await res.json();
+        const fileSearch = document.getElementById('fileSearchInput');
+        if (fileSearch) fileSearch.placeholder = t('searchFiles');
+        const skillSearch = document.getElementById('skillSearchInput');
+        if (skillSearch) skillSearch.placeholder = t('searchSkills');
+        const toolSearch = document.getElementById('toolSearchInput');
+        if (toolSearch) toolSearch.placeholder = t('searchTools');
+        const agentInput = document.getElementById('agentPromptInput');
+        if (agentInput) agentInput.placeholder = t('agentPromptLabel');
+
+        const langLabel = document.getElementById('langToggleLabel');
+        if (langLabel) langLabel.textContent = lang === 'ar' ? 'EN' : 'AR';
+
+        const drawerTitle = document.getElementById('drawerTitle');
+        if (drawerTitle) {
+          const titles = STUDIO_I18N[lang].drawerTitles || {};
+          drawerTitle.textContent = titles[state.currentDrawerTab] || '';
+        }
+
+        const skillsCountEl = document.getElementById('skillsCountText');
+        if (skillsCountEl) {
+          skillsCountEl.textContent = state.allSkills.length
+            ? `${state.allSkills.length} ${t('skillsActiveSuffix')}`
+            : t('skillsActiveSuffix');
+        }
+
+        const arsenalCountEl = document.getElementById('arsenalCountText');
+        if (arsenalCountEl) {
+          arsenalCountEl.textContent = state.allTools.length
+            ? `${state.allTools.length} ${t('arsenalActiveSuffix')}`
+            : t('arsenalLabel');
+        }
+
+        if (state.lastBurpStatus) {
+          renderBurpStatus(state.lastBurpStatus.proxyOnline, state.lastBurpStatus.agentOnline);
+        }
+        if (state.allSkills.length) renderSkills();
+        if (state.allTools.length) renderArsenalTools();
+
+        updateBackLink();
+      }
+
+      // ── 1. Monaco Editor Initialization ─────────────────────────────────────
+      function initMonaco() {
+        if (typeof window.require !== 'function') {
+          appendDockLog('[!] Local Monaco loader unavailable.');
+          return;
+        }
+        window.require.config({ paths: { vs: '/static/vendor/monaco/vs' } });
+        window.require(['vs/editor/editor.main'], () => {
+          const box = document.getElementById('monaco-editor-box');
+          if (!box) return;
+          state.editor = window.monaco.editor.create(box, {
+            value: '# HunterAI · OpenCode Studio\n# Select a file from Explorer or open Burp Repeater\n\nprint("OpenCode Studio ready")\n',
+            language: 'python',
+            theme: getTheme() === 'light' ? 'vs' : 'vs-dark',
+            automaticLayout: true,
+            fontSize: 13,
+            fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+            minimap: { enabled: true },
+            scrollBeyondLastLine: false,
+            lineNumbers: 'on',
+            cursorBlinking: 'smooth'
+          });
+
+          state.editor.onDidChangeModelContent(() => {
+            if (state.activeTabId && !state.activeTabId.startsWith('special:')) {
+              const tab = state.openTabs.find((x) => x.id === state.activeTabId);
+              if (tab && !tab.isDirty) {
+                tab.isDirty = true;
+                renderTabs();
+              }
+            }
+          });
+
+          state.editor.addCommand(window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyS, () => {
+            saveCurrentFile();
+          });
+
+          state.editor.addCommand(window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.Enter, () => {
+            if (state.activeTabId === 'special:repeater') {
+              sendBurpRepeaterRequest();
+            }
+          });
+
+          openFileInTab('pentest.py');
+        });
+      }
+
+      // ── 2. Tab Management ───────────────────────────────────────────────────
+      function getMonacoLanguage(ext) {
+        const map = {
+          py: 'python',
+          js: 'javascript',
+          mjs: 'javascript',
+          cjs: 'javascript',
+          ts: 'typescript',
+          tsx: 'typescript',
+          jsx: 'javascript',
+          json: 'json',
+          md: 'markdown',
+          html: 'html',
+          htm: 'html',
+          css: 'css',
+          yaml: 'yaml',
+          yml: 'yaml',
+          sh: 'shell',
+          bash: 'shell',
+          sql: 'sql',
+          bat: 'bat',
+          txt: 'plaintext',
+          http: 'plaintext'
+        };
+        return map[ext] || 'plaintext';
+      }
+
+      function openFileInTab(filePath, isSpecial, specialContent) {
+        const special = Boolean(isSpecial);
+        const tabId = filePath;
+        let existing = state.openTabs.find((x) => x.id === tabId);
+        if (!existing) {
+          const name = special
+            ? (tabId === 'special:repeater' ? 'Burp Repeater' : 'Studio')
+            : filePath.split('/').pop();
+          const parts = filePath.split('.');
+          const ext = parts.length > 1 ? parts.pop().toLowerCase() : 'txt';
+          existing = {
+            id: tabId,
+            name: name || filePath,
+            path: filePath,
+            isSpecial: special,
+            isDirty: false,
+            content: special ? (specialContent || '') : specialContent,
+            extension: ext
+          };
+          state.openTabs.push(existing);
+        } else if (specialContent !== undefined && special) {
+          existing.content = specialContent;
+        }
+        switchToTab(tabId);
+      }
+
+      async function switchToTab(tabId) {
+        state.activeTabId = tabId;
+        const tab = state.openTabs.find((x) => x.id === tabId);
+        if (!tab) return;
+
+        renderTabs();
+        renderFileTree(getFilteredTreeItems());
+
+        const codeView = document.getElementById('codeEditorView');
+        const repView = document.getElementById('burpRepeaterView');
+
+        if (tab.isSpecial && tab.id === 'special:repeater') {
+          if (codeView) codeView.classList.remove('active');
+          if (repView) repView.classList.add('active');
+          return;
+        }
+
+        if (repView) repView.classList.remove('active');
+        if (codeView) codeView.classList.add('active');
+
+        if (!tab.isSpecial && tab.content === undefined) {
+          try {
+            const res = await fetch('/api/editor/file?path=' + encodeURIComponent(tab.path));
+            const data = await res.json();
+            if (data.status === 'ok') {
+              tab.content = typeof data.content === 'string' ? data.content : '';
+              tab.extension = data.extension ? String(data.extension).replace('.', '') : 'txt';
+            } else {
+              showToast(t('readFailed') + (data.message || data.detail || res.status), 'error');
+              return;
+            }
+          } catch (err) {
+            showToast(t('networkError') + ': ' + err.message, 'error');
+            return;
+          }
+        }
+
+        if (state.activeTabId !== tab.id) return;
+
+        if (state.editor && window.monaco && window.monaco.editor) {
+          const lang = getMonacoLanguage(tab.extension);
+          const oldModel = state.editor.getModel();
+          const newModel = window.monaco.editor.createModel(tab.content || '', lang);
+          state.editor.setModel(newModel);
+          if (oldModel) oldModel.dispose();
+        }
+      }
+
+      function closeTab(tabId) {
+        const idx = state.openTabs.findIndex((x) => x.id === tabId);
+        if (idx === -1) return;
+        state.openTabs.splice(idx, 1);
+
+        if (state.activeTabId === tabId) {
+          if (state.openTabs.length > 0) {
+            const nextTab = state.openTabs[Math.max(0, idx - 1)];
+            switchToTab(nextTab.id);
+          } else {
+            state.activeTabId = null;
+            if (state.editor) state.editor.setValue('');
+            const repView = document.getElementById('burpRepeaterView');
+            const codeView = document.getElementById('codeEditorView');
+            if (repView) repView.classList.remove('active');
+            if (codeView) codeView.classList.add('active');
+          }
+        }
+        renderTabs();
+      }
+
+      function renderTabs() {
+        const container = document.getElementById('tabsBar');
+        if (!container) return;
+        clearNode(container);
+
+        state.openTabs.forEach((tab) => {
+          const isActive = tab.id === state.activeTabId;
+          const wrap = uiEl('div', {
+            class: 'editor-tab-wrap' + (isActive ? ' active' : '') + (tab.isDirty ? ' is-dirty' : ''),
+            role: 'presentation'
+          });
+
+          const tabBtn = uiEl('button', {
+            type: 'button',
+            class: 'editor-tab',
+            role: 'tab',
+            'aria-selected': isActive ? 'true' : 'false',
+            'data-action': 'switch-tab',
+            'data-tab-id': tab.id
+          }, [
+            uiEl('span', {}, [tab.name]),
+            uiEl('span', { class: 'dirty-indicator', 'aria-hidden': 'true' })
+          ]);
+
+          const closeBtn = uiEl('button', {
+            type: 'button',
+            class: 'editor-tab-close',
+            'data-action': 'close-tab',
+            'data-tab-id': tab.id,
+            'aria-label': 'Close ' + tab.name
+          }, ['×']);
+
+          wrap.appendChild(tabBtn);
+          wrap.appendChild(closeBtn);
+          container.appendChild(wrap);
+        });
+      }
+
+      // ── 3. Save File API ────────────────────────────────────────────────────
+      async function saveCurrentFile() {
+        if (!state.activeTabId) return;
+        const tab = state.openTabs.find((x) => x.id === state.activeTabId);
+        if (!tab) return;
+
+        if (tab.isSpecial) {
+          showToast(t('specialPanelNotice'), 'info');
+          return;
+        }
+        if (!state.editor) return;
+
+        const content = state.editor.getValue();
+        try {
+          const res = await fetch('/api/editor/file/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: tab.path, content })
+          });
+          const data = await res.json();
+          if (data.status === 'ok') {
+            tab.isDirty = false;
+            tab.content = content;
+            renderTabs();
+            showToast(t('savedFile') + tab.name, 'success');
+            appendDockLog(`[OK] File saved: ${tab.path} (${data.size} bytes)`);
+          } else {
+            showToast(t('saveFailed') + (data.detail || data.message || res.status), 'error');
+          }
+        } catch (err) {
+          showToast(t('saveFailed') + err.message, 'error');
+        }
+      }
+
+      // ── 4. File Tree Explorer ───────────────────────────────────────────────
+      async function loadFileTree() {
+        const container = document.getElementById('fileTreeContainer');
+        if (!container) return;
+        try {
+          const res = await fetch('/api/editor/tree');
+          const data = await res.json();
+          if (data.status === 'ok') {
+            state.allTreeItems = Array.isArray(data.items) ? data.items : [];
+            renderFileTree(getFilteredTreeItems());
+          } else {
+            clearNode(container);
+            container.appendChild(uiEl('div', { class: 'drawer-error-msg' }, [data.detail || data.message || 'Error']));
+          }
+        } catch (err) {
+          clearNode(container);
+          container.appendChild(uiEl('div', { class: 'drawer-error-msg' }, [t('networkError') + ': ' + err.message]));
+        }
+      }
+
+      function getFilteredTreeItems() {
+        const input = document.getElementById('fileSearchInput');
+        const q = input ? input.value.toLowerCase().trim() : '';
+        if (!q) return state.allTreeItems;
+        return state.allTreeItems.filter((item) => {
+          const name = (item.name || '').toLowerCase();
+          const path = (item.path || '').toLowerCase();
+          return name.includes(q) || path.includes(q);
+        });
+      }
+
+      function createSvgIcon(isDir) {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('width', '14');
+        svg.setAttribute('height', '14');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('aria-hidden', 'true');
+        const path = document.createElementNS(svgNS, 'path');
+        if (isDir) {
+          path.setAttribute('d', 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z');
+          svg.appendChild(path);
+        } else {
+          path.setAttribute('d', 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z');
+          const poly = document.createElementNS(svgNS, 'polyline');
+          poly.setAttribute('points', '14 2 14 8 20 8');
+          svg.appendChild(path);
+          svg.appendChild(poly);
+        }
+        return svg;
+      }
+
+      function renderFileTree(items) {
+        const container = document.getElementById('fileTreeContainer');
+        if (!container) return;
+        clearNode(container);
+
+        if (!items || items.length === 0) {
+          container.appendChild(uiEl('div', { class: 'drawer-empty-msg' }, [t('noFiles')]));
+          return;
+        }
+
+        items.slice(0, 300).forEach((item) => {
+          const isDir = item.type === 'directory';
+          const isActive = state.activeTabId === item.path;
+          const iconSpan = uiEl('span', { class: 'tree-item-icon' });
+          iconSpan.appendChild(createSvgIcon(isDir));
+          const btn = uiEl('button', {
+            type: 'button',
+            class: 'tree-item' + (isDir ? ' tree-item-dir' : '') + (isActive ? ' active' : ''),
+            'data-action': 'tree-item',
+            'data-path': item.path,
+            'data-type': isDir ? 'directory' : 'file',
+            title: item.path
+          }, [
+            iconSpan,
+            uiEl('span', { class: 'tree-item-name' }, [item.name || item.path])
+          ]);
+          container.appendChild(btn);
+        });
+      }
+
+      // ── 5. Central Project Skill Hub ─────────────────────────────────────────
+      async function loadSkills() {
+        const container = document.getElementById('skillsListContainer');
+        try {
+          const res = await fetch('/api/opencode/skills');
+          const data = await res.json();
+          state.allSkills = Array.isArray(data.skills) ? data.skills : [];
+
+          const countEl = document.getElementById('skillsCountText');
+          if (countEl) {
+            countEl.textContent = `${state.allSkills.length} ${t('skillsActiveSuffix')}`;
+          }
+          const railBadge = document.getElementById('skillsActivityCount');
+          if (railBadge) {
+            railBadge.textContent = String(state.allSkills.length);
+          }
+          renderSkills();
+        } catch (err) {
+          if (container) {
+            clearNode(container);
+            container.appendChild(uiEl('div', { class: 'drawer-error-msg' }, [t('networkError') + ': ' + err.message]));
+          }
+        }
+      }
+
+      function renderSkills() {
+        const container = document.getElementById('skillsListContainer');
+        if (!container) return;
+        clearNode(container);
+
+        const searchEl = document.getElementById('skillSearchInput');
+        const q = searchEl ? searchEl.value.toLowerCase().trim() : '';
+
+        const filtered = state.allSkills.filter((s) => {
+          const packLabel = s.pack || s.kind || 'project_primary';
+          const matchesPack = state.currentSkillFilter === 'all' || packLabel === state.currentSkillFilter;
+          const desc = (s.description || '').toLowerCase();
+          const name = (s.name || '').toLowerCase();
+          return matchesPack && (!q || name.includes(q) || desc.includes(q));
+        });
+
+        if (filtered.length === 0) {
+          container.appendChild(uiEl('div', { class: 'drawer-empty-msg' }, [t('noSkills')]));
+          return;
+        }
+
+        filtered.slice(0, 100).forEach((s) => {
+          const packLabel = s.pack || s.kind || 'project_primary';
+          const card = uiEl('article', { class: 'skill-card' }, [
+            uiEl('button', {
+              type: 'button',
+              class: 'skill-card-select',
+              'data-action': 'open-skill',
+              'data-skill': s.name
+            }, [
+              uiEl('div', { class: 'skill-card-top' }, [
+                uiEl('span', { class: 'skill-card-title' }, [s.name]),
+                uiEl('span', { class: 'skill-card-pack' }, [packLabel])
+              ]),
+              uiEl('div', { class: 'skill-card-desc' }, [s.description || ''])
+            ]),
+            uiEl('div', { class: 'skill-card-actions' }, [
+              uiEl('button', {
+                type: 'button',
+                class: 'btn-action compact',
+                'data-action': 'open-skill',
+                'data-skill': s.name
+              }, [t('openInEditor')]),
+              uiEl('button', {
+                type: 'button',
+                class: 'btn-action primary compact',
+                'data-action': 'run-skill',
+                'data-skill': s.name
+              }, [t('runSkill')])
+            ])
+          ]);
+          container.appendChild(card);
+        });
+      }
+
+      async function openSkillInEditor(skillName) {
+        showToast(skillName + '...', 'info');
+        try {
+          const res = await fetch('/api/opencode/skill-file?name=' + encodeURIComponent(skillName));
+          const data = await res.json();
+          if (data.status === 'ok') {
+            openFileInTab(data.path, false, data.content);
+            showToast(skillName, 'success');
+          } else {
+            showToast(t('readFailed') + (data.detail || res.status), 'error');
+          }
+        } catch (err) {
+          showToast(t('networkError') + ': ' + err.message, 'error');
+        }
+      }
+
+      function openSkillRunModal(skillName, triggerEl) {
+        const modal = document.getElementById('skillRunModal');
+        const skillLabel = document.getElementById('skillRunModalSkillName');
+        const targetInput = document.getElementById('skillRunTargetInput');
+        if (!modal || !skillLabel || !targetInput) return;
+
+        state.pendingSkillName = skillName;
+        state.modalReturnFocus = triggerEl || document.activeElement;
+        skillLabel.textContent = skillName;
+        targetInput.value = state.activeEngagementTarget || 'https://example.com';
+        modal.hidden = false;
+        targetInput.focus();
+        targetInput.select();
+      }
+
+      function closeSkillRunModal() {
+        const modal = document.getElementById('skillRunModal');
+        if (!modal || modal.hidden) return;
+        modal.hidden = true;
+        if (state.modalReturnFocus && typeof state.modalReturnFocus.focus === 'function') {
+          state.modalReturnFocus.focus();
+        }
+        state.modalReturnFocus = null;
+      }
+
+      async function executeSkillRun(skillName, target) {
+        appendDockLog(`\n[+] Executing skill ${skillName} -> ${target}`);
+        const dock = document.getElementById('bottomDock');
+        if (dock && dock.classList.contains('collapsed')) {
+          dock.classList.remove('collapsed');
+        }
+        try {
+          const res = await fetch('/api/opencode/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skill_name: skillName, target })
+          });
+          const data = await res.json();
+          appendDockLog(`[OK] Job ID: ${data.job_id || 'EXEC'}`);
+          if (data.output) appendDockLog(data.output);
+          showToast(skillName + ' -> ' + (data.job_id || 'EXEC'), 'success');
+        } catch (err) {
+          appendDockLog(`[-] Error running skill: ${err.message}`);
+          showToast(t('networkError') + ': ' + err.message, 'error');
+        }
+      }
+
+      // ── 6. Burp Suite Hub & Repeater ────────────────────────────────────────
+      function renderBurpStatus(proxyOnline, agentOnline) {
+        state.lastBurpStatus = { proxyOnline, agentOnline };
         const pill = document.getElementById('burpStatusPill');
         const text = document.getElementById('burpStatusText');
 
-        if (data.proxy && data.proxy.online) {
-          pill.className = 'status-badge badge-green';
-          text.textContent = 'Burp Proxy (8080): متصل 🟢';
-        } else {
-          pill.className = 'status-badge badge-yellow';
-          text.textContent = 'Burp Proxy (8080): غير متصل ⚠️';
+        if (pill && text) {
+          pill.className = 'status-badge ' + (proxyOnline ? 'badge-success' : 'badge-warning');
+          text.textContent = proxyOnline ? t('burpOnline') : t('burpOffline');
         }
 
         const detail = document.getElementById('burpDetailedStatus');
         if (detail) {
-          detail.innerHTML = `
-            <div>• بروكسي Burp: <strong>${data.proxy.online ? '<span style="color:var(--green)">متصل (127.0.0.1:8080)</span>' : '<span style="color:var(--yellow)">غير متصل (افتح Burp)</span>'}</strong></div>
-            <div>• عميل الأجنت: <strong>${data.agent.online ? '<span style="color:var(--green)">جاهز (127.0.0.1:8085)</span>' : '<span style="color:#64748b">خامل</span>'}</strong></div>
-          `;
+          clearNode(detail);
+          detail.appendChild(uiEl('div', {}, [
+            'Proxy: ',
+            uiEl('strong', {}, [proxyOnline ? t('burpOnlineDetail') : t('burpOfflineDetail')])
+          ]));
+          detail.appendChild(uiEl('div', {}, [
+            'Agent: ',
+            uiEl('strong', {}, [agentOnline ? t('agentReadyDetail') : t('agentIdleDetail')])
+          ]));
         }
+      }
 
-        if (showNotice) {
-          showToast(data.proxy.online ? 'Burp Suite متصل ويعمل بنجاح!' : 'Burp Suite غير متصل على 127.0.0.1:8080. يمكنك إرسال الطلبات مباشرة بدون بروكسي.', data.proxy.online ? 'success' : 'info');
+      async function checkBurpStatus(showNotice) {
+        try {
+          const res = await fetch('/api/burp/status');
+          const data = await res.json();
+          const proxyOnline = Boolean(data.proxy && data.proxy.online);
+          const agentOnline = Boolean(data.agent && data.agent.online);
+          renderBurpStatus(proxyOnline, agentOnline);
+
+          if (showNotice) {
+            showToast(proxyOnline ? t('burpOnlineDetail') : t('burpOfflineDetail'), proxyOnline ? 'success' : 'info');
+          }
+        } catch (err) {
+          // Quietly keep current status on transient poll failure
         }
-      } catch (err) {
-        console.error('Burp check failed', err);
-      }
-    }
-
-    function openBurpRepeaterTab() {
-      openFileInTab('special:repeater', true);
-    }
-
-    async function sendBurpRepeaterRequest() {
-      const raw = document.getElementById('rawHttpRequestText').value.trim();
-      const targetUrl = document.getElementById('repeaterTargetUrl').value.trim();
-      const useProxy = document.getElementById('routeBurpCheckbox').checked;
-
-      if (!raw) {
-        showToast('يرجى إدخال نص الطلب HTTP أولاً!', 'error');
-        return;
       }
 
-      const respBox = document.getElementById('rawHttpResponseText');
-      respBox.value = 'جاري إرسال الطلب واستقبال الرد... ⏳';
-
-      showToast('جاري إرسال طلب HTTP...', 'info');
-
-      try {
-        const res = await fetch('/api/burp/repeater/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            raw_request: raw,
-            url: targetUrl,
-            use_proxy: useProxy
-          })
-        });
-
-        const data = await res.json();
-
-        if (data.status === 'ok') {
-          respBox.value = data.raw_response;
-          
-          // Update Metrics
-          const pill = document.getElementById('responseStatusPill');
-          pill.style.display = 'inline-flex';
-          pill.textContent = `${data.status_code} ${data.reason}`;
-          pill.className = `status-badge ${data.status_code < 400 ? 'badge-green' : (data.status_code < 500 ? 'badge-yellow' : 'badge-red')}`;
-
-          document.getElementById('responseElapsedPill').textContent = `${data.elapsed_ms} ms`;
-          document.getElementById('responseBytesPill').textContent = `${data.bytes} B`;
-
-          showToast(`تم استلام الرد: ${data.status_code} (${data.elapsed_ms}ms)`, 'success');
-          appendDockLog(`[HTTP] ${raw.split('\n')[0]} -> ${data.status_code} (${data.elapsed_ms}ms)`);
-        } else {
-          respBox.value = `[!] خطأ في التنفيذ:\n${data.message || JSON.stringify(data)}`;
-          showToast(`فشل الطلب: ${data.message}`, 'error');
-        }
-      } catch (err) {
-        respBox.value = `[!] Network Exception: ${err}`;
-        showToast(`خطأ في الشبكة: ${err}`, 'error');
-      }
-    }
-
-    function loadRepeaterPreset(type) {
-      if (!type) return;
-      const editor = document.getElementById('rawHttpRequestText');
-      const urlInput = document.getElementById('repeaterTargetUrl');
-
-      if (type === 'get') {
-        urlInput.value = 'https://httpbin.org/get';
-        editor.value = `GET /get HTTP/1.1\nHost: httpbin.org\nUser-Agent: PentestAI-OpenCode/2.0\nAccept: application/json\n\n`;
-      } else if (type === 'post_json') {
-        urlInput.value = 'https://httpbin.org/post';
-        editor.value = `POST /post HTTP/1.1\nHost: httpbin.org\nContent-Type: application/json\nUser-Agent: PentestAI-OpenCode/2.0\n\n{\n  "username": "admin",\n  "action": "authenticate"\n}`;
-      } else if (type === 'sqli') {
-        urlInput.value = 'https://httpbin.org/get?id=1';
-        editor.value = `GET /get?id=1' OR 1=1-- - HTTP/1.1\nHost: httpbin.org\nUser-Agent: PentestAI-OpenCode/2.0\n\n`;
-      } else if (type === 'idor') {
-        urlInput.value = 'https://httpbin.org/get?user_id=1002';
-        editor.value = `GET /get?user_id=1002 HTTP/1.1\nHost: httpbin.org\nCookie: session=xyz987\n\n`;
-      } else if (type === 'ssrf') {
-        urlInput.value = 'http://169.254.169.254/latest/meta-data/';
-        editor.value = `GET /latest/meta-data/ HTTP/1.1\nHost: 169.254.169.254\nMetadata-Flavor: Google\n\n`;
-      }
-      showToast(`تم تحميل نموذج ${type}!`, 'info');
-    }
-
-    function copyRepeaterResponse() {
-      const text = document.getElementById('rawHttpResponseText').value;
-      if (!text) return;
-      navigator.clipboard.writeText(text);
-      showToast('تم نسخ الاستجابة إلى الحافظة! 📋', 'success');
-    }
-
-    async function auditCurrentRepeaterWithAgent() {
-      const rawReq = document.getElementById('rawHttpRequestText').value;
-      const rawResp = document.getElementById('rawHttpResponseText').value;
-
-      if (!rawReq || !rawResp) {
-        showToast('يرجى التأكد من وجود طلب واستجابة أولاً قبل الفحص بالذكاء الاصطناعي!', 'error');
-        return;
+      function openBurpRepeaterTab() {
+        openFileInTab('special:repeater', true);
       }
 
-      showToast('جاري تحليل الطلب والاستجابة بواسطة الـ AI Security Auditor...', 'info');
-      document.getElementById('auditSkillLabel').textContent = '⏳ جاري الفحص الأمني...';
+      async function sendBurpRepeaterRequest() {
+        const rawEl = document.getElementById('rawHttpRequestText');
+        const urlEl = document.getElementById('repeaterTargetUrl');
+        const proxyEl = document.getElementById('routeBurpCheckbox');
+        const respBox = document.getElementById('rawHttpResponseText');
+        if (!rawEl || !respBox) return;
 
-      try {
-        const res = await fetch('/api/burp/ai-audit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            raw_request: rawReq,
-            raw_response: rawResp,
-            skill_category: 'web-api-security'
-          })
-        });
-        const data = await res.json();
-        document.getElementById('auditSkillLabel').textContent = '✅ اكتمل الفحص الأمني';
+        const raw = rawEl.value.trim();
+        const targetUrl = urlEl ? urlEl.value.trim() : '';
+        const useProxy = proxyEl ? proxyEl.checked : false;
 
-        // Display in Agent Chat Drawer
-        switchDrawerTab('agent');
-        appendAgentMessage('user', 'فحص أمني فوري للطلب والاستجابة عبر Burp:');
-        appendAgentMessage('ai', data.analysis);
-        showToast('تم اكتمال الفحص الأمني! راجع نافذة الأجنت.', 'success');
-      } catch (err) {
-        document.getElementById('auditSkillLabel').textContent = '❌ خطأ';
-        showToast(`فشل الفحص: ${err}`, 'error');
-      }
-    }
-
-    async function loadBurpTraffic() {
-      const container = document.getElementById('burpTrafficContainer');
-      container.innerHTML = '<div style="color:#64748b;padding:8px;text-align:center;">جاري جلب الترافيك...</div>';
-
-      try {
-        const res = await fetch('/api/burp/traffic?limit=25');
-        const data = await res.json();
-        const items = data.items || [];
-        container.innerHTML = '';
-
-        if (items.length === 0) {
-          container.innerHTML = '<div style="color:#64748b;padding:8px;text-align:center;">لا يوجد ترافيك مسجل بعد.</div>';
+        if (!raw) {
+          showToast(t('needRequest'), 'error');
           return;
         }
 
-        items.forEach(it => {
-          const row = document.createElement('div');
-          row.className = 'traffic-row';
-          const methodClass = `method-${(it.method || 'GET').toLowerCase()}`;
+        respBox.value = t('sendingReq');
+        showToast(t('sendingReq'), 'info');
 
-          row.innerHTML = `
-            <span class="badge-method ${methodClass}">${escapeHtml(it.method)}</span>
-            <span style="color:#fff;overflow:hidden;text-overflow:ellipsis;flex:1;">${escapeHtml(it.path || '/')}</span>
-            <span style="color:#94a3b8;font-size:10px;">${escapeHtml(it.status || '200')}</span>
-          `;
+        try {
+          const res = await fetch('/api/burp/repeater/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              raw_request: raw,
+              url: targetUrl,
+              use_proxy: useProxy
+            })
+          });
+          const data = await res.json();
 
-          row.onclick = () => {
-            openBurpRepeaterTab();
-            document.getElementById('rawHttpRequestText').value = 
-`${it.method || 'GET'} ${it.path || '/'} HTTP/1.1
-Host: ${it.host || '127.0.0.1'}
-User-Agent: PentestAI-OpenCode/2.0
-Accept: */*
+          if (data.status === 'ok') {
+            respBox.value = data.raw_response || '';
+            const statusPill = document.getElementById('responseStatusPill');
+            if (statusPill) {
+              statusPill.hidden = false;
+              statusPill.textContent = `${data.status_code} ${data.reason || ''}`.trim();
+              const cls = data.status_code < 400 ? 'badge-success' : (data.status_code < 500 ? 'badge-warning' : 'badge-danger');
+              statusPill.className = 'status-badge ' + cls;
+            }
+            const elapsedEl = document.getElementById('responseElapsedPill');
+            if (elapsedEl) elapsedEl.textContent = `${data.elapsed_ms} ms`;
+            const bytesEl = document.getElementById('responseBytesPill');
+            if (bytesEl) bytesEl.textContent = `${data.bytes} B`;
 
-`;
-            showToast(`تم نقل الطلب [${it.path}] إلى Repeater!`, 'info');
-          };
-
-          container.appendChild(row);
-        });
-      } catch (err) {
-        container.innerHTML = `<div style="color:var(--red);padding:8px;">خطأ: ${err}</div>`;
-      }
-    }
-
-    // ── 7. Agent Co-Pilot Chat ──────────────────────────────────────────────
-    async function sendAgentChat() {
-      const input = document.getElementById('agentPromptInput');
-      const text = input.value.trim();
-      if (!text) return;
-
-      input.value = '';
-      appendAgentMessage('user', text);
-
-      const activeCode = editor ? editor.getValue() : '';
-      const promptWithContext = `User Question: ${text}\n\nContext File (${activeTabId || 'None'}):\n\`\`\`\n${activeCode.slice(0, 3000)}\n\`\`\``;
-
-      const model = document.getElementById('modelSelector').value;
-
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: promptWithContext, provider: model })
-        });
-        const data = await res.json();
-        appendAgentMessage('ai', data.response || data.message || 'تم استلام التوجيه.');
-      } catch (err) {
-        appendAgentMessage('ai', `خطأ في الاتصال بالأجنت: ${err}`);
-      }
-    }
-
-    function askAgentPrompt(promptText) {
-      document.getElementById('agentPromptInput').value = promptText;
-      sendAgentChat();
-    }
-
-    function appendAgentMessage(role, text) {
-      const history = document.getElementById('agentChatHistory');
-      const div = document.createElement('div');
-      div.style.padding = '8px 10px';
-      div.style.borderRadius = '6px';
-      div.style.background = role === 'user' ? 'rgba(0, 240, 255, 0.1)' : 'rgba(0, 0, 0, 0.4)';
-      div.style.border = `1px solid ${role === 'user' ? 'rgba(0, 240, 255, 0.3)' : 'rgba(255, 255, 255, 0.08)'}`;
-      div.style.color = role === 'user' ? 'var(--cyan)' : '#e2e8f0';
-
-      div.innerHTML = `<strong>${role === 'user' ? '👤 أنت' : '🤖 PentestAI'}:</strong><br><div style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(text)}</div>`;
-      history.appendChild(div);
-      history.scrollTop = history.scrollHeight;
-    }
-
-    // ── 8. Bottom Dock & Terminal ───────────────────────────────────────────
-    function switchDockTab(tab) {
-      currentDockTab = tab;
-      document.querySelectorAll('.dock-tab').forEach(t => t.classList.remove('active'));
-      document.getElementById(`dockTab-${tab}`).classList.add('active');
-
-      const out = document.getElementById('dockOutputBox');
-      if (tab === 'term') {
-        out.style.color = 'var(--green)';
-      } else if (tab === 'agent') {
-        out.style.color = 'var(--cyan)';
-      } else if (tab === 'burp') {
-        out.style.color = 'var(--yellow)';
-      }
-    }
-
-    function appendDockLog(text) {
-      const box = document.getElementById('dockOutputBox');
-      box.textContent += '\n' + text;
-      box.scrollTop = box.scrollHeight;
-    }
-
-    function clearDockOutput() {
-      document.getElementById('dockOutputBox').textContent = '[*] Dock logs cleared.';
-    }
-
-    function toggleDockSize() {
-      const dock = document.getElementById('bottomDock');
-      if (dock.style.height === '400px') {
-        dock.style.height = '220px';
-      } else {
-        dock.style.height = '400px';
-      }
-    }
-
-    async function executeTerminalCmd() {
-      const input = document.getElementById('terminalCmdInput');
-      const cmd = input.value.trim();
-      if (!cmd) return;
-
-      input.value = '';
-      appendDockLog(`\n$ ${cmd}`);
-
-      try {
-        const res = await fetch('/api/run-tool', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: cmd })
-        });
-        const data = await res.json();
-        if (data.output) {
-          appendDockLog(data.output);
-        } else if (data.status) {
-          appendDockLog(`[Status: ${data.status}]`);
+            showToast(`HTTP ${data.status_code} (${data.elapsed_ms}ms)`, 'success');
+            appendDockLog(`[HTTP] ${raw.split('\n')[0]} -> ${data.status_code} (${data.elapsed_ms}ms)`);
+          } else {
+            respBox.value = `[!] Error:\n${data.message || JSON.stringify(data)}`;
+            showToast(data.message || 'Request failed', 'error');
+          }
+        } catch (err) {
+          respBox.value = `[!] Network Exception: ${err.message}`;
+          showToast(t('networkError') + ': ' + err.message, 'error');
         }
-      } catch (err) {
-        appendDockLog(`[-] Command error: ${err}`);
       }
-    }
 
-    // ── 9. Drawer Navigation ────────────────────────────────────────────────
-    function switchDrawerTab(tabName) {
-      document.querySelectorAll('.activity-btn').forEach(b => b.classList.remove('active'));
-      const activeBtn = document.getElementById(`btn-${tabName}`);
-      if (activeBtn) activeBtn.classList.add('active');
+      function loadRepeaterPreset(type) {
+        if (!type) return;
+        const reqEditor = document.getElementById('rawHttpRequestText');
+        const urlInput = document.getElementById('repeaterTargetUrl');
+        if (!reqEditor || !urlInput) return;
 
-      const drawer = document.getElementById('sideDrawer');
-      drawer.classList.remove('collapsed');
+        const presets = {
+          get: {
+            url: 'https://httpbin.org/get',
+            raw: 'GET /get HTTP/1.1\nHost: httpbin.org\nUser-Agent: HunterAI-OpenCode/2.0\nAccept: application/json\n\n'
+          },
+          post_json: {
+            url: 'https://httpbin.org/post',
+            raw: 'POST /post HTTP/1.1\nHost: httpbin.org\nContent-Type: application/json\nUser-Agent: HunterAI-OpenCode/2.0\n\n{\n  "username": "admin",\n  "action": "authenticate"\n}'
+          },
+          sqli: {
+            url: 'https://httpbin.org/get?id=1',
+            raw: "GET /get?id=1' OR 1=1-- - HTTP/1.1\nHost: httpbin.org\nUser-Agent: HunterAI-OpenCode/2.0\n\n"
+          },
+          idor: {
+            url: 'https://httpbin.org/get?user_id=1002',
+            raw: 'GET /get?user_id=1002 HTTP/1.1\nHost: httpbin.org\nCookie: session=placeholder\n\n'
+          },
+          ssrf: {
+            url: 'http://169.254.169.254/latest/meta-data/',
+            raw: 'GET /latest/meta-data/ HTTP/1.1\nHost: 169.254.169.254\nMetadata-Flavor: Google\n\n'
+          }
+        };
 
-      const titles = {
-        'explorer': 'مستكشف الملفات (Explorer)',
-        'skills': 'مستكشف المهارة المركزية',
-        'burp': 'لوحة Burp Suite والترافيك',
-        'agent': 'مساعد الأجنت الذكي (AI Co-Pilot)',
-        'arsenal': 'ترسانة أدوات كالي (MCP Arsenal)'
-      };
-      document.getElementById('drawerTitle').textContent = titles[tabName] || 'القائمة';
+        const preset = presets[type];
+        if (!preset) return;
+        urlInput.value = preset.url;
+        reqEditor.value = preset.raw;
+        showToast(type, 'info');
+      }
 
-      ['explorer', 'skills', 'burp', 'agent', 'arsenal'].forEach(t => {
-        const view = document.getElementById(`drawerView-${t}`);
-        if (view) view.style.display = (t === tabName) ? 'flex' : 'none';
-      });
+      async function copyRepeaterResponse() {
+        const respBox = document.getElementById('rawHttpResponseText');
+        const text = respBox ? respBox.value : '';
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast(t('copied'), 'success');
+        } catch (err) {
+          showToast(t('copyFailed'), 'error');
+        }
+      }
 
-      if (tabName === 'burp') loadBurpTraffic();
-    }
+      async function auditCurrentRepeaterWithAgent() {
+        const rawReq = (document.getElementById('rawHttpRequestText') || {}).value || '';
+        const rawResp = (document.getElementById('rawHttpResponseText') || {}).value || '';
+        const labelEl = document.getElementById('auditSkillLabel');
 
-    function toggleDrawer() {
-      const drawer = document.getElementById('sideDrawer');
-      drawer.classList.toggle('collapsed');
-    }
+        if (!rawReq || !rawResp) {
+          showToast(t('needReqAndResp'), 'error');
+          return;
+        }
 
-    function refreshCurrentDrawer() {
-      loadFileTree();
-      loadSkills();
-      checkBurpStatus(true);
-      showToast('تم تحديث البيانات!', 'info');
-    }
+        showToast(t('auditingReq'), 'info');
+        if (labelEl) labelEl.textContent = t('auditingReq');
 
-    // ── 10. Toast Helper ────────────────────────────────────────────────────
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      toast.className = 'toast';
+        try {
+          const res = await fetch('/api/burp/ai-audit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              raw_request: rawReq,
+              raw_response: rawResp,
+              skill_category: 'web-api-security'
+            })
+          });
+          const data = await res.json();
+          if (labelEl) labelEl.textContent = t('auditDone');
+          switchDrawerTab('agent');
+          appendAgentMessage('user', 'Burp HTTP Request/Response Audit');
+          appendAgentMessage('ai', data.analysis || data.message || '');
+          showToast(t('auditDone'), 'success');
+        } catch (err) {
+          if (labelEl) labelEl.textContent = t('auditError');
+          showToast(t('networkError') + ': ' + err.message, 'error');
+        }
+      }
 
-      const icons = {
-        'success': '✅',
-        'error': '❌',
-        'info': 'ℹ️',
-        'warning': '⚠️'
-      };
-      toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${escapeHtml(message)}</span>`;
-      container.appendChild(toast);
+      async function loadBurpTraffic() {
+        const container = document.getElementById('burpTrafficContainer');
+        if (!container) return;
+        clearNode(container);
+        container.appendChild(uiEl('div', { class: 'drawer-empty-msg' }, [t('loadingTraffic')]));
 
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.3s';
-        setTimeout(() => toast.remove(), 300);
-      }, 3500);
-    }
+        try {
+          const res = await fetch('/api/burp/traffic?limit=25');
+          const data = await res.json();
+          const items = Array.isArray(data.items) ? data.items : [];
+          clearNode(container);
 
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
+          if (items.length === 0) {
+            container.appendChild(uiEl('div', { class: 'drawer-empty-msg' }, [t('noTraffic')]));
+            return;
+          }
 
-    // ── 11. Initial Onload ──────────────────────────────────────────────────
-    window.addEventListener('load', () => {
-      loadFileTree();
-      loadSkills();
-      checkBurpStatus(false);
-      setInterval(() => checkBurpStatus(false), 8000); // Poll status every 8s
-    });
+          items.forEach((it) => {
+            const method = String(it.method || 'GET').toUpperCase();
+            const knownMethods = { GET: 'method-get', POST: 'method-post', PUT: 'method-put', PATCH: 'method-patch', DELETE: 'method-delete' };
+            const methodCls = knownMethods[method] || 'method-other';
+
+            const row = uiEl('button', {
+              type: 'button',
+              class: 'traffic-row',
+              'data-action': 'load-traffic',
+              'data-method': method,
+              'data-host': it.host || '127.0.0.1',
+              'data-path': it.path || '/',
+              'data-scheme': it.scheme || 'http'
+            }, [
+              uiEl('span', { class: 'badge-method ' + methodCls }, [method]),
+              uiEl('span', { class: 'traffic-path' }, [it.path || '/']),
+              uiEl('span', { class: 'traffic-status' }, [String(it.status || '200')])
+            ]);
+            container.appendChild(row);
+          });
+        } catch (err) {
+          clearNode(container);
+          container.appendChild(uiEl('div', { class: 'drawer-error-msg' }, [t('networkError') + ': ' + err.message]));
+        }
+      }
+
+      // ── 7. Agent Co-Pilot Chat ──────────────────────────────────────────────
+      async function sendAgentChat() {
+        const input = document.getElementById('agentPromptInput');
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) return;
+
+        input.value = '';
+        appendAgentMessage('user', text);
+
+        const activeCode = state.editor ? state.editor.getValue() : '';
+        const promptWithContext = `User Question: ${text}\n\nContext File (${state.activeTabId || 'None'}):\n\`\`\`\n${activeCode.slice(0, 3000)}\n\`\`\``;
+        const modelEl = document.getElementById('modelSelector');
+        const model = modelEl ? modelEl.value : 'gemini';
+
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: promptWithContext, provider: model })
+          });
+          const data = await res.json();
+          appendAgentMessage('ai', data.response || data.message || '');
+        } catch (err) {
+          appendAgentMessage('ai', t('networkError') + ': ' + err.message);
+        }
+      }
+
+      function appendAgentMessage(role, rawText) {
+        const history = document.getElementById('agentChatHistory');
+        if (!history) return;
+        const text = String(rawText || '');
+
+        const wrapper = uiEl('div', {
+          class: 'agent-msg ' + (role === 'user' ? 'agent-msg-user' : 'agent-msg-ai')
+        }, [
+          uiEl('div', { class: 'agent-msg-meta' }, [role === 'user' ? 'User' : 'HunterAI'])
+        ]);
+
+        const body = uiEl('div', { class: 'agent-msg-body' });
+        const parts = text.split(/```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g);
+
+        parts.forEach((segment, idx) => {
+          if (!segment) return;
+          if (idx % 2 === 1) {
+            const pre = uiEl('pre', { class: 'chat-code ltr-isolate', dir: 'ltr' }, [
+              uiEl('code', {}, [segment.trim()])
+            ]);
+            body.appendChild(pre);
+          } else {
+            const inlineParts = segment.split(/`([^`\n]+)`/g);
+            inlineParts.forEach((chunk, cIdx) => {
+              if (!chunk) return;
+              if (cIdx % 2 === 1) {
+                body.appendChild(uiEl('code', { class: 'ltr-isolate', dir: 'ltr' }, [chunk]));
+              } else if (window.HunterCore && typeof window.HunterCore.sanitizeHtml === 'function' && typeof window.HunterCore.escapeHtml === 'function') {
+                const escaped = window.HunterCore.escapeHtml(chunk);
+                const formatted = escaped.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+                const cleanHtml = window.HunterCore.sanitizeHtml(formatted);
+                const parsed = new DOMParser().parseFromString(cleanHtml, 'text/html');
+                Array.from(parsed.body.childNodes).forEach((child) => {
+                  body.appendChild(document.importNode(child, true));
+                });
+              } else {
+                body.appendChild(document.createTextNode(chunk));
+              }
+            });
+          }
+        });
+
+        wrapper.appendChild(body);
+        history.appendChild(wrapper);
+        history.scrollTop = history.scrollHeight;
+      }
+
+      // ── 8. MCP Arsenal ──────────────────────────────────────────────────────
+      async function loadArsenalTools() {
+        const container = document.getElementById('arsenalToolsContainer');
+        try {
+          const res = await fetch('/api/control/tools');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : (Array.isArray(data.tools) ? data.tools : []);
+          state.allTools = list;
+
+          const countEl = document.getElementById('arsenalCountText');
+          if (countEl && list.length > 0) {
+            countEl.textContent = `${list.length} ${t('arsenalActiveSuffix')}`;
+          }
+          renderArsenalTools();
+        } catch (err) {
+          if (container) {
+            clearNode(container);
+            container.appendChild(uiEl('div', { class: 'drawer-empty-msg' }, [t('noTools')]));
+          }
+        }
+      }
+
+      function renderArsenalTools() {
+        const container = document.getElementById('arsenalToolsContainer');
+        if (!container) return;
+        clearNode(container);
+
+        const searchEl = document.getElementById('toolSearchInput');
+        const q = searchEl ? searchEl.value.toLowerCase().trim() : '';
+
+        const filtered = state.allTools.filter((tool) => {
+          const name = String(tool.name || tool.id || '').toLowerCase();
+          const desc = String(tool.description || tool.category || '').toLowerCase();
+          return !q || name.includes(q) || desc.includes(q);
+        });
+
+        if (filtered.length === 0) {
+          container.appendChild(uiEl('div', { class: 'drawer-empty-msg' }, [t('noTools')]));
+          return;
+        }
+
+        filtered.slice(0, 120).forEach((tool) => {
+          const name = String(tool.name || tool.id || 'tool');
+          const category = String(tool.category || (tool.available === false ? 'offline' : 'mcp'));
+          const desc = String(tool.description || '');
+          const cmd = String(tool.command || name);
+
+          const cardChildren = [
+            uiEl('div', { class: 'tool-card-top' }, [
+              uiEl('span', { class: 'tool-card-name ltr-isolate', dir: 'ltr' }, [name]),
+              uiEl('span', { class: 'skill-card-pack' }, [category])
+            ])
+          ];
+          if (desc) {
+            cardChildren.push(uiEl('div', { class: 'tool-card-desc' }, [desc]));
+          }
+
+          const card = uiEl('button', {
+            type: 'button',
+            class: 'tool-card',
+            'data-action': 'prefill-tool',
+            'data-cmd': cmd
+          }, cardChildren);
+          container.appendChild(card);
+        });
+      }
+
+      // ── 9. Bottom Dock & Terminal ───────────────────────────────────────────
+      function switchDockTab(tab) {
+        state.currentDockTab = tab;
+        document.querySelectorAll('.dock-tab').forEach((btn) => {
+          const active = btn.getAttribute('data-dock-tab') === tab;
+          btn.classList.toggle('active', active);
+          btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+
+        const out = document.getElementById('dockOutputBox');
+        if (!out) return;
+        out.classList.remove('tone-agent', 'tone-burp');
+        if (tab === 'agent') out.classList.add('tone-agent');
+        else if (tab === 'burp') out.classList.add('tone-burp');
+      }
+
+      function appendDockLog(text) {
+        const box = document.getElementById('dockOutputBox');
+        if (!box) return;
+        box.textContent += '\n' + String(text || '');
+        box.scrollTop = box.scrollHeight;
+      }
+
+      function toggleDockSize() {
+        const dock = document.getElementById('bottomDock');
+        if (!dock) return;
+        dock.classList.remove('collapsed');
+        dock.style.height = dock.style.height === '380px' ? '220px' : '380px';
+      }
+
+      function toggleDockCollapsed() {
+        const dock = document.getElementById('bottomDock');
+        if (dock) dock.classList.toggle('collapsed');
+      }
+
+      async function executeTerminalCmd() {
+        const input = document.getElementById('terminalCmdInput');
+        if (!input) return;
+        const cmd = input.value.trim();
+        if (!cmd) return;
+
+        input.value = '';
+        appendDockLog(`\n$ ${cmd}`);
+
+        try {
+          const res = await fetch('/api/run-tool', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: cmd })
+          });
+          const data = await res.json();
+          if (data.output) {
+            appendDockLog(data.output);
+          } else if (data.status) {
+            appendDockLog(`[Status: ${data.status}]`);
+          }
+        } catch (err) {
+          appendDockLog(`[-] Command error: ${err.message}`);
+        }
+      }
+
+      // ── 10. Drawer Navigation & Responsive Controls ─────────────────────────
+      function setDrawerOpen(isOpen) {
+        const drawer = document.getElementById('sideDrawer');
+        const backdrop = document.getElementById('drawerBackdrop');
+        const railToggle = document.getElementById('toggleDrawerRailBtn');
+        const mobileToggle = document.getElementById('mobileDrawerToggle');
+
+        if (drawer) drawer.classList.toggle('collapsed', !isOpen);
+        if (backdrop) backdrop.classList.toggle('open', isOpen);
+        if (railToggle) railToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        if (mobileToggle) mobileToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      }
+
+      function switchDrawerTab(tabName) {
+        state.currentDrawerTab = tabName;
+        document.querySelectorAll('.activity-btn[data-drawer-tab]').forEach((btn) => {
+          const active = btn.getAttribute('data-drawer-tab') === tabName;
+          btn.classList.toggle('active', active);
+          btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+
+        setDrawerOpen(true);
+
+        const lang = getLang();
+        const titleEl = document.getElementById('drawerTitle');
+        if (titleEl) {
+          titleEl.textContent = (STUDIO_I18N[lang].drawerTitles || {})[tabName] || tabName;
+        }
+
+        ['explorer', 'skills', 'burp', 'agent', 'arsenal'].forEach((name) => {
+          const panel = document.getElementById('drawerView-' + name);
+          if (panel) panel.hidden = name !== tabName;
+        });
+
+        if (tabName === 'burp') loadBurpTraffic();
+      }
+
+      function toggleDrawer() {
+        const drawer = document.getElementById('sideDrawer');
+        if (!drawer) return;
+        setDrawerOpen(drawer.classList.contains('collapsed'));
+      }
+
+      function initResizeHandles() {
+        const vHandle = document.getElementById('drawerResizeHandle');
+        const drawer = document.getElementById('sideDrawer');
+        if (vHandle && drawer) {
+          vHandle.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            const isRtl = document.documentElement.dir === 'rtl';
+            const startX = e.clientX;
+            const startW = drawer.getBoundingClientRect().width;
+            const onMove = (ev) => {
+              const delta = isRtl ? (startX - ev.clientX) : (ev.clientX - startX);
+              const next = Math.max(220, Math.min(540, startW + delta));
+              drawer.style.width = next + 'px';
+            };
+            const onUp = () => {
+              window.removeEventListener('pointermove', onMove);
+              window.removeEventListener('pointerup', onUp);
+            };
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+          });
+          vHandle.addEventListener('keydown', (e) => {
+            const cur = drawer.getBoundingClientRect().width;
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              e.preventDefault();
+              const step = e.key === 'ArrowRight' ? 20 : -20;
+              const signed = document.documentElement.dir === 'rtl' ? -step : step;
+              drawer.style.width = Math.max(220, Math.min(540, cur + signed)) + 'px';
+            }
+          });
+        }
+
+        const hHandle = document.getElementById('dockResizeHandle');
+        const dock = document.getElementById('bottomDock');
+        if (hHandle && dock) {
+          hHandle.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            dock.classList.remove('collapsed');
+            const startY = e.clientY;
+            const startH = dock.getBoundingClientRect().height;
+            const onMove = (ev) => {
+              const next = Math.max(120, Math.min(480, startH + (startY - ev.clientY)));
+              dock.style.height = next + 'px';
+            };
+            const onUp = () => {
+              window.removeEventListener('pointermove', onMove);
+              window.removeEventListener('pointerup', onUp);
+            };
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+          });
+          hHandle.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+              e.preventDefault();
+              dock.classList.remove('collapsed');
+              const cur = dock.getBoundingClientRect().height;
+              const delta = e.key === 'ArrowUp' ? 20 : -20;
+              dock.style.height = Math.max(120, Math.min(480, cur + delta)) + 'px';
+            }
+          });
+        }
+      }
+
+      // ── 11. Platform Context Subscription ───────────────────────────────────
+      function syncPlatformState(platState) {
+        if (!platState || typeof platState !== 'object') return;
+        const engagements = Array.isArray(platState.engagements) ? platState.engagements : [];
+        const activeId = (platState.context && platState.context.active_engagement_id) || '';
+
+        const selector = document.getElementById('engagementSelector');
+        if (selector) {
+          clearNode(selector);
+          selector.appendChild(uiEl('option', { value: '' }, [t('defaultWorkspace')]));
+          engagements.forEach((eng) => {
+            const id = String(eng.engagement_id || eng.id || '');
+            if (!id) return;
+            const label = eng.name || eng.target || id;
+            const target = eng.target && eng.name && eng.target !== eng.name ? ` (${eng.target})` : '';
+            selector.appendChild(uiEl('option', { value: id }, [label + target]));
+          });
+          selector.value = activeId;
+        }
+
+        const activeEng = engagements.find((eng) => (eng.engagement_id || eng.id) === activeId);
+        state.activeEngagementTarget = (activeEng && activeEng.target) || '';
+
+        const pillText = document.getElementById('workspacePillText');
+        if (pillText) {
+          pillText.textContent = activeEng
+            ? (activeEng.name || activeEng.target || activeEng.engagement_id)
+            : t('defaultWorkspace');
+        }
+
+        const runs = Array.isArray(platState.runs) ? platState.runs : [];
+        const liveRun = runs.find((r) => r.status === 'running' || r.status === 'paused');
+        const runBadge = document.getElementById('activeRunBadge');
+        const runText = document.getElementById('activeRunText');
+        if (runBadge && runText) {
+          if (liveRun) {
+            runBadge.hidden = false;
+            runText.textContent = `${liveRun.target || liveRun.run_id} (${liveRun.status})`;
+          } else {
+            runBadge.hidden = true;
+          }
+        }
+      }
+
+      // ── 12. Event Binding ───────────────────────────────────────────────────
+      function bindEvents() {
+        document.getElementById('mobileDrawerToggle')?.addEventListener('click', toggleDrawer);
+        document.getElementById('toggleDrawerRailBtn')?.addEventListener('click', toggleDrawer);
+        document.getElementById('closeDrawerBtn')?.addEventListener('click', () => setDrawerOpen(false));
+        document.getElementById('drawerBackdrop')?.addEventListener('click', () => setDrawerOpen(false));
+
+        document.getElementById('refreshDrawerBtn')?.addEventListener('click', () => {
+          loadFileTree();
+          loadSkills();
+          loadArsenalTools();
+          checkBurpStatus(true);
+        });
+
+        document.getElementById('burpStatusPill')?.addEventListener('click', () => checkBurpStatus(true));
+        document.getElementById('skillsBadgeBtn')?.addEventListener('click', () => switchDrawerTab('skills'));
+        document.getElementById('arsenalBadgeBtn')?.addEventListener('click', () => switchDrawerTab('arsenal'));
+        document.getElementById('saveFileBtn')?.addEventListener('click', saveCurrentFile);
+        document.getElementById('openRepeaterBtn')?.addEventListener('click', openBurpRepeaterTab);
+        document.getElementById('drawerOpenRepeaterBtn')?.addEventListener('click', openBurpRepeaterTab);
+        document.getElementById('refreshBurpTrafficBtn')?.addEventListener('click', loadBurpTraffic);
+
+        document.getElementById('langToggleBtn')?.addEventListener('click', async () => {
+          const next = getLang() === 'ar' ? 'en' : 'ar';
+          if (window.HunterCore && typeof window.HunterCore.setLang === 'function') {
+            await window.HunterCore.setLang(next);
+          } else {
+            localStorage.setItem('hunterai_lang', next);
+            document.documentElement.lang = next;
+            document.documentElement.dir = next === 'ar' ? 'rtl' : 'ltr';
+          }
+          applyStudioTranslations();
+        });
+
+        document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
+          if (window.HunterCore && typeof window.HunterCore.toggleTheme === 'function') {
+            window.HunterCore.toggleTheme();
+          } else {
+            const next = getTheme() === 'light' ? 'dark' : 'light';
+            localStorage.setItem('hunterai_theme', next);
+            document.documentElement.setAttribute('data-theme', next);
+          }
+          syncMonacoTheme();
+          updateBackLink();
+        });
+
+        document.getElementById('engagementSelector')?.addEventListener('change', async (e) => {
+          const nextId = e.target.value || null;
+          if (window.HunterPlatform && typeof window.HunterPlatform.setContext === 'function') {
+            try {
+              await window.HunterPlatform.setContext({ active_engagement_id: nextId });
+              showToast(t('engagementSwitched'), 'info');
+            } catch (err) {
+              showToast(t('networkError') + ': ' + err.message, 'error');
+            }
+          }
+        });
+
+        document.querySelectorAll('.activity-btn[data-drawer-tab]').forEach((btn) => {
+          btn.addEventListener('click', () => switchDrawerTab(btn.getAttribute('data-drawer-tab')));
+        });
+
+        document.querySelectorAll('.dock-tab[data-dock-tab]').forEach((btn) => {
+          btn.addEventListener('click', () => switchDockTab(btn.getAttribute('data-dock-tab')));
+        });
+
+        document.getElementById('clearDockBtn')?.addEventListener('click', () => {
+          const box = document.getElementById('dockOutputBox');
+          if (box) box.textContent = '[*] Dock logs cleared.';
+        });
+        document.getElementById('toggleDockSizeBtn')?.addEventListener('click', toggleDockSize);
+        document.getElementById('collapseDockBtn')?.addEventListener('click', toggleDockCollapsed);
+
+        document.getElementById('fileSearchInput')?.addEventListener('input', () => renderFileTree(getFilteredTreeItems()));
+        document.getElementById('skillSearchInput')?.addEventListener('input', renderSkills);
+        document.getElementById('toolSearchInput')?.addEventListener('input', renderArsenalTools);
+
+        document.getElementById('skillFilterGroup')?.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-skill-filter]');
+          if (!btn) return;
+          state.currentSkillFilter = btn.getAttribute('data-skill-filter') || 'all';
+          document.querySelectorAll('#skillFilterGroup [data-skill-filter]').forEach((b) => {
+            b.classList.toggle('is-active', b === btn);
+          });
+          renderSkills();
+        });
+
+        document.getElementById('tabsBar')?.addEventListener('click', (e) => {
+          const closeBtn = e.target.closest('[data-action="close-tab"]');
+          if (closeBtn) {
+            e.stopPropagation();
+            closeTab(closeBtn.getAttribute('data-tab-id'));
+            return;
+          }
+          const tabBtn = e.target.closest('[data-action="switch-tab"]');
+          if (tabBtn) switchToTab(tabBtn.getAttribute('data-tab-id'));
+        });
+
+        document.getElementById('fileTreeContainer')?.addEventListener('click', (e) => {
+          const itemBtn = e.target.closest('[data-action="tree-item"]');
+          if (!itemBtn) return;
+          const itemPath = itemBtn.getAttribute('data-path');
+          if (itemBtn.getAttribute('data-type') === 'directory') {
+            showToast(itemPath, 'info');
+          } else {
+            openFileInTab(itemPath);
+          }
+        });
+
+        document.getElementById('skillsListContainer')?.addEventListener('click', (e) => {
+          const openBtn = e.target.closest('[data-action="open-skill"]');
+          if (openBtn) {
+            openSkillInEditor(openBtn.getAttribute('data-skill'));
+            return;
+          }
+          const runBtn = e.target.closest('[data-action="run-skill"]');
+          if (runBtn) {
+            openSkillRunModal(runBtn.getAttribute('data-skill'), runBtn);
+          }
+        });
+
+        document.getElementById('burpTrafficContainer')?.addEventListener('click', (e) => {
+          const row = e.target.closest('[data-action="load-traffic"]');
+          if (!row) return;
+          const method = row.getAttribute('data-method') || 'GET';
+          const host = row.getAttribute('data-host') || '127.0.0.1';
+          const path = row.getAttribute('data-path') || '/';
+          const scheme = row.getAttribute('data-scheme') || 'http';
+          openBurpRepeaterTab();
+          const urlInput = document.getElementById('repeaterTargetUrl');
+          const reqBox = document.getElementById('rawHttpRequestText');
+          if (urlInput) urlInput.value = `${scheme}://${host}${path}`;
+          if (reqBox) {
+            reqBox.value = `${method} ${path} HTTP/1.1\nHost: ${host}\nUser-Agent: HunterAI-OpenCode/2.0\nAccept: */*\n\n`;
+          }
+          showToast(`${method} ${path}`, 'info');
+        });
+
+        document.getElementById('arsenalToolsContainer')?.addEventListener('click', (e) => {
+          const card = e.target.closest('[data-action="prefill-tool"]');
+          if (!card) return;
+          const cli = document.getElementById('terminalCmdInput');
+          if (cli) {
+            cli.value = card.getAttribute('data-cmd') || '';
+            cli.focus();
+          }
+          const dock = document.getElementById('bottomDock');
+          if (dock && dock.classList.contains('collapsed')) dock.classList.remove('collapsed');
+          switchDockTab('term');
+        });
+
+        document.getElementById('agentQuickPrompts')?.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-prompt]');
+          if (!btn) return;
+          const input = document.getElementById('agentPromptInput');
+          if (input) {
+            input.value = btn.getAttribute('data-prompt') || '';
+            sendAgentChat();
+          }
+        });
+
+        document.getElementById('sendAgentChatBtn')?.addEventListener('click', sendAgentChat);
+        document.getElementById('agentPromptInput')?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            sendAgentChat();
+          }
+        });
+
+        document.getElementById('sendRepeaterBtn')?.addEventListener('click', sendBurpRepeaterRequest);
+        document.getElementById('repeaterPresetSelect')?.addEventListener('change', (e) => loadRepeaterPreset(e.target.value));
+        document.getElementById('copyRepeaterRespBtn')?.addEventListener('click', copyRepeaterResponse);
+        document.getElementById('auditRepeaterBtn')?.addEventListener('click', auditCurrentRepeaterWithAgent);
+
+        document.getElementById('rawHttpRequestText')?.addEventListener('keydown', (e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            sendBurpRepeaterRequest();
+          }
+        });
+
+        document.getElementById('runTerminalCmdBtn')?.addEventListener('click', executeTerminalCmd);
+        document.getElementById('terminalCmdInput')?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            executeTerminalCmd();
+          }
+        });
+
+        // Skill Run Modal events
+        document.getElementById('closeSkillModalBtn')?.addEventListener('click', closeSkillRunModal);
+        document.getElementById('cancelSkillModalBtn')?.addEventListener('click', closeSkillRunModal);
+        document.getElementById('skillRunModal')?.addEventListener('click', (e) => {
+          if (e.target.id === 'skillRunModal') closeSkillRunModal();
+        });
+        document.getElementById('skillRunForm')?.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const targetInput = document.getElementById('skillRunTargetInput');
+          const target = targetInput ? targetInput.value.trim() : '';
+          if (!target || !state.pendingSkillName) return;
+          const skill = state.pendingSkillName;
+          closeSkillRunModal();
+          executeSkillRun(skill, target);
+        });
+
+        // Global shortcuts
+        document.addEventListener('keydown', (e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            saveCurrentFile();
+          } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+            e.preventDefault();
+            toggleDrawer();
+          } else if (e.key === 'Escape') {
+            closeSkillRunModal();
+            if (window.innerWidth <= 960) setDrawerOpen(false);
+          }
+        });
+
+        // Observe external theme/lang mutations (from HunterCore / Copilot drawer)
+        let lastObservedLang = getLang();
+        const observer = new MutationObserver(() => {
+          syncMonacoTheme();
+          updateBackLink();
+          const curLang = getLang();
+          if (curLang !== lastObservedLang) {
+            lastObservedLang = curLang;
+            applyStudioTranslations();
+          }
+        });
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['data-theme', 'lang', 'dir']
+        });
+      }
+
+      // ── 13. Bootstrap ───────────────────────────────────────────────────────
+      async function bootstrap() {
+        document.documentElement.setAttribute('data-theme', getTheme());
+        if (window.HunterCore && typeof window.HunterCore.initI18n === 'function') {
+          try {
+            await window.HunterCore.initI18n();
+          } catch (err) {
+            // Fall back to local i18n if catalog fetch is offline
+          }
+        }
+        applyStudioTranslations();
+        bindEvents();
+        initResizeHandles();
+        initMonaco();
+
+        if (window.innerWidth <= 960) {
+          setDrawerOpen(false);
+        }
+
+        if (window.HunterPlatform && typeof window.HunterPlatform.subscribe === 'function') {
+          window.HunterPlatform.subscribe(syncPlatformState);
+        }
+
+        loadFileTree();
+        loadSkills();
+        loadArsenalTools();
+        checkBurpStatus(false);
+
+        if (window.HunterCore && typeof window.HunterCore.createVisibilityPoller === 'function') {
+          state.burpPoller = window.HunterCore.createVisibilityPoller(() => checkBurpStatus(false), 8000);
+        } else {
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) checkBurpStatus(false);
+          });
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootstrap);
+      } else {
+        bootstrap();
+      }
+    })();
   </script>
 </body>
 </html>
