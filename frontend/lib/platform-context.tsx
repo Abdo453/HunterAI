@@ -294,6 +294,7 @@ interface PlatformContextValue {
   tasks: TaskRecord[];
   auditLogs: AuditRecord[];
   runs: RunRecord[];
+  activeRunId: string | null;
   approvals: ApprovalRecord[];
   pendingApprovalsCount: number;
   goCoreHealth: GoCoreHealth;
@@ -344,6 +345,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([]);
   const [runs, setRuns] = useState<RunRecord[]>([]);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
 
   const [goCoreHealth, setGoCoreHealth] = useState<GoCoreHealth>({
@@ -369,6 +371,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
   const useProxyRef = useRef<boolean>(false);
   const pollAbortRef = useRef<AbortController | null>(null);
   const lastSeqRef = useRef<number>(0);
+  const lastEventIdRef = useRef<string>("");
   const streamPausedRef = useRef<boolean>(false);
   const selectedEngRef = useRef<string>("");
 
@@ -524,6 +527,21 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         const latestSeq = Number(hubOv.latest_seq || 0);
         if (latestSeq > lastSeqRef.current) {
           lastSeqRef.current = latestSeq;
+          lastEventIdRef.current = String(latestSeq);
+        }
+        const ctxObj =
+          hubOv.context && typeof hubOv.context === "object"
+            ? (hubOv.context as Record<string, unknown>)
+            : null;
+        if (ctxObj) {
+          const nextRunId =
+            typeof ctxObj.active_run_id === "string" && ctxObj.active_run_id
+              ? ctxObj.active_run_id
+              : null;
+          if (fpRef.current.activeRunId !== (nextRunId || "")) {
+            fpRef.current.activeRunId = nextRunId || "";
+            setActiveRunId(nextRunId);
+          }
         }
         const services = (hubOv.services || {}) as HunterHubHealth["services"];
         const nextHub: HunterHubHealth = {
@@ -915,11 +933,19 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       activeController = new AbortController();
-      const since = lastSeqRef.current > 0 ? `?since_seq=${lastSeqRef.current}` : "";
+      const currentSeq = lastSeqRef.current;
+      const since = currentSeq > 0 ? `?since_seq=${encodeURIComponent(currentSeq)}` : "";
+      const lastEventIdHeader = currentSeq > 0 ? String(currentSeq) : lastEventIdRef.current;
+      const headers: Record<string, string> = {
+        Accept: "text/event-stream",
+      };
+      if (lastEventIdHeader) {
+        headers["Last-Event-ID"] = lastEventIdHeader;
+      }
 
       try {
         const resp = await hunterFetch(`/api/platform/stream${since}`, {
-          headers: { Accept: "text/event-stream" },
+          headers,
           signal: activeController.signal,
         });
         if (!resp.ok || !resp.body) {
@@ -934,21 +960,44 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         const dispatchBlock = (block: string) => {
           const lines = block.split(/\r?\n/);
           let eventName = "message";
+          let eventId = "";
           const dataLines: string[] = [];
           for (const line of lines) {
             if (!line || line.startsWith(":")) continue;
             if (line.startsWith("event:")) {
-              eventName = line.slice(6).trim();
+              eventName = line.slice(6).trim() || "message";
+            } else if (line.startsWith("id:")) {
+              eventId = line.slice(3).trim();
             } else if (line.startsWith("data:")) {
               dataLines.push(line.slice(5).trimStart());
             }
           }
+
+          let parsedId = 0;
+          if (eventId && !eventId.includes("\0")) {
+            lastEventIdRef.current = eventId;
+            if (/^\d+$/.test(eventId)) {
+              parsedId = Number.parseInt(eventId, 10);
+              if (parsedId > lastSeqRef.current) {
+                lastSeqRef.current = parsedId;
+                setHunterHubHealth((prev) =>
+                  parsedId > prev.latestSeq ? { ...prev, latestSeq: parsedId } : prev
+                );
+              }
+            }
+          }
+
           if (dataLines.length === 0) return;
           try {
             const ev = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
-            const seq = Number(ev.seq || 0);
+            const rawSeq = Number(ev.seq ?? parsedId ?? 0);
+            const seq = Number.isFinite(rawSeq) && rawSeq > 0 ? rawSeq : 0;
             if (seq > lastSeqRef.current) {
               lastSeqRef.current = seq;
+              lastEventIdRef.current = String(seq);
+              setHunterHubHealth((prev) =>
+                seq > prev.latestSeq ? { ...prev, latestSeq: seq } : prev
+              );
             }
             if (seq && seenSseSeqRef.current.has(seq)) {
               return;
@@ -989,16 +1038,30 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           }
         };
 
-        while (!cancelled) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+        const flushCompleteBlocks = () => {
           let idx: number;
           while ((idx = buffer.search(/\r?\n\r?\n/)) !== -1) {
             const sepLen = buffer.slice(idx).startsWith("\r\n\r\n") ? 4 : 2;
             const block = buffer.slice(0, idx);
             buffer = buffer.slice(idx + sepLen);
             dispatchBlock(block);
+          }
+        };
+
+        while (!cancelled) {
+          const { value, done } = await reader.read();
+          if (done) {
+            buffer += decoder.decode();
+            break;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          flushCompleteBlocks();
+        }
+        if (!cancelled) {
+          flushCompleteBlocks();
+          if (buffer.trim()) {
+            dispatchBlock(buffer);
+            buffer = "";
           }
         }
       } catch {
@@ -1219,6 +1282,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       tasks,
       auditLogs,
       runs,
+      activeRunId,
       approvals,
       pendingApprovalsCount,
       goCoreHealth,
@@ -1255,6 +1319,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       tasks,
       auditLogs,
       runs,
+      activeRunId,
       approvals,
       pendingApprovalsCount,
       goCoreHealth,

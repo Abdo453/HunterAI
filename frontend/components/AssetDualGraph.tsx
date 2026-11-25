@@ -484,22 +484,21 @@ export default function AssetDualGraph() {
                   return (
                     <tr
                       key={asset.id || `${asset.value}-${idx}`}
-                      tabIndex={0}
-                      role="button"
-                      onClick={() => setInspectedAsset(asset)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setInspectedAsset(asset);
-                        }
-                      }}
-                      className="hover:bg-elevated/80 cursor-pointer transition-colors"
+                      className="hover:bg-elevated/80 transition-colors"
                     >
                       <td className="py-2 px-3 font-mono text-[11px] text-sentinel-primary whitespace-nowrap">
                         {asset.kind}
                       </td>
-                      <td className="py-2 px-3 font-mono text-ink-primary ltr-isolate max-w-[260px] truncate">
-                        {asset.value}
+                      <td className="p-0 font-mono text-ink-primary ltr-isolate max-w-[260px]">
+                        <button
+                          type="button"
+                          onClick={() => setInspectedAsset(asset)}
+                          aria-label={`${asset.value} — ${t("graph.inspectorTitle")}`}
+                          title={asset.value}
+                          className="block w-full max-w-[260px] py-2 px-3 ltr-isolate truncate hover:text-sentinel-primary hover:underline underline-offset-2 cursor-pointer"
+                        >
+                          {asset.value}
+                        </button>
                       </td>
                       <td className="py-2 px-3 font-mono tabular-nums ltr-isolate whitespace-nowrap">
                         {statusCode ? (

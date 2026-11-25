@@ -82,12 +82,17 @@ export default function LiveConsole() {
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-inset p-0.5 rounded border border-border-subtle">
+          <div
+            role="group"
+            aria-label={t("console.title")}
+            className="flex items-center gap-1 bg-inset p-0.5 rounded border border-border-subtle"
+          >
             {LEVEL_FILTERS.map((lvl) => (
               <button
                 key={lvl}
                 type="button"
                 onClick={() => setLevelFilter(lvl)}
+                aria-pressed={levelFilter === lvl}
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
                   levelFilter === lvl
                     ? "bg-elevated text-ink-primary border border-border-subtle"

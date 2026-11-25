@@ -60,18 +60,54 @@ interface PendingAttachment {
   filename: string;
 }
 
+interface ModelChoice {
+  id: string;
+  label: string;
+  kind?: string;
+  provider?: string;
+  model?: string;
+  available?: boolean;
+}
+
+interface ModelsCatalogResponse {
+  choices?: Array<{
+    id?: string;
+    kind?: string;
+    provider?: string;
+    model?: string;
+    label?: string;
+    available?: boolean;
+  }>;
+  local?: { available?: boolean; models?: string[] };
+  cloud?: Array<{
+    provider?: string;
+    label?: string;
+    default_model?: string;
+    models?: string[];
+  }>;
+}
+
+const COPILOT_MODES: Array<{ value: string; en: string; ar: string }> = [
+  { value: "analyst", en: "analyst (Security Analyst)", ar: "analyst · محلل أمني" },
+  { value: "redteam", en: "redteam (Operator)", ar: "redteam · مشغّل Red Team" },
+  { value: "passive", en: "passive (Read-Only)", ar: "passive · تحليل سلبي" },
+  { value: "recon", en: "recon (Recon & Surface)", ar: "recon · استطلاع وسطوح الهجوم" },
+  { value: "triage", en: "triage (Findings Triage)", ar: "triage · فرز الأدلة والنتائج" },
+];
+
 export default function CopilotDrawer() {
   const {
     copilotOpen,
     setCopilotOpen,
     selectedEngagementId,
     runs,
+    activeRunId,
     hunterHubHealth,
     hunterFetch,
     navigateToRef,
     refreshNow,
   } = usePlatform();
-  const { t, dir } = useI18n();
+  const { t, lang, dir } = useI18n();
 
   const [drawerWidth, setDrawerWidth] = useState<number>(440);
   const [fullWidth, setFullWidth] = useState<boolean>(false);
@@ -80,6 +116,8 @@ export default function CopilotDrawer() {
   const [messages, setMessages] = useState<ChatMessageItem[]>([]);
   const [mode, setMode] = useState<string>("analyst");
   const [model, setModel] = useState<string>("auto");
+  const [catalogModels, setCatalogModels] = useState<ModelChoice[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState<boolean>(false);
   const [prompt, setPrompt] = useState<string>("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
@@ -96,6 +134,183 @@ export default function CopilotDrawer() {
         .length,
     [runs]
   );
+
+  const activeRun = useMemo(() => {
+    const isRunActive = (r: { status?: string }) =>
+      ["running", "paused", "pending"].includes((r.status || "").toLowerCase());
+    if (activeRunId) {
+      const ctxMatch = runs.find((r) => r.run_id === activeRunId && isRunActive(r));
+      if (ctxMatch) return ctxMatch;
+    }
+    return runs.find(isRunActive) || null;
+  }, [runs, activeRunId]);
+
+  const loadModelsCatalog = useCallback(async () => {
+    if (hunterHubHealth.status !== "connected") return;
+    const autoLabel = lang === "ar" ? "auto · تلقائي (الموجه الذكي)" : "auto (Smart Router)";
+    try {
+      const res = await hunterFetch("/api/models/catalog");
+      if (!res.ok) return;
+      const cat = (await res.json()) as ModelsCatalogResponse;
+      const list: ModelChoice[] = [{ id: "auto", label: autoLabel }];
+      const seen = new Set<string>(["auto"]);
+
+      if (Array.isArray(cat.choices) && cat.choices.length > 0) {
+        for (const ch of cat.choices) {
+          if (!ch?.id || ch.available === false || seen.has(ch.id)) continue;
+          seen.add(ch.id);
+          list.push({
+            id: ch.id,
+            label: ch.label || `${ch.kind === "local" ? "Local" : "Cloud"} · ${ch.model || ch.id}`,
+            kind: ch.kind,
+            provider: ch.provider,
+            model: ch.model,
+            available: ch.available,
+          });
+        }
+      } else {
+        for (const c of cat.cloud || []) {
+          if (!c?.provider) continue;
+          const models =
+            Array.isArray(c.models) && c.models.length > 0
+              ? c.models
+              : c.default_model
+                ? [c.default_model]
+                : [];
+          for (const m of models) {
+            if (!m) continue;
+            const id = `api:${c.provider}:${m}`;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            list.push({
+              id,
+              label: `${c.label || c.provider} · ${m}`,
+              kind: "cloud",
+              provider: c.provider,
+              model: m,
+              available: true,
+            });
+          }
+        }
+        for (const m of cat.local?.models || []) {
+          if (!m) continue;
+          const id = `local:${m}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          list.push({
+            id,
+            label: `Ollama · ${m}`,
+            kind: "local",
+            provider: "ollama",
+            model: m,
+            available: true,
+          });
+        }
+      }
+
+      setCatalogModels(list);
+      setCatalogLoaded(true);
+    } catch {
+      // Fall back gracefully to configured providers reported by Hub health
+    }
+  }, [hunterHubHealth.status, hunterFetch, lang]);
+
+  const modelOptions = useMemo<ModelChoice[]>(() => {
+    const autoLabel = lang === "ar" ? "auto · تلقائي (الموجه الذكي)" : "auto (Smart Router)";
+    const list: ModelChoice[] = [];
+    const seen = new Set<string>();
+    const pushUnique = (opt: ModelChoice) => {
+      if (!opt.id || seen.has(opt.id)) return;
+      seen.add(opt.id);
+      list.push(opt);
+    };
+
+    if (catalogLoaded && catalogModels.length > 0) {
+      for (const item of catalogModels) {
+        pushUnique(item);
+      }
+    } else {
+      pushUnique({ id: "auto", label: autoLabel });
+      const cloudProviders = hunterHubHealth.services?.cloud_providers || [];
+      for (const prov of cloudProviders) {
+        if (!prov) continue;
+        pushUnique({
+          id: `api:${prov}`,
+          label: `Cloud · ${prov}`,
+          kind: "cloud",
+          provider: prov,
+          available: true,
+        });
+      }
+      if (hunterHubHealth.services?.lm_studio?.online) {
+        pushUnique({
+          id: "lmstudio:local-model",
+          label: "LM Studio · local-model",
+          kind: "local",
+          provider: "lm_studio",
+          available: true,
+        });
+      }
+    }
+
+    if (model && !seen.has(model)) {
+      pushUnique({ id: model, label: model });
+    }
+    return list;
+  }, [catalogLoaded, catalogModels, hunterHubHealth.services, lang, model]);
+
+  const modeOptions = useMemo(() => {
+    const opts = [...COPILOT_MODES];
+    if (mode && !opts.some((m) => m.value === mode)) {
+      opts.push({ value: mode, en: mode, ar: mode });
+    }
+    return opts;
+  }, [mode]);
+
+  const persistConversationPatch = useCallback(
+    async (cid: string, patch: { mode?: string; model?: string }) => {
+      if (!cid) return;
+      try {
+        const res = await hunterFetch(`/api/copilot/conversations/${encodeURIComponent(cid)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) return;
+        const data = (await res.json().catch(() => null)) as {
+          conversation?: ConversationSummary;
+        } | null;
+        if (data?.conversation) {
+          setConversations((prev) =>
+            prev.map((c) => (c.conversation_id === cid ? data.conversation! : c))
+          );
+        }
+      } catch {
+        // Non-fatal; active selections are still passed in chat requests
+      }
+    },
+    [hunterFetch]
+  );
+
+  const handleModeChange = (nextMode: string) => {
+    setMode(nextMode);
+    if (activeConvId) {
+      setConversations((prev) =>
+        prev.map((c) => (c.conversation_id === activeConvId ? { ...c, mode: nextMode } : c))
+      );
+      void persistConversationPatch(activeConvId, { mode: nextMode });
+    }
+  };
+
+  const handleModelChange = (nextModel: string) => {
+    setModel(nextModel);
+    if (activeConvId) {
+      setConversations((prev) =>
+        prev.map((c) => (c.conversation_id === activeConvId ? { ...c, model: nextModel } : c))
+      );
+      void persistConversationPatch(activeConvId, { model: nextModel });
+    }
+  };
 
   const loadConversations = useCallback(async () => {
     if (hunterHubHealth.status !== "connected") return;
@@ -138,8 +353,9 @@ export default function CopilotDrawer() {
   useEffect(() => {
     if (copilotOpen && hunterHubHealth.status === "connected") {
       void loadConversations();
+      void loadModelsCatalog();
     }
-  }, [copilotOpen, hunterHubHealth.status, loadConversations]);
+  }, [copilotOpen, hunterHubHealth.status, loadConversations, loadModelsCatalog]);
 
   useEffect(() => {
     if (copilotOpen && activeConvId && !isStreaming) {
@@ -203,6 +419,7 @@ export default function CopilotDrawer() {
         body: JSON.stringify({
           title: "New Investigation",
           engagement_id: selectedEngagementId || null,
+          run_id: activeRun?.run_id || null,
           mode,
           model,
           set_active: true,
@@ -302,20 +519,27 @@ export default function CopilotDrawer() {
     streamAbortRef.current = controller;
 
     try {
+      const activeConv = conversations.find((c) => c.conversation_id === activeConvId);
+      const effectiveRunId = activeRun?.run_id || activeConv?.run_id || null;
+      const bodyPayload: Record<string, unknown> = {
+        message: text,
+        conversation_id: activeConvId || null,
+        engagement_id: selectedEngagementId || null,
+        mode,
+        model,
+        attachment_ids: attachmentIds,
+      };
+      if (effectiveRunId) {
+        bodyPayload.run_id = effectiveRunId;
+      }
+
       const res = await hunterFetch("/api/copilot/chat/stream", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({
-          message: text,
-          conversation_id: activeConvId || null,
-          engagement_id: selectedEngagementId || null,
-          mode,
-          model,
-          attachment_ids: attachmentIds,
-        }),
+        body: JSON.stringify(bodyPayload),
         signal: controller.signal,
       });
 
@@ -335,7 +559,7 @@ export default function CopilotDrawer() {
         for (const line of lines) {
           if (!line || line.startsWith(":")) continue;
           if (line.startsWith("event:")) {
-            eventName = line.slice(6).trim();
+            eventName = line.slice(6).trim() || "message";
           } else if (line.startsWith("data:")) {
             dataLines.push(line.slice(5).trimStart());
           }
@@ -421,10 +645,7 @@ export default function CopilotDrawer() {
         }
       };
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+      const flushCompleteBlocks = () => {
         let idx: number;
         while ((idx = buffer.search(/\r?\n\r?\n/)) !== -1) {
           const sepLen = buffer.slice(idx).startsWith("\r\n\r\n") ? 4 : 2;
@@ -432,7 +653,30 @@ export default function CopilotDrawer() {
           buffer = buffer.slice(idx + sepLen);
           processBlock(block);
         }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          buffer += decoder.decode();
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        flushCompleteBlocks();
       }
+
+      // Flush any trailing blocks / frame remaining at EOF without \n\n
+      flushCompleteBlocks();
+      if (buffer.trim()) {
+        processBlock(buffer);
+        buffer = "";
+      }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.message_id === tempAssistId && m.streaming ? { ...m, streaming: false } : m
+        )
+      );
 
       if (streamConvId && !conversations.some((c) => c.conversation_id === streamConvId)) {
         void loadConversations();
@@ -579,30 +823,33 @@ export default function CopilotDrawer() {
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <label className="flex items-center gap-1.5 flex-1">
+          <label className="flex items-center gap-1.5 flex-1 min-w-0">
             <span className="text-ink-muted shrink-0">{t("copilot.modeLabel")}:</span>
             <select
               value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              className="w-full h-7 px-2 rounded bg-inset border border-border-subtle text-xs text-ink-primary"
+              onChange={(e) => handleModeChange(e.target.value)}
+              className="w-full min-w-0 h-7 px-2 rounded bg-inset border border-border-subtle text-xs text-ink-primary truncate"
             >
-              <option value="analyst">analyst</option>
-              <option value="passive">passive</option>
-              <option value="redteam">redteam</option>
+              {modeOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {lang === "ar" ? opt.ar : opt.en}
+                </option>
+              ))}
             </select>
           </label>
 
-          <label className="flex items-center gap-1.5 flex-1">
+          <label className="flex items-center gap-1.5 flex-1 min-w-0">
             <span className="text-ink-muted shrink-0">{t("copilot.modelLabel")}:</span>
             <select
               value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full h-7 px-2 rounded bg-inset border border-border-subtle text-xs font-mono text-ink-primary"
+              onChange={(e) => handleModelChange(e.target.value)}
+              className="w-full min-w-0 h-7 px-2 rounded bg-inset border border-border-subtle text-xs font-mono text-ink-primary ltr-isolate truncate"
             >
-              <option value="auto">auto</option>
-              <option value="local:qwen2.5-coder:14b">local:qwen2.5-coder:14b</option>
-              <option value="api:gemini:gemini-3.8-flash">api:gemini</option>
-              <option value="api:deepseek:deepseek-chat">api:deepseek</option>
+              {modelOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>
