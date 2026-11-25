@@ -189,7 +189,7 @@ def _build_dashboard_html() -> str:
 <body>
 <header>
   <h1>⚡ HUNTEROS · UNIFIED DASHBOARD</h1>
-  <span id="status-badge" class="badge badge-green">● RUNNING</span>
+  <span id="status-badge" class="badge badge-green">○ STANDBY</span>
 </header>
 <div class="grid">
   <div class="sidebar">
@@ -223,6 +223,19 @@ def _build_dashboard_html() -> str:
   </div>
 </div>
 <script>
+  function clearChildren(node) {
+    while (node && node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  }
+
+  function makeTextEl(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    el.textContent = text == null ? '' : String(text);
+    return el;
+  }
+
   async function fetchStatus() {
     try {
       const r = await fetch('/api/status'); const d = await r.json();
@@ -233,32 +246,66 @@ def _build_dashboard_html() -> str:
       document.getElementById('m-js').textContent        = d.metrics?.js_files   ?? '—';
       document.getElementById('m-findings').textContent  = d.metrics?.findings   ?? '—';
 
+      const agents = d.agents || {};
+      const tasks = d.active_tasks || [];
+      const hasActiveWork = tasks.length > 0 || Object.values(agents).some(st => st === 'RUNNING' || st === 'ACTIVE');
+
       const badge = document.getElementById('status-badge');
-      badge.textContent = d.paused ? '⏸ PAUSED' : '● RUNNING';
-      badge.className = 'badge ' + (d.paused ? 'badge-red' : 'badge-green');
+      if (d.paused) {
+        badge.textContent = '⏸ PAUSED';
+        badge.className = 'badge badge-red';
+      } else if (hasActiveWork) {
+        badge.textContent = '● RUNNING';
+        badge.className = 'badge badge-green';
+      } else {
+        badge.textContent = '○ STANDBY';
+        badge.className = 'badge badge-green';
+      }
 
       const al = document.getElementById('agents-list');
-      const agents = d.agents || {};
-      al.innerHTML = Object.entries(agents).map(([name, state]) =>
-        '<div class="agent-pill ' + (state === 'STALLED' ? 'stalled' : '') + '">' + name + ' · ' + state + '</div>'
-      ).join('') || '<div class="agent-pill">No active agents</div>';
+      clearChildren(al);
+      const agentEntries = Object.entries(agents);
+      if (agentEntries.length === 0) {
+        al.appendChild(makeTextEl('div', 'agent-pill', 'No active agents'));
+      } else {
+        for (const [name, state] of agentEntries) {
+          const pill = makeTextEl('div', 'agent-pill' + (state === 'STALLED' ? ' stalled' : ''), name + ' · ' + state);
+          al.appendChild(pill);
+        }
+      }
 
       const tl = document.getElementById('task-list');
-      const tasks = d.active_tasks || [];
-      tl.innerHTML = tasks.length ? tasks.map(t =>
-        '<div style="padding:4px 0; border-bottom:1px solid #30363d">' + JSON.stringify(t) + '</div>'
-      ).join('') : '<i style="color:#6e7681">No active tasks</i>';
+      clearChildren(tl);
+      if (tasks.length === 0) {
+        const empty = makeTextEl('i', '', 'No active tasks');
+        empty.style.color = '#6e7681';
+        tl.appendChild(empty);
+      } else {
+        for (const t of tasks) {
+          const row = makeTextEl('div', '', typeof t === 'string' ? t : JSON.stringify(t));
+          row.style.padding = '4px 0';
+          row.style.borderBottom = '1px solid #30363d';
+          tl.appendChild(row);
+        }
+      }
     } catch(e) {}
   }
 
-  // SSE-based event log
+  // SSE-based event log (strictly textContent-escaped DOM nodes)
   const evtLog = document.getElementById('event-log');
   const es = new EventSource('/api/stream/events');
   es.onmessage = (e) => {
     const ev = JSON.parse(e.data);
     const el = document.createElement('div');
     el.className = 'event';
-    el.innerHTML = '<span class="ts">' + ev.ts + '</span>  <span class="level-' + (ev.level||'info').toLowerCase() + '">[' + (ev.level||'INFO') + ']</span>  <b>' + (ev.agent||'system') + '</b>: ' + ev.message;
+    const rawLevel = String(ev.level || 'INFO');
+    const levelClass = ['info', 'warning', 'error'].includes(rawLevel.toLowerCase()) ? rawLevel.toLowerCase() : 'info';
+    el.appendChild(makeTextEl('span', 'ts', ev.ts || ''));
+    el.appendChild(document.createTextNode('  '));
+    el.appendChild(makeTextEl('span', 'level-' + levelClass, '[' + rawLevel + ']'));
+    el.appendChild(document.createTextNode('  '));
+    el.appendChild(makeTextEl('b', '', ev.agent || 'system'));
+    el.appendChild(document.createTextNode(': ' + (ev.message || '')));
     evtLog.appendChild(el);
     evtLog.scrollTop = evtLog.scrollHeight;
   };

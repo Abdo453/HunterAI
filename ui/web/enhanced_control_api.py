@@ -136,6 +136,10 @@ async def launch_master_assessment(req: MasterLaunchRequest):
     }
 
     async def _execute_mission():
+        from core.platform_store import get_platform_store
+        from core.run_control import GLOBAL_RUN_CONTROLLER
+
+        store = get_platform_store()
         mission_state = _ACTIVE_MASTER_MISSIONS[master_mission_id]
         out_dir = Path(req.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -143,9 +147,15 @@ async def launch_master_assessment(req: MasterLaunchRequest):
 
         try:
             for idx, tgt in enumerate(target_list):
+                if not await GLOBAL_RUN_CONTROLLER.checkpoint(master_mission_id):
+                    mission_state["status"] = "STOPPED"
+                    store.update_run(master_mission_id, status="stopped", finished_at=time.time())
+                    return
+
                 mission_state["current_target_index"] = idx
                 mission_state["current_target"] = tgt
                 clean_domain = tgt.replace("https://", "").replace("http://", "").split("/")[0]
+                store.update_run(master_mission_id, current_phase=f"TARGET_{idx + 1}", progress=round((idx / max(1, len(target_list))) * 100.0, 1))
 
                 config = AssessmentConfig(
                     target_url=tgt if tgt.startswith("http") else f"https://{tgt}",
@@ -205,17 +215,40 @@ async def launch_master_assessment(req: MasterLaunchRequest):
                 mission_state["dossiers"].append(str(multi_dossier_path))
 
             mission_state["status"] = "COMPLETED"
+            store.update_run(
+                master_mission_id,
+                status="completed",
+                current_phase=mission_state["current_phase"],
+                progress=round(float(mission_state["coverage_pct"]), 1),
+                finished_at=time.time(),
+                meta={"dossiers": mission_state["dossiers"], "confirmed_findings_count": len(mission_state["confirmed_findings"])},
+            )
+        except asyncio.CancelledError:
+            mission_state["status"] = "STOPPED"
+            store.update_run(master_mission_id, status="stopped", finished_at=time.time())
+            raise
         except Exception as err:
             logger.error("Master mission %s failed: %s", master_mission_id, err)
             mission_state["status"] = "FAILED"
             mission_state["error"] = str(err)
+            store.update_run(master_mission_id, status="failed", error=str(err), finished_at=time.time())
         finally:
             mission_state["elapsed_secs"] = round(time.time() - mission_state["start_time"], 1)
 
-    asyncio.create_task(_execute_mission())
+    from ui.web.platform_hub import register_managed_run
+
+    task = asyncio.create_task(_execute_mission(), name=f"enhanced_omni:{master_mission_id}")
+    register_managed_run(
+        master_mission_id,
+        task,
+        kind="omni",
+        target=target_list[0],
+        meta={"targets": target_list, "platform": req.platform, "source": "enhanced_control_api"},
+    )
     return {
         "status": "LAUNCHED",
         "mission_id": master_mission_id,
+        "run_id": master_mission_id,
         "targets_count": len(target_list),
         "targets": target_list,
     }
@@ -226,7 +259,24 @@ async def get_master_mission_status(mission_id: str):
     """Returns live status, active phase, findings count, and dossiers for a master mission."""
     mission = _ACTIVE_MASTER_MISSIONS.get(mission_id)
     if not mission:
-        raise HTTPException(404, f"Mission '{mission_id}' not found.")
+        from core.platform_store import get_platform_store
+
+        persisted = get_platform_store().get_run(mission_id)
+        if not persisted:
+            raise HTTPException(404, f"Mission '{mission_id}' not found.")
+        return {
+            "mission_id": mission_id,
+            "status": persisted.get("status", "unknown").upper(),
+            "current_target": persisted.get("target", ""),
+            "target_progress": "1/1",
+            "current_phase": persisted.get("current_phase", "UNKNOWN"),
+            "coverage_pct": round(float(persisted.get("progress") or 0.0), 1),
+            "confirmed_findings_count": int((persisted.get("meta") or {}).get("confirmed_findings_count", 0)),
+            "confirmed_findings": [],
+            "dossiers": (persisted.get("meta") or {}).get("dossiers", []),
+            "elapsed_secs": 0.0,
+            "error": persisted.get("error") or None,
+        }
     elapsed = round(time.time() - mission["start_time"], 1) if mission["status"] == "RUNNING" else mission["elapsed_secs"]
     return {
         "mission_id": mission_id,

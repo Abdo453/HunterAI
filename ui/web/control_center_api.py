@@ -28,6 +28,7 @@ import shutil
 import socket
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -92,21 +93,12 @@ _TARGETS_FILE = WORKSPACE_ROOT / "data" / "authorized_targets.json"
 def _load_targets() -> List[Dict[str, Any]]:
     if _TARGETS_FILE.exists():
         try:
-            return json.loads(_TARGETS_FILE.read_text(encoding="utf-8"))
+            data = json.loads(_TARGETS_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return data
         except Exception:
             pass
-    return [
-        {
-            "id": "tgt-demo-1",
-            "name": "HotGame Demo Environment",
-            "url": "https://cdn-web.hotgame.win",
-            "description": "Authorized game endpoint & API gateway testing",
-            "in_scope": ["cdn-web.hotgame.win", "www.hotgame.win"],
-            "out_of_scope": ["*.billing.hotgame.win", "127.0.0.1", "169.254.169.254"],
-            "created_at": "2026-11-10 12:00:00",
-            "status": "AUTHORIZED"
-        }
-    ]
+    return []
 
 def _save_targets(targets: List[Dict[str, Any]]):
     _TARGETS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -203,6 +195,9 @@ async def get_system_status():
     if sessions_dir.exists():
         active_sessions = len([d for d in os.listdir(sessions_dir) if os.path.isdir(sessions_dir / d)])
 
+    from core.run_control import GLOBAL_RUN_CONTROLLER
+    active_runs_count = len(GLOBAL_RUN_CONTROLLER.list_runs(active_only=True))
+
     return {
         "status": "ok",
         "telemetry": {
@@ -216,7 +211,7 @@ async def get_system_status():
         },
         "components": {
             "agents_available": len(agent_files),
-            "agents_running": 0,
+            "agents_running": active_runs_count,
             "skills_total": native_skills_count + opencode_skills_count,
             "skills_native": native_skills_count,
             "skills_opencode": opencode_skills_count,
@@ -931,29 +926,95 @@ async def run_system_diagnostics():
 # 12. Settings & Safety Policy Controls
 # =========================================================================== #
 
+_DEFAULT_CONTROL_SETTINGS: Dict[str, Any] = {
+    "upstream_proxy": "http://127.0.0.1:8080",
+    "burp_agent_port": 8085,
+    "max_concurrent_agents": 5,
+    "safe_boundaries_enforced": True,
+    "llm_policy": "cloud_first",
+    "default_model": "auto",
+    "rate_limit_rps": 2.0,
+}
+
+
+class ControlSettingsUpdate(BaseModel):
+    upstream_proxy: Optional[str] = None
+    burp_agent_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    max_concurrent_agents: Optional[int] = Field(default=None, ge=1, le=50)
+    safe_boundaries_enforced: Optional[bool] = None
+    llm_policy: Optional[str] = None
+    default_model: Optional[str] = None
+    rate_limit_rps: Optional[float] = Field(default=None, ge=0.1, le=100.0)
+
+
+def _get_persisted_control_settings() -> Dict[str, Any]:
+    from core.platform_store import get_platform_store
+
+    store = get_platform_store()
+    merged = dict(_DEFAULT_CONTROL_SETTINGS)
+    stored = store.get_all_settings()
+    for k in _DEFAULT_CONTROL_SETTINGS:
+        if k in stored and stored[k] is not None:
+            merged[k] = stored[k]
+    merged["cloud_provider_active"] = (
+        "nvidia" if os.environ.get("NVIDIA_API_KEY")
+        else ("gemini" if os.environ.get("GEMINI_API_KEY")
+              else ("deepseek" if os.environ.get("DEEPSEEK_API_KEY") else "None"))
+    )
+    merged["has_gemini_key"] = bool(os.environ.get("GEMINI_API_KEY"))
+    merged["has_deepseek_key"] = bool(os.environ.get("DEEPSEEK_API_KEY"))
+    merged["has_nvidia_key"] = bool(os.environ.get("NVIDIA_API_KEY"))
+    merged["has_anthropic_key"] = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    merged["has_openai_key"] = bool(os.environ.get("OPENAI_API_KEY"))
+    merged["has_openrouter_key"] = bool(os.environ.get("OPENROUTER_API_KEY"))
+    return merged
+
+
 @router.get("/settings")
 async def get_settings():
-    """Returns non-sensitive configuration settings."""
+    """Returns persisted non-secret configuration settings from PlatformStore."""
     return {
         "status": "ok",
-        "settings": {
-            "upstream_proxy": "http://127.0.0.1:8080",
-            "burp_agent_port": 8085,
-            "max_concurrent_agents": 5,
-            "safe_boundaries_enforced": True,
-            "cloud_provider_active": "gemini" if os.environ.get("GEMINI_API_KEY") else "None",
-            "has_gemini_key": bool(os.environ.get("GEMINI_API_KEY")),
-            "has_deepseek_key": bool(os.environ.get("DEEPSEEK_API_KEY")),
-            "has_nvidia_key": bool(os.environ.get("NVIDIA_API_KEY")),
-        }
+        "settings": _get_persisted_control_settings(),
+    }
+
+
+@router.post("/settings")
+async def update_settings(req: ControlSettingsUpdate):
+    """Persists non-secret control center settings in PlatformStore."""
+    from core.platform_store import get_platform_store
+
+    updates: Dict[str, Any] = {}
+    for field_name in req.model_fields_set:
+        val = getattr(req, field_name)
+        if val is None:
+            continue
+        if field_name == "llm_policy":
+            norm = str(val).strip().lower()
+            if norm not in ("cloud_first", "local_first", "local_only", "cloud_only"):
+                raise HTTPException(status_code=400, detail=f"Invalid llm_policy '{val}'")
+            updates[field_name] = norm
+        else:
+            updates[field_name] = val
+
+    store = get_platform_store()
+    if updates:
+        store.update_settings(updates)
+        store.append_event("SETTINGS_UPDATED", source="control_center", payload={"keys": sorted(updates.keys()), "settings": updates})
+        log_activity_event("SystemCore", "Settings Updated", "PlatformStore", "SUCCESS", 0.01, f"Updated {', '.join(sorted(updates.keys()))}")
+
+    return {
+        "status": "ok",
+        "updated": sorted(updates.keys()),
+        "settings": _get_persisted_control_settings(),
     }
 
 
 # =========================================================================== #
-# 13. Live Test Target & Test.py Radar Integration (Downloads/test.py)
+# 13. Live Proxy Radar & Capture Inspection (Repo-Local State)
 # =========================================================================== #
 
-_TEST_PY_PATH = Path(r"C:\Users\Computer Market\Downloads\test.py")
+_RADAR_STATE_FILE = WORKSPACE_ROOT / "data" / "radar" / "latest_state.json"
 
 _LATEST_RADAR_STATE: Dict[str, Any] = {
     "round": None,
@@ -961,14 +1022,16 @@ _LATEST_RADAR_STATE: Dict[str, Any] = {
     "winning_hand_type": None,
     "winning_cards": [],
     "all_positions": [],
-    "victory_reason": "في انتظار التقاط أول جولة مباشرة عبر test.py أو المحاكي...",
+    "victory_reason": "Standby — awaiting ingested proxy/radar telemetry.",
     "last_updated": None,
     "source": "STANDBY",
+    "simulated": False,
     "total_rounds_intercepted": 0
 }
 
 _SUIT_SYMBOLS = {1: "♠", 2: "♥", 3: "♣", 4: "♦"}
 _RANK_NAMES = {1: "A", 11: "J", 12: "Q", 13: "K"}
+
 
 def _card_repr(card: dict) -> dict:
     if not card:
@@ -987,56 +1050,51 @@ def _card_repr(card: dict) -> dict:
         "color": color
     }
 
+
 def _explain_victory(win_pos: int, cards: list, hands: list = None) -> str:
     """Explains why the winning position won in Teen Patti."""
     if win_pos < 0 or win_pos >= len(cards):
-        return "لا يوجد فائز محدد بعد."
-    
+        return "No winner determined yet."
+
     hand_title = ""
     if hands and len(hands) > win_pos and hands[win_pos]:
         hand_title = f" [{hands[win_pos]}]"
-        
-    reason = f"فاز المركز رقم ({win_pos + 1}){hand_title}: "
-    reason += "وفقاً لقواعد Teen Patti الرسمية، فإن ترتيب القوة هو: "
-    reason += "1. Trio/Trail (3 أوراق متطابقة) > 2. Pure Sequence (متتالية من نفس اللون) > "
-    reason += "3. Sequence (متتالية أرقام عادية) > 4. Color/Flush (نفس اللون) > "
-    reason += "5. Pair (ورقتان متطابقتان) > 6. High Card (أعلى ورقة)."
-    return reason
+
+    return (
+        f"Position ({win_pos + 1}){hand_title} selected by Teen Patti rank order: "
+        "Trail/Trio > Pure Sequence > Sequence > Color/Flush > Pair > High Card."
+    )
+
 
 @router.get("/test-radar")
 async def get_test_radar():
-    """
-    Returns inspection data for C:\\Users\\Computer Market\\Downloads\\test.py
-    and the latest intercepted live radar status.
-    """
-    file_exists = _TEST_PY_PATH.exists()
-    file_info: Dict[str, Any] = {
-        "path": str(_TEST_PY_PATH),
-        "exists": file_exists,
-        "target_filter": "www.hotgame.win/api",
-        "monitored_events": ["onRoundStep", "onPlayerUpdate"],
-        "ignored_events": ["game.TeenPatti.dbmHeartbeat"],
-        "size_bytes": 0,
-        "last_modified": None,
-        "code_preview": ""
-    }
-
-    if file_exists:
+    """Returns truthful radar ingestion state without hardcoded host/user paths."""
+    state = dict(_LATEST_RADAR_STATE)
+    if _RADAR_STATE_FILE.is_file():
         try:
-            stat = _TEST_PY_PATH.stat()
-            file_info["size_bytes"] = stat.st_size
-            file_info["last_modified"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime))
-            content = _TEST_PY_PATH.read_text(encoding="utf-8", errors="replace")
-            lines = content.splitlines()
-            file_info["code_preview"] = "\n".join(lines[:35])
-            file_info["total_lines"] = len(lines)
-        except Exception as e:
-            file_info["read_error"] = str(e)
+            persisted = json.loads(_RADAR_STATE_FILE.read_text(encoding="utf-8"))
+            if isinstance(persisted, dict):
+                state.update(persisted)
+        except Exception:
+            pass
+
+    file_info: Dict[str, Any] = {
+        "path": str(_RADAR_STATE_FILE.relative_to(WORKSPACE_ROOT)).replace("\\", "/"),
+        "exists": _RADAR_STATE_FILE.is_file(),
+        "monitored_events": [],
+        "ignored_events": [],
+        "size_bytes": _RADAR_STATE_FILE.stat().st_size if _RADAR_STATE_FILE.is_file() else 0,
+        "last_modified": (
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(_RADAR_STATE_FILE.stat().st_mtime))
+            if _RADAR_STATE_FILE.is_file()
+            else None
+        ),
+    }
 
     return {
         "status": "ok",
         "file_info": file_info,
-        "radar_state": _LATEST_RADAR_STATE,
+        "radar_state": state,
         "hand_rankings": [
             {"rank": 1, "name": "Trail / Trio", "arabic": "ثلاثية متطابقة (AAA, KKK...)", "multiplier": "أعلى قوة مطلقة"},
             {"rank": 2, "name": "Pure Sequence", "arabic": "متتالية من نفس اللون (AKQ, QJ10...)", "multiplier": "نادر جداً"},
@@ -1047,19 +1105,19 @@ async def get_test_radar():
         ]
     }
 
+
 class RadarIngestRequest(BaseModel):
     round: Optional[Union[int, str]] = None
     win_pos: int
     cards: List[Any]
     hands: Optional[List[Any]] = None
-    source: Optional[str] = "test.py"
+    source: Optional[str] = "proxy_hook"
+    simulated: bool = False
+
 
 @router.post("/test-radar/ingest")
 async def ingest_radar_event(payload: RadarIngestRequest):
-    """
-    Ingests live Teen Patti round data sent from C:\\Users\\Computer Market\\Downloads\\test.py
-    or external proxy hooks.
-    """
+    """Ingests live radar payload from an authorized proxy hook."""
     global _LATEST_RADAR_STATE
     win_pos = payload.win_pos
     cards_raw = payload.cards
@@ -1093,31 +1151,36 @@ async def ingest_radar_event(payload: RadarIngestRequest):
         "all_positions": formatted_positions,
         "victory_reason": win_reason,
         "last_updated": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "source": payload.source or "test.py (Live Interceptor)",
+        "source": payload.source or "proxy_hook",
+        "simulated": bool(payload.simulated),
         "total_rounds_intercepted": count
     }
+    try:
+        _RADAR_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _RADAR_STATE_FILE.write_text(json.dumps(_LATEST_RADAR_STATE, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
     log_activity_event(
         agent_name="RADAR_INTERCEPTOR",
         event_type="ROUND_CAPTURED",
-        tool_name="test.py",
+        tool_name=payload.source or "proxy_hook",
         status="SUCCESS",
-        details=f"جولة {payload.round} — الفائز: المركز {win_pos + 1} — {win_reason[:60]}..."
+        details=f"Round {payload.round} (simulated={bool(payload.simulated)}) — pos {win_pos + 1}"
     )
 
-    return {"status": "ok", "message": "Round ingested successfully", "radar_state": _LATEST_RADAR_STATE}
+    return {"status": "ok", "simulated": bool(payload.simulated), "message": "Round ingested successfully", "radar_state": _LATEST_RADAR_STATE}
+
 
 @router.post("/test-radar/simulate")
 async def simulate_radar_round():
-    """Simulates a live Teen Patti round for instant interactive UI verification."""
+    """Simulates a radar round explicitly marked `simulated: true` for UI testing."""
     import random
     suits = [1, 2, 3, 4]
-    
+
     positions = []
     for p in range(5):
-        hand = []
         if p == 2:
-            # Let position 3 have a high pair or trail
             r = random.choice([1, 13, 12])
             hand = [{"num": r, "decor": 1}, {"num": r, "decor": 2}, {"num": random.randint(2, 10), "decor": 3}]
         else:
@@ -1126,16 +1189,14 @@ async def simulate_radar_round():
                     {"num": nums[1], "decor": random.choice(suits)},
                     {"num": nums[2], "decor": random.choice(suits)}]
         positions.append(hand)
-    
-    win_pos = 2
-    hands = ["HighCard", "Pair", "Trail (Trio)", "HighCard", "Sequence"]
 
     req = RadarIngestRequest(
         round=random.randint(100, 999),
-        win_pos=win_pos,
+        win_pos=2,
         cards=positions,
-        hands=hands,
-        source="Simulation Engine"
+        hands=["HighCard", "Pair", "Trail (Trio)", "HighCard", "Sequence"],
+        source="Simulation Engine",
+        simulated=True,
     )
     return await ingest_radar_event(req)
 
@@ -1459,145 +1520,170 @@ async def evaluate_finding_seven_gate(req: SevenGateReq):
 # 16. Swarm Telemetry, Attack Path Graph & Inter-Agent Wiretap                #
 # =========================================================================== #
 
-_DEFAULT_WIRETAP_EVENTS = [
-    {
-        "id": "wt-101",
-        "time": time.strftime("%H:%M:%S", time.localtime(time.time() - 45)),
-        "from_agent": "ReconAgent",
-        "to_agent": "AttackSurfaceRanker",
-        "type": "SURFACE_MAPPED",
-        "summary": "Discovered 14 live subdomains and 224 endpoints on target.com",
-        "details": {"subdomains": ["api.target.com", "auth.target.com", "admin.target.com"], "tool": "subfinder + httpx", "endpoints_count": 224}
-    },
-    {
-        "id": "wt-102",
-        "time": time.strftime("%H:%M:%S", time.localtime(time.time() - 32)),
-        "from_agent": "AttackSurfaceRanker",
-        "to_agent": "BugHunter",
-        "type": "TASK_DISPATCH",
-        "summary": "Prioritized high-value target: api.target.com/api/v2/invoices/export (Score: 9.2/10)",
-        "details": {"asset": "api.target.com", "endpoint": "/api/v2/invoices/export", "priority": "CRITICAL", "signals": ["financial", "numeric_id", "cross_tenant"]}
-    },
-    {
-        "id": "wt-103",
-        "time": time.strftime("%H:%M:%S", time.localtime(time.time() - 18)),
-        "from_agent": "BugHunter",
-        "to_agent": "ToolManager",
-        "type": "TOOL_EXEC",
-        "summary": "Executing targeted IDOR differential fuzzing with two auth tokens",
-        "details": {"tool": "BurpRepeater + Fuzzer", "command": "curl -s -H 'Authorization: Bearer TokB' https://api.target.com/api/v2/invoices/export?invoice_id=98214"}
-    },
-    {
-        "id": "wt-104",
-        "time": time.strftime("%H:%M:%S", time.localtime(time.time() - 9)),
-        "from_agent": "BugHunter",
-        "to_agent": "SevenQuestionValidator",
-        "type": "VERIFY_REQUEST",
-        "summary": "Hypothesis: IDOR confirmed on invoice_id=98214. Requesting Brain B adjudication.",
-        "details": {"hypothesis": "Invoice belongs to Org-A but returned HTTP 200 with Org-A data to Org-B token", "status_code": 200, "bytes": 4821}
-    },
-    {
-        "id": "wt-105",
-        "time": time.strftime("%H:%M:%S", time.localtime(time.time() - 2)),
-        "from_agent": "SevenQuestionValidator",
-        "to_agent": "ReportWriter",
-        "type": "EVIDENCE_LOCKED",
-        "summary": "7-Question Gate PASSED (Score: 0.94/1.0). Causal proof verified. Ready for report.",
-        "details": {"verdict": "CONFIRMED", "vrt": "Insecure Direct Object Reference (IDOR)", "severity": "P1 - Critical", "safe_proof": True}
-    }
-]
+_SIMULATED_WIRETAP_EVENTS: List[Dict[str, Any]] = []
 
-_DEFAULT_TWO_BRAIN_DIFFS = [
-    {
-        "diff_id": "diff-801",
-        "title": "BOLA / IDOR in Invoices Export Endpoint",
-        "target": "https://api.target.com/api/v2/invoices/export?invoice_id=98214",
-        "vuln_class": "IDOR / BOLA",
-        "confidence_score": 0.96,
-        "brain_a_hypothesis": "The invoice_id parameter lacks organization-level tenant tenancy check. Token B can export invoices created by Token A.",
-        "brain_b_verification": "Confirmed: Response body returned full company name 'Acme Corp' (Org-A) while authenticated with Session B (Beta Ltd). Status: 200 OK.",
-        "request_a": "GET /api/v2/invoices/export?invoice_id=98214 HTTP/1.1\nHost: api.target.com\nAuthorization: Bearer user_a_org1_token\nAccept: application/json",
-        "response_a": "HTTP/1.1 200 OK\nContent-Type: application/json\nContent-Length: 4821\n\n{\"invoice_id\": 98214, \"tenant\": \"Acme Corp\", \"amount\": 24500.00, \"currency\": \"USD\"}",
-        "request_b": "GET /api/v2/invoices/export?invoice_id=98214 HTTP/1.1\nHost: api.target.com\nAuthorization: Bearer user_b_org2_token\nAccept: application/json",
-        "response_b": "HTTP/1.1 200 OK\nContent-Type: application/json\nContent-Length: 4821\n\n{\"invoice_id\": 98214, \"tenant\": \"Acme Corp\", \"amount\": 24500.00, \"currency\": \"USD\"}",
-        "diff_analysis": "Discrepancy: Expected HTTP 403 Forbidden or 404 Not Found for cross-tenant access. Identical 200 response with confidential data confirms cross-tenant data leakage."
+
+def _format_wiretap_event(ev: Dict[str, Any]) -> Dict[str, Any]:
+    payload = ev.get("payload") or {}
+    created_at = ev.get("created_at") or time.time()
+    return {
+        "id": f"evt-{ev.get('seq', 0)}",
+        "seq": ev.get("seq", 0),
+        "time": time.strftime("%H:%M:%S", time.localtime(float(created_at))),
+        "from_agent": ev.get("agent_id") or ev.get("source") or "platform",
+        "to_agent": payload.get("to_agent") or "PlatformHub",
+        "type": ev.get("event_type") or "EVENT",
+        "summary": payload.get("summary") or payload.get("reason") or payload.get("target") or ev.get("event_type", ""),
+        "details": payload,
+        "simulated": bool(payload.get("simulated", False)),
     }
-]
 
 
 @router.get("/swarm-telemetry")
-async def get_swarm_telemetry(target: Optional[str] = "target.com"):
-    """Returns live Attack Path Graph (DAG), Inter-Agent Wiretap stream, and Two-Brain Diff proofs."""
-    from core.reasoning.attack_surface_graph import AttackSurfaceGraph, SurfaceNode, SurfaceEdge, EpistemicStatus
-    
-    # Build live or cached Attack Path Graph
-    g = AttackSurfaceGraph(target_domain=target)
-    g.add_node(SurfaceNode(node_id=target, node_type="TARGET", name=target, epistemic_status=EpistemicStatus.CONFIRMED))
-    g.add_node(SurfaceNode(node_id=f"api.{target}", node_type="SUBDOMAIN", name=f"api.{target}", epistemic_status=EpistemicStatus.CONFIRMED))
-    g.add_node(SurfaceNode(node_id=f"auth.{target}", node_type="SUBDOMAIN", name=f"auth.{target}", epistemic_status=EpistemicStatus.OBSERVED))
-    g.add_node(SurfaceNode(node_id="/api/v2/invoices/export", node_type="ENDPOINT", name="/api/v2/invoices/export", epistemic_status=EpistemicStatus.CONFIRMED))
-    g.add_node(SurfaceNode(node_id="/oauth/token", node_type="ENDPOINT", name="/oauth/token", epistemic_status=EpistemicStatus.OBSERVED))
-    g.add_node(SurfaceNode(node_id="invoice_id=98214", node_type="PARAMETER", name="invoice_id=98214", epistemic_status=EpistemicStatus.TESTED))
-    g.add_node(SurfaceNode(node_id="VULN-IDOR-P1", node_type="FINDING", name="IDOR: Invoice Exfiltration", epistemic_status=EpistemicStatus.CONFIRMED))
-    g.add_node(SurfaceNode(node_id="VULN-CORS-P3", node_type="FINDING", name="CORS Reflection on Auth", epistemic_status=EpistemicStatus.TESTED))
+async def get_swarm_telemetry(target: Optional[str] = None):
+    """Returns truthful Attack Surface Graph, wiretap events, and court diffs from live stores."""
+    from core.evidence_store import EvidenceStore
+    from core.platform_store import get_platform_store
+    from core.reasoning.attack_surface_graph import AttackSurfaceGraph
+    from core.run_control import GLOBAL_RUN_CONTROLLER
 
-    g.add_edge(SurfaceEdge(edge_id="e1", source_node_id=target, target_node_id=f"api.{target}", relation_type="SUBDOMAIN"))
-    g.add_edge(SurfaceEdge(edge_id="e2", source_node_id=target, target_node_id=f"auth.{target}", relation_type="SUBDOMAIN"))
-    g.add_edge(SurfaceEdge(edge_id="e3", source_node_id=f"api.{target}", target_node_id="/api/v2/invoices/export", relation_type="ENDPOINT"))
-    g.add_edge(SurfaceEdge(edge_id="e4", source_node_id=f"auth.{target}", target_node_id="/oauth/token", relation_type="ENDPOINT"))
-    g.add_edge(SurfaceEdge(edge_id="e5", source_node_id="/api/v2/invoices/export", target_node_id="invoice_id=98214", relation_type="PARAM"))
-    g.add_edge(SurfaceEdge(edge_id="e6", source_node_id="invoice_id=98214", target_node_id="VULN-IDOR-P1", relation_type="EXPLOITS"))
-    g.add_edge(SurfaceEdge(edge_id="e7", source_node_id="/oauth/token", target_node_id="VULN-CORS-P3", relation_type="VULNERABLE"))
+    store = get_platform_store()
+    ctx = store.get_context()
+    active_eng = store.get_engagement(ctx["active_engagement_id"]) if ctx.get("active_engagement_id") else None
+    resolved_target = target or (active_eng.get("target") if active_eng else None) or ""
 
-    graph_data = g.export_graph()
+    # 1. Real Attack Surface Graph from BurpGateway if populated, else empty graph
+    graph_data: Dict[str, Any] = AttackSurfaceGraph(target_domain=resolved_target or "unselected").export_graph()
+    try:
+        from ui.web.app import get_burp_gateway
 
-    swarm_roster = [
-        {"agent": "ReconAgent", "role": "Surface Enumeration", "status": "COMPLETED", "node": f"api.{target}", "active_tool": "subfinder"},
-        {"agent": "AttackSurfaceRanker", "role": "Asset Prioritization", "status": "COMPLETED", "node": "/api/v2/invoices/export", "active_tool": "heuristic_scorer"},
-        {"agent": "BugHunter", "role": "Vulnerability Probing", "status": "ACTIVE", "node": "invoice_id=98214", "active_tool": "differential_fuzzer"},
-        {"agent": "SevenQuestionValidator", "role": "Two-Brain Gate Adjudication", "status": "VERIFYING", "node": "VULN-IDOR-P1", "active_tool": "seven_question_gate"},
-        {"agent": "ReportWriter", "role": "Evidence-Locked PoC Generation", "status": "IDLE", "node": "VULN-IDOR-P1", "active_tool": "markdown_exporter"}
-    ]
+        gw = get_burp_gateway()
+        if gw and getattr(gw, "attack_surface_graph", None):
+            exported = gw.attack_surface_graph.export_graph()
+            if exported.get("nodes_count", 0) > 0:
+                graph_data = exported
+    except Exception:
+        pass
+
+    # 2. Real Wiretap Events from PlatformStore + EvidenceStore (+ explicit simulated steps)
+    wiretap_events: List[Dict[str, Any]] = []
+    latest_seq = store.latest_seq()
+    for ev in reversed(store.list_events(since_seq=max(0, latest_seq - 30), limit=30)):
+        wiretap_events.append(_format_wiretap_event(ev))
+
+    try:
+        ev_store = EvidenceStore()
+        for rec in reversed(ev_store._read_all("event")[-15:]):
+            wiretap_events.append({
+                "id": rec.get("event_id", ""),
+                "time": time.strftime("%H:%M:%S", time.localtime(float(rec.get("timestamp") or time.time()))),
+                "from_agent": rec.get("run_id") or "EvidenceStore",
+                "to_agent": "Coordinator",
+                "type": rec.get("event_type") or "EVIDENCE_EVENT",
+                "summary": str(rec.get("payload") or rec.get("event_type") or "")[:180],
+                "details": rec.get("payload") or {},
+                "simulated": False,
+            })
+    except Exception:
+        pass
+
+    for sim_ev in _SIMULATED_WIRETAP_EVENTS:
+        wiretap_events.append(sim_ev)
+
+    # 3. Real Two-Brain Diffs from EvidenceStore court_verdict / BurpGateway experiment_ledger
+    two_brain_diffs: List[Dict[str, Any]] = []
+    try:
+        ev_store = EvidenceStore()
+        for verdict in reversed(ev_store._read_all("court_verdict")[-10:]):
+            two_brain_diffs.append({
+                "diff_id": verdict.get("court_id", ""),
+                "title": verdict.get("title", ""),
+                "target": verdict.get("endpoint", ""),
+                "vuln_class": verdict.get("reason_code", ""),
+                "confidence_score": 1.0 if verdict.get("verdict") == "PASSED" else 0.35,
+                "brain_a_hypothesis": verdict.get("title", ""),
+                "brain_b_verification": verdict.get("rationale", ""),
+                "verdict": verdict.get("verdict", ""),
+                "diff_analysis": verdict.get("rationale", ""),
+            })
+    except Exception:
+        pass
+
+    try:
+        from ui.web.app import get_burp_gateway
+
+        gw = get_burp_gateway()
+        if gw and getattr(gw, "experiment_ledger", None):
+            for blk in gw.experiment_ledger.export_ledger()[-10:]:
+                two_brain_diffs.append({
+                    "diff_id": blk.get("experiment_id", ""),
+                    "title": f"Experiment {blk.get('hypothesis_id', '')}",
+                    "target": (blk.get("source_transaction") or {}).get("tx_id", ""),
+                    "vuln_class": blk.get("hypothesis_id", ""),
+                    "confidence_score": float(blk.get("causal_strength", 0.0)),
+                    "brain_a_hypothesis": blk.get("hypothesis_id", ""),
+                    "brain_b_verification": "; ".join(blk.get("observations") or []),
+                    "diff_analysis": "; ".join(blk.get("observations") or []),
+                })
+    except Exception:
+        pass
+
+    # 4. Truthful Swarm Roster from live GLOBAL_RUN_CONTROLLER
+    live_runs = GLOBAL_RUN_CONTROLLER.list_runs(active_only=True, limit=50)
+    swarm_roster: List[Dict[str, Any]] = []
+    for lr in live_runs:
+        meta = lr.get("meta") or {}
+        swarm_roster.append({
+            "agent": lr.get("kind", "runner"),
+            "role": lr.get("run_id", ""),
+            "status": str(lr.get("state", "running")).upper(),
+            "node": meta.get("target") or resolved_target or "workspace",
+            "active_tool": lr.get("kind", "engine"),
+        })
+
+    swarm_status = "ONLINE" if live_runs else "STANDBY"
 
     return {
         "status": "ok",
-        "target": target,
-        "swarm_status": "ONLINE (Active Hunt Loop)",
+        "target": resolved_target or None,
+        "swarm_status": swarm_status,
+        "active_runs_count": len(live_runs),
         "graph": graph_data,
-        "wiretap_events": _DEFAULT_WIRETAP_EVENTS,
-        "two_brain_diffs": _DEFAULT_TWO_BRAIN_DIFFS,
-        "swarm_roster": swarm_roster
+        "wiretap_events": wiretap_events[:50],
+        "two_brain_diffs": two_brain_diffs[:20],
+        "swarm_roster": swarm_roster,
     }
 
 
 class TelemetryStepReq(BaseModel):
     step_type: Optional[str] = "FINDING_DISCOVERED"
-    node_name: Optional[str] = "GraphQL /graphql"
+    node_name: Optional[str] = "endpoint"
     agent: Optional[str] = "BugHunter"
 
 
 @router.post("/swarm-telemetry/simulate-step")
 async def simulate_swarm_step(req: TelemetryStepReq):
-    """Simulates or advances an attack step in the swarm graph and emits a live wiretap event."""
+    """Emits an explicitly tagged simulated telemetry event (`simulated: true`)."""
     new_event = {
-        "id": f"wt-{int(time.time()) % 10000}",
+        "id": f"wt-sim-{int(time.time() * 1000) % 100000}",
         "time": time.strftime("%H:%M:%S"),
         "from_agent": req.agent or "BugHunter",
         "to_agent": "SevenQuestionValidator",
         "type": req.step_type or "EVALUATE_STEP",
-        "summary": f"Executed dynamic probe on [{req.node_name}] -> Found suspicious response variance",
-        "details": {"node": req.node_name, "timestamp": time.time(), "status": "EVALUATING"}
+        "summary": f"[SIMULATED] Probe step on [{req.node_name}]",
+        "details": {"node": req.node_name, "timestamp": time.time(), "status": "SIMULATED", "simulated": True},
+        "simulated": True,
     }
-    _DEFAULT_WIRETAP_EVENTS.insert(0, new_event)
-    if len(_DEFAULT_WIRETAP_EVENTS) > 30:
-        _DEFAULT_WIRETAP_EVENTS.pop()
+    _SIMULATED_WIRETAP_EVENTS.insert(0, new_event)
+    if len(_SIMULATED_WIRETAP_EVENTS) > 30:
+        _SIMULATED_WIRETAP_EVENTS.pop()
 
     log_activity_event(
         req.agent or "BugHunter",
         "Attack Step Simulated",
-        "Swarm Telemetry",
+        "Swarm Telemetry (Simulated)",
         "SUCCESS",
         0.05,
-        f"Simulated step: {req.step_type} on {req.node_name}"
+        f"[SIMULATED] step: {req.step_type} on {req.node_name}"
     )
-    return {"status": "ok", "event": new_event}
+    return {"status": "ok", "simulated": True, "event": new_event}

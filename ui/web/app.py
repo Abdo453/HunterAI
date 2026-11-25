@@ -22,10 +22,23 @@ from fastapi.staticfiles import StaticFiles
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """تشغيل الـ Auto-Scheduler عند بدء التطبيق"""
+    """Startup: reconcile interrupted runs, wire PlatformStore, and launch background workers."""
     import logging
     log = logging.getLogger("app.lifespan")
     scheduler_task = None
+
+    try:
+        from core.run_control import GLOBAL_RUN_CONTROLLER
+        from ui.web.platform_hub import ensure_platform_wiring
+
+        store = ensure_platform_wiring()
+        active_ids = [r["run_id"] for r in GLOBAL_RUN_CONTROLLER.list_runs(active_only=True)]
+        reconciled = store.reconcile_interrupted_runs(active_run_ids=active_ids)
+        if reconciled:
+            log.info("[APP] Reconciled %d interrupted run(s) from prior session", len(reconciled))
+    except Exception as e:
+        log.warning(f"[APP] PlatformStore reconciliation warning: {e}")
+
     try:
         from core.learning.learning_server import get_scheduler
         scheduler = get_scheduler()
@@ -48,8 +61,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
-
     # Shutdown
+    try:
+        from core.run_control import GLOBAL_RUN_CONTROLLER
+        GLOBAL_RUN_CONTROLLER.stop_all()
+    except Exception:
+        pass
     if scheduler_task and not scheduler_task.done():
         scheduler_task.cancel()
         try:
@@ -60,6 +77,31 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PentestAI Unified", lifespan=lifespan)
+
+_CSP_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
+    "style-src 'self' 'unsafe-inline'; "
+    "font-src 'self' data:; "
+    "img-src 'self' data: blob:; "
+    "worker-src 'self' blob:; "
+    "connect-src 'self' ws: wss:; "
+    "frame-ancestors 'self'; "
+    "base-uri 'self'; "
+    "object-src 'none'"
+)
+
+
+@app.middleware("http")
+async def _security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("Content-Security-Policy", _CSP_POLICY)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
+
 BASE = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 _HTML_PATH = BASE / "templates" / "index.html"
@@ -943,25 +985,54 @@ async def start_recon_pipeline(req: Request):
 
     from core.scope_guard import ScopeGuard
     from core.pipeline_runner import ReconPipelineRunner
+    from core.platform_store import get_platform_store
+    from core.run_control import GLOBAL_RUN_CONTROLLER
+    from ui.web.platform_hub import register_managed_run
 
     guard = ScopeGuard(in_scope=in_scope or [target], out_of_scope=out_of_scope)
     session_id = f"pipe_{int(time.time())}"
+    store = get_platform_store()
 
     async def pipeline_cb(ev):
-        # Update latest graph data cache
+        await GLOBAL_RUN_CONTROLLER.checkpoint(session_id)
         if ev.get("event") == "graph_update":
             _latest_graph_data["nodes"] = ev.get("nodes", [])
             _latest_graph_data["edges"] = ev.get("edges", [])
+        store.append_event(
+            str(ev.get("event") or "PIPELINE_EVENT").upper(),
+            run_id=session_id,
+            source="pipeline_runner",
+            payload=ev,
+        )
 
     runner = ReconPipelineRunner(target, scope_guard=guard, progress_cb=pipeline_cb, session_id=session_id)
     _active_pipelines[session_id] = runner
 
-    # Launch in background
-    asyncio.create_task(runner.run())
+    async def _run_pipeline_managed():
+        try:
+            res = await runner.run()
+            store.update_run(session_id, status="completed", current_phase="DONE", progress=100.0, finished_at=time.time())
+            return res
+        except asyncio.CancelledError:
+            store.update_run(session_id, status="stopped", finished_at=time.time())
+            raise
+        except Exception as exc:
+            store.update_run(session_id, status="failed", error=str(exc), finished_at=time.time())
+            raise
+
+    task = asyncio.create_task(_run_pipeline_managed(), name=f"pipeline:{session_id}")
+    register_managed_run(
+        session_id,
+        task,
+        kind="pipeline",
+        target=target,
+        meta={"in_scope": in_scope or [target], "out_of_scope": out_of_scope},
+    )
 
     return {
         "status": "started",
         "session_id": session_id,
+        "run_id": session_id,
         "target": target
     }
 
@@ -1506,40 +1577,86 @@ async def ws_learn(ws: WebSocket):
 # ── WebSocket: CHAT ──────────────────────────────────────────
 @app.websocket("/ws/chat")
 async def ws_chat(ws: WebSocket):
-    """Chat mode — يصنف المهمة ويوجهها للموديل الصح"""
+    """Grounded multi-conversation Copilot WebSocket (supports conversation_id, engagement_id, run_id, model, mode)."""
     await ws.accept()
+    qp = ws.query_params
+    default_conv_id = qp.get("conversation_id") or None
+    default_eng_id = qp.get("engagement_id") or None
+    default_run_id = qp.get("run_id") or None
+    default_model = qp.get("model") or "auto"
+    default_mode = qp.get("mode") or "analyst"
+
     try:
-        from core.smart_orchestrator import SmartOrchestrator
+        from core.copilot_service import CopilotService
 
-        async def cb(ev):
-            try:
-                await ws.send_text(json.dumps(ev, default=str))
-            except Exception:
-                pass
-
-        orchestrator = SmartOrchestrator(progress_callback=cb)
+        service = CopilotService()
+        active_conv_id = default_conv_id
 
         while True:
             try:
                 data = json.loads(await ws.receive_text())
                 if data.get("action") == "clear_memory":
-                    orchestrator.memory.clear_conversation()
+                    active_conv_id = None
+                    await ws.send_text(json.dumps({"event": "memory_cleared"}))
                     continue
 
-                user_input = data.get("message", "").strip()
-                selected_model = data.get("model", "auto")
+                user_input = (data.get("message") or "").strip()
                 if not user_input:
                     continue
 
-                result = await orchestrator.chat(user_input, selected_model=selected_model)
+                conv_id = data.get("conversation_id") or active_conv_id
+                eng_id = data.get("engagement_id") or default_eng_id
+                run_id = data.get("run_id") or default_run_id
+                selected_model = data.get("model") or default_model
+                mode = data.get("mode") or default_mode
+                attachment_ids = data.get("attachment_ids") or []
+
+                t0 = time.time()
                 await ws.send_text(json.dumps({
-                    "event": "chat_response",
-                    "answer": result["answer"],
-                    "route": result["route"],
-                    "duration": result["duration"],
-                    "gpu_status": result["gpu_status"],
-                    "model_used": result.get("selected_model", selected_model),
+                    "event": "chat_start",
+                    "input": user_input[:100],
+                    "selected_model": selected_model,
+                    "mode": mode,
+                    "conversation_id": conv_id,
                 }, default=str))
+
+                async for ev_name, payload in service.stream_turn(
+                    message=user_input,
+                    conversation_id=conv_id,
+                    engagement_id=eng_id,
+                    run_id=run_id,
+                    model=selected_model,
+                    mode=mode,
+                    attachment_ids=attachment_ids,
+                ):
+                    if ev_name == "start":
+                        active_conv_id = payload.get("conversation_id") or active_conv_id
+                    elif ev_name == "token":
+                        await ws.send_text(json.dumps({"event": "token", **payload}, default=str))
+                    elif ev_name in ("context", "approval_request", "policy_blocked", "refs"):
+                        await ws.send_text(json.dumps({"event": ev_name, **payload}, default=str))
+                    elif ev_name == "error":
+                        await ws.send_text(json.dumps({"event": "error", "message": payload.get("error", "Unknown error")}, default=str))
+                    elif ev_name == "done":
+                        active_conv_id = payload.get("conversation_id") or active_conv_id
+                        duration = round(time.time() - t0, 2)
+                        await ws.send_text(json.dumps({
+                            "event": "chat_response",
+                            "answer": payload.get("answer", ""),
+                            "route": payload.get("provider", "copilot"),
+                            "duration": duration,
+                            "model_used": payload.get("model_used", selected_model),
+                            "provider": payload.get("provider", "offline_heuristic"),
+                            "fallback": bool(payload.get("fallback", False)),
+                            "conversation_id": active_conv_id,
+                            "engagement_id": eng_id,
+                            "run_id": run_id,
+                            "mode": mode,
+                            "refs": payload.get("refs", []),
+                            "citations": payload.get("citations", []),
+                            "approval": payload.get("approval"),
+                            "policy": payload.get("policy"),
+                        }, default=str))
 
             except WebSocketDisconnect:
                 break
@@ -1689,6 +1806,13 @@ app.include_router(enhanced_control_router)
 # ── HunterAI Advanced Control Center API (13 Specialized Operational Modules) ──
 from ui.web.control_center_api import router as control_center_router
 app.include_router(control_center_router)
+
+# ── Durable Platform Execution Hub & Grounded Copilot API ──
+from ui.web.platform_hub import ensure_platform_wiring, router as platform_hub_router
+from ui.web.copilot_api import router as copilot_api_router
+ensure_platform_wiring()
+app.include_router(platform_hub_router)
+app.include_router(copilot_api_router)
 
 # ── V27.2 METAMORPHIC TRIAD, ATTACK SURFACE GRAPH & LEDGER ENDPOINTS ──
 @app.get("/api/v27/attack-surface")
@@ -2556,13 +2680,46 @@ async def start_autonomous_mission(req: Request):
 
     from agents.autonomous_mission_agent import AutonomousMissionAgent
     from agents.base_agent import AgentTask
+    from core.platform_store import get_platform_store
+    from core.run_control import GLOBAL_RUN_CONTROLLER
     from tools.tool_manager import ToolManager
+    from ui.web.platform_hub import register_managed_run
 
-    agent = AutonomousMissionAgent(tool_manager=ToolManager())
+    store = get_platform_store()
+
+    async def _mission_cb(ev):
+        await GLOBAL_RUN_CONTROLLER.checkpoint(session_id)
+        store.append_event(
+            str(ev.get("event") or "MISSION_EVENT").upper(),
+            run_id=session_id,
+            agent_id="autonomous_mission_agent",
+            source="mission_agent",
+            payload=ev,
+        )
+
+    agent = AutonomousMissionAgent(tool_manager=ToolManager(), progress_callback=_mission_cb)
     task = AgentTask(target=target, mode=mode, session_id=session_id, extra=data.get("extra", {}))
 
-    # Background async task execution
-    async_task = asyncio.create_task(agent.run(task))
+    async def _run_mission_managed():
+        try:
+            res = await agent.run(task)
+            store.update_run(
+                session_id,
+                status="completed" if res.success else "failed",
+                current_phase="DONE",
+                progress=100.0,
+                finished_at=time.time(),
+                meta={"findings_count": len(res.findings)},
+            )
+            return res
+        except asyncio.CancelledError:
+            store.update_run(session_id, status="stopped", finished_at=time.time())
+            raise
+        except Exception as exc:
+            store.update_run(session_id, status="failed", error=str(exc), finished_at=time.time())
+            raise
+
+    async_task = asyncio.create_task(_run_mission_managed(), name=f"mission:{session_id}")
     _active_mission_tasks[session_id] = {
         "target": target,
         "mode": mode,
@@ -2570,10 +2727,18 @@ async def start_autonomous_mission(req: Request):
         "async_task": async_task,
         "started_at": time.time()
     }
+    register_managed_run(
+        session_id,
+        async_task,
+        kind="mission",
+        target=target,
+        meta={"mode": mode},
+    )
 
     return {
         "status": "started",
         "session_id": session_id,
+        "run_id": session_id,
         "target": target,
         "mode": mode,
         "workspace": str(agent.workspace.get_workspace_path(target, session_id))
@@ -2896,6 +3061,9 @@ async def launch_omni_mission(req: Request):
     }
 
     async def _run_job():
+        from core.platform_store import get_platform_store
+
+        store = get_platform_store()
         try:
             res = await asyncio.to_thread(engine.run)
             _OMNI_RUNS[eng_id]["status"] = "COMPLETED"
@@ -2910,14 +3078,38 @@ async def launch_omni_mission(req: Request):
             _OMNI_RUNS[eng_id]["confirmed_findings"] = res.confirmed_findings
             _OMNI_RUNS[eng_id]["coverage_pct"] = res.coverage_pct
             _OMNI_RUNS[eng_id]["current_phase"] = res.phase_reached.value
+            store.update_run(
+                eng_id,
+                status="completed",
+                current_phase=res.phase_reached.value,
+                progress=round(float(res.coverage_pct), 1),
+                finished_at=time.time(),
+                meta={"confirmed_findings_count": len(res.confirmed_findings)},
+            )
+        except asyncio.CancelledError:
+            _OMNI_RUNS[eng_id]["status"] = "STOPPED"
+            store.update_run(eng_id, status="stopped", finished_at=time.time())
+            raise
         except Exception as e:
             _OMNI_RUNS[eng_id]["status"] = "FAILED"
             _OMNI_RUNS[eng_id]["error"] = str(e)
+            store.update_run(eng_id, status="failed", error=str(e), finished_at=time.time())
 
-    asyncio.create_task(_run_job())
+    from ui.web.platform_hub import register_managed_run
+
+    task = asyncio.create_task(_run_job(), name=f"omni:{eng_id}")
+    register_managed_run(
+        eng_id,
+        task,
+        kind="omni",
+        target=target,
+        engagement_id=eng_id,
+        meta={"scope": scope},
+    )
     return {
         "status": "LAUNCHED",
         "engagement_id": eng_id,
+        "run_id": eng_id,
         "target": target,
         "scope": scope,
     }
@@ -3186,11 +3378,40 @@ EXCLUDE_DIRS = {
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5MB max text file for editor
 
 
+_BLOCKED_SENSITIVE_FILES = {"authorization_grant.json"}
+_BLOCKED_SENSITIVE_SUFFIXES = {".pem", ".key"}
+
+
+def _is_blocked_sensitive_path(parts: Tuple[str, ...], name: str) -> bool:
+    low_parts = [p.lower() for p in parts]
+    if ".git" in low_parts:
+        return True
+    if any(p.startswith(".env") for p in low_parts):
+        return True
+    low_name = name.lower()
+    if low_name.startswith(".env"):
+        return True
+    if low_name in _BLOCKED_SENSITIVE_FILES:
+        return True
+    if Path(low_name).suffix in _BLOCKED_SENSITIVE_SUFFIXES:
+        return True
+    return False
+
+
 def _safe_resolve_path(rel_path: str) -> Path:
-    clean = rel_path.lstrip("/\\")
-    target = (WORKSPACE_ROOT / clean).resolve()
-    if not str(target).lower().startswith(str(WORKSPACE_ROOT).lower()):
+    if not rel_path or not isinstance(rel_path, str) or "\x00" in rel_path:
+        raise HTTPException(status_code=403, detail="Access denied: invalid path")
+    raw = rel_path.strip()
+    if not raw or (len(raw) >= 2 and raw[1] == ":"):
+        raise HTTPException(status_code=403, detail="Access denied: invalid path")
+    clean = raw.lstrip("/\\")
+    root_resolved = WORKSPACE_ROOT.resolve()
+    target = (root_resolved / clean).resolve()
+    if not target.is_relative_to(root_resolved):
         raise HTTPException(status_code=403, detail="Access denied: outside workspace")
+    rel = target.relative_to(root_resolved)
+    if _is_blocked_sensitive_path(rel.parts, target.name):
+        raise HTTPException(status_code=403, detail="Access denied: restricted sensitive file")
     return target
 
 
@@ -3202,7 +3423,10 @@ async def get_editor_tree(folder: Optional[str] = None):
 
     try:
         for root, dirs, files in os.walk(base_dir):
-            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith(".tmp")]
+            dirs[:] = [
+                d for d in dirs
+                if d not in EXCLUDE_DIRS and not d.startswith(".tmp") and not d.startswith(".env")
+            ]
             rel_root = os.path.relpath(root, WORKSPACE_ROOT) if root != str(WORKSPACE_ROOT) else ""
             rel_root = rel_root.replace("\\", "/")
 
@@ -3216,6 +3440,8 @@ async def get_editor_tree(folder: Optional[str] = None):
                 })
 
             for f in sorted(files):
+                if _is_blocked_sensitive_path((), f):
+                    continue
                 file_rel = f"{rel_root}/{f}" if rel_root else f
                 ext = os.path.splitext(f)[1].lower()
                 items.append({
@@ -3225,7 +3451,7 @@ async def get_editor_tree(folder: Optional[str] = None):
                     "ext": ext,
                     "parent": rel_root or None,
                 })
-            
+
             if len(items) >= 2000:
                 break
     except Exception as exc:

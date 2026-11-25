@@ -52,11 +52,27 @@ async def mcp_add_server(cfg: MCPServerConfig):
 
 @router.post("/mcp/call")
 async def mcp_call_tool(req: MCPCallRequest):
-    # محاولة استدعاء حقيقي عبر MCPClientManager إذا كان متاحًا
+    """Invoke a real tool on a connected MCP client; never fabricate output."""
+    client = _MCP_CLIENTS.get(req.server_id)
+    if client is None:
+        return {
+            "ok": False,
+            "error": f"No active MCP client connected for server '{req.server_id}'",
+            "server_id": req.server_id,
+            "tool_name": req.tool_name,
+        }
     try:
-        from core.global_state import GLOBAL_COORDINATOR
-        # placeholder: لا يوجد MCPClientManager مكتمل بعد في GlobalState
-        return {"ok": False, "error": "MCP client not wired yet", "server_id": req.server_id, "tool_name": req.tool_name}
+        namespaced = req.tool_name if "::" in req.tool_name else f"{req.server_id}::{req.tool_name}"
+        res = await client.call_tool(namespaced, req.arguments)
+        return {
+            "ok": bool(getattr(res, "ok", False)),
+            "server_id": req.server_id,
+            "tool_name": req.tool_name,
+            "content": getattr(res, "content", []),
+            "structured": getattr(res, "structured", None),
+            "error": getattr(res, "error", None),
+            "error_category": getattr(res, "error_category", None),
+        }
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc), "server_id": req.server_id, "tool_name": req.tool_name}
 
@@ -158,13 +174,26 @@ class FlagSubmitRequest(BaseModel):
     platform_url: str
     token: str
     challenge_id: str = ""
+    dry_run: bool = False
+
+
+_FLAG_SERVICE_STORE_PATH = "data/flags/web_flag_store.json"
+_FLAG_SERVICE = None
+
+
+def _get_flag_service():
+    global _FLAG_SERVICE
+    if _FLAG_SERVICE is None:
+        from flags.service import FlagService
+
+        _FLAG_SERVICE = FlagService(store_path=_FLAG_SERVICE_STORE_PATH)
+    return _FLAG_SERVICE
 
 
 @router.post("/flags/ingest")
 async def flags_ingest(req: FlagIngestRequest):
     try:
-        from flags.service import FlagService
-        svc = FlagService()
+        svc = _get_flag_service()
         fresh = svc.ingest(req.text)
         return {
             "fresh": len(fresh),
@@ -178,26 +207,31 @@ async def flags_ingest(req: FlagIngestRequest):
 @router.get("/flags/progress")
 async def flags_progress():
     try:
-        from flags.service import FlagService
-        svc = FlagService()
+        svc = _get_flag_service()
         return svc.progress().to_dict()
-    except Exception as exc:  # noqa: BLE001
-        return {"accepted_count": 0, "expected_count": 0, "complete": False}
+    except Exception:  # noqa: BLE001
+        return {"accepted": 0, "expected": 0, "complete": False}
 
 
 @router.post("/ctf/submit")
 async def ctf_submit(req: FlagSubmitRequest):
+    svc = _get_flag_service()
+    pending = svc.store.pending()
+    if not pending:
+        raise HTTPException(
+            status_code=400,
+            detail="No real ingested flags available to submit. Ingest captured flags via /api/flags/ingest first.",
+        )
     try:
         from ctf.bridge import FlagSubmitter
         from ctf.ctfd import CTFdPlatform
-        from flags.service import FlagService
-        svc = FlagService()
-        # ملء بسيط للاستعراض — في الإنتاج يُجلب من مخزن الفلوغات الحقيقي
-        svc.ingest("flag{placeholder}")
+
         platform = CTFdPlatform(req.platform_url, req.token)
         sub = FlagSubmitter(svc, platform, challenge_id=req.challenge_id)
-        summary = sub.submit_pending(dry_run=True)
+        summary = sub.submit_pending(dry_run=req.dry_run)
         return summary.to_dict()
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, str(exc))
 
