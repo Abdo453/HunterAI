@@ -16,11 +16,18 @@ def _client() -> TestClient:
 
 
 def test_chat_page_is_served():
-    r = _client().get("/chat")
+    c = _client()
+    r_redir = c.get("/chat", follow_redirects=False)
+    assert r_redir.status_code == 302
+    assert r_redir.headers.get("location") == "/?section=chat"
+
+    r = c.get("/?section=chat")
     assert r.status_code == 200
-    assert 'id="app"' in r.text
-    assert "/static/chat.js" in r.text
-    assert "/static/chat.css" in r.text
+    assert 'id="sec-chat"' in r.text
+    assert 'window._defaultSection="chat"' in r.text
+    assert 'id="secChatCopilotMount"' in r.text
+    assert "/static/copilot-drawer.js" in r.text
+    assert "/static/platform-client.js" in r.text
 
 
 def test_chat_static_assets_are_served():

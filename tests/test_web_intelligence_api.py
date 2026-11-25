@@ -9,14 +9,26 @@ from ui.web.app import app
 @pytest.mark.asyncio
 async def test_intelligence_status_endpoint():
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.get("/api/intelligence/status")
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "online"
-        assert "subsystems" in data
-        assert data["subsystems"]["security_intelligence"] == "active"
-        assert data["subsystems"]["autonomous_brain"] == "connected"
+    prev_brain = getattr(app.state, "active_brain", None)
+    try:
+        app.state.active_brain = None
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get("/api/intelligence/status")
+            assert res.status_code == 200
+            data = res.json()
+            assert data["status"] in {"online", "idle", "degraded"}
+            assert "subsystems" in data
+            assert data["subsystems"]["security_intelligence"] == "active"
+            assert data["subsystems"]["autonomous_brain"] in {"idle", "offline"}
+
+            app.state.active_brain = object()
+            res_connected = await client.get("/api/intelligence/status")
+            assert res_connected.status_code == 200
+            data_connected = res_connected.json()
+            assert data_connected["status"] == "online"
+            assert data_connected["subsystems"]["autonomous_brain"] == "connected"
+    finally:
+        app.state.active_brain = prev_brain
 
 
 @pytest.mark.asyncio

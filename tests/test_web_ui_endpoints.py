@@ -18,16 +18,22 @@ def client():
 # ── 1. HTML Rendering Tests ──────────────────────────────────────────────────
 
 def test_index_page_renders_5_pillars(client):
-    """Verify that the home page renders the 5-pillar modern command center HTML."""
+    """Verify that the home page renders the unified HunterAI workspace shell."""
     response = client.get("/")
     assert response.status_code == 200
     html = response.text
     assert "HunterAI" in html
-    assert "مركز قيادة OmniHunter الذاتي" in html
-    assert "مرآة التفكير المعرفي (CoT)" in html
-    assert "ترسانة كالي ومصفوفة MCP" in html
-    assert "شات وتوجيه الوكلاء" in html
-    assert "محكمة الأدلة والـ PoC" in html
+    assert html.count('class="nav-group"') == 4
+    assert "/static/tokens.css" in html
+    assert "/static/ui-core.js" in html
+    assert "/static/copilot-drawer.js" in html
+    assert "/static/vendor/monaco/vs/loader.min.js" in html
+    assert "fonts.googleapis.com" not in html
+    assert "cdnjs.cloudflare.com" not in html
+    assert "Copilot" in html
+    assert "overviewApprovalsList" in html
+    assert "findingsContainer" in html
+    assert "arsenal/synthesize" in html or "ترسانة الأدوات الهجومية" in html
 
 
 # ── 2. Universal Kali Arsenal API Tests ───────────────────────────────────────
