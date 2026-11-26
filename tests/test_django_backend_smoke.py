@@ -135,9 +135,10 @@ def _isolate_smoke_platform_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         rt.EVENT_BUS._history.clear()
 
 
-def _make_asgi_client() -> httpx.AsyncClient:
-    transport = httpx.ASGITransport(app=application)
-    return httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000")
+def _make_asgi_client(*, authenticated: bool = True) -> httpx.AsyncClient:
+    from hunter_backend.testing import make_async_client
+
+    return make_async_client(authenticated=authenticated)
 
 
 async def _run_ws_exchange(
@@ -255,8 +256,10 @@ async def test_compat_redirects_and_xss_sanitization() -> None:
 
 @pytest.mark.asyncio
 async def test_cors_csp_and_nocors_csrf_middleware() -> None:
-    async with _make_asgi_client() as client:
-        # 1. CSRF issuance + CSP headers + HttpOnly=False cookie
+    from hunter_backend.auth import get_or_create_api_token
+
+    async with _make_asgi_client(authenticated=False) as client:
+        # 1. CSRF issuance + CSP headers + HttpOnly=False cookie (public)
         r_csrf = await client.get("/api/csrf", headers={"Origin": "http://127.0.0.1:3000"})
         assert r_csrf.status_code == 200
         token = r_csrf.json()["csrfToken"]
@@ -278,7 +281,16 @@ async def test_cors_csp_and_nocors_csrf_middleware() -> None:
         assert "last-event-id" in allow_hdrs
         assert "x-csrftoken" in allow_hdrs
 
-        # 3. Reject no-cors text/plain & form-urlencoded & untrusted Origin & cross-site
+        # 3. Establish cookie-based browser session (non-bearer) so CSRF checks are exercised directly
+        r_sess = await client.post(
+            "/api/auth/session",
+            json={"token": get_or_create_api_token()},
+            headers={"Origin": "http://127.0.0.1:3000"},
+        )
+        assert r_sess.status_code == 200
+        token = r_sess.json()["csrfToken"]
+
+        # 4. Reject no-cors text/plain & form-urlencoded & untrusted Origin & cross-site
         r_txt = await client.post(
             "/api/platform/engagements",
             content=b'{"target":"example.com"}',
@@ -317,7 +329,7 @@ async def test_cors_csp_and_nocors_csrf_middleware() -> None:
         )
         assert r_bad_tok.status_code == 403
 
-        # 4. Valid trusted Origin + JSON + matching X-CSRFToken passes
+        # 5. Valid trusted Origin + session cookie + JSON + matching X-CSRFToken passes
         r_ok = await client.post(
             "/api/platform/engagements",
             json={"target": "example.com", "name": "Smoke Target"},
@@ -404,6 +416,9 @@ async def test_native_async_sse_streams_and_websockets(monkeypatch: pytest.Monke
             assert "hello " in r_chat_sse.text
 
         # WebSocket Origin rejection (CSWSH defense)
+        from hunter_backend.auth import get_or_create_api_token
+
+        ws_auth_hdr = (b"authorization", f"Bearer {get_or_create_api_token()}".encode("utf-8"))
         evil_frames = await _run_ws_exchange(
             "/ws/platform",
             headers=[(b"origin", b"https://evil.example")],
@@ -411,10 +426,18 @@ async def test_native_async_sse_streams_and_websockets(monkeypatch: pytest.Monke
         )
         assert evil_frames == [{"type": "websocket.close", "code": 4403}]
 
-        # WebSocket ping/pong & event stream with trusted Origin
-        ok_frames = await _run_ws_exchange(
+        # Unauthenticated trusted Origin must fail closed with 4401
+        unauth_frames = await _run_ws_exchange(
             "/ws/platform",
             headers=[(b"origin", b"http://127.0.0.1:3000")],
+            max_server_frames=5,
+        )
+        assert unauth_frames == [{"type": "websocket.close", "code": 4401}]
+
+        # WebSocket ping/pong & event stream with trusted Origin + valid Bearer auth
+        ok_frames = await _run_ws_exchange(
+            "/ws/platform",
+            headers=[(b"origin", b"http://127.0.0.1:3000"), ws_auth_hdr],
             client_messages=[{"action": "ping"}],
             max_server_frames=200,
         )
@@ -423,9 +446,10 @@ async def test_native_async_sse_streams_and_websockets(monkeypatch: pytest.Monke
         assert any(t.get("type") == "ready" for t in texts)
         assert any(t.get("type") == "pong" for t in texts)
 
-        # /ws/chat without Origin (CLI/test client)
+        # /ws/chat without Origin succeeds ONLY with valid Bearer auth (CLI client)
         chat_frames = await _run_ws_exchange(
             "/ws/chat",
+            headers=[ws_auth_hdr],
             client_messages=[{"action": "ping"}],
             max_server_frames=10,
         )

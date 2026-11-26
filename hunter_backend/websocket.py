@@ -338,6 +338,11 @@ async def websocket_application(
         await send({"type": "websocket.close", "code": 4403})
         return
 
+    if not auth_ctx.authenticated:
+        logger.warning("Rejected unauthenticated WebSocket upgrade on %r", scope.get("path"))
+        await send({"type": "websocket.close", "code": 4401})
+        return
+
     path = (scope.get("path") or "").rstrip("/") or "/"
     ws = WSConnection(scope, receive, send, auth=auth_ctx)
 

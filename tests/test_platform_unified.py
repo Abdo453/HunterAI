@@ -745,8 +745,9 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
 
     monkeypatch.setattr(copilot_api, "run_command_no_shell", _fake_run)
 
-    # 1. Default unrestricted explicit mode runs clean command without prior scope;
-    #    under strict web governance (HUNTER_WEB_UNRESTRICTED=0), empty scope fails closed.
+    # 1. Under strict web governance (HUNTER_WEB_UNRESTRICTED=0), empty scope fails closed;
+    #    under explicit unrestricted opt-in (HUNTER_WEB_UNRESTRICTED=1), allowlisted commands
+    #    queue for HITL approval (never auto-executed).
     async def _ai_nmap(msg, provider=None, model=None, system_prompt=None):
         return "```bash\nnmap -sV example.com\n```"
 
@@ -754,22 +755,24 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
     monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
     r_no_scope = isolated_client.post(
         "/api/chat",
-        json={"message": "scan example.com", "provider": "ollama", "allow_exec": True},
+        json={"message": "scan example.com", "provider": "ollama", "allow_exec": True, "authorized": True},
     )
     assert r_no_scope.status_code == 200
     assert r_no_scope.json()["executed"] == []
     assert r_no_scope.json()["blocked"][0]["status"] == "BLOCKED_SCOPE"
     assert executed_cmds == []
-    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
     r_unrestricted_ok = isolated_client.post(
         "/api/chat",
-        json={"message": "scan example.com", "provider": "ollama", "allow_exec": True},
+        json={"message": "scan example.com", "provider": "ollama", "allow_exec": True, "authorized": True},
     )
     assert r_unrestricted_ok.status_code == 200
-    assert len(r_unrestricted_ok.json()["executed"]) == 1
-    assert executed_cmds == ["nmap -sV example.com"]
-    executed_cmds.clear()
+    assert r_unrestricted_ok.json()["executed"] == []
+    assert len(r_unrestricted_ok.json()["queued_approvals"]) == 1
+    assert r_unrestricted_ok.json()["queued_approvals"][0]["tool_name"] == "nmap"
+    assert executed_cmds == []
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
     # 2. Shell metacharacter injection & metadata host blocked even with valid scope
     async def _ai_injected(msg, provider=None, model=None, system_prompt=None):
@@ -789,6 +792,7 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
             "target": "example.com",
             "scope": ["example.com"],
             "allow_exec": True,
+            "authorized": True,
         },
     )
     assert r_inj.status_code == 200
@@ -796,7 +800,8 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
     assert len(r_inj.json()["blocked"]) == 2
     assert executed_cmds == []
 
-    # 3. Clean in-scope command executes when allow_exec=True, skipped when allow_exec=False
+    # 3. Clean in-scope command queues for approval when allow_exec=True & authorized=True,
+    #    skipped when allow_exec=False, and NEVER auto-executes LLM bash blocks.
     monkeypatch.setattr(copilot_api, "call_ai", _ai_nmap)
     r_skip = isolated_client.post(
         "/api/chat",
@@ -810,6 +815,7 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
     )
     assert r_skip.status_code == 200
     assert r_skip.json()["executed"] == []
+    assert r_skip.json()["queued_approvals"] == []
     assert executed_cmds == []
 
     r_ok = isolated_client.post(
@@ -820,11 +826,14 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
             "target": "example.com",
             "scope": ["example.com"],
             "allow_exec": True,
+            "authorized": True,
         },
     )
     assert r_ok.status_code == 200
-    assert len(r_ok.json()["executed"]) == 1
-    assert executed_cmds == ["nmap -sV example.com"]
+    assert r_ok.json()["executed"] == []
+    assert len(r_ok.json()["queued_approvals"]) == 1
+    assert r_ok.json()["queued_approvals"][0]["tool_name"] == "nmap"
+    assert executed_cmds == []
 
 
 def test_truthful_settings_burp_artex_redaction_and_catalog_parity(isolated_client: ASGISyncClient, monkeypatch):

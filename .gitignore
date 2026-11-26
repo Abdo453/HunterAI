@@ -24,6 +24,9 @@ venv.bak/
 
 # Local runtime secrets & settings (never commit)
 data/root_controller/.django_secret
+data/root_controller/.api_token
+data/root_controller/.session_gen
+data/root_controller/.policy_secret
 data/control_settings.json
 
 # Testing & Coverage

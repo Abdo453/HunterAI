@@ -204,12 +204,12 @@ func (s *APIServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/v1/health", enableCORS(s.handleHealth))
-	mux.HandleFunc("/api/v1/stats", enableCORS(s.handleStats))
-	mux.HandleFunc("/api/v1/engagements", enableCORS(s.handleEngagements))
-	mux.HandleFunc("/api/v1/assets", enableCORS(s.handleAssets))
-	mux.HandleFunc("/api/v1/findings", enableCORS(s.handleFindings))
-	mux.HandleFunc("/api/v1/tasks", enableCORS(s.handleTasks))
-	mux.HandleFunc("/api/v1/audit", enableCORS(s.handleAudit))
+	mux.HandleFunc("/api/v1/stats", enableCORS(s.requireBearerAuth(s.handleStats)))
+	mux.HandleFunc("/api/v1/engagements", enableCORS(s.requireBearerAuth(s.handleEngagements)))
+	mux.HandleFunc("/api/v1/assets", enableCORS(s.requireBearerAuth(s.handleAssets)))
+	mux.HandleFunc("/api/v1/findings", enableCORS(s.requireBearerAuth(s.handleFindings)))
+	mux.HandleFunc("/api/v1/tasks", enableCORS(s.requireBearerAuth(s.handleTasks)))
+	mux.HandleFunc("/api/v1/audit", enableCORS(s.requireBearerAuth(s.handleAudit)))
 	mux.HandleFunc("/api/v1/scan", enableCORS(s.requireBearerAuth(s.handleScan)))
 
 	return mux

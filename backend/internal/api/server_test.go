@@ -543,6 +543,9 @@ func TestNilDBSafety(t *testing.T) {
 
 	for _, ep := range endpoints {
 		req := httptest.NewRequest(http.MethodGet, ep, nil)
+		if ep != "/api/v1/health" {
+			req.Header.Set("Authorization", "Bearer "+srv.APIToken())
+		}
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
@@ -581,6 +584,7 @@ func TestEmptySliceSerialization(t *testing.T) {
 
 	for _, ep := range listEndpoints {
 		req := httptest.NewRequest(http.MethodGet, ep, nil)
+		req.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
@@ -610,6 +614,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 		}
 		srv := NewAPIServer(newStubDB(t, state), 0)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/engagements", nil)
+		req.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 
@@ -645,6 +650,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 		}
 		srv := NewAPIServer(newStubDB(t, state), 0)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?target=api&engagement_id=eng-99", nil)
+		req.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 
@@ -686,6 +692,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 		}
 		srv := NewAPIServer(newStubDB(t, state), 0)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/findings?engagement_id=eng-99", nil)
+		req.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 
@@ -731,6 +738,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 
 		// Tasks
 		reqTasks := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?engagement_id=eng-99", nil)
+		reqTasks.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		recTasks := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(recTasks, reqTasks)
 		if recTasks.Code != http.StatusOK {
@@ -743,6 +751,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 
 		// Audit
 		reqAudit := httptest.NewRequest(http.MethodGet, "/api/v1/audit?engagement_id=eng-99", nil)
+		reqAudit.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		recAudit := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(recAudit, reqAudit)
 		if recAudit.Code != http.StatusOK {
@@ -826,6 +835,53 @@ func TestBindAddrAndAuthAndSSLHardening(t *testing.T) {
 		handler.ServeHTTP(rec3, req3)
 		if rec3.Code != http.StatusUnauthorized {
 			t.Fatalf("overridden token expected 401, got %d", rec3.Code)
+		}
+	})
+
+	t.Run("read endpoints require bearer auth while /api/v1/health stays open", func(t *testing.T) {
+		state := &stubDriverState{
+			queryHandler: func(query string, _ []driver.NamedValue) (driver.Rows, error) {
+				if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(query)), "SELECT COUNT(*)") {
+					return &stubRows{cols: []string{"count"}, data: [][]driver.Value{{int64(0)}}}, nil
+				}
+				return &stubRows{}, nil
+			},
+		}
+		srv := NewAPIServer(newStubDB(t, state), 7071)
+		handler := srv.Handler()
+
+		// Health stays publicly readable without bearer token
+		healthReq := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+		healthRec := httptest.NewRecorder()
+		handler.ServeHTTP(healthRec, healthReq)
+		if healthRec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/health without auth expected 200, got %d", healthRec.Code)
+		}
+
+		// All data/state read routes fail closed 401 without valid bearer token
+		protectedReads := []string{
+			"/api/v1/stats",
+			"/api/v1/engagements",
+			"/api/v1/assets",
+			"/api/v1/findings",
+			"/api/v1/tasks",
+			"/api/v1/audit",
+		}
+		for _, ep := range protectedReads {
+			unauthReq := httptest.NewRequest(http.MethodGet, ep, nil)
+			unauthRec := httptest.NewRecorder()
+			handler.ServeHTTP(unauthRec, unauthReq)
+			if unauthRec.Code != http.StatusUnauthorized {
+				t.Fatalf("unauthenticated GET %s expected 401, got %d", ep, unauthRec.Code)
+			}
+
+			authReq := httptest.NewRequest(http.MethodGet, ep, nil)
+			authReq.Header.Set("Authorization", "Bearer "+srv.APIToken())
+			authRec := httptest.NewRecorder()
+			handler.ServeHTTP(authRec, authReq)
+			if authRec.Code != http.StatusOK {
+				t.Fatalf("authenticated GET %s expected 200, got %d (body=%s)", ep, authRec.Code, authRec.Body.String())
+			}
 		}
 	})
 

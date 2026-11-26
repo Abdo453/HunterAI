@@ -55,9 +55,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(autouse=True)
-def _reset_login_guard():
+def _isolate_auth_state(tmp_path, monkeypatch):
+    import hunter_backend.auth as auth_mod
+
     LOGIN_GUARD.reset()
+    prev_tok = auth_mod._CACHED_FILE_TOKEN
+    prev_sgn = auth_mod._SESSION_GENERATION
+    monkeypatch.setenv("HUNTER_API_TOKEN_FILE", str(tmp_path / ".api_token"))
+    monkeypatch.setenv("HUNTER_SESSION_GEN_FILE", str(tmp_path / ".session_gen"))
+    auth_mod._CACHED_FILE_TOKEN = None
+    auth_mod._SESSION_GENERATION = None
     yield
+    auth_mod._CACHED_FILE_TOKEN = prev_tok
+    auth_mod._SESSION_GENERATION = prev_sgn
     LOGIN_GUARD.reset()
 
 
@@ -271,6 +281,11 @@ def test_websocket_fails_closed_when_origin_missing_without_bearer():
     assert no_origin["type"] == "websocket.close"
     assert no_origin["code"] == 4403
 
+    # Trusted Origin WITHOUT any auth credentials -> 4401 (never admit unauth WS upgrades)
+    trusted_origin_unauth = asyncio.run(_probe([(b"origin", b"http://127.0.0.1:3000")]))
+    assert trusted_origin_unauth["type"] == "websocket.close"
+    assert trusted_origin_unauth["code"] == 4401
+
     # Invalid bearer -> 4401
     bad_bearer = asyncio.run(_probe([(b"authorization", b"Bearer invalid-token")]))
     assert bad_bearer["type"] == "websocket.close"
@@ -280,6 +295,18 @@ def test_websocket_fails_closed_when_origin_missing_without_bearer():
     token = get_or_create_api_token()
     ok_bearer = asyncio.run(_probe([(b"authorization", f"Bearer {token}".encode("utf-8"))]))
     assert ok_bearer["type"] == "websocket.accept"
+
+    # Trusted Origin WITH valid signed session cookie -> accept
+    sess_tok = issue_session_token(principal="ws-operator", tier=USER_TIER)
+    ok_cookie = asyncio.run(
+        _probe(
+            [
+                (b"origin", b"http://127.0.0.1:3000"),
+                (b"cookie", f"hunter_session={sess_tok}".encode("utf-8")),
+            ]
+        )
+    )
+    assert ok_cookie["type"] == "websocket.accept"
 
 
 # ---------------------------------------------------------------------------

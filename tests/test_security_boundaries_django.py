@@ -235,16 +235,21 @@ def test_csrf_nocors_content_type_origin_and_security_headers():
 
 
 def test_websocket_origin_4403_enforcement():
-    async def _ws_probe(path: str, origin: str):
+    from hunter_backend.auth import get_or_create_api_token
+
+    async def _ws_probe(path: str, origin: str, *, auth_token: str | None = None):
         in_q: asyncio.Queue = asyncio.Queue()
         out_q: asyncio.Queue = asyncio.Queue()
         await in_q.put({"type": "websocket.connect"})
 
+        headers = [(b"origin", origin.encode("utf-8"))]
+        if auth_token:
+            headers.append((b"authorization", f"Bearer {auth_token}".encode("utf-8")))
         scope = {
             "type": "websocket",
             "asgi": {"version": "3.0"},
             "path": path,
-            "headers": [(b"origin", origin.encode("utf-8"))],
+            "headers": headers,
             "query_string": b"",
         }
         task = asyncio.create_task(application(scope, in_q.get, out_q.put))
@@ -260,7 +265,11 @@ def test_websocket_origin_4403_enforcement():
     assert rejected["type"] == "websocket.close"
     assert rejected["code"] == 4403
 
-    accepted = asyncio.run(_ws_probe("/ws/platform", "http://127.0.0.1:3000"))
+    unauth = asyncio.run(_ws_probe("/ws/platform", "http://127.0.0.1:3000"))
+    assert unauth["type"] == "websocket.close"
+    assert unauth["code"] == 4401
+
+    accepted = asyncio.run(_ws_probe("/ws/platform", "http://127.0.0.1:3000", auth_token=get_or_create_api_token()))
     assert accepted["type"] == "websocket.accept"
 
 

@@ -6,7 +6,7 @@ import pytest
 import httpx
 
 from core.learning.learning_pipeline import LearningPipeline
-from hunter_backend.asgi import application
+from hunter_backend.testing import make_async_client
 
 
 class TestLearningPipelineIntegration:
@@ -50,8 +50,7 @@ class TestLearningPipelineIntegration:
 
     @pytest.mark.asyncio
     async def test_rest_api_get_curriculum(self):
-        transport = httpx.ASGITransport(app=application)
-        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+        async with make_async_client() as client:
             res = await client.get("/api/learning/curriculum")
             assert res.status_code == 200
             data = res.json()
@@ -60,8 +59,7 @@ class TestLearningPipelineIntegration:
 
     @pytest.mark.asyncio
     async def test_rest_api_teach_endpoint(self):
-        transport = httpx.ASGITransport(app=application)
-        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+        async with make_async_client() as client:
             # 1. Challenge presentation
             res_chal = await client.post("/api/learning/teach", json={"level": 3})
             assert res_chal.status_code == 200
@@ -84,8 +82,7 @@ class TestLearningPipelineIntegration:
 
     @pytest.mark.asyncio
     async def test_rest_api_experiences_and_rag_query(self):
-        transport = httpx.ASGITransport(app=application)
-        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+        async with make_async_client() as client:
             # Experiences endpoint
             res_exp = await client.get("/api/learning/experiences")
             assert res_exp.status_code == 200

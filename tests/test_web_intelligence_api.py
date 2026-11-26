@@ -3,16 +3,15 @@ import pytest
 import httpx
 
 import hunter_backend.runtime as rt
-from hunter_backend.asgi import application
+from hunter_backend.testing import make_async_client
 
 
 @pytest.mark.asyncio
 async def test_intelligence_status_endpoint():
-    transport = httpx.ASGITransport(app=application)
     prev_brain = getattr(rt, "active_brain", None)
     try:
         rt.active_brain = None
-        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+        async with make_async_client() as client:
             res = await client.get("/api/intelligence/status")
             assert res.status_code == 200
             data = res.json()
@@ -33,8 +32,7 @@ async def test_intelligence_status_endpoint():
 
 @pytest.mark.asyncio
 async def test_intelligence_scope_endpoint():
-    transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+    async with make_async_client() as client:
         res = await client.post("/api/intelligence/scope", json={
             "target": "target.local",
             "allowed_domains": ["target.local", "api.target.local"],
@@ -50,8 +48,7 @@ async def test_intelligence_scope_endpoint():
 
 @pytest.mark.asyncio
 async def test_intelligence_explain_endpoint():
-    transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+    async with make_async_client() as client:
         res = await client.post("/api/intelligence/explain", json={
             "subject": "BOLA",
             "language": "ar",
@@ -65,8 +62,7 @@ async def test_intelligence_explain_endpoint():
 
 @pytest.mark.asyncio
 async def test_intelligence_quiz_endpoints():
-    transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+    async with make_async_client() as client:
         # Start quiz
         q_res = await client.post("/api/intelligence/quiz/start", json={"topic": "bola"})
         assert q_res.status_code == 200
