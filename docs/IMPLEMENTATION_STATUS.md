@@ -1,319 +1,88 @@
-# HunterAI Implementation Status Tracker
-# ملف تتبع حالة التنفيذ — أين نقف في كل مرحلة
+# HunterAI — Implementation Status Tracker
+# حالة التنفيذ الموحد لمنصة HunterAI
 
-> آخر تحديث: 2026-10-16
-> الحالة: **Phase 1 — Architecture Audit (جارٍ)**
+> **Branch:** `feat/platform-unification`
+> **Completed Gates:** `phase/0-green` through `phase/7-green` (Phase 8 release hardening in progress)
+> **Scope Note:** This tracker reflects verified repository structure and git milestones. Test pass counts are intentionally not hard-coded here; run the verification commands in Section 4 to obtain live counts for the current checkout.
 
 ---
 
-## ملخص سريع
+## 1. Platform Unification Milestone Tags
 
+| Milestone | Git Tag | Commit | Summary |
+| :--- | :--- | :--- | :--- |
+| Pre-Unification Baseline | `baseline/pre-unification` | `d5dd2bb6` | Safety baseline prior to Phase 0 external reference isolation |
+| Phase 0 — Isolation & Provenance | `phase/0-green` | `bbd3f723` | Pinned read-only `external/` checkouts, `.gitignore`/`.dockerignore`/`pyproject.toml` boundaries, `NOTICE`, AGPL-3.0 ban |
+| Phase 1 — Service Security Hardening | `phase/1-green` | `76f8b9f5` | Django local bearer auth, PBKDF2-SHA512 KDF, `sgn` revocation, `userTier`/`tokenTier`, CSRF/Origin/WS/CSP, editor sandbox, subprocess allowlist, approval digest, Burp/Go/MCP hardening |
+| Phase 2 — Canonical Runtime | `phase/2-green` | `59fd1bf4` | `RuntimeOrchestrator`, 7-state run lifecycle, checkpointing, idempotency, crash recovery, API/Go parity |
+| Phase 3 — 7-State Evidence Court | `phase/3-green` | `c017b8e3` | Authoritative 7-state `CourtVerdict`, typed `ProofContract`, PoE truthfulness invariants |
+| Phase 4 — Skills, Tools & Sandbox | `phase/4-green` | `0fced3af` | `config/tools.catalog.yaml` (68 tools), hardened `DockerSandbox`, `skills/registry.json` (`hunterai-redteam`), dual-channel `core/prompts/`, 8 Apache-2.0 PentesterFlow corpora |
+| Phase 5 & 6 — Sensors, Vuln Intel & AI Infra | `phase/5-6-green` | `79ce0ccf` | Sensory Triad seam fixes, `core/vuln_intel/` API wiring, `LLMRouter`, `core/context/` AST compaction, `GPUScheduler`, fail-closed `core/security_mode.py` |
+| Phase 7 — Unified Frontend UI | `phase/7-green` | `0111cdd2` | Next.js Obsidian Sentinel dashboard (`frontend/app/`), live Copilot UI, WCAG contrast & Arabic RTL hardening |
+| Phase 8 — Release Hardening | *(in progress)* | `feat/platform-unification` | Hardened Docker/Compose (`:8088` WAF lab), full multi-stack CI matrix, E2E/VRAM alignment, zero-caller dead-code retirement, documentation reconciliation |
+
+---
+
+## 2. Active Subsystem Inventory (Source-Verified)
+
+| Domain | Status | Canonical Modules | Notes |
+| :--- | :---: | :--- | :--- |
+| **Control Plane (Django ASGI `:8000`)** | ✅ Active | `hunter_backend/{asgi,auth,middleware,runtime,settings,urls,websocket}.py`, `hunter_backend/apps/*` | ~252 HTTP routes + authenticated WS/SSE streams; canonical API control plane |
+| **Go ARTEX-Pro Engine (`127.0.0.1:7071`)** | ✅ Active | `backend/cmd/server/`, `backend/internal/{api,agent,arsenal,database}/` | Constant-time bearer auth, strict CORS allowlist, private/metadata SSRF block, PostgreSQL persistence |
+| **Obsidian Sentinel Frontend (`:3000`)** | ✅ Active | `frontend/app/{page,operations,surface,intercept,findings,arsenal,studio,system}` | Next.js App Router, Copilot SSE streaming, WCAG & RTL support |
+| **Canonical Runtime Orchestrator** | ✅ Active | `core/runtime/{orchestrator,state_machine,event_bus,agent_manager}.py` | Single dispatcher with `Flow -> Task -> Subtask` checkpoints and `recover_run()` |
+| **7-State Evidence Court & PoE** | ✅ Active | `core/evidence_court.py`, `core/poe_engine.py`, `core/court/evidence_court_v2.py` | Canonical states: `UNVERIFIED`, `CANDIDATE`, `CONFIRMED`, `REJECTED`, `INCONCLUSIVE`, `UNAVAILABLE`, `ERROR` |
+| **Sensory Triad** | ✅ Active | `core/sensors/sensory_triad.py`, `core/browser/`, `core/burp_gateway/`, `core/code_intel/` | Browser Playwright sensor, Burp Gateway (`127.0.0.1:8085`), JS/AST code intelligence |
+| **Vulnerability Intelligence** | ✅ Active | `core/vuln_intel/{models,db,sync,coverage,cvss,php,triage,tool_selection,cli}.py`, `sources/{nvd,osv}.py` | Wired into `/api/vuln-intel/{search,coverage,triage,sync}` |
+| **Tool Catalog & Sandbox** | ✅ Active | `config/tools.catalog.yaml`, `core/tool_registry.py`, `core/sandbox.py`, `scripts/sync_tool_manifests.py` | 68 tools / 13 tiers / 2 MCP entries; `DockerSandbox` drops all caps (`CapDrop: ALL`) |
+| **Skills, Prompts & Wordlists** | ✅ Active | `skills/registry.json`, `skills/hunterai-redteam/`, `core/prompts/`, `wordlists/pentesterflow/` | 1 canonical skill mirrored to `.opencode/skills/` and `.agents/skills/`; 8 Apache-2.0 corpora |
+| **LLM Router, Context & VRAM** | ✅ Active | `core/llm_router.py`, `core/context/`, `core/llm/gpu_scheduler.py` | Policy routing (`cloud_first`/`local_first`/`local_only`/`cloud_only`), AST compaction, priority GPU lock |
+| **Fail-Closed Security & Red-Team Policy** | ✅ Active | `core/security_mode.py`, `core/policy/red_team.py`, `core/network_scope_guard.py`, `core/scope_guard.py` | Defaults `unrestricted_mode()=False`, `web_governance_enforced()=True`; HMAC-signed grants |
+| **Safe Read-Only Detectors** | ✅ Active | `core/detectors/` | SQLi, XSS, IDOR, SSRF (loopback canary), open-redirect + `EvidenceChain` + `LabValidationGate` |
+| **Blue-Team Detection Pack** | ✅ Isolated | `detections/{sigma,suricata,attack,indicators,triage,tests}/` | Static defensive detection library; isolated from offensive runtime execution |
+| **Upstream Reference Isolation** | ✅ Enforced | `external/` (gitignored), `NOTICE`, `THIRD_PARTY_LICENSES/`, `tests/test_external_isolation.py` | `github.com/vxcontrol/cloud` (AGPL-3.0) banned across repository |
+
+---
+
+## 3. Phase 8 Dead-Code Audit Record
+
+Static caller analysis across tracked repository files (excluding `external/` and `.git/`) verified which legacy candidates could be safely removed without breaking runtime, CLI, script, or test callers:
+
+| Candidate | Decision | Evidence |
+| :--- | :--- | :--- |
+| `claude-red/` | **Deleted** | Orphaned gitlink (`160000`, no `.gitmodules`, empty working dir); 0 references repo-wide |
+| `core/orchestrator.py` | **Deleted** | Superseded v2.0 orchestrator (`AnalystAgent`, `ValidationAgent`); 0 runtime, CLI, script, or test callers (only historical audit mentions) |
+| `plugins/sample_exporter/` | **Deleted** | Sample plugin (`manifest.json`, `plugin.py`); 0 external references (`PluginLoader.discover_and_load_all()` handles empty `plugins/` cleanly) |
+| `rules/*.md` | **Deleted** | `rules/{README,hunting,reporting}.md`; 0 references repo-wide (canonical guidance consolidated in `skills/hunterai-redteam/` and `AGENTS.md`) |
+| `core/pipeline_runner.py` | **Retained** | Active test caller: `tests/test_platform_unified.py:210,265,466,542` |
+| `core/smart_orchestrator.py` | **Retained** | Active test callers: `tests/test_ai_model_connectivity.py:9,104`, `tests/test_auto_route_streaming.py:62,87,102`, `tests/test_llm_streaming.py:206` |
+| `agents/autonomous_mission_agent.py` | **Retained** | Active test callers: `tests/test_agent_improvements.py:19-23`, `tests/test_cognitive_architecture.py:19`, `tests/test_mission_framework.py:14` |
+| `core/pipeline/authorized_bugbounty_pipeline.py` | **Retained** | Active test caller: `tests/test_authorized_bugbounty_pipeline.py:11-16` |
+
+---
+
+## 4. Verification Commands
+
+Execute these commands to verify the current working tree across all three stacks:
+
+```bash
+# 1. Isolation, security, and Phase 2-6 contract suites
+python -m pytest tests/test_external_isolation.py tests/security/ tests/test_canonical_runtime_contracts.py tests/test_evidence_court_truthfulness.py tests/test_registry_parity.py tests/test_cross_platform_sandbox.py tests/test_prompt_templates.py tests/test_sensory_triad_and_vuln_intel.py tests/test_llm_context_vram.py -q
+
+# 2. Hermetic Python suite + full-platform E2E
+python -m pytest tests/ -q -m "not slow" --ignore=tests/integration
+python -m pytest tests/integration/test_full_platform_e2e.py -q
+
+# 3. Registry, manifest, readiness, arena, and certification gates
+python tools/install_opencode_skills.py --check
+python scripts/sync_tool_manifests.py --check
+python run_causal_validation_arena.py
+python -m core.readiness --timeout 5
+python certify.py
+
+# 4. Go ARTEX-Pro backend
+cd backend && go test -race ./...
+
+# 5. Next.js Obsidian Sentinel frontend
+cd frontend && npm run lint && npx tsc --noEmit --incremental false && npm run build && npm run verify:ui
 ```
-✅ = مكتملة (implementation + tests + integration)
-🔄 = قيد التنفيذ
-⏳ = لم تبدأ (تنتظر موافقة)
-❌ = محجوبة / تحتاج قرار
-```
-
-| # | المرحلة | الحالة | ملاحظة |
-|---|---------|--------|--------|
-| 1 | Architecture Audit | ✅ مكتملة | التدقيق الفعلي مكتمل (docs/IMPLEMENTATION_AUDIT.md) |
-| 2 | Unified Tool Registry | ✅ موجودة في الكود | core.tool_registry.ToolRegistry + config/tools.json (capability_matrix PASS) |
-| 3 | Agent Profiles + Skills + Model Presets | ✅ موجودة في الكود | profiles/*.json + core.model_preset.ModelPreset (capability_matrix PASS) |
-| 4 | Project Isolation | ✅ موجودة في الكود | core.project_isolation.ProjectIsolationManager (capability_matrix PASS) |
-| 5 | Memory 2.0 | ✅ موجودة في الكود | core.memory_manager_v2.MemoryManager + core.system/* (capability_matrix PASS) |
-| 6 | Subagents 2.0 | ✅ موجودة في الكود | core.subagent_manager_v2.SubagentManager + core.system/subagent_manager_v2.py (capability_matrix PASS) |
-| 7 | Terminal Execution Layer | ✅ موجودة في الكود | core.terminal_bridge.TerminalBridge + core/system/terminal_bridge.py (capability_matrix PASS) |
-| 8 | Browser 2.0 + DOM Annotation | ✅ موجودة في الكود | core.browser_agent.BrowserAgent + core/system/browser_v2.py (capability_matrix PASS) |
-| 9 | Host Bridge | ✅ موجودة في الكود | core.host_bridge.HostBridge + core/system/host_bridge.py (capability_matrix PASS) |
-| 10 | Snapshots / Time Travel | ✅ موجودة في الكود | core.snapshot_manager.SnapshotManager + core/system/snapshot_manager.py (capability_matrix PASS) |
-| 11 | Plugin System | ✅ موجودة في الكود | core.plugin_system.PluginLoader + core/system/plugin_system.py (capability_matrix PASS) |
-| 12 | MCP + A2A | ✅ موجودة في الكود | core.system.mcp_a2a.MCPClient (capability_matrix PASS) |
-| 13 | Task Automation | ✅ موجودة في الكود | core.system.task_scheduler.TaskScheduler (capability_matrix PASS) |
-| 14 | Information Gain Planner | ✅ موجودة في الكود | core.system.information_gain_planner.InformationGainPlanner (capability_matrix PASS) |
-| 15 | Recovery Engine | ✅ موجودة في الكود | core.system.recovery_engine.RecoveryEngine (capability_matrix PASS) |
-| 16 | Unified Dashboard | ✅ موجودة في الكود | ui/web/dashboard.py + ui/web/app.py (capability_matrix PASS) |
-| 17 | End-to-End Testing | ✅ موجودة في الكود | tests/test_e2e_phase17.py 10/10 (capability_matrix PASS) |
-
-> **ملاحظة:** الحالة أعلاه تُ표ّض الوجود الفعلي للمكونات في الكود (مطابق لـ `capability_matrix.json`). هذا لا يعني جاهزية إنتاجية كاملة: وفقًا لـ `docs/IMPLEMENTATION_AUDIT.md` (تدقيق فعلي بالأسطر)، بعض المكونات لا تزال `PARTIAL` أو `MISSING` (خاصة العقود الموحّدة، الحالة المشتركة، الفرق/الجدولة، وإنتاج findings مؤكدة). المراحل M0–M5 من `docs/IMPLEMENTATION_PLAN.md` تُقدّم خطة الإغلاق مرتبة بالأولوية.
-
----
-
-## تفاصيل كل مرحلة
-
-### Phase 1: Architecture Audit 🔄
-
-| الشرط | الحالة | التفاصيل |
-|-------|--------|----------|
-| فحص git status | ⏳ لم يُنفذ | لم يتم تشغيله |
-| فحص git diff | ⏳ لم يُنفذ | محاولات فاشلة — خطأ tool "execute" يتطلب `code` مفتاح وليس `command` |
-| فحص git log -n 10 | ⏳ لم يُنفذ | لم يتم تشغيله |
-| فحص existing tests | ⏳ لم يُنفذ | لم يتم تشغيله |
-| inventory: Attack Surface Graph | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Evidence Graph | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Evidence Court | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Browser/Burp correlation | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Scope Engine | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Policy Gate | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Exploration Memory | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Event Bus | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Blackboard | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Model/Agent orchestration | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: MCP | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| inventory: Tool Registry | ⏳ لم يُفحص | لم يتم العثور على الملف |
-| تقرير PHASE STATUS | ⏳ لم يُكتب | ينتظر اكتمال الفحص |
-| موافقة المستخدم | ⏳ | **لم يتم عرض التقرير بعد** |
-
----
-
-### Phase 2: Unified Tool Registry ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فهم implementation الحالية | ⏳ |
-| فحص وجود Tool Registry موجود | ⏳ |
-| إنشاء ToolRegistry class | ⏳ |
-| discover_tools() | ⏳ |
-| check_permissions() | ⏳ |
-| log_tool_usage() | ⏳ |
-| config/tools.json | ⏳ |
-| tests | ⏳ |
-| health check | ⏳ |
-
----
-
-### Phase 3: Agent Profiles + Skills + Model Presets ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص profiles/ الموجودة | ⏳ |
-| فحص Model Presets الموجودة | ⏳ |
-| إنشاء profiles/ | ⏳ |
-| ModelPreset class | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 4: Project Isolation ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص ProjectIsolation موجود | ⏳ |
-| ProjectIsolationManager | ⏳ |
-| memory isolation | ⏳ |
-| secrets via references | ⏳ |
-| cross-project blocking | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 5: Memory 2.0 ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص memory hiện có | ⏳ |
-| MemoryManager | ⏳ |
-| ExplorationMemory | ⏳ |
-| ProjectMemory | ⏳ |
-| BlackboardState | ⏳ |
-| curate_memory() | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 6: Subagents 2.0 ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص subagent hiện có | ⏳ |
-| SubagentManager | ⏳ |
-| launch_subagent() | ⏳ |
-| monitor_subagents() | ⏳ |
-| TaskScheduler | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 7: Terminal Execution Layer ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص terminal hiện có | ⏳ |
-| TerminalBridge | ⏳ |
-| execute_command() + scope | ⏳ |
-| capture_output() | ⏳ |
-| process_supervisor() | ⏳ |
-| audit log (project_id, tool_id, timestamp) | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 8: Browser 2.0 + DOM Annotation ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص browser hiện有 | ⏳ |
-| BrowserAgent | ⏳ |
-| DOMAnnotator | ⏳ |
-| history_manager | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 9: Host Bridge ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص host bridge موجود | ⏳ |
-| HostBridge | ⏳ |
-| file_manager | ⏳ |
-| network_inspector | ⏳ |
-| host_guard | ⏳ |
-| audit | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 10: Snapshots / Time Travel ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص snapshot موجود | ⏳ |
-| SnapshotManager | ⏳ |
-| snapshot() | ⏳ |
-| rollback() | ⏳ |
-| snapshot_history.json | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 11: Plugin System ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص plugin system موجود | ⏳ |
-| PluginLoader | ⏳ |
-| permission validation | ⏳ |
-| PluginRegistry | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 12: MCP + A2A ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص MCP الحالي | ⏳ |
-| MCPClient | ⏳ |
-| send_message() | ⏳ |
-| receive_message() | ⏳ |
-| verify_signature() | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 13: Task Automation ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص task system الحالي | ⏳ |
-| TaskScheduler | ⏳ |
-| tasks.json parsing | ⏳ |
-| conditional rules (if/then) | ⏳ |
-| task_logs/ | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 14: Information Gain Planner ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص planner موجود | ⏳ |
-| InformationGainPlanner | ⏳ |
-| calculate_information_gain() | ⏳ |
-| select_next_task() | ⏳ |
-| update_memory() | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 15: Recovery Engine ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص recovery موجود | ⏳ |
-| RecoveryEngine | ⏳ |
-| check_system_status() | ⏳ |
-| model error recovery | ⏳ |
-| tool crash recovery | ⏳ |
-| network recovery | ⏳ |
-| recovery_events.json | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 16: Unified Dashboard ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| فحص dashboard موجود | ⏳ |
-| real-time metrics | ⏳ |
-| project overview | ⏳ |
-| event stream | ⏳ |
-| interactive controls | ⏳ |
-| tests | ⏳ |
-
----
-
-### Phase 17: End-to-End Testing ⏳
-
-| الشرط | الحالة |
-|-------|--------|
-| create_project() | ⏳ |
-| set_scope() | ⏳ |
-| validate_environment() | ⏳ |
-| execute_task("recon") | ⏳ |
-| browser_agent_inspect() | ⏳ |
-| generate_hypothesis() | ⏳ |
-| run_test("login_flow") | ⏳ |
-| court_evidence() | ⏳ |
-| generate_report() | ⏳ |
-| snapshot() | ⏳ |
-
----
-
-## التسليمات النهائية
-
-| التسليم | الحالة |
-|---------|--------|
-| docs/AGENT_ZERO_GAP_ANALYSIS.md | ⏳ |
-| docs/HUNTERAI_AGENT_ARCHITECTURE.md | ⏳ |
-| docs/IMPLEMENTED_AGENT_ZERO_CAPABILITIES.md | ⏳ |
-| data/agent_capability_matrix.json | ✅ |
-| design.md | ✅ |
-| security.md | ✅ |
-| usage.md | ✅ |
-| capability_matrix.json | ✅ |
-| end_to_end_test_results.md | ✅ |
-| security_audit.md | ✅ |
-
----
-
-## مشاكل مُثبَّتة (Known Blockers)
-
-| # | المشكلة | السبب | الحل المطلوب |
-|---|---------|-------|-------------|
-| 1 | أداة `execute` تتطلب `code` وليس `command` | 잘못 مني استخدام parameter خطأ | استخدام مفتاح `code` مع كود JavaScript، أو استخدام أداة `shell` للأوامر |
-| 2 | لم يتم فحص repository فعلياً | الخطأ السابق منع الفحص | إعادة المحاولة بالأداة الصحيحة |
-| 3 | تقرير Phase 1 لم يُعرض | الفحص لم يكتمل | إكمال الفحص ثم عرض التقرير |
-
----
-
-## القاعدة الذهبية
-
-> **لا تنتقل لـ Phase 2 قبل:**
-> 1. ✅ اكتمال inventory كامل لكل المكونات
-> 2. ✅ تشغيل جميع الاختبارات
-> 3. ✅ عرض تقرير PHASE STATUS بالشكل المطلوب
-> 4. ✅ الحصول على موافقة المستخدم صراحة
