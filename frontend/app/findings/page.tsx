@@ -79,16 +79,107 @@ export default function FindingsPage() {
   const loadAll = useCallback(async () => {
     const [resR, sessR, repR, snapR, ledR] = await Promise.all([
       apiJson<{ findings?: ResultReportItem[] }>("/api/control/results"),
-      apiJson<SessionSummary[]>("/api/sessions"),
-      apiJson<{ reports?: EnhancedReportFile[] }>("/api/enhanced/reports"),
-      apiJson<{ snapshots?: SnapshotSummary[] }>("/api/enhanced/snapshots"),
+      apiJson<SessionSummary[] | { sessions?: Array<SessionSummary | string> }>("/api/sessions"),
+      apiJson<{ reports?: Array<EnhancedReportFile | string> }>("/api/enhanced/reports"),
+      apiJson<{ snapshots?: Array<SnapshotSummary | string> }>("/api/enhanced/snapshots"),
       apiJson<EvidenceLedgerResponse>("/api/evidence/ledger"),
     ]);
 
-    if (resR.ok && Array.isArray(resR.data?.findings)) setResults(resR.data.findings);
-    if (sessR.ok && Array.isArray(sessR.data)) setSessions(sessR.data);
-    if (repR.ok && Array.isArray(repR.data?.reports)) setReports(repR.data.reports);
-    if (snapR.ok && Array.isArray(snapR.data?.snapshots)) setSnapshots(snapR.data.snapshots);
+    if (resR.ok && Array.isArray(resR.data?.findings)) {
+      setResults(
+        resR.data.findings
+          .filter((item): item is ResultReportItem => Boolean(item && typeof item === "object"))
+          .map((item, idx) => ({
+            ...item,
+            id: String(item.id || item.filename || item.title || `result-${idx}`),
+          }))
+      );
+    }
+    if (sessR.ok && sessR.data) {
+      const rawSessions = Array.isArray(sessR.data)
+        ? sessR.data
+        : Array.isArray(sessR.data.sessions)
+          ? sessR.data.sessions
+          : [];
+      const normalizedSessions = rawSessions
+        .map((item: unknown): SessionSummary | null => {
+          if (typeof item === "string" && item.trim()) {
+            return { id: item.trim(), target: item.trim(), mode: "", status: "completed" };
+          }
+          if (item && typeof item === "object") {
+            const obj = item as Record<string, unknown>;
+            const id = String(obj.id || obj.session_id || obj.run_id || "").trim();
+            if (!id) return null;
+            return {
+              id,
+              target: String(obj.target || id),
+              mode: String(obj.mode || ""),
+              status: String(obj.status || "completed"),
+              findings_count: typeof obj.findings_count === "number" ? obj.findings_count : 0,
+            };
+          }
+          return null;
+        })
+        .filter((item): item is SessionSummary => item !== null);
+      setSessions(normalizedSessions);
+    }
+    if (repR.ok && Array.isArray(repR.data?.reports)) {
+      const normalizedReports = repR.data.reports
+        .map((item: unknown): EnhancedReportFile | null => {
+          if (typeof item === "string" && item.trim()) {
+            return { filename: item.trim(), size_bytes: 0, modified: "" };
+          }
+          if (item && typeof item === "object") {
+            const obj = item as Record<string, unknown>;
+            const filename = String(obj.filename || obj.name || "").trim();
+            if (!filename) return null;
+            return {
+              filename,
+              size_bytes: Number(obj.size_bytes || 0),
+              modified: String(obj.modified || ""),
+              is_master_dossier: Boolean(obj.is_master_dossier),
+            };
+          }
+          return null;
+        })
+        .filter((item): item is EnhancedReportFile => item !== null);
+      setReports(normalizedReports);
+    }
+    if (snapR.ok && Array.isArray(snapR.data?.snapshots)) {
+      const normalizedSnapshots = snapR.data.snapshots
+        .map((item: unknown): SnapshotSummary | null => {
+          if (typeof item === "string" && item.trim()) {
+            const name = item.trim();
+            return {
+              filename: name,
+              snapshot_id: name,
+              target: "",
+              phase: "",
+              coverage_pct: 0,
+              findings_count: 0,
+              modified: "",
+            };
+          }
+          if (item && typeof item === "object") {
+            const obj = item as Record<string, unknown>;
+            const filename = String(obj.filename || obj.snapshot_id || "").trim();
+            const snapshotId = String(obj.snapshot_id || filename).trim();
+            if (!filename && !snapshotId) return null;
+            return {
+              filename: filename || snapshotId,
+              snapshot_id: snapshotId || filename,
+              target: String(obj.target || ""),
+              phase: String(obj.phase || ""),
+              coverage_pct: Number(obj.coverage_pct || 0),
+              findings_count: Number(obj.findings_count || 0),
+              modified: String(obj.modified || ""),
+            };
+          }
+          return null;
+        })
+        .filter((item): item is SnapshotSummary => item !== null);
+      setSnapshots(normalizedSnapshots);
+    }
     if (ledR.ok && ledR.data) setLedger(ledR.data);
   }, [apiJson]);
 
@@ -111,11 +202,21 @@ export default function FindingsPage() {
   }, [results, classificationFilter]);
 
   const openReportDossier = async (filename: string) => {
+    if (!filename) return;
     const res = await fetch(`/api/enhanced/reports/${encodeURIComponent(filename)}`, {
       credentials: "include",
     });
-    const txt = await res.text();
-    setOpenedDossier({ title: filename, markdown: txt });
+    const rawTxt = await res.text();
+    let markdown = rawTxt;
+    try {
+      const parsed = JSON.parse(rawTxt) as { content?: unknown };
+      if (parsed && typeof parsed === "object" && typeof parsed.content === "string") {
+        markdown = parsed.content;
+      }
+    } catch {
+      // Non-JSON raw markdown body
+    }
+    setOpenedDossier({ title: filename, markdown });
   };
 
   const dossierHtml = useMemo(() => {
@@ -194,9 +295,9 @@ export default function FindingsPage() {
           <div className="flex-1 overflow-y-auto space-y-3 pe-1">
             {filteredResults.length > 0 && (
               <div className="space-y-2">
-                {filteredResults.map((item) => (
+                {filteredResults.map((item, idx) => (
                   <button
-                    key={item.id}
+                    key={`${item.id || item.filename || item.title || "result"}-${idx}`}
                     type="button"
                     onClick={() =>
                       setOpenedDossier({
@@ -224,8 +325,8 @@ export default function FindingsPage() {
             {sessions.length > 0 && (
               <div className="pt-2 border-t border-border-subtle space-y-1.5">
                 <div className="text-xs font-semibold text-ink-secondary">Session Exports</div>
-                {sessions.slice(0, 10).map((s) => (
-                  <div key={s.id} className="p-2.5 rounded bg-inset border border-border-subtle flex flex-wrap items-center justify-between gap-2 text-xs">
+                {sessions.slice(0, 10).map((s, idx) => (
+                  <div key={`${s.id || "session"}-${idx}`} className="p-2.5 rounded bg-inset border border-border-subtle flex flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="font-mono ltr-isolate truncate text-ink-primary">
                       {s.target || s.id} ({s.findings_count ?? 0})
                     </span>
@@ -252,8 +353,8 @@ export default function FindingsPage() {
             {reports.length > 0 && (
               <div className="pt-2 border-t border-border-subtle space-y-1.5">
                 <div className="text-xs font-semibold text-ink-secondary">Generated Dossiers (.md)</div>
-                {reports.slice(0, 10).map((r) => (
-                  <div key={r.filename} className="p-2 rounded bg-inset border border-border-subtle flex items-center justify-between gap-2 text-xs">
+                {reports.slice(0, 10).map((r, idx) => (
+                  <div key={`${r.filename || "report"}-${idx}`} className="p-2 rounded bg-inset border border-border-subtle flex items-center justify-between gap-2 text-xs">
                     <span className="font-mono ltr-isolate truncate text-ink-secondary">{r.filename}</span>
                     <button
                       type="button"
@@ -284,9 +385,9 @@ export default function FindingsPage() {
               <h2 className="text-sm font-semibold text-ink-primary">Evidence Ledger</h2>
             </div>
             <div className="flex flex-wrap gap-1">
-              {ledgerEntities.map((ent) => (
+              {ledgerEntities.map((ent, idx) => (
                 <button
-                  key={ent}
+                  key={`${ent}-${idx}`}
                   type="button"
                   onClick={() => setActiveEntity(ent)}
                   className={`px-2 py-0.5 rounded text-[11px] font-mono border ${
@@ -316,8 +417,8 @@ export default function FindingsPage() {
             <div className="py-8 text-center text-xs text-ink-muted">{t("common.noData")}</div>
           ) : (
             <div className="space-y-2 max-h-60 overflow-y-auto">
-              {snapshots.map((sn) => (
-                <div key={sn.filename} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
+              {snapshots.map((sn, idx) => (
+                <div key={`${sn.filename || sn.snapshot_id || "snapshot"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono font-semibold text-ink-primary ltr-isolate truncate">
                       {sn.snapshot_id}

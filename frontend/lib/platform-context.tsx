@@ -385,6 +385,16 @@ function unwrapArtexPayload(raw: unknown): { online?: boolean; payload: unknown 
   return { payload: raw };
 }
 
+function normalizePlatformEventType(rawType: unknown, fallbackEventName = "message"): string {
+  const raw = String(rawType || fallbackEventName || "message").trim();
+  if (!raw) return "MESSAGE";
+  const normalized = raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || "MESSAGE";
+}
+
 export function extractApiError(payload: unknown, statusCode: number): string {
   if (payload && typeof payload === "object") {
     const rec = payload as Record<string, unknown>;
@@ -692,24 +702,49 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         hubApprovalsRes,
         hubRunsRes,
         artexHealthRes,
+      ] = await Promise.all([
+        apiJson<Record<string, unknown>>("/api/platform/overview", { signal }),
+        apiJson<Record<string, unknown>>("/api/platform/approvals", { signal }),
+        apiJson<Record<string, unknown>>("/api/platform/runs", { signal }),
+        apiJson<Record<string, unknown>>("/api/platform/artex/health", { signal }),
+      ]);
+
+      if (signal.aborted) return;
+
+      const isArtexOnline = Boolean(
+        artexHealthRes.ok &&
+          artexHealthRes.data &&
+          typeof artexHealthRes.data === "object" &&
+          artexHealthRes.data.online === true
+      );
+
+      type ApiJsonResponse = { ok: boolean; status: number; data: unknown; error?: string };
+      const skippedArtex: ApiJsonResponse = { ok: false, status: 0, data: null };
+
+      const [
         artexStatsRes,
         artexEngsRes,
         artexAssetsRes,
         artexFindingsRes,
         artexTasksRes,
         artexAuditRes,
-      ] = await Promise.all([
-        apiJson<Record<string, unknown>>("/api/platform/overview", { signal }),
-        apiJson<Record<string, unknown>>("/api/platform/approvals", { signal }),
-        apiJson<Record<string, unknown>>("/api/platform/runs", { signal }),
-        apiJson<Record<string, unknown>>("/api/platform/artex/health", { signal }),
-        apiJson<unknown>("/api/platform/artex/stats", { signal }),
-        apiJson<unknown>("/api/platform/artex/engagements", { signal }),
-        apiJson<unknown>(`/api/platform/artex/assets${goFilter}`, { signal }),
-        apiJson<unknown>(`/api/platform/artex/findings${goFilter}`, { signal }),
-        apiJson<unknown>(`/api/platform/artex/tasks${goFilter}`, { signal }),
-        apiJson<unknown>(`/api/platform/artex/audit${goFilter}`, { signal }),
-      ]);
+      ] = isArtexOnline
+        ? await Promise.all([
+            apiJson<unknown>("/api/platform/artex/stats", { signal }),
+            apiJson<unknown>("/api/platform/artex/engagements", { signal }),
+            apiJson<unknown>(`/api/platform/artex/assets${goFilter}`, { signal }),
+            apiJson<unknown>(`/api/platform/artex/findings${goFilter}`, { signal }),
+            apiJson<unknown>(`/api/platform/artex/tasks${goFilter}`, { signal }),
+            apiJson<unknown>(`/api/platform/artex/audit${goFilter}`, { signal }),
+          ])
+        : [
+            skippedArtex,
+            skippedArtex,
+            skippedArtex,
+            skippedArtex,
+            skippedArtex,
+            skippedArtex,
+          ];
 
       if (signal.aborted) return;
 
@@ -720,9 +755,21 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         hubOverviewRes.data && typeof hubOverviewRes.data === "object"
           ? hubOverviewRes.data
           : null;
+      const hubHealthy = Boolean(
+        hubOverviewRes.ok &&
+          hubOv &&
+          (hubOv.status === "ok" ||
+            (!("status" in hubOv) &&
+              typeof hubOv.context === "object" &&
+              hubOv.context !== null))
+      );
 
-      if (hubOverviewRes.ok && hubOv && hubOv.status === "ok") {
-        const latestSeq = Number(hubOv.latest_seq || 0);
+      if (hubHealthy && hubOv) {
+        const statsObj =
+          hubOv.stats && typeof hubOv.stats === "object"
+            ? (hubOv.stats as Record<string, unknown>)
+            : null;
+        const latestSeq = Number(hubOv.latest_seq ?? statsObj?.latest_seq ?? 0);
         if (latestSeq > lastSeqRef.current) {
           lastSeqRef.current = latestSeq;
           lastEventIdRef.current = String(latestSeq);
@@ -746,15 +793,39 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        if (hubOv.counts && typeof hubOv.counts === "object") {
-          const cntFp = fingerprintData(hubOv.counts);
+        const rawCounts =
+          hubOv.counts && typeof hubOv.counts === "object"
+            ? (hubOv.counts as OverviewCounts)
+            : statsObj
+              ? ({
+                  engagements: Number(statsObj.engagement_count || 0),
+                  runs: Number(statsObj.run_count || 0),
+                  active_runs: Number(statsObj.active_run_count || 0),
+                  pending_approvals: Number(statsObj.pending_approval_count || 0),
+                  findings: 0,
+                  assets: 0,
+                  leads: 0,
+                  conversations: 0,
+                  unread_notifications: Number(statsObj.unread_notification_count || 0),
+                  tools_installed: 0,
+                  agents: 0,
+                } satisfies OverviewCounts)
+              : null;
+
+        if (rawCounts) {
+          const cntFp = fingerprintData(rawCounts);
           if (fpRef.current.counts !== cntFp) {
             fpRef.current.counts = cntFp;
-            setOverviewCounts(hubOv.counts as OverviewCounts);
+            setOverviewCounts(rawCounts);
           }
         }
 
-        const services = (hubOv.services || {}) as HubServicesSnapshot;
+        const services = (
+          hubOv.services ||
+          (hubOv.artex && typeof hubOv.artex === "object"
+            ? { artex_go_core: hubOv.artex as Record<string, unknown> }
+            : {})
+        ) as HubServicesSnapshot;
         const nextHub: HunterHubHealth = {
           status: "connected",
           lastSyncedAt: nowTs,
@@ -790,6 +861,9 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           : null) ||
         (hubOv?.services && typeof (hubOv.services as Record<string, unknown>).artex_go_core === "object"
           ? ((hubOv.services as Record<string, unknown>).artex_go_core as Record<string, unknown>)
+          : null) ||
+        (hubOv?.artex && typeof hubOv.artex === "object"
+          ? (hubOv.artex as Record<string, unknown>)
           : null);
 
       const upstreamObj =
@@ -842,8 +916,15 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 3. Stats (from Django /api/platform/artex/stats, falling back to Hub counts when offline)
-      const unwrappedStats = unwrapArtexPayload(artexStatsRes.data).payload;
-      if (artexStatsRes.ok && unwrappedStats && typeof unwrappedStats === "object") {
+      const statsWrap = unwrapArtexPayload(artexStatsRes.data);
+      const unwrappedStats = statsWrap.payload;
+      if (
+        artexStatsRes.ok &&
+        statsWrap.online !== false &&
+        unwrappedStats &&
+        typeof unwrappedStats === "object" &&
+        !Array.isArray(unwrappedStats)
+      ) {
         const s = unwrappedStats as Record<string, unknown>;
         const nextStats: StatsSummary = {
           total_assets: Number(s.total_assets || 0),
@@ -857,15 +938,19 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           fpRef.current.stats = fp;
           setStats(nextStats);
         }
-      } else if (nextGoHealth.status === "offline") {
+      } else if (nextGoHealth.status === "offline" || statsWrap.online === false) {
         const cnts =
           hubOv?.counts && typeof hubOv.counts === "object"
             ? (hubOv.counts as Record<string, unknown>)
             : null;
+        const hubStatsObj =
+          hubOv?.stats && typeof hubOv.stats === "object"
+            ? (hubOv.stats as Record<string, unknown>)
+            : null;
         const offlineStats: StatsSummary = {
           total_assets: Number(cnts?.assets || 0),
           total_findings: Number(cnts?.findings || 0),
-          total_engagements: Number(cnts?.engagements || 0),
+          total_engagements: Number(cnts?.engagements ?? hubStatsObj?.engagement_count ?? 0),
           status: "OFFLINE",
         };
         const fp = fingerprintData(offlineStats);
@@ -878,9 +963,10 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       // 4. Engagements (Merge Go Core proxy + Django Hub overview)
       const mergedEngs: EngagementRecord[] = [];
       const seenEngIds = new Set<string>();
-      const rawGoEngs = unwrapArtexPayload(artexEngsRes.data).payload;
+      const engsWrap = unwrapArtexPayload(artexEngsRes.data);
+      const rawGoEngs = engsWrap.payload;
 
-      if (artexEngsRes.ok && Array.isArray(rawGoEngs)) {
+      if (artexEngsRes.ok && engsWrap.online !== false && Array.isArray(rawGoEngs)) {
         for (const item of rawGoEngs) {
           if (!item || typeof item !== "object") continue;
           const ge = item as Record<string, unknown>;
@@ -1201,6 +1287,18 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           if (dataLines.length === 0) return;
           try {
             const ev = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+            const rawEventName =
+              ev.event_type ??
+              ev.type ??
+              (eventName && eventName !== "message" && eventName !== "platform.event"
+                ? eventName
+                : "");
+            const evType = normalizePlatformEventType(rawEventName, eventName);
+
+            if (evType === "PING" || evType === "PLATFORM_READY") {
+              return;
+            }
+
             const rawSeq = Number(ev.seq ?? parsedId ?? 0);
             const seq = Number.isFinite(rawSeq) && rawSeq > 0 ? rawSeq : 0;
             if (seq > lastSeqRef.current) {
@@ -1218,29 +1316,52 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (!streamPausedRef.current) {
-              const evType = String(ev.event_type || eventName).toUpperCase();
               const source = String(ev.source || "platform_hub");
+              const payloadObj =
+                ev.payload && typeof ev.payload === "object"
+                  ? (ev.payload as Record<string, unknown>)
+                  : null;
               const payload = ev.payload ? JSON.stringify(ev.payload) : "";
-              const level: ConsoleLevel = evType.includes("FAIL") || evType.includes("ERROR")
-                ? "ERROR"
-                : evType.includes("COMPLETED") || evType.includes("APPROVED") || evType.includes("STARTED")
-                  ? "SUCCESS"
-                  : evType.includes("STOP") || evType.includes("REJECT") || evType.includes("BLOCK")
-                    ? "WARN"
-                    : "INFO";
+              const payloadStatus = String(payloadObj?.status || "").toLowerCase();
+              const level: ConsoleLevel =
+                evType.includes("FAIL") || evType.includes("ERROR")
+                  ? "ERROR"
+                  : evType.includes("COMPLETED") ||
+                      evType.includes("APPROVED") ||
+                      evType.includes("STARTED") ||
+                      evType.includes("RESUMED") ||
+                      evType.includes("EXECUTED") ||
+                      (evType === "APPROVAL_DECIDED" && payloadStatus === "approved")
+                    ? "SUCCESS"
+                    : evType.includes("STOP") ||
+                        evType.includes("PAUSED") ||
+                        evType.includes("REJECT") ||
+                        evType.includes("BLOCK") ||
+                        evType.includes("INTERRUPTED") ||
+                        (evType === "APPROVAL_DECIDED" && payloadStatus === "rejected")
+                      ? "WARN"
+                      : "INFO";
+              const tsValue =
+                typeof ev.created_at === "number"
+                  ? ev.created_at
+                  : typeof ev.ts === "number"
+                    ? ev.ts
+                    : null;
               addConsoleLog(
                 level,
                 source,
                 `${evType}${payload && payload !== "{}" ? ` ${payload}` : ""}`,
                 seq ? `sse:${seq}` : undefined,
-                formatTimeHHMMSS(typeof ev.created_at === "number" ? ev.created_at : null)
+                formatTimeHHMMSS(tsValue)
               );
             }
 
             if (
-              eventName.startsWith("RUN_") ||
-              eventName.startsWith("APPROVAL_") ||
-              eventName === "ENGAGEMENT_CREATED"
+              evType.startsWith("RUN_") ||
+              evType.startsWith("APPROVAL_") ||
+              evType.startsWith("PIPELINE_") ||
+              evType.startsWith("ENGAGEMENT_") ||
+              evType === "CONTEXT_UPDATED"
             ) {
               void refreshData();
             }

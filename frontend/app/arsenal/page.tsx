@@ -102,11 +102,61 @@ export default function ArsenalPage() {
       apiJson<Record<string, unknown>>("/api/sandbox/health"),
     ]);
     if (agR.ok && Array.isArray(agR.data?.agents)) {
-      setAgents(agR.data.agents);
-      if (!selectedAgentId && agR.data.agents[0]) setSelectedAgentId(agR.data.agents[0].id);
+      const normalizedAgents = agR.data.agents
+        .filter((ag): ag is AgentItem => Boolean(ag && typeof ag === "object"))
+        .map((ag) => ({
+          id: String(ag.id || ag.name || ""),
+          name: String(ag.name || ag.id || "agent"),
+          description: String(ag.description || ""),
+          tools: Array.isArray(ag.tools) ? ag.tools.map(String) : [],
+          status: String(ag.status || "ready"),
+        }));
+      setAgents(normalizedAgents);
+      if (!selectedAgentId && normalizedAgents[0]?.id) setSelectedAgentId(normalizedAgents[0].id);
     }
-    if (skR.ok && Array.isArray(skR.data?.skills)) setSkills(skR.data.skills);
-    if (tlR.ok && Array.isArray(tlR.data?.tools)) setTools(tlR.data.tools);
+    if (skR.ok && Array.isArray(skR.data?.skills)) {
+      const normalizedSkills = skR.data.skills
+        .map((sk: unknown): SkillCatalogItem | null => {
+          if (typeof sk === "string") return { name: sk };
+          if (sk && typeof sk === "object") {
+            const obj = sk as Record<string, unknown>;
+            const name = String(obj.name || "");
+            if (!name) return null;
+            return {
+              name,
+              category: typeof obj.category === "string" ? obj.category : undefined,
+              layer: typeof obj.layer === "string" ? obj.layer : undefined,
+              description: typeof obj.description === "string" ? obj.description : undefined,
+            };
+          }
+          return null;
+        })
+        .filter((sk): sk is SkillCatalogItem => sk !== null);
+      setSkills(normalizedSkills);
+    }
+    if (tlR.ok && Array.isArray(tlR.data?.tools)) {
+      const normalizedTools = tlR.data.tools
+        .map((tl: unknown): KaliToolItem | null => {
+          if (typeof tl === "string") {
+            return { name: tl, installed: true, status: "installed", path: "" };
+          }
+          if (tl && typeof tl === "object") {
+            const obj = tl as Record<string, unknown>;
+            const name = String(obj.name || obj.tool || "");
+            if (!name) return null;
+            const installed = Boolean(obj.installed ?? true);
+            return {
+              name,
+              installed,
+              status: String(obj.status || (installed ? "installed" : "missing")),
+              path: String(obj.path || ""),
+            };
+          }
+          return null;
+        })
+        .filter((tl): tl is KaliToolItem => tl !== null);
+      setTools(normalizedTools);
+    }
     if (engR.ok && Array.isArray(engR.data?.engines)) setEngines(engR.data.engines);
     if (mcpR.ok && mcpR.data) setMcpStatus(mcpR.data);
     if (mcpListR.ok && Array.isArray(mcpListR.data?.servers)) setMcpServers(mcpListR.data.servers);
@@ -121,7 +171,7 @@ export default function ArsenalPage() {
     e.preventDefault();
     if (!selectedAgentId || !agentPrompt.trim()) return;
     setAgentSending(true);
-    const res = await apiJson<{ response?: string; message?: string }>("/api/control/agent/chat", {
+    const res = await apiJson<{ response?: string; reply?: string; message?: string }>("/api/control/agent/chat", {
       method: "POST",
       body: {
         agent_id: selectedAgentId,
@@ -130,7 +180,7 @@ export default function ArsenalPage() {
       },
     });
     setAgentSending(false);
-    setAgentReplyMd(res.ok ? res.data?.response || "" : res.error || res.data?.message || "Error");
+    setAgentReplyMd(res.ok ? res.data?.response || res.data?.reply || "" : res.error || res.data?.message || "Error");
   };
 
   const runEliteProber = async (e: React.FormEvent) => {
@@ -229,9 +279,9 @@ export default function ArsenalPage() {
           </div>
 
           <div className="space-y-1.5 max-h-72 overflow-y-auto pe-1">
-            {agents.map((ag) => (
+            {agents.map((ag, idx) => (
               <button
-                key={ag.id}
+                key={`${ag.id || ag.name || "agent"}-${idx}`}
                 type="button"
                 onClick={() => setSelectedAgentId(ag.id)}
                 className={`w-full p-2.5 rounded border text-start text-xs space-y-1 transition-colors ${
@@ -305,8 +355,11 @@ export default function ArsenalPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pe-1">
-            {filteredSkills.slice(0, 80).map((sk) => (
-              <div key={sk.name} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
+            {filteredSkills.slice(0, 80).map((sk, idx) => (
+              <div
+                key={`${sk.name || "skill"}-${sk.layer || sk.category || ""}-${idx}`}
+                className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1"
+              >
                 <div className="flex items-center justify-between gap-1">
                   <span className="font-mono font-semibold text-sentinel-primary truncate">{sk.name}</span>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-inset text-ink-muted shrink-0">
@@ -388,8 +441,8 @@ export default function ArsenalPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle font-mono">
-                {filteredTools.map((tl) => (
-                  <tr key={tl.name} className="ltr-isolate">
+                {filteredTools.map((tl, idx) => (
+                  <tr key={`${tl.name || "tool"}-${idx}`} className="ltr-isolate">
                     <td className="py-1.5 px-3 text-ink-primary">{tl.name}</td>
                     <td className="py-1.5 px-3">
                       <span className={tl.installed ? "text-sentinel-success" : "text-ink-muted"}>
@@ -483,8 +536,8 @@ export default function ArsenalPage() {
             </button>
           </div>
           <div className="space-y-1.5 text-xs">
-            {engines.map((e) => (
-              <div key={e.engine} className="p-2 rounded bg-elevated border border-border-subtle font-mono flex justify-between">
+            {engines.map((e, idx) => (
+              <div key={`${e.engine || e.display_name || "engine"}-${idx}`} className="p-2 rounded bg-elevated border border-border-subtle font-mono flex justify-between">
                 <span>{e.display_name || e.engine}</span>
                 <span className="text-ink-muted">{e.supports_streaming ? "STREAM" : "SYNC"}</span>
               </div>

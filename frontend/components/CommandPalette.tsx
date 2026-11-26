@@ -234,7 +234,7 @@ export default function CommandPalette() {
               const selected = idx === selectedIndex;
               return (
                 <button
-                  key={item.id}
+                  key={`${item.id}-${idx}`}
                   type="button"
                   onMouseEnter={() => setSelectedIndex(idx)}
                   onClick={() => executeEntry(item)}

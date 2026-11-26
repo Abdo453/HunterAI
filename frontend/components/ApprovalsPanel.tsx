@@ -107,12 +107,12 @@ export default function ApprovalsPanel() {
         </div>
       ) : (
         <div className="space-y-2.5 max-h-80 overflow-y-auto pe-1">
-          {visibleList.map((ap) => {
+          {visibleList.map((ap, idx) => {
             const isPending = ap.status === "pending";
             const isBusy = busyId === ap.approval_id;
             return (
               <div
-                key={ap.approval_id}
+                key={`${ap.approval_id || "ap"}-${idx}`}
                 className="p-3 rounded-md bg-elevated border border-border-subtle space-y-2"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">

@@ -795,8 +795,8 @@ export default function CopilotDrawer() {
             className="flex-1 min-w-0 h-8 px-2 rounded bg-inset border border-border-subtle text-xs text-ink-primary truncate"
           >
             {conversations.length === 0 && <option value="">{t("copilot.newSession")}</option>}
-            {conversations.map((c) => (
-              <option key={c.conversation_id} value={c.conversation_id}>
+            {conversations.map((c, idx) => (
+              <option key={`${c.conversation_id || "conv"}-${idx}`} value={c.conversation_id}>
                 {c.title || c.conversation_id}
               </option>
             ))}
@@ -875,12 +875,12 @@ export default function CopilotDrawer() {
             <p className="text-xs leading-relaxed max-w-xs">{t("copilot.noConversations")}</p>
           </div>
         ) : (
-          messages.map((msg) => {
+          messages.map((msg, msgIdx) => {
             const isUser = msg.role === "user";
             const safeHtml = !isUser && msg.content ? renderSafeMarkdown(msg.content) : "";
             return (
               <div
-                key={msg.message_id}
+                key={`${msg.message_id || "msg"}-${msgIdx}`}
                 className={`rounded-lg border p-3 space-y-2 ${
                   isUser
                     ? "bg-elevated border-border-strong ms-6"
@@ -950,9 +950,9 @@ export default function CopilotDrawer() {
                       {t("copilot.refsTitle")}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {msg.refs.slice(0, 8).map((ref) => (
+                      {msg.refs.slice(0, 8).map((ref, refIdx) => (
                         <button
-                          key={`${ref.kind}:${ref.id}`}
+                          key={`${ref.kind}:${ref.id}-${refIdx}`}
                           type="button"
                           onClick={() => handleRefClick(ref)}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-elevated border border-border-subtle hover:border-sentinel-primary text-[11px] font-mono text-sentinel-primary ltr-isolate"
@@ -977,9 +977,9 @@ export default function CopilotDrawer() {
       <form onSubmit={handleSend} className="p-3 border-t border-border-subtle bg-surface space-y-2">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {attachments.map((att) => (
+            {attachments.map((att, attIdx) => (
               <span
-                key={att.attachment_id}
+                key={`${att.attachment_id || "att"}-${attIdx}`}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-elevated border border-border-subtle text-xs font-mono text-ink-secondary ltr-isolate"
               >
                 <span>{att.filename}</span>

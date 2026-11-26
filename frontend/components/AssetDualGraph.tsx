@@ -483,7 +483,7 @@ export default function AssetDualGraph() {
 
                   return (
                     <tr
-                      key={asset.id || `${asset.value}-${idx}`}
+                      key={`${asset.id || asset.value || "asset"}-${idx}`}
                       className="hover:bg-elevated/80 transition-colors"
                     >
                       <td className="py-2 px-3 font-mono text-[11px] text-sentinel-primary whitespace-nowrap">

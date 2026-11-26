@@ -406,10 +406,10 @@ export default function OverviewPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle">
-                  {runs.slice(0, 20).map((run) => {
+                  {runs.slice(0, 20).map((run, idx) => {
                     const st = (run.status || "").toLowerCase();
                     return (
-                      <tr key={run.run_id} className="hover:bg-elevated/60">
+                      <tr key={`${run.run_id || "run"}-${idx}`} className="hover:bg-elevated/60">
                         <td className="py-2 px-3 font-mono text-ink-primary ltr-isolate whitespace-nowrap">
                           {run.run_id}
                         </td>
@@ -628,7 +628,7 @@ export default function OverviewPage() {
                   <div className="py-8 text-center text-ink-muted">{t("common.noData")}</div>
                 ) : (
                   runDetails.events.map((ev, idx) => (
-                    <div key={ev.event_id || idx} className="p-3 rounded bg-elevated border border-border-subtle space-y-1">
+                    <div key={`${ev.event_id || "ev"}-${idx}`} className="p-3 rounded bg-elevated border border-border-subtle space-y-1">
                       <div className="font-mono text-sentinel-primary font-semibold ltr-isolate">
                         {ev.event_type || "EVENT"}
                       </div>
@@ -643,7 +643,7 @@ export default function OverviewPage() {
                   <div className="py-8 text-center text-ink-muted">{t("common.noData")}</div>
                 ) : (
                   runDetails.evidence.map((evi, idx) => (
-                    <div key={evi.evidence_id || idx} className="p-3 rounded bg-elevated border border-border-subtle space-y-1">
+                    <div key={`${evi.evidence_id || "evi"}-${idx}`} className="p-3 rounded bg-elevated border border-border-subtle space-y-1">
                       <div className="flex justify-between font-mono">
                         <span className="text-sentinel-success">{evi.evidence_type} · {evi.source_tool}</span>
                         <span>{Math.round((evi.confidence || 0) * 100)}%</span>
@@ -658,7 +658,7 @@ export default function OverviewPage() {
                 <div className="py-8 text-center text-ink-muted">{t("common.noData")}</div>
               ) : (
                 runDetails.findings.map((fd, idx) => (
-                  <div key={fd.evidence_id || idx} className="p-3 rounded bg-elevated border border-border-subtle space-y-1">
+                  <div key={`${fd.evidence_id || fd.title || "fd"}-${idx}`} className="p-3 rounded bg-elevated border border-border-subtle space-y-1">
                     <div className="font-semibold text-ink-primary">{fd.title}</div>
                     <div className="font-mono text-sentinel-warning ltr-isolate">{fd.affected_asset}</div>
                     <div className="font-mono text-[11px] text-ink-secondary whitespace-pre-wrap break-all">

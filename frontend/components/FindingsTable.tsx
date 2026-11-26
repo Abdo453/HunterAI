@@ -313,9 +313,9 @@ export default function FindingsTable() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-2 pe-1">
-          {filteredFindings.map((f) => (
+          {filteredFindings.map((f, idx) => (
             <button
-              key={f.id}
+              key={`${f.id || f.title || "finding"}-${idx}`}
               type="button"
               onClick={() => setInspectedFinding(f)}
               className="w-full text-start p-3 rounded-md bg-elevated border border-border-subtle hover:border-border-strong transition-colors flex flex-col gap-1.5"

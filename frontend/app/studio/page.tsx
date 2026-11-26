@@ -226,18 +226,50 @@ export default function StudioPage() {
   // Load Sidebar Data
   const loadSidebarData = useCallback(async () => {
     const [treeR, skR, burpStR, burpTrR, toolsR, sensR] = await Promise.all([
-      apiJson<{ items?: TreeItem[] }>("/api/editor/tree"),
+      apiJson<{ items?: TreeItem[]; entries?: Array<TreeItem & { is_dir?: boolean }> }>("/api/editor/tree"),
       apiJson<{ skills?: SkillSummary[] }>("/api/opencode/skills"),
       apiJson<{ proxy?: { online?: boolean } }>("/api/burp/status"),
       apiJson<{ items?: TrafficRow[] }>("/api/burp/traffic?limit=30"),
-      apiJson<{ tools?: Array<{ name: string; installed: boolean }> }>("/api/control/tools"),
+      apiJson<{ tools?: Array<{ name: string; installed: boolean } | string> }>("/api/control/tools"),
       apiJson<{ events?: Array<Record<string, unknown>> }>("/api/burp/sensory_events"),
     ]);
-    if (treeR.ok && Array.isArray(treeR.data?.items)) setTreeItems(treeR.data.items);
+    const rawTree = Array.isArray(treeR.data?.items)
+      ? treeR.data.items
+      : Array.isArray(treeR.data?.entries)
+        ? treeR.data.entries
+        : null;
+    if (treeR.ok && rawTree) {
+      setTreeItems(
+        rawTree
+          .filter((it): it is TreeItem & { is_dir?: boolean } => Boolean(it && typeof it === "object" && it.path))
+          .map((it) => ({
+            type: it.type || (it.is_dir ? "directory" : "file"),
+            name: String(it.name || it.path),
+            path: String(it.path),
+            ext: it.ext,
+            parent: it.parent,
+          }))
+      );
+    }
     if (skR.ok && Array.isArray(skR.data?.skills)) setSkills(skR.data.skills);
     if (burpStR.ok && burpStR.data?.proxy) setBurpProxyOnline(Boolean(burpStR.data.proxy.online));
     if (burpTrR.ok && Array.isArray(burpTrR.data?.items)) setTraffic(burpTrR.data.items);
-    if (toolsR.ok && Array.isArray(toolsR.data?.tools)) setTools(toolsR.data.tools);
+    if (toolsR.ok && Array.isArray(toolsR.data?.tools)) {
+      setTools(
+        toolsR.data.tools
+          .map((tl: unknown) => {
+            if (typeof tl === "string" && tl) return { name: tl, installed: true };
+            if (tl && typeof tl === "object") {
+              const obj = tl as Record<string, unknown>;
+              const name = String(obj.name || "");
+              if (!name) return null;
+              return { name, installed: Boolean(obj.installed ?? true) };
+            }
+            return null;
+          })
+          .filter((tl): tl is { name: string; installed: boolean } => tl !== null)
+      );
+    }
     if (sensR.ok && Array.isArray(sensR.data?.events)) setSensoryEvents(sensR.data.events);
   }, [apiJson]);
 
@@ -637,9 +669,9 @@ export default function StudioPage() {
                 />
 
                 <div className="space-y-0.5">
-                  {filteredTree.map((item) => (
+                  {filteredTree.map((item, idx) => (
                     <button
-                      key={item.path}
+                      key={`${item.path || item.name || "entry"}-${idx}`}
                       type="button"
                       disabled={item.type === "directory"}
                       onClick={() => void openFileTab(item.path)}
@@ -670,8 +702,8 @@ export default function StudioPage() {
                   placeholder={t("studio.searchSkills")}
                   className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle text-xs"
                 />
-                {filteredSkills.map((sk) => (
-                  <div key={sk.name} className="p-2 rounded bg-elevated border border-border-subtle space-y-1.5">
+                {filteredSkills.map((sk, idx) => (
+                  <div key={`${sk.name || "skill"}-${idx}`} className="p-2 rounded bg-elevated border border-border-subtle space-y-1.5">
                     <div className="font-mono font-semibold text-sentinel-primary">{sk.name}</div>
                     <div className="text-[11px] text-ink-muted line-clamp-2">{sk.description}</div>
                     <div className="flex gap-1.5">
@@ -706,9 +738,9 @@ export default function StudioPage() {
                 {traffic.length === 0 ? (
                   <div className="py-4 text-center text-ink-muted">{t("studio.noTraffic")}</div>
                 ) : (
-                  traffic.map((tx) => (
+                  traffic.map((tx, idx) => (
                     <button
-                      key={tx.id}
+                      key={`${tx.id || `${tx.method}-${tx.host}${tx.path}`}-${idx}`}
                       type="button"
                       onClick={() => {
                         const scheme = tx.scheme || "http";
@@ -730,9 +762,9 @@ export default function StudioPage() {
 
             {activityTab === "tools" && (
               <div className="space-y-1">
-                {tools.map((tl) => (
+                {tools.map((tl, idx) => (
                   <button
-                    key={tl.name}
+                    key={`${tl.name || "tool"}-${idx}`}
                     type="button"
                     onClick={() => setTermCmd(`${tl.name} --help`)}
                     className="w-full px-2 py-1.5 rounded bg-inset border border-border-subtle hover:border-sentinel-primary flex items-center justify-between font-mono text-[11px] ltr-isolate"
@@ -752,11 +784,11 @@ export default function StudioPage() {
         <div className="flex-1 flex flex-col min-w-0">
           {/* Tabs Strip */}
           <div className="px-2 py-1 border-b border-border-subtle bg-elevated/60 flex items-center gap-1 overflow-x-auto">
-            {tabs.map((tb) => {
+            {tabs.map((tb, idx) => {
               const active = tb.id === activeTabId;
               return (
                 <div
-                  key={tb.id}
+                  key={`${tb.id}-${idx}`}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono border shrink-0 ${
                     active
                       ? "bg-surface border-sentinel-primary text-ink-primary"

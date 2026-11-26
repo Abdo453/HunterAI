@@ -188,8 +188,8 @@ export default function InterceptPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle font-mono">
-                {traffic.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-elevated/60 ltr-isolate">
+                {traffic.map((tx, idx) => (
+                  <tr key={`${tx.id || `${tx.method}-${tx.host}${tx.path}`}-${idx}`} className="hover:bg-elevated/60 ltr-isolate">
                     <td className="py-1.5 px-3 text-ink-muted whitespace-nowrap">{tx.time}</td>
                     <td className="py-1.5 px-3 text-sentinel-primary font-semibold">{tx.method}</td>
                     <td className="py-1.5 px-3 text-ink-primary max-w-[160px] truncate">{tx.host}</td>

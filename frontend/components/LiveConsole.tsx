@@ -152,8 +152,8 @@ export default function LiveConsole() {
               {t("console.emptyLogs")}
             </div>
           ) : (
-            filteredLogs.map((entry) => (
-              <div key={entry.id} className="leading-relaxed break-all">
+            filteredLogs.map((entry, idx) => (
+              <div key={`${entry.id}-${idx}`} className="leading-relaxed break-all">
                 <span className="text-ink-muted tabular-nums">[{entry.timestamp}]</span>{" "}
                 <span className={`font-semibold ${levelStyle(entry.level)}`}>
                   [{entry.level}]

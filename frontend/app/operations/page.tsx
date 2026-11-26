@@ -295,8 +295,8 @@ export default function OperationsPage() {
             {engagements.length === 0 ? (
               <div className="text-xs text-ink-muted py-3">{t("targets.emptyTargets")}</div>
             ) : (
-              engagements.map((eng) => (
-                <div key={eng.id} className="p-2.5 rounded bg-elevated border border-border-subtle flex flex-wrap items-center justify-between gap-2 text-xs">
+              engagements.map((eng, idx) => (
+                <div key={`${eng.id || eng.name || "eng"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle flex flex-wrap items-center justify-between gap-2 text-xs">
                   <div className="min-w-0">
                     <div className="font-semibold text-ink-primary truncate">{eng.name}</div>
                     <div className="font-mono text-[11px] text-ink-muted ltr-isolate truncate">
@@ -428,8 +428,8 @@ export default function OperationsPage() {
           </div>
 
           <div className="space-y-1.5 max-h-56 overflow-y-auto text-xs">
-            {(rtState?.hard_invariants || []).map((inv) => (
-              <div key={inv.action} className="p-2 rounded bg-inset border border-border-subtle flex items-start gap-2">
+            {(rtState?.hard_invariants || []).map((inv, idx) => (
+              <div key={`${inv.action || "inv"}-${idx}`} className="p-2 rounded bg-inset border border-border-subtle flex items-start gap-2">
                 <span className="font-mono font-semibold text-sentinel-danger shrink-0">{inv.action}</span>
                 <span className="text-ink-secondary">{inv.desc}</span>
               </div>
@@ -576,7 +576,7 @@ export default function OperationsPage() {
               leads.map((ld, idx) => {
                 const lid = ld.lead_id || ld.id || String(idx);
                 return (
-                  <div key={lid} className="p-2.5 rounded bg-elevated border border-border-subtle space-y-1.5">
+                  <div key={`${lid}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono font-semibold text-sentinel-primary">{ld.skill}</span>
                       <span className="font-mono text-[11px] text-ink-muted">{ld.status}</span>
@@ -615,12 +615,12 @@ export default function OperationsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {checklists.map((cat) => (
-            <div key={cat.category_id} className="p-3 rounded-md bg-inset border border-border-subtle space-y-2">
+          {checklists.map((cat, catIdx) => (
+            <div key={`${cat.category_id || cat.category_title || "cat"}-${catIdx}`} className="p-3 rounded-md bg-inset border border-border-subtle space-y-2">
               <div className="text-xs font-semibold text-ink-primary">{cat.category_title}</div>
               <div className="space-y-1.5">
-                {cat.items.map((it) => (
-                  <label key={it.item_id} className="flex items-start gap-2 text-xs cursor-pointer">
+                {cat.items.map((it, itemIdx) => (
+                  <label key={`${it.item_id || it.title || "item"}-${itemIdx}`} className="flex items-start gap-2 text-xs cursor-pointer">
                     <input
                       type="checkbox"
                       checked={Boolean(it.checked)}

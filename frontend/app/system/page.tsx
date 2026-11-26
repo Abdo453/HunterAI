@@ -248,8 +248,8 @@ export default function SystemPage() {
                 className="w-full h-9 px-2.5 rounded bg-inset border border-border-subtle font-mono"
               >
                 <option value="auto">auto</option>
-                {catalogChoices.map((ch) => (
-                  <option key={ch.id} value={ch.id}>{ch.label}</option>
+                {catalogChoices.map((ch, idx) => (
+                  <option key={`${ch.id}-${idx}`} value={ch.id}>{ch.label}</option>
                 ))}
               </select>
             </div>
@@ -360,8 +360,10 @@ export default function SystemPage() {
               onChange={(e) => setKeyProvider(e.target.value)}
               className="h-8 px-2 rounded bg-inset border border-border-subtle font-mono"
             >
-              {(envSettings?.providers || ["nvidia", "gemini", "deepseek", "openai", "anthropic", "openrouter"]).map((p) => (
-                <option key={p} value={p}>{p}</option>
+              {Array.from(
+                new Set(envSettings?.providers || ["nvidia", "gemini", "deepseek", "openai", "anthropic", "openrouter"])
+              ).map((p, idx) => (
+                <option key={`${p}-${idx}`} value={p}>{p}</option>
               ))}
             </select>
             <input
@@ -415,7 +417,7 @@ export default function SystemPage() {
                 </thead>
                 <tbody className="divide-y divide-border-subtle">
                   {diagReport.checks.map((c, idx) => (
-                    <tr key={idx}>
+                    <tr key={`${c.component || "check"}-${idx}`}>
                       <td className="py-1.5 px-3 font-medium text-ink-primary">{c.component}</td>
                       <td className="py-1.5 px-3 font-mono">
                         <span

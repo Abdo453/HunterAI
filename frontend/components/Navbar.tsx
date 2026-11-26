@@ -200,8 +200,8 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
               className="min-h-[44px] lg:min-h-0 lg:h-9 px-2.5 rounded-md bg-elevated border border-border-subtle text-xs text-ink-primary max-w-[190px] truncate shrink-0"
             >
               <option value="">{t("nav.allEngagements")}</option>
-              {engagements.map((eng) => (
-                <option key={eng.id} value={eng.id}>
+              {engagements.map((eng, idx) => (
+                <option key={`${eng.id}-${idx}`} value={eng.id}>
                   {eng.name} ({eng.source === "artex_go" ? "Go" : "Hub"})
                 </option>
               ))}

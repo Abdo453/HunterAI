@@ -164,7 +164,7 @@ export default function SurfacePage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
               {causalNodes.map((n, idx) => (
-                <div key={n.id || idx} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
+                <div key={`${n.id || "node"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-sentinel-primary">{n.node_type || "NODE"}</span>
                     {typeof n.risk_score === "number" && (
@@ -204,7 +204,7 @@ export default function SurfacePage() {
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {roster.map((item, idx) => (
-                <div key={`${item.role}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
+                <div key={`${item.role || "role"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-semibold text-ink-primary ltr-isolate">{item.agent}</span>
                     <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-primary-bg)] text-sentinel-primary">
@@ -244,7 +244,7 @@ export default function SurfacePage() {
               <div className="py-6 text-center text-xs text-ink-muted">{t("common.noData")}</div>
             ) : (
               wiretap.map((ev, idx) => (
-                <div key={ev.id || idx} className="p-2.5 rounded bg-inset border border-border-subtle text-xs space-y-1">
+                <div key={`${ev.id || "ev"}-${idx}`} className="p-2.5 rounded bg-inset border border-border-subtle text-xs space-y-1">
                   <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
                     <span className="text-sentinel-primary ltr-isolate">
                       {ev.from_agent} → {ev.to_agent}
