@@ -102,7 +102,7 @@ def test_opencode_execute_endpoint(test_client):
     res_bad = test_client.post("/api/opencode/execute", json={})
     assert res_bad.status_code == 400
 
-    # 2. CORS skill execution via ABHToolBridge
+    # 2. Markdown prompt skill returns truthful UNAVAILABLE (Phase 5: no synthetic "CORS Scan finished" stub)
     res_cors = test_client.post("/api/opencode/execute", json={
         "skill_name": "hunterai-redteam",
         "task": "cors audit",
@@ -110,18 +110,21 @@ def test_opencode_execute_endpoint(test_client):
     })
     assert res_cors.status_code == 200
     data_cors = res_cors.json()
-    assert data_cors["status"] == "ok"
+    assert data_cors["status"] == "UNAVAILABLE"
+    assert data_cors["ok"] is False
+    assert data_cors["executed"] is False
     assert "job_id" in data_cors
-    assert "CORS Scan finished" in data_cors["output"]
 
-    # 3. General skill execution
+    # 3. General prompt skill request also reports truthful UNAVAILABLE with target reference
     res_gen = test_client.post("/api/opencode/execute", json={
         "skill_name": "hunterai-redteam",
         "target": "target.com"
     })
     assert res_gen.status_code == 200
     data_gen = res_gen.json()
-    assert data_gen["status"] == "ok"
+    assert data_gen["status"] == "UNAVAILABLE"
+    assert data_gen["ok"] is False
+    assert data_gen["executed"] is False
     assert "target.com" in data_gen["output"]
 
     legacy = test_client.post("/api/opencode/execute", json={

@@ -34,7 +34,8 @@ def test_vrt_mapper():
 
 
 def test_seven_question_gate():
-    solid_finding = {
+    # Prose-only IDOR without DERIVED proof payload MUST fail closed (Phase 3 Evidence Court)
+    prose_only_finding = {
         "title": "IDOR in User Profile Endpoint",
         "type": "idor",
         "severity": "High",
@@ -42,7 +43,22 @@ def test_seven_question_gate():
         "evidence": "GET /v1/users/5512/profile with user 5510 session token returned full victim profile: HTTP 200",
         "tool": "manual_probe",
         "target": "api.target.com",
-        "recommendation": "Enforce server-side user ownership checks."
+        "recommendation": "Enforce server-side user ownership checks.",
+    }
+    prose_result = SevenQuestionGate.evaluate_finding(prose_only_finding, in_scope_list=["api.target.com"])
+    assert prose_result.passed is False
+    assert any("Q3" in item for item in prose_result.missing_items)
+
+    # Proof-backed finding with canonical EvidenceCourt DERIVED payload passes all 7 questions
+    solid_finding = {
+        **prose_only_finding,
+        "proof_payload": {
+            "artifact_type": "idor",
+            "expected_token": "victim_5512_ssn_canary",
+            "response_text": '{"user_id":5512,"secret":"victim_5512_ssn_canary"}',
+            "baseline_text": '{"user_id":5510,"secret":"actor_5510_own_data"}',
+            "metadata": {"actor_id": "5510", "owner_id": "5512", "status_code": 200},
+        },
     }
 
     gate_result = SevenQuestionGate.evaluate_finding(solid_finding, in_scope_list=["api.target.com"])
@@ -50,6 +66,7 @@ def test_seven_question_gate():
     assert gate_result.score >= 0.80
     assert len(gate_result.missing_items) == 0
     assert "PASSED" in gate_result.triage_statement
+    assert gate_result.proof_strength == "DERIVED"
 
     weak_finding = {
         "title": "Possible bug somewhere",
@@ -57,6 +74,7 @@ def test_seven_question_gate():
         "evidence": "",
     }
     weak_result = SevenQuestionGate.evaluate_finding(weak_finding)
+    assert weak_result.passed is False
     assert weak_result.score < 0.70
     assert len(weak_result.missing_items) > 0
 

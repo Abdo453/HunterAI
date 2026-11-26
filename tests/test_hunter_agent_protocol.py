@@ -159,26 +159,30 @@ def test_structured_task_result_5_questions():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_ai_model_router_intents():
-    router = AIModelRouter()
+    from core.llm.manifest import canonical_gemini_model
 
-    # Code Analysis -> Qwen 2.5 Coder
+    router = AIModelRouter()
+    profile = router.manifest.resolve_hardware_profile()
+
+    # Code Analysis -> ModelManifest fixer role (hardware-profile aware)
     r_code = router.route_task("Decompile javascript bundle and parse AST")
-    assert r_code.model_name == "qwen2.5-coder:14b"
+    assert r_code.model_name == router.manifest.get_role_config("fixer", profile=profile).local_model
     assert r_code.tier == ModelTierPreference.LOCAL_CODE
 
-    # Offensive Vectors -> WhiteRabbitNeo
+    # Offensive Vectors -> ModelManifest deep_analyst role
     r_off = router.route_task("Craft WAF bypass payload for SQL Injection filter breakout")
-    assert r_off.model_name == "WhiteRabbitNeo"
+    assert r_off.model_name == router.manifest.get_role_config("deep_analyst", profile=profile).local_model
     assert r_off.tier == ModelTierPreference.LOCAL_OFFENSIVE
 
-    # Massive Recon -> Gemini Flash
+    # Massive Recon -> unified canonical Gemini model (Phase 6)
     r_recon = router.route_task("Parse massive 1M tokens sitemap and DOM graph")
-    assert r_recon.model_name == "gemini-2.0-flash"
+    assert r_recon.model_name == canonical_gemini_model()
     assert r_recon.tier == ModelTierPreference.CLOUD_FAST
 
-    # Deep Threat Logic -> Llama 70B
+    # Deep Threat Logic -> canonical OpenRouter cloud deep model
     r_logic = router.route_task("Evaluate multi-tenant business logic and complex RBAC matrix")
-    assert "llama-3.3-70b" in r_logic.model_name
+    expected_deep = router.manifest.get_default_model("openrouter") or "anthropic/claude-3.5-sonnet"
+    assert r_logic.model_name == expected_deep
     assert r_logic.tier == ModelTierPreference.CLOUD_DEEP
 
 

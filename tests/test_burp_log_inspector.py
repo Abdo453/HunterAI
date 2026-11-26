@@ -244,4 +244,7 @@ def test_omni_hunter_integrates_burp_file(tmp_path):
 
     # Discovered endpoints from burp XML should be ingested into surface
     assert any("/api/v2/orders" in ep for ep in engine.surface["endpoints"])
-    assert len(engine.confirmed_findings) > 0
+    # Phase 3 truthfulness: passive Burp log signals emit candidate_findings
+    # and are never promoted to confirmed_findings without Proof-of-Execution.
+    assert len(engine.candidate_findings) > 0
+    assert len(engine.confirmed_findings) == 0

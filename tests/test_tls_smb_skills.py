@@ -179,7 +179,18 @@ async def test_tls_audit_with_sslscan(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_tls_audit_with_openssl(tmp_path):
+async def test_tls_audit_with_openssl(tmp_path, monkeypatch):
+    import asyncio as _asyncio
+
+    class _FakeProc:
+        async def communicate(self):
+            return OPENSSL_OUT.encode("utf-8"), b""
+
+    async def _fake_exec(*args, **kwargs):
+        assert args[0] == "openssl" and args[1] == "s_client"
+        return _FakeProc()
+
+    monkeypatch.setattr(_asyncio, "create_subprocess_exec", _fake_exec)
     tm = FakeToolManager(available={"openssl"}, responses=[("openssl s_client", OPENSSL_OUT)])
     ctx = _ctx(tmp_path, tm)
     res = await TlsAuditSkill().run(ctx)

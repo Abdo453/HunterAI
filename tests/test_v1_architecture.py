@@ -168,10 +168,18 @@ def test_targeted_xss_detector_and_fp_rejection():
 def test_targeted_sqli_detector_and_fp_rejection():
     ep = EndpointModel(target="test.lab", path="/products", method="GET")
 
-    # 1. Vulnerable mock dispatcher (arithmetic boolean differential)
-    def mock_vuln_sqli(method, url, headers, body):
+    # 1a. Bare JSON body diff without DBMS error/proof MUST be rejected by Phase 3 EvidenceCourt
+    def mock_bare_diff_sqli(method, url, headers, body):
         if "1%2B%2853-52%29" in url or "1+(53-52)" in url:
             return 200, {"Content-Type": "application/json"}, '{"id": 2, "name": "Premium Gadget"}'
+        return 200, {"Content-Type": "application/json"}, '{"id": 1, "name": "Standard"}'
+
+    assert SQLiDetector.test_parameter(ep, "cat", mock_bare_diff_sqli) is None
+
+    # 1b. Vulnerable mock dispatcher returning genuine DBMS SQL syntax disclosure confirms via EvidenceCourt
+    def mock_vuln_sqli(method, url, headers, body):
+        if "1%2B%2853-52%29" in url or "1+(53-52)" in url:
+            return 500, {"Content-Type": "text/plain"}, "ERROR: PostgreSQL 15.4 syntax error at or near '1+(53-52)'"
         return 200, {"Content-Type": "application/json"}, '{"id": 1, "name": "Standard"}'
 
     finding = SQLiDetector.test_parameter(ep, "cat", mock_vuln_sqli)

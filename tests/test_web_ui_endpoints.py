@@ -98,8 +98,10 @@ def test_api_arsenal_run_tool(client, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["tool"] == "katana"
-    assert data["success"] is True
-    assert data["used_fallback"] is True
+    # Phase 3 truthfulness: force_fallback=True never synthesizes fake tool output.
+    assert data["success"] is False
+    assert data["used_fallback"] is False
+    assert data["structured_data"]["status"] == "UNAVAILABLE"
     assert "cognitive_deliberation" in data["structured_data"]
 
 
@@ -245,16 +247,25 @@ def test_api_enhanced_skills_catalog(client):
 
 
 def test_api_enhanced_elite_run(client):
-    """Verify direct elite exploit skill execution API."""
+    """Verify direct elite exploit skill execution API (Phase 6 real SkillRegistry dispatch, zero stubs)."""
+    # Unregistered skill name fails closed with 404 (no fake stub execution).
+    resp_missing = client.post("/api/enhanced/skills/elite-run", json={
+        "skill_name": "nonexistent_elite_skill_xyz",
+        "target_url": "https://elite-test.local",
+        "scope": ["elite-test.local"],
+    })
+    assert resp_missing.status_code == 404
+
+    # Registered builtin skill name dispatches truthfully.
     payload = {
-        "skill_name": "http_smuggling",
+        "skill_name": "http_smuggling_skill",
         "target_url": "https://elite-test.local",
         "scope": ["elite-test.local"],
     }
     resp = client.post("/api/enhanced/skills/elite-run", json=payload)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["skill_name"] == "http_smuggling"
+    assert data["skill_name"] == "http_smuggling_skill"
     assert "verified" in data
 
 

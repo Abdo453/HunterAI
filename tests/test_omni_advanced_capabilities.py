@@ -51,30 +51,40 @@ def test_tool_adapter_detects_availability():
 
 
 def test_subfinder_fallback_generates_valid_subdomains():
+    """Phase 3 truthfulness: unavailable subfinder fails closed with UNAVAILABLE (no synthetic subdomains)."""
     adapter = RealToolAdapter(force_fallback=True)
     res = adapter.execute_subfinder("example.corp")
-    assert res.success
-    assert "discovered_subdomains" in res.structured_data
-    subdomains = res.structured_data["discovered_subdomains"]
-    assert any("api.example.corp" in s for s in subdomains)
+    assert res.success is False
+    assert res.used_fallback is False
+    assert res.exit_code == 127
+    assert res.structured_data["status"] == "UNAVAILABLE"
+    assert res.structured_data["verified"] is False
+    assert res.structured_data.get("discovered_subdomains") in (None, [])
 
 
 def test_nmap_fallback_generates_standard_ports():
+    """Phase 3 truthfulness: unavailable nmap fails closed with UNAVAILABLE (no synthetic open ports)."""
     adapter = RealToolAdapter(force_fallback=True)
     res = adapter.execute_nmap_ports("192.168.1.100")
-    assert res.success
-    assert "open_ports" in res.structured_data
-    assert "80" in res.structured_data["open_ports"]
-    assert "443" in res.structured_data["open_ports"]
+    assert res.success is False
+    assert res.used_fallback is False
+    assert res.exit_code == 127
+    assert res.structured_data["status"] == "UNAVAILABLE"
+    assert res.structured_data["verified"] is False
+    assert res.structured_data.get("open_ports") in (None, [])
 
 
 def test_httpx_fallback_generates_endpoint_records():
+    """Phase 3 truthfulness: unavailable httpx fails closed with UNAVAILABLE (no synthetic endpoints)."""
     adapter = RealToolAdapter(force_fallback=True)
     urls = ["https://example.corp", "https://api.example.corp"]
     res = adapter.execute_httpx_endpoints(urls)
-    assert res.success
-    assert "alive_endpoints" in res.structured_data
-    assert len(res.structured_data["alive_endpoints"]) == 2
+    assert res.success is False
+    assert res.used_fallback is False
+    assert res.exit_code == 127
+    assert res.structured_data["status"] == "UNAVAILABLE"
+    assert res.structured_data["verified"] is False
+    assert res.structured_data.get("alive_endpoints") in (None, [])
 
 
 # ── 2. Dual-Identity Matrix Tests ──────────────────────────────────────────────

@@ -42,19 +42,25 @@ class TestAIModelConnectivity:
 
     @pytest.mark.asyncio
     async def test_resource_manager_gpu_lock_cycle(self):
-        """Verify exclusive GPU locking and automatic unloading of local models"""
-        ollama = OllamaManager()
-        ollama.unload_model = AsyncMock(return_value=True)
-        rm = ResourceManager(ollama)
+        """Verify exclusive GPU locking and explicit/keep-alive unloading via GPUScheduler."""
+        from core.llm.gpu_scheduler import reset_gpu_scheduler_for_tests
 
-        assert rm.is_gpu_free() is True
-        async with rm.exclusive_gpu("whiterabbitneo:8b") as gpu:
-            assert rm.is_gpu_free() is False
-            assert rm.status["current_model"] == "whiterabbitneo:8b"
-            assert rm.status["locked"] is True
+        reset_gpu_scheduler_for_tests()
+        try:
+            ollama = OllamaManager()
+            ollama.unload_model = AsyncMock(return_value=True)
+            rm = ResourceManager(ollama)
 
-        assert rm.is_gpu_free() is True
-        ollama.unload_model.assert_called_once_with("whiterabbitneo:8b")
+            assert rm.is_gpu_free() is True
+            async with rm.exclusive_gpu("whiterabbitneo:8b", unload_on_release=True) as gpu:
+                assert rm.is_gpu_free() is False
+                assert rm.status["current_model"] == "whiterabbitneo:8b"
+                assert rm.status["locked"] is True
+
+            assert rm.is_gpu_free() is True
+            ollama.unload_model.assert_called_once_with("whiterabbitneo:8b")
+        finally:
+            reset_gpu_scheduler_for_tests()
 
     @pytest.mark.asyncio
     async def test_cloud_gemini_provider_integration(self):

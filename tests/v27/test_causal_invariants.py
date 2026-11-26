@@ -61,14 +61,29 @@ def test_authorization_invariant():
 
 def test_dom_execution_invariant():
     inv = DOMExecutionInvariant(canary="xss777")
-    bundle_executed = TriadBundle(
-        hypothesis_id="h4",
+    # Inert HTML reflection without browser runtime DOM execution telemetry MUST fail closed (Phase 3)
+    bundle_inert = TriadBundle(
+        hypothesis_id="h4_inert",
         target_endpoint="/search",
         baseline=TransactionSnapshot(),
         control=TransactionSnapshot(),
         experiment_1=TransactionSnapshot(body='<div><img src=x onerror=alert("xss777")></div>'),
         experiment_2=TransactionSnapshot(body='<div><svg onload=alert("xss777")></div>'),
     )
+    res_inert = inv.evaluate(bundle_inert)
+    assert res_inert.passed is False
+    assert res_inert.invalidation_detail == "inert_html_reflection_only"
+
+    # Verified browser runtime DOM execution telemetry passes
+    bundle_executed = TriadBundle(
+        hypothesis_id="h4",
+        target_endpoint="/search",
+        baseline=TransactionSnapshot(),
+        control=TransactionSnapshot(),
+        experiment_1=TransactionSnapshot(body="<div>ok</div>", extracted_tokens=["xss777"]),
+        experiment_2=TransactionSnapshot(body="<div>ok</div>", extracted_tokens=["xss777"]),
+        metadata={"dom_execution_observed": True, "console_logs": ["DOM_FIRED:xss777"]},
+    )
     res = inv.evaluate(bundle_executed)
     assert res.passed is True
-    assert res.extracted_observables.get("dom_breakout_confirmed") is True
+    assert res.extracted_observables.get("dom_execution_confirmed") is True
