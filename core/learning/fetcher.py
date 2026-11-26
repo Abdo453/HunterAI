@@ -117,18 +117,36 @@ class IntelligenceFetcher:
     مبدأ: fetch-only, لا parsing هنا — الـ Analyzer يتولى الفهم.
     """
 
-    def __init__(self, timeout: float = 20.0, max_concurrent: int = 6):
+    def __init__(
+        self,
+        timeout: float = 20.0,
+        max_concurrent: int = 6,
+        allow_insecure_lab_tls: bool = False,
+    ):
         self.timeout = timeout
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self._github_token = os.getenv("GITHUB_TOKEN", "")
+        self.allow_insecure_lab_tls = allow_insecure_lab_tls
 
-    def _build_client(self) -> httpx.AsyncClient:
+    def _tls_verify_enabled(self) -> bool:
+        if self.allow_insecure_lab_tls:
+            return False
+        return os.getenv("HUNTER_LAB_INSECURE_TLS", "").strip().lower() not in {"1", "true", "yes"}
+
+    def _build_client(self, target_url: str = "") -> httpx.AsyncClient:
+        from urllib.parse import urlparse
+
         hdrs = dict(HEADERS)
         if self._github_token:
-            hdrs["Authorization"] = f"token {self._github_token}"
+            host = (urlparse(target_url).hostname or "").lower() if target_url else ""
+            if not host or host in {"api.github.com", "raw.githubusercontent.com"} or host.endswith(".github.com"):
+                hdrs["Authorization"] = f"token {self._github_token}"
         return httpx.AsyncClient(
-            headers=hdrs, timeout=self.timeout,
-            follow_redirects=True, verify=False
+            headers=hdrs,
+            timeout=self.timeout,
+            follow_redirects=True,
+            verify=self._tls_verify_enabled(),
+            trust_env=False,
         )
 
     async def _fetch_one(
@@ -139,7 +157,7 @@ class IntelligenceFetcher:
             return None
         async with self.semaphore:
             try:
-                async with self._build_client() as client:
+                async with self._build_client(cfg["url"]) as client:
                     params = cfg.get("params", {})
                     resp = await client.get(cfg["url"], params=params)
                     resp.raise_for_status()

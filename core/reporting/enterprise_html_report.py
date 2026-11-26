@@ -10,10 +10,13 @@ Generates standalone, executive-ready, interactive HTML & JSON reports with:
 """
 
 import json
+import re
 import time
 import html
 from datetime import datetime
 from typing import Dict, List, Any, Optional
+
+from core.secret_sanitizer import SecretSanitizer
 
 
 class EnterpriseReportGenerator:
@@ -35,27 +38,40 @@ class EnterpriseReportGenerator:
         low_count  = sum(1 for f in findings if str(f.get("severity", "")).lower() in ("low", "info"))
 
         total = len(findings)
-        scan_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+        scan_date = html.escape(datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"), quote=True)
 
         findings_cards = []
         for i, f in enumerate(findings, 1):
-            sev = str(f.get("severity", "Medium")).capitalize()
-            badge_class = f"badge-{sev.lower()}"
-            title = html.escape(str(f.get("title", f"Vulnerability in {f.get('param_name', 'target')}")))
-            vuln_type = html.escape(str(f.get("type", "Security Finding")).upper())
-            param = html.escape(str(f.get("param_name", "N/A")))
-            cwe = html.escape(str(f.get("cwe", "CWE-Unknown")))
-            owasp = html.escape(str(f.get("owasp_top10", "OWASP Top 10")))
-            conf = float(f.get("confidence", 0.90))
-            payload = html.escape(str(f.get("payload_used", "N/A")))
-            evidence = html.escape(str(f.get("evidence", "Verified differential response")))
-            remediation = html.escape(str(f.get("remediation", "Apply parameter validation and defense in depth.")))
-            sources = ", ".join(f.get("evidence_sources", [f.get("tool", "AutonomousBrain")]))
+            sev_raw = str(f.get("severity", "Medium")).capitalize()
+            sev_slug = re.sub(r"[^a-z0-9_-]", "", sev_raw.lower()) or "medium"
+            sev_esc = html.escape(sev_raw, quote=True)
+            badge_class = f"badge-{sev_slug}"
+            title = html.escape(str(f.get("title", f"Vulnerability in {f.get('param_name', 'target')}")), quote=True)
+            vuln_type = html.escape(str(f.get("type", "Security Finding")).upper(), quote=True)
+            param = html.escape(str(f.get("param_name", "N/A")), quote=True)
+            cwe = html.escape(str(f.get("cwe", "CWE-Unknown")), quote=True)
+            owasp = html.escape(str(f.get("owasp_top10", "OWASP Top 10")), quote=True)
+            try:
+                conf = float(f.get("confidence", 0.90))
+            except (TypeError, ValueError):
+                conf = 0.90
+            payload = html.escape(str(f.get("payload_used", "N/A")), quote=True)
+            evidence = html.escape(
+                SecretSanitizer.sanitize_text(str(f.get("evidence", "Verified differential response"))),
+                quote=True,
+            )
+            remediation = html.escape(str(f.get("remediation", "Apply parameter validation and defense in depth.")), quote=True)
+            raw_sources = f.get("evidence_sources", [f.get("tool", "AutonomousBrain")])
+            if isinstance(raw_sources, (list, tuple)):
+                sources_str = ", ".join(str(s) for s in raw_sources)
+            else:
+                sources_str = str(raw_sources)
+            sources = html.escape(sources_str, quote=True)
 
             findings_cards.append(f"""
-            <div class="finding-card card-{sev.lower()}" data-severity="{sev.lower()}">
+            <div class="finding-card card-{sev_slug}" data-severity="{sev_slug}">
                 <div class="finding-header">
-                    <span class="badge {badge_class}">{sev}</span>
+                    <span class="badge {badge_class}">{sev_esc}</span>
                     <span class="finding-title">{i}. {title}</span>
                     <span class="confidence-badge">Confidence: {conf:.0%}</span>
                 </div>
@@ -87,7 +103,7 @@ class EnterpriseReportGenerator:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PentestAI Unified Security Assessment — {html.escape(target_url)}</title>
+    <title>PentestAI Unified Security Assessment — {html.escape(str(target_url), quote=True)}</title>
     <style>
         :root {{
             --bg: #0d1117;
@@ -142,9 +158,9 @@ class EnterpriseReportGenerator:
     <div class="container">
         <div class="header">
             <h1>🛡️ PentestAI Unified Assessment Report</h1>
-            <div class="target-url">{html.escape(target_url)}</div>
+            <div class="target-url">{html.escape(str(target_url), quote=True)}</div>
             <div style="margin-top: 10px; font-size: 13px; color: #8b949e;">
-                Generated at: {scan_date} | Mission: <code>{html.escape(mission_id)}</code> | Audited Parameters: {len(tested_params)}
+                Generated at: {scan_date} | Mission: <code>{html.escape(str(mission_id), quote=True)}</code> | Audited Parameters: {len(tested_params)}
             </div>
         </div>
 

@@ -15,6 +15,8 @@ from typing import Dict, List, Optional, Any
 
 from core.command_kb.models import CommandEntry
 from core.command_kb.registry import CommandRegistry
+from core.control_plane.computer_control import _parse_command_argv
+from core.process_utils import kill_process_tree
 from core.verification import DeterministicFilter, VerificationResult
 
 log = logging.getLogger("core.command_executor")
@@ -145,11 +147,29 @@ class CommandExecutor:
                 error=f"REJECTED:{verification.verdict.value}",
             )
 
-        # التنفيذ الفعلي
+        # تحليل الأمر إلى مصفوفة argv بدون شيل (NO shell=True)
+        try:
+            argv = _parse_command_argv(rendered)
+        except ValueError as exc:
+            return CommandExecutionResult(
+                command_id=command.id,
+                tool=command.tool,
+                target=target,
+                rendered_command=rendered,
+                success=False,
+                return_code=-1,
+                stdout="",
+                stderr=str(exc),
+                execution_time=0.0,
+                verification_result=verification,
+                error="SHELL_METACHAR_BLOCKED",
+            )
+
+        # التنفيذ الفعلي عبر create_subprocess_exec بدون شيل
         start = time.time()
         try:
-            proc = await asyncio.create_subprocess_shell(
-                rendered,
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -159,11 +179,7 @@ class CommandExecutor:
                     proc.communicate(), timeout=self.default_timeout
                 )
             except asyncio.TimeoutError:
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    pass
-                stdout_bytes, stderr_bytes = await proc.communicate()
+                await kill_process_tree(proc)
                 execution_time = time.time() - start
                 return CommandExecutionResult(
                     command_id=command.id,
@@ -172,8 +188,8 @@ class CommandExecutor:
                     rendered_command=rendered,
                     success=False,
                     return_code=-1,
-                    stdout=stdout_bytes.decode("utf-8", errors="replace")[: self.max_output_size],
-                    stderr=stderr_bytes.decode("utf-8", errors="replace")[: self.max_output_size],
+                    stdout="",
+                    stderr=f"Command timed out after {self.default_timeout}s",
                     execution_time=execution_time,
                     verification_result=verification,
                     error="TIMEOUT",

@@ -46,12 +46,18 @@ HARD_BLOCKED_HOSTS: Set[str] = {
     "localhost.localdomain",
     "metadata.google.internal",
     "metadata.internal",
+    "metadata.azure.com",
+    "metadata.tencentyun.com",
+    "metadata.aliyun.com",
+    "local-metadata",
     "instance-data",
 }
 
 INVIOLABLE_IPV4_SUBNETS: List[ipaddress.IPv4Network] = [
+    ipaddress.IPv4Network("0.0.0.0/8"),         # Unspecified / current network
     ipaddress.IPv4Network("127.0.0.0/8"),       # Loopback
     ipaddress.IPv4Network("169.254.0.0/16"),    # Link-Local & AWS/Azure/GCP metadata
+    ipaddress.IPv4Network("100.100.100.200/32"),# Alibaba Cloud metadata
     ipaddress.IPv4Network("224.0.0.0/4"),       # Multicast
     ipaddress.IPv4Network("240.0.0.0/4"),       # Reserved
     ipaddress.IPv4Network("255.255.255.255/32") # Broadcast
@@ -66,8 +72,18 @@ RFC1918_IPV4_SUBNETS: List[ipaddress.IPv4Network] = [
 
 HARD_BLOCKED_IPV4_SUBNETS: List[ipaddress.IPv4Network] = INVIOLABLE_IPV4_SUBNETS + RFC1918_IPV4_SUBNETS
 
+_IPV4_MAPPED_IPV6 = ipaddress.IPv6Network("::ffff:0:0/96")
+_NAT64_WELL_KNOWN_IPV6 = ipaddress.IPv6Network("64:ff9b::/96")
+_NAT64_LOCAL_IPV6 = ipaddress.IPv6Network("64:ff9b:1::/48")
+_AWS_IMDS_IPV6 = ipaddress.IPv6Network("fd00:ec2::254/128")
+
 INVIOLABLE_IPV6_SUBNETS: List[ipaddress.IPv6Network] = [
+    ipaddress.IPv6Network("::/128"),            # Unspecified
     ipaddress.IPv6Network("::1/128"),           # Loopback
+    _IPV4_MAPPED_IPV6,                          # IPv4-mapped IPv6
+    _NAT64_WELL_KNOWN_IPV6,                     # NAT64 well-known prefix
+    _NAT64_LOCAL_IPV6,                          # NAT64 local-use prefix
+    _AWS_IMDS_IPV6,                             # AWS IPv6 IMDS
     ipaddress.IPv6Network("fe80::/10"),         # Link-Local
     ipaddress.IPv6Network("ff00::/8"),          # Multicast
 ]
@@ -126,6 +142,58 @@ def _normalize_url_path(raw_path: str) -> str:
     return norm
 
 
+def _parse_legacy_ipv4_part(part: str) -> Optional[int]:
+    """Parse one IPv4 component in decimal, octal (0...), or hex (0x...) form."""
+    if not part:
+        return None
+    low = part.lower()
+    try:
+        if low.startswith("0x"):
+            if len(low) <= 2:
+                return None
+            return int(low, 16)
+        if len(low) > 1 and low.startswith("0"):
+            if not all(ch in "01234567" for ch in low):
+                return None
+            return int(low, 8)
+        if not low.isdigit():
+            return None
+        return int(low, 10)
+    except ValueError:
+        return None
+
+
+def _parse_legacy_ipv4(host: str) -> Optional[ipaddress.IPv4Address]:
+    """Portable parser for non-canonical IPv4 literals (integer/octal/hex/short)."""
+    parts = host.split(".")
+    if not (1 <= len(parts) <= 4):
+        return None
+    nums: List[int] = []
+    for p in parts:
+        val = _parse_legacy_ipv4_part(p)
+        if val is None or val < 0:
+            return None
+        nums.append(val)
+
+    if len(nums) == 1:
+        if nums[0] > 0xFFFFFFFF:
+            return None
+        addr_int = nums[0]
+    elif len(nums) == 2:
+        if nums[0] > 0xFF or nums[1] > 0xFFFFFF:
+            return None
+        addr_int = (nums[0] << 24) | nums[1]
+    elif len(nums) == 3:
+        if nums[0] > 0xFF or nums[1] > 0xFF or nums[2] > 0xFFFF:
+            return None
+        addr_int = (nums[0] << 24) | (nums[1] << 16) | nums[2]
+    else:
+        if any(n > 0xFF for n in nums):
+            return None
+        addr_int = (nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]
+    return ipaddress.IPv4Address(addr_int)
+
+
 def normalize_ip_literal(
     host: str,
 ) -> Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]:
@@ -158,7 +226,11 @@ def normalize_ip_literal(
     except ValueError:
         pass
 
-    # Legacy inet_aton forms (IPv4 only, incl. hex/octal/short notation).
+    legacy = _parse_legacy_ipv4(h)
+    if legacy is not None:
+        return legacy
+
+    # Fallback to platform inet_aton for any remaining legacy IPv4 forms.
     try:
         return ipaddress.IPv4Address(socket.inet_aton(h))
     except (OSError, ValueError):
@@ -324,13 +396,27 @@ class StrictScopeEngine:
         # 2. Hard-blocked IP addresses & CIDRs (ALL textual encodings)
         ip_obj = normalize_ip_literal(low_host)
         if ip_obj is not None:
-            # Normalise IPv4-mapped IPv6 (::ffff:127.0.0.1) to IPv4 so mapped
-            # loopback / metadata cannot slip past the IPv4 invariants.
-            if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped is not None:
-                ip_obj = ip_obj.ipv4_mapped
+            if str(ip_obj).lower() in _METADATA_HOST_IPS:
+                return False, f"SECURITY INVARIANT: IP {host} is a cloud metadata address ({ip_obj}) and cannot be scanned."
 
-            if isinstance(ip_obj, ipaddress.IPv4Address):
-                # Inviolable invariants (Loopback, Cloud Metadata 169.254.169.254) can NEVER be scanned
+            if isinstance(ip_obj, ipaddress.IPv6Address):
+                # Block IPv4-mapped IPv6 (::ffff:0:0/96) and NAT64 (64:ff9b::/96) unconditionally
+                if ip_obj in _IPV4_MAPPED_IPV6:
+                    mapped = ip_obj.ipv4_mapped
+                    return False, f"SECURITY INVARIANT: IPv6 {host} belongs to inviolable IPv4-mapped subnet ::ffff:0:0/96 (mapped IPv4: {mapped})."
+                if ip_obj in _NAT64_WELL_KNOWN_IPV6 or ip_obj in _NAT64_LOCAL_IPV6:
+                    return False, f"SECURITY INVARIANT: IPv6 {host} belongs to inviolable NAT64 subnet 64:ff9b::/96 and cannot be scanned."
+                if ip_obj in _AWS_IMDS_IPV6:
+                    return False, f"SECURITY INVARIANT: IPv6 {host} is AWS IMDS metadata address fd00:ec2::254 and cannot be scanned."
+                for blk in INVIOLABLE_IPV6_SUBNETS:
+                    if ip_obj in blk:
+                        return False, f"SECURITY INVARIANT: IPv6 {host} belongs to inviolable subnet {blk} and cannot be scanned."
+                if not self.policy.allow_private_ips_override:
+                    for blk in RFC1918_IPV6_SUBNETS:
+                        if ip_obj in blk:
+                            return False, f"SECURITY INVARIANT: IPv6 {host} belongs to internal/private subnet {blk} and cannot be scanned."
+            elif isinstance(ip_obj, ipaddress.IPv4Address):
+                # Inviolable invariants (Loopback, Cloud Metadata 169.254.169.254 / 100.100.100.200) can NEVER be scanned
                 for blk in INVIOLABLE_IPV4_SUBNETS:
                     if ip_obj in blk:
                         return False, f"SECURITY INVARIANT: IP {host} belongs to inviolable subnet {blk} and cannot be scanned."
@@ -339,14 +425,6 @@ class StrictScopeEngine:
                     for blk in RFC1918_IPV4_SUBNETS:
                         if ip_obj in blk:
                             return False, f"SECURITY INVARIANT: IP {host} belongs to internal/private subnet {blk} and cannot be scanned."
-            elif isinstance(ip_obj, ipaddress.IPv6Address):
-                for blk in INVIOLABLE_IPV6_SUBNETS:
-                    if ip_obj in blk:
-                        return False, f"SECURITY INVARIANT: IPv6 {host} belongs to inviolable subnet {blk} and cannot be scanned."
-                if not self.policy.allow_private_ips_override:
-                    for blk in RFC1918_IPV6_SUBNETS:
-                        if ip_obj in blk:
-                            return False, f"SECURITY INVARIANT: IPv6 {host} belongs to internal/private subnet {blk} and cannot be scanned."
 
         # 3. Hard-blocked Ports
         if port and port in self.policy.excluded_ports:
@@ -632,46 +710,150 @@ def _check_resolved_ip_safety(
     ip_obj: Union[ipaddress.IPv4Address, ipaddress.IPv6Address],
     label: str,
     allow_loopback: bool,
+    allow_private: bool = False,
 ) -> Tuple[bool, Optional[str]]:
     """Enforce SSRF & inviolable subnet checks on a literal or DNS-resolved IP."""
-    if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped is not None:
-        ip_obj = ip_obj.ipv4_mapped
+    if isinstance(ip_obj, ipaddress.IPv6Address):
+        if ip_obj in _IPV4_MAPPED_IPV6:
+            mapped = ip_obj.ipv4_mapped
+            return (
+                False,
+                f"SECURITY INVARIANT: {label} belongs to blocked IPv4-mapped IPv6 subnet ::ffff:0:0/96 (mapped: {mapped})",
+            )
+        if ip_obj in _NAT64_WELL_KNOWN_IPV6 or ip_obj in _NAT64_LOCAL_IPV6:
+            return (
+                False,
+                f"SECURITY INVARIANT: {label} belongs to blocked NAT64 IPv6 subnet 64:ff9b::/96",
+            )
+        if ip_obj in _AWS_IMDS_IPV6 or str(ip_obj).lower() in _METADATA_HOST_IPS:
+            return False, f"SECURITY INVARIANT: {label} resolves to cloud metadata IP {ip_obj}"
+        if ip_obj in _LINK_LOCAL_IPV6:
+            return False, f"SECURITY INVARIANT: {label} belongs to non-overridable IPv6 link-local subnet {_LINK_LOCAL_IPV6}"
+        if ip_obj in _UNSPECIFIED_IPV6:
+            return False, f"SECURITY INVARIANT: {label} belongs to unspecified IPv6 address {_UNSPECIFIED_IPV6}"
+        if ip_obj in _LOOPBACK_IPV6:
+            if allow_loopback:
+                return True, None
+            return False, f"SECURITY INVARIANT: {label} belongs to IPv6 loopback subnet {_LOOPBACK_IPV6}"
+        for blk in INVIOLABLE_IPV6_SUBNETS:
+            if ip_obj in blk:
+                return False, f"SECURITY INVARIANT: {label} belongs to inviolable IPv6 subnet {blk}"
+        if not allow_private:
+            for blk in RFC1918_IPV6_SUBNETS:
+                if ip_obj in blk:
+                    return False, f"SECURITY INVARIANT: {label} belongs to internal/private IPv6 subnet {blk}"
+        return True, None
 
     if str(ip_obj).lower() in _METADATA_HOST_IPS:
         return False, f"SECURITY INVARIANT: {label} resolves to cloud metadata IP {ip_obj}"
-
-    if isinstance(ip_obj, ipaddress.IPv4Address):
-        if ip_obj in _LINK_LOCAL_IPV4:
-            return False, f"SECURITY INVARIANT: {label} belongs to non-overridable link-local/metadata subnet {_LINK_LOCAL_IPV4}"
-        if ip_obj in _UNSPECIFIED_IPV4:
-            return False, f"SECURITY INVARIANT: {label} belongs to unspecified subnet {_UNSPECIFIED_IPV4}"
-        if ip_obj in _LOOPBACK_IPV4:
-            if allow_loopback:
-                return True, None
-            return False, f"SECURITY INVARIANT: {label} belongs to loopback subnet {_LOOPBACK_IPV4}"
-        for blk in INVIOLABLE_IPV4_SUBNETS:
-            if ip_obj in blk:
-                return False, f"SECURITY INVARIANT: {label} belongs to inviolable subnet {blk}"
+    if ip_obj in _LINK_LOCAL_IPV4:
+        return False, f"SECURITY INVARIANT: {label} belongs to non-overridable link-local/metadata subnet {_LINK_LOCAL_IPV4}"
+    if ip_obj in _UNSPECIFIED_IPV4:
+        return False, f"SECURITY INVARIANT: {label} belongs to unspecified subnet {_UNSPECIFIED_IPV4}"
+    if ip_obj in _LOOPBACK_IPV4:
+        if allow_loopback:
+            return True, None
+        return False, f"SECURITY INVARIANT: {label} belongs to loopback subnet {_LOOPBACK_IPV4}"
+    for blk in INVIOLABLE_IPV4_SUBNETS:
+        if ip_obj in blk:
+            return False, f"SECURITY INVARIANT: {label} belongs to inviolable subnet {blk}"
+    if not allow_private:
         for blk in RFC1918_IPV4_SUBNETS:
             if ip_obj in blk:
                 return False, f"SECURITY INVARIANT: {label} belongs to internal/private subnet {blk}"
-        return True, None
-
-    if ip_obj in _LINK_LOCAL_IPV6:
-        return False, f"SECURITY INVARIANT: {label} belongs to non-overridable IPv6 link-local subnet {_LINK_LOCAL_IPV6}"
-    if ip_obj in _UNSPECIFIED_IPV6:
-        return False, f"SECURITY INVARIANT: {label} belongs to unspecified IPv6 address {_UNSPECIFIED_IPV6}"
-    if ip_obj in _LOOPBACK_IPV6:
-        if allow_loopback:
-            return True, None
-        return False, f"SECURITY INVARIANT: {label} belongs to IPv6 loopback subnet {_LOOPBACK_IPV6}"
-    for blk in INVIOLABLE_IPV6_SUBNETS:
-        if ip_obj in blk:
-            return False, f"SECURITY INVARIANT: {label} belongs to inviolable IPv6 subnet {blk}"
-    for blk in RFC1918_IPV6_SUBNETS:
-        if ip_obj in blk:
-            return False, f"SECURITY INVARIANT: {label} belongs to internal/private IPv6 subnet {blk}"
     return True, None
+
+
+class SSRFBlockedError(ValueError):
+    """Raised when a target host or any resolved A/AAAA record violates SSRF invariants."""
+
+
+def resolve_and_pin_host(
+    host: str,
+    port: Optional[int] = None,
+    *,
+    allow_loopback: bool = False,
+    allow_private: bool = False,
+) -> str:
+    """Resolve ``host`` (A and AAAA), verify EVERY returned IP against SSRF blocks, and return a pinned IP.
+
+    Prevents DNS rebinding and dual-stack SSRF bypasses by validating every
+    returned A/AAAA record before the caller connects to the pinned IP.
+    Raises :class:`SSRFBlockedError` (a ``ValueError`` subclass) when the host
+    cannot be resolved or any resolved IP is private, loopback (unless explicitly
+    permitted), link-local, metadata, IPv4-mapped IPv6, or NAT64.
+    """
+    raw = (host or "").strip()
+    if not raw:
+        raise SSRFBlockedError("Host is empty")
+
+    if "://" in raw:
+        parsed = urlparse(raw)
+        clean_host = (parsed.hostname or "").strip().lower().rstrip(".")
+        port = port or parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
+    else:
+        clean_host = _extract_authority_host(raw)
+
+    if not clean_host:
+        raise SSRFBlockedError(f"Could not extract hostname from {host!r}")
+
+    if clean_host in {
+        "metadata.google.internal",
+        "metadata.internal",
+        "metadata.azure.com",
+        "metadata.tencentyun.com",
+        "metadata.aliyun.com",
+        "local-metadata",
+        "instance-data",
+    }:
+        raise SSRFBlockedError(f"SECURITY INVARIANT: Host '{clean_host}' is a blocked cloud metadata host")
+
+    if clean_host in {"localhost", "localhost.localdomain"} and not allow_loopback:
+        raise SSRFBlockedError(f"SECURITY INVARIANT: Host '{clean_host}' is a blocked loopback host")
+
+    # Direct IP literal (canonical, integer, octal, hex, IPv6, IPv4-mapped, NAT64)
+    literal_ip = normalize_ip_literal(clean_host)
+    if literal_ip is not None:
+        safe, reason = _check_resolved_ip_safety(
+            literal_ip,
+            f"Target IP {clean_host}",
+            allow_loopback=allow_loopback,
+            allow_private=allow_private,
+        )
+        if not safe:
+            raise SSRFBlockedError(reason or f"Target IP {clean_host} is blocked")
+        return str(literal_ip)
+
+    check_port = port or 443
+    try:
+        addr_infos = socket.getaddrinfo(clean_host, check_port)
+    except (socket.gaierror, OSError) as exc:
+        raise SSRFBlockedError(f"DNS resolution failed for host '{clean_host}': {exc}") from exc
+
+    verified_ips: List[str] = []
+    for info in addr_infos:
+        if not info or len(info) < 5 or not info[4]:
+            continue
+        resolved_str = str(info[4][0])
+        resolved_ip = normalize_ip_literal(resolved_str)
+        if resolved_ip is None:
+            raise SSRFBlockedError(f"DNS returned unparseable address {resolved_str!r} for '{clean_host}'")
+        safe, reason = _check_resolved_ip_safety(
+            resolved_ip,
+            f"Resolved host {clean_host} ({resolved_ip})",
+            allow_loopback=allow_loopback,
+            allow_private=allow_private,
+        )
+        if not safe:
+            raise SSRFBlockedError(reason or f"Resolved IP {resolved_ip} for '{clean_host}' is blocked")
+        canonical = str(resolved_ip)
+        if canonical not in verified_ips:
+            verified_ips.append(canonical)
+
+    if not verified_ips:
+        raise SSRFBlockedError(f"DNS resolution returned no addresses for '{clean_host}'")
+
+    return verified_ips[0]
 
 
 def validate_http_url_target(
@@ -748,7 +930,15 @@ def validate_http_url_target(
                 return False, f"Path '{raw_path}' matches excluded path rule '{exp}'"
 
     # Check non-overridable cloud metadata hostnames before scope matching.
-    if host in {"metadata.google.internal", "metadata.internal", "instance-data"}:
+    if host in {
+        "metadata.google.internal",
+        "metadata.internal",
+        "metadata.azure.com",
+        "metadata.tencentyun.com",
+        "metadata.aliyun.com",
+        "local-metadata",
+        "instance-data",
+    }:
         return False, f"SECURITY INVARIANT: Host '{host}' is a non-overridable metadata host"
 
     in_patterns, in_subnets = _compile_url_scope_rules(in_scope)

@@ -1,9 +1,19 @@
 """Session Manager — حفظ واستكمال جلسات الـ pentest"""
-import json, uuid
+import json
+import logging
+import os
+import re
+import stat
+import uuid
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional
+
+from core.secret_sanitizer import SecretSanitizer
+
+logger = logging.getLogger("hunter_ai.session_manager")
+_SAFE_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 @dataclass
@@ -35,8 +45,17 @@ class PentestSession:
 
 class SessionManager:
     def __init__(self, sessions_dir: str = "data/sessions"):
-        self.dir = Path(sessions_dir)
+        self.dir = Path(sessions_dir).resolve()
         self.dir.mkdir(parents=True, exist_ok=True)
+
+    def _session_path(self, sid: str) -> Path:
+        clean = str(sid or "").strip()
+        if not clean or clean in {".", ".."} or ".." in clean or not _SAFE_SESSION_ID_RE.fullmatch(clean):
+            raise ValueError(f"Invalid session ID: {sid!r}")
+        candidate = (self.dir / f"{clean}.json").resolve()
+        if not candidate.is_relative_to(self.dir):
+            raise ValueError(f"Session path escapes sessions directory: {sid!r}")
+        return candidate
 
     def create_session(self, target: str, mode: str) -> PentestSession:
         now = datetime.now().isoformat()
@@ -47,12 +66,24 @@ class SessionManager:
 
     def save(self, session: PentestSession):
         session.updated_at = datetime.now().isoformat()
-        with open(self.dir / f"{session.id}.json", "w", encoding="utf-8") as f:
-            json.dump(asdict(session), f, indent=2, ensure_ascii=False)
+        target_path = self._session_path(session.id)
+        # Scrub persisted disk payload while leaving in-memory session intact
+        scrubbed = SecretSanitizer.sanitize_data(asdict(session))
+        serialized = json.dumps(scrubbed, indent=2, ensure_ascii=False)
+        if os.name != "nt":
+            fd = os.open(str(target_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(fd, serialized.encode("utf-8"))
+            finally:
+                os.close(fd)
+            os.chmod(target_path, stat.S_IRUSR | stat.S_IWUSR)
+        else:
+            target_path.write_text(serialized, encoding="utf-8")
 
     def load(self, sid: str) -> Optional[PentestSession]:
-        p = self.dir / f"{sid}.json"
-        if not p.exists(): return None
+        p = self._session_path(sid)
+        if not p.exists():
+            return None
         with open(p, encoding="utf-8") as f:
             d = json.load(f)
         findings = [Finding(**x) for x in d.pop("findings", [])]
@@ -70,8 +101,8 @@ class SessionManager:
                             "mode": d.get("mode"), "status": d.get("status"),
                             "created_at": d.get("created_at"),
                             "findings_count": len(d.get("findings", []))})
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Skipping corrupt session file %s: %s", p, exc)
         return out
 
     def add_finding(self, session: PentestSession, finding: Finding):

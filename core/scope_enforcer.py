@@ -19,6 +19,13 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from core.scope_engine import (
+    SSRFBlockedError,
+    _check_resolved_ip_safety,
+    _extract_authority_host,
+    normalize_ip_literal,
+    resolve_and_pin_host,
+)
 from core.scope_guard import ScopeGuard
 
 logger = logging.getLogger(__name__)
@@ -36,9 +43,13 @@ class ScopeDecision:
 # عناوين نطاقات metadata التي تُحظر دائمًا (حتى لو ظهرت في النطاق يدويًا)
 METADATA_HOSTS: List[str] = [
     "169.254.169.254",
+    "100.100.100.200",
+    "fd00:ec2::254",
     "metadata.google.internal",
+    "metadata.internal",
     "metadata.azure.com",
-    "169.254.169.254",
+    "metadata.tencentyun.com",
+    "metadata.aliyun.com",
     "local-metadata",
     "instance-data",
 ]
@@ -48,10 +59,18 @@ PRIVATE_IPV4_NETS: List[str] = [
     "10.0.0.0/8",
     "172.16.0.0/12",
     "192.168.0.0/16",
+    "100.64.0.0/10",
+]
+
+PRIVATE_IPV6_NETS: List[str] = [
+    "fc00::/7",
+    "fe80::/10",
+    "::ffff:0:0/96",
+    "64:ff9b::/96",
 ]
 
 # Loopback
-LOOPBACK_HOSTS: List[str] = ["127.0.0.1", "::1", "localhost"]
+LOOPBACK_HOSTS: List[str] = ["127.0.0.1", "::1", "localhost", "localhost.localdomain"]
 
 
 class ScopeEnforcer:
@@ -88,16 +107,21 @@ class ScopeEnforcer:
         clean = target.strip().lower()
         host = self._extract_host(clean)
 
-        # 1. invariant engine من scope_guard (loopback/metadata/RFC1918 غير المصرح)
-        inv_ok, inv_reason = self._check_invariants(host)
-        if not inv_ok:
-            return self._record(target, ScopeDecision.DENIED_LOCAL, inv_reason)
-
-        # 2. حظر خدمات metadata حتى لو مدرجة في النطاق
+        # 1. حظر خدمات metadata حتى لو مدرجة في النطاق (بما فيها IPv6/octal/integer)
         if self._is_metadata_host(host):
             return self._record(
                 target, ScopeDecision.DENIED_METADATA,
                 f"خدمة metadata محظورة: {host}")
+
+        # 2. invariant engine (IPv4/IPv6/NAT64/IPv4-mapped/octal/integer/loopback/RFC1918)
+        inv_ok, inv_reason = self._check_invariants(host)
+        if not inv_ok:
+            dec = (
+                ScopeDecision.DENIED_METADATA
+                if "metadata" in inv_reason.lower() or "169.254" in inv_reason or "100.100.100.200" in inv_reason or "fd00:ec2::254" in inv_reason
+                else ScopeDecision.DENIED_LOCAL
+            )
+            return self._record(target, dec, inv_reason)
 
         # 3. نطاق scope_guard (in_scope/out_of_scope patterns)
         guard_ok, guard_reason = self.guard.is_in_scope(target)
@@ -129,42 +153,73 @@ class ScopeEnforcer:
     # ── المساعدة الداخلية ──────────────────────────────────────────────
 
     def _extract_host(self, target: str) -> str:
-        """استخراج المضيف من عنوان URL أو مضيف صريح."""
+        """استخراج المضيف من عنوان URL أو مضيف صريح مع دعم IPv6."""
         from urllib.parse import urlparse
 
-        clean = target
-        if clean.startswith("http://") or clean.startswith("https://"):
+        clean = target.strip()
+        if clean.startswith(("http://", "https://")):
             parsed = urlparse(clean)
-            return (parsed.hostname or clean).lower()
-        # إزالة المسار والمنفذ إذا وُجدا
-        host = clean.split("/", 1)[0].split(":", 1)[0]
-        return host.lower()
+            return (parsed.hostname or clean).strip().lower().rstrip(".")
+        authority = clean.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+        return _extract_authority_host(authority)
 
     def _check_invariants(self, host: str) -> Tuple[bool, str]:
-        """فحص invariant غير قابلة للتجاوز (loopback/private/metadata)."""
-        # loopback صريح — مسموح فقط إن وُجد في in_scope صراحةً (عبر guard لاحقًا)
-        if host in ("127.0.0.1", "::1", "localhost"):
-            # يُترك للقرار النهائي للguard؛ لكن نُنبه إن لم يُصرح
-            return True, "loopback (deferred to guard)"
+        """فحص invariants غير قابلة للتجاوز (IPv4/IPv6/NAT64/IPv4-mapped/octal/int/private/metadata)."""
+        low = host.strip().lower().rstrip(".")
 
-        # عناوين IP الخاصة (RFC1918) — تُحظر ما لم تُصرح صراحةً
-        try:
-            ip = ipaddress.IPv4Address(host)
-            if ip.is_private:
-                if self.allow_private_by_default:
-                    return True, "private IP (allowed by default)"
-                return False, f"عنوان IP خاص غير مصرح به: {host}"
-        except ValueError:
-            pass
+        if low in ("localhost", "localhost.localdomain"):
+            if any(low == str(s).strip().lower() for s in getattr(self.guard, "in_scope", [])):
+                return True, "loopback (explicitly listed, deferred to guard)"
+            return False, f"عنوان loopback محظور: {host}"
+
+        ip_obj = normalize_ip_literal(low)
+        if ip_obj is not None:
+            # Allow canonical loopback ONLY when explicitly listed in guard.in_scope
+            canonical_str = str(ip_obj)
+            is_canonical_loopback = (
+                low in ("127.0.0.1", "::1")
+                and any(low == str(s).strip().lower() for s in getattr(self.guard, "in_scope", []))
+            )
+            # Never allow non-canonical (octal/hex/integer) obfuscated loopback or metadata IPs
+            if canonical_str != low and ip_obj.version == 4:
+                is_canonical_loopback = False
+
+            safe, reason = _check_resolved_ip_safety(
+                ip_obj,
+                f"Target IP {host}",
+                allow_loopback=is_canonical_loopback,
+                allow_private=self.allow_private_by_default,
+            )
+            if not safe:
+                return False, reason or f"عنوان IP محظور: {host}"
 
         return True, "invariants OK"
 
     def _is_metadata_host(self, host: str) -> bool:
-        h = host.lower()
+        h = host.strip().lower().rstrip(".")
         for m in METADATA_HOSTS:
             if h == m or h.endswith("." + m.lstrip("*.")):
                 return True
+        ip_obj = normalize_ip_literal(h)
+        if ip_obj is not None:
+            ip_str = str(ip_obj).lower()
+            if ip_str in ("169.254.169.254", "100.100.100.200", "fd00:ec2::254"):
+                return True
+            if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped is not None:
+                mapped_str = str(ip_obj.ipv4_mapped)
+                if mapped_str in ("169.254.169.254", "100.100.100.200") or ip_obj.ipv4_mapped in ipaddress.IPv4Network("169.254.0.0/16"):
+                    return True
         return False
+
+    def resolve_and_pin(self, target: str, port: Optional[int] = None) -> str:
+        """Resolve and pin target host via DNS while enforcing SSRF/private/metadata blocks."""
+        host = self._extract_host(target)
+        return resolve_and_pin_host(
+            host,
+            port=port,
+            allow_private=self.allow_private_by_default,
+            allow_loopback=False,
+        )
 
     def _check_rate_limit(self, host: str) -> bool:
         if self.rate_limit_per_min is None:

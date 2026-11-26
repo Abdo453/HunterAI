@@ -18,7 +18,19 @@ logger = logging.getLogger(__name__)
 
 LOCAL_ONLY_TASK_KINDS: Set[str] = {
     "source_analysis",
+    "source_code",
+    "code_analysis",
     "http_analysis",
+    "http_capture",
+    "burp_traffic",
+    "burp_analysis",
+    "traffic_analysis",
+    "raw_logs",
+    "log_analysis",
+    "attachments",
+    "attachment_analysis",
+    "session_data",
+    "credential_analysis",
     "secret_detection",
     "baseline_comparison",
     "raw_parameter_parsing",
@@ -37,12 +49,13 @@ ONLINE_SUITABLE_TASK_KINDS: Set[str] = {
 @dataclass
 class GovernedTask:
     task_id: str
-    kind: str  # "source_analysis", "http_analysis", "planning", "ssrf", "report_writing", etc.
+    kind: str  # "source_analysis", "http_analysis", "burp_traffic", "planning", "report_writing", etc.
     target_url: str
     method: str = "GET"
     data: Dict[str, Any] = field(default_factory=dict)
     risk_level: str = "low"  # "low", "medium", "high", "critical"
     contains_sensitive_data: bool = False
+    redacted: bool = False
     requires_execution: bool = False
     human_approved: bool = False
     expected_output: List[str] = field(default_factory=list)
@@ -55,6 +68,16 @@ class GovernedTaskRouter:
     - يضمن عدم تسريب أي كود أو حركة مرور أو مفاتيح سرية إلى النماذج السحابية.
     """
 
+    LOCAL_ONLY_TASK_KINDS: Set[str] = LOCAL_ONLY_TASK_KINDS
+    ONLINE_SUITABLE_TASK_KINDS: Set[str] = ONLINE_SUITABLE_TASK_KINDS
+
+    @classmethod
+    def is_local_only_task(cls, task_kind: Optional[str], *, redacted: bool = False) -> bool:
+        """Return True if *task_kind* must stay on local models unless explicitly redacted."""
+        if not task_kind or redacted:
+            return False
+        return str(task_kind).strip().lower() in cls.LOCAL_ONLY_TASK_KINDS
+
     @classmethod
     def choose_model(cls, task: GovernedTask) -> str:
         """
@@ -62,16 +85,16 @@ class GovernedTaskRouter:
         - "local": للمهام الحساسة والبيانات الخاصة وتحليل الكود والترافيك
         - "online": للتخطيط العام وصياغة التقارير وتلخيص النتائج الخالية من الأسرار
         """
-        # 1. Any task flagged as containing sensitive data stays local 100%
-        if task.contains_sensitive_data:
+        # 1. Any task flagged as containing sensitive data stays local unless explicitly redacted
+        if task.contains_sensitive_data and not task.redacted:
             return "local"
 
-        # 2. Local-only technical categories
-        if task.kind.lower() in LOCAL_ONLY_TASK_KINDS:
+        # 2. Local-only technical categories stay local unless explicitly redacted
+        if cls.is_local_only_task(task.kind, redacted=task.redacted):
             return "local"
 
-        # 3. Cloud-suitable conceptual categories
-        if task.kind.lower() in ONLINE_SUITABLE_TASK_KINDS:
+        # 3. Cloud-suitable conceptual categories (or explicitly redacted local-only categories)
+        if task.kind.lower() in ONLINE_SUITABLE_TASK_KINDS or task.redacted:
             return "online"
 
         # Default safe stance: Keep task local

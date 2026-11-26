@@ -37,7 +37,11 @@ class SecuritySanitizer:
             return ""
         masked = text
         for pat in COOKIE_PATTERNS:
-            masked = re.sub(pat, r"\1=\2[:4]...[MASKED]", masked)
+            masked = re.sub(
+                pat,
+                lambda m: f"{m.group(1)}={m.group(2)[:4]}...[MASKED]",
+                masked,
+            )
         return masked
 
     @classmethod
@@ -45,14 +49,17 @@ class SecuritySanitizer:
         safe = {}
         for k, v in headers.items():
             low_k = k.lower()
-            if low_k in ("authorization", "cookie", "set-cookie", "x-api-key", "token"):
-                if "bearer " in v.lower():
-                    token_part = v[7:].strip()
-                    safe[k] = f"Bearer {token_part[:6]}...[MASKED]"
-                elif "basic " in v.lower():
+            if low_k in ("authorization", "cookie", "set-cookie", "x-api-key", "x-auth-token", "x-hunter-token", "token"):
+                val_str = str(v)
+                if val_str.lower().startswith("bearer "):
+                    token_part = val_str[7:].strip()
+                    prefix = token_part[:6] if len(token_part) > 10 else ""
+                    safe[k] = f"Bearer {prefix}...[MASKED]" if prefix else "Bearer [MASKED]"
+                elif val_str.lower().startswith("basic "):
                     safe[k] = "Basic [MASKED]"
                 else:
-                    safe[k] = f"{v[:4]}...[MASKED_CREDENTIAL]"
+                    prefix = val_str[:4] if len(val_str) > 8 else ""
+                    safe[k] = f"{prefix}...[MASKED_CREDENTIAL]" if prefix else "[MASKED_CREDENTIAL]"
             else:
                 safe[k] = v
         return safe

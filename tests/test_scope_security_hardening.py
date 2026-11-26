@@ -207,39 +207,42 @@ class TestScopeEnginePathNormalizationAndSSRF:
 
 
 class TestSecurityModeWebGovernance:
-    def test_web_governance_defaults_false_for_explicit_targets_even_when_cli_governed(self, monkeypatch):
+    def test_web_governance_defaults_fail_closed_and_supports_explicit_opt_in(self, monkeypatch):
         monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
         monkeypatch.delenv("HUNTER_UNRESTRICTED", raising=False)
-        assert unrestricted_mode() is True
-        assert web_governance_enforced() is False
+        assert unrestricted_mode() is False
+        assert web_governance_enforced() is True
 
         monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
         assert unrestricted_mode() is False
-        assert web_governance_enforced() is False
+        assert web_governance_enforced() is True
 
         set_unrestricted(True)
         assert unrestricted_mode() is True
-        assert web_governance_enforced() is False
-
-    @pytest.mark.parametrize("truthy_or_empty", ["1", "true", "TRUE", "yes", "on", ""])
-    def test_web_governance_stays_disabled_for_truthy_or_empty(self, monkeypatch, truthy_or_empty):
-        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", truthy_or_empty)
-        assert web_governance_enforced() is False
-
-    @pytest.mark.parametrize("falsy", ["0", "false", "FALSE", "no", "off", "disabled", "governed", "restricted"])
-    def test_web_governance_enforced_only_on_explicit_opt_in_falsy(self, monkeypatch, falsy):
-        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", falsy)
         assert web_governance_enforced() is True
 
-    def test_strict_scope_adapter_default_unrestricted_and_governed_lab_overrides(self, monkeypatch):
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
+        assert web_governance_enforced() is False
+
+    @pytest.mark.parametrize("truthy", ["1", "true", "TRUE", "yes", "on", "enabled", "unrestricted"])
+    def test_web_governance_disabled_on_explicit_opt_in_truthy(self, monkeypatch, truthy):
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", truthy)
+        assert web_governance_enforced() is False
+
+    @pytest.mark.parametrize("falsy_or_empty", ["", "0", "false", "FALSE", "no", "off", "disabled", "governed", "restricted"])
+    def test_web_governance_enforced_for_falsy_or_empty(self, monkeypatch, falsy_or_empty):
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", falsy_or_empty)
+        assert web_governance_enforced() is True
+
+    def test_strict_scope_adapter_explicit_unrestricted_and_governed_lab_overrides(self, monkeypatch):
         from core.copilot_service import evaluate_action_policy
 
         monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
-        monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
         monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
         monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
 
-        # 1. Default explicit-target mode allows websites, .local, localhost, and private lab targets
+        # 1. Explicit opt-in web unrestricted mode allows websites, .local, localhost, and private lab targets
         # even with no engagement scope or differing scope/out_of_scope entries, plus ?url= query params
         for allowed_target in (
             "https://any-site.com",

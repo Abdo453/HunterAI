@@ -14,18 +14,92 @@ import fnmatch
 import json
 import logging
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from core.control_plane.policy_gate import ActionCategory, ActionRequest, PolicyGate
 from core.process_utils import kill_process_tree
 
 logger = logging.getLogger("hunter_ai.computer_control")
+
+_SHELL_OPERATOR_TOKENS = {";", "|", "||", "&", "&&", ">", ">>", "<", "<<", "2>", "2>&1"}
+_SAFE_PROCESS_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _parse_command_argv(command: Union[str, Sequence[str]]) -> List[str]:
+    """Parse a command string or argv list into safe argv tokens with NO shell execution.
+
+    Rejects unquoted shell chaining/redirection operators and control chars
+    while preserving Windows paths (backslashes) and quoted arguments.
+    """
+    if isinstance(command, (list, tuple)):
+        argv = [str(tok) for tok in command if str(tok) != ""]
+        if not argv:
+            raise ValueError("Empty command argv")
+        for tok in argv:
+            if "\x00" in tok or "\n" in tok or "\r" in tok:
+                raise ValueError("Disallowed control character in command argument")
+        return argv
+
+    raw = str(command or "").strip()
+    if not raw:
+        raise ValueError("Empty command string")
+    if "\x00" in raw or "\n" in raw or "\r" in raw:
+        raise ValueError("Disallowed newline or null byte in command")
+
+    lexer = shlex.shlex(raw, posix=(os.name != "nt"), punctuation_chars=";|&<>")
+    lexer.whitespace_split = True
+    tokens = list(lexer)
+    if not tokens:
+        raise ValueError("Empty command after tokenization")
+
+    argv: List[str] = []
+    for tok in tokens:
+        if tok in _SHELL_OPERATOR_TOKENS or any(op in tok for op in (";", "|", "&", "`", "$(")) and not (
+            (len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in ("'", '"'))
+        ):
+            raise ValueError(f"Blocked shell metacharacter/operator token: {tok!r}")
+        if os.name == "nt" and len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in ('"', "'"):
+            tok = tok[1:-1]
+        argv.append(tok)
+    return argv
+
+
+def _kill_popen_tree_sync(proc: subprocess.Popen) -> None:
+    """Terminate a subprocess.Popen process and its descendants safely."""
+    try:
+        import psutil
+        try:
+            parent = psutil.Process(proc.pid)
+            children = parent.children(recursive=True)
+        except psutil.NoSuchProcess:
+            children = []
+            parent = None
+        for child in children:
+            try:
+                child.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        if parent is not None:
+            try:
+                parent.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        targets = ([parent] if parent is not None else []) + children
+        if targets:
+            psutil.wait_procs(targets, timeout=3.0)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
 
 @dataclass
@@ -99,7 +173,7 @@ class ComputerControl:
 
     async def execute_command(
         self,
-        command: str,
+        command: Union[str, Sequence[str]],
         tool: str = "custom",
         stage: str = "general",
         reason: str = "",
@@ -110,24 +184,26 @@ class ComputerControl:
         requested_by_model: str = "unknown",
     ) -> ExecutionRecord:
         """
-        Executes a shell/terminal command safely through PolicyGate with full auditing.
+        Executes a terminal command safely through PolicyGate using create_subprocess_exec
+        (NO shell=True) with process-tree reaping and full auditing.
         """
         start_time = time.time()
         iso_time = datetime.now().isoformat()
         effective_cwd = Path(cwd).resolve() if cwd else self.workspace_dir
+        cmd_display = " ".join(str(x) for x in command) if isinstance(command, (list, tuple)) else str(command)
 
         # 1. Evaluate against PolicyGate
         req = ActionRequest(
             category=ActionCategory.TERMINAL_COMMAND,
             target=target or "local_terminal",
-            command=command,
+            command=cmd_display,
             reason=reason,
             requested_by_model=requested_by_model,
         )
         decision = self.policy_gate.evaluate(req)
         if not decision.allowed:
             rec = ExecutionRecord(
-                command=command,
+                command=cmd_display,
                 timestamp=iso_time,
                 cwd=str(effective_cwd),
                 exit_code=-1,
@@ -143,15 +219,36 @@ class ComputerControl:
             self._audit_record(rec)
             return rec
 
-        # 2. Build environment
+        # 2. Parse into argv array (never invoke OS shell)
+        try:
+            argv = _parse_command_argv(command)
+        except ValueError as parse_err:
+            rec = ExecutionRecord(
+                command=cmd_display,
+                timestamp=iso_time,
+                cwd=str(effective_cwd),
+                exit_code=-1,
+                stdout="",
+                stderr=f"COMMAND_REJECTED: {parse_err}",
+                duration_ms=0.0,
+                tool=tool,
+                stage=stage,
+                reason=reason,
+                success=False,
+                error_message=str(parse_err),
+            )
+            self._audit_record(rec)
+            return rec
+
+        # 3. Build environment
         full_env = os.environ.copy()
         if env_vars:
             full_env.update(env_vars)
 
-        # 3. Asynchronously execute process
+        # 4. Asynchronously execute process via create_subprocess_exec (NO shell)
         try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(effective_cwd),
@@ -167,7 +264,6 @@ class ComputerControl:
                 exit_code = proc.returncode or 0
                 error_msg = None if exit_code == 0 else f"Process exited with code {exit_code}"
             except asyncio.TimeoutError:
-                # Kill the whole tree: cmd.exe's child is the real workload.
                 await kill_process_tree(proc)
                 stdout_str = ""
                 stderr_str = f"Execution timed out after {timeout} seconds"
@@ -183,7 +279,7 @@ class ComputerControl:
         duration_ms = (time.time() - start_time) * 1000.0
 
         rec = ExecutionRecord(
-            command=command,
+            command=cmd_display,
             timestamp=iso_time,
             cwd=str(effective_cwd),
             exit_code=exit_code,
@@ -204,21 +300,28 @@ class ComputerControl:
     def start_process(
         self,
         process_id: str,
-        command: str,
+        command: Union[str, Sequence[str]],
         tool: str = "daemon",
         stage: str = "background",
         reason: str = "",
         cwd: Optional[str] = None,
     ) -> Tuple[bool, str]:
-        """Start a persistent background process and track its output stream"""
+        """Start a persistent background process (argv array, shell=False) and track output."""
+        if not process_id or ".." in process_id or not _SAFE_PROCESS_ID_RE.fullmatch(process_id):
+            return False, f"Invalid process_id: {process_id!r}"
+
         effective_cwd = Path(cwd).resolve() if cwd else self.workspace_dir
-        log_file = self.workspace_dir / f"process_{process_id}.log"
+        log_file = (self.workspace_dir / f"process_{process_id}.log").resolve()
+        if not log_file.is_relative_to(self.workspace_dir):
+            return False, f"SECURITY: Process log path escapes workspace jail."
+
+        cmd_display = " ".join(str(x) for x in command) if isinstance(command, (list, tuple)) else str(command)
 
         # Check policy
         req = ActionRequest(
             category=ActionCategory.PROCESS_SPAWN,
             target="background_process",
-            command=command,
+            command=cmd_display,
             reason=reason,
         )
         decision = self.policy_gate.evaluate(req)
@@ -226,10 +329,15 @@ class ComputerControl:
             return False, f"POLICY REJECTION: {decision.reason}"
 
         try:
+            argv = _parse_command_argv(command)
+        except ValueError as parse_err:
+            return False, f"COMMAND REJECTION: {parse_err}"
+
+        try:
             out_fd = open(log_file, "w", encoding="utf-8")
             p = subprocess.Popen(
-                command,
-                shell=True,
+                argv,
+                shell=False,
                 stdout=out_fd,
                 stderr=subprocess.STDOUT,
                 cwd=str(effective_cwd),
@@ -237,7 +345,7 @@ class ComputerControl:
             managed = ManagedProcess(
                 process_id=process_id,
                 pid=p.pid,
-                command=command,
+                command=cmd_display,
                 started_at=time.time(),
                 popen_obj=p,
                 log_path=str(log_file),
@@ -283,12 +391,12 @@ class ComputerControl:
         }
 
     def stop_process(self, process_id: str) -> bool:
-        """Terminate a running background process"""
+        """Terminate a running background process and its process tree"""
         if process_id not in self._background_processes:
             return False
         m = self._background_processes[process_id]
         try:
-            m.popen_obj.terminate()
+            _kill_popen_tree_sync(m.popen_obj)
             m.status = "terminated"
             return True
         except Exception as e:
@@ -302,55 +410,71 @@ class ComputerControl:
 
     # ── 3. WORKSPACE FILESYSTEM OPERATIONS ───────────────────────────────────
 
+    def _resolve_workspace_path(self, relative_path: str) -> Path:
+        """Resolve *relative_path* strictly inside self.workspace_dir via Path.is_relative_to."""
+        if "\x00" in str(relative_path):
+            raise PermissionError(f"SECURITY: Null byte in path '{relative_path}'.")
+        full_path = (self.workspace_dir / relative_path).resolve()
+        if not full_path.is_relative_to(self.workspace_dir):
+            raise PermissionError(f"SECURITY: Path '{relative_path}' escapes workspace jail.")
+        return full_path
+
     def write_file(self, relative_path: str, content: str) -> Tuple[bool, str]:
         """Safely writes a file within the designated workspace directory"""
         try:
-            full_path = (self.workspace_dir / relative_path).resolve()
-            # Enforce workspace jail
-            if not str(full_path).startswith(str(self.workspace_dir)):
-                return False, f"SECURITY: Path '{relative_path}' escapes workspace jail."
+            full_path = self._resolve_workspace_path(relative_path)
             full_path.parent.mkdir(parents=True, exist_ok=True)
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(content)
             return True, str(full_path)
+        except PermissionError as pe:
+            return False, str(pe)
         except Exception as e:
             return False, f"Write failed: {e}"
 
     def read_file(self, relative_path: str) -> Tuple[bool, str]:
         """Safely reads a file within the workspace"""
         try:
-            full_path = (self.workspace_dir / relative_path).resolve()
+            full_path = self._resolve_workspace_path(relative_path)
             if not full_path.exists():
                 return False, f"File not found: {relative_path}"
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 return True, f.read()
+        except PermissionError as pe:
+            return False, str(pe)
         except Exception as e:
             return False, f"Read failed: {e}"
 
     def list_directory(self, relative_path: str = "") -> List[Dict[str, Any]]:
-        """Lists directory entries within workspace"""
-        full_path = (self.workspace_dir / relative_path).resolve()
+        """Lists directory entries within workspace (enforces is_relative_to jail)"""
+        full_path = self._resolve_workspace_path(relative_path)
         if not full_path.exists() or not full_path.is_dir():
             return []
         items = []
         for entry in os.scandir(full_path):
+            entry_resolved = Path(entry.path).resolve()
+            if not entry_resolved.is_relative_to(self.workspace_dir):
+                continue
             items.append({
                 "name": entry.name,
                 "is_dir": entry.is_dir(),
                 "size_bytes": entry.stat().st_size if entry.is_file() else 0,
-                "path": str(Path(entry.path).relative_to(self.workspace_dir)),
+                "path": str(entry_resolved.relative_to(self.workspace_dir)),
             })
         return items
 
     def search_files(self, pattern: str, sub_dir: str = "") -> List[str]:
-        """Glob search files within the workspace"""
-        root = (self.workspace_dir / sub_dir).resolve()
+        """Glob search files within the workspace (enforces is_relative_to jail)"""
+        root = self._resolve_workspace_path(sub_dir)
         if not root.exists():
             return []
         matches = []
         for dirpath, _, filenames in os.walk(root):
             for fname in filenames:
                 if fnmatch.fnmatch(fname, pattern):
-                    rel = Path(os.path.join(dirpath, fname)).relative_to(self.workspace_dir)
+                    resolved_file = Path(os.path.join(dirpath, fname)).resolve()
+                    if not resolved_file.is_relative_to(self.workspace_dir):
+                        continue
+                    rel = resolved_file.relative_to(self.workspace_dir)
                     matches.append(str(rel))
         return matches

@@ -1,22 +1,20 @@
 """Owner Execution Mode — single source of truth for agent execution latitude.
 ================================================================================
 
-The operator owns this platform and runs it on their own machine, so the
-DEFAULT is **UNRESTRICTED execution**: the agent acts with FULL permissions —
-any target, any action, no scope gating, no policy blocks, no active-testing
-authorization flag and no human-approval queues.
+Governance defaults are **fail-closed**:
 
-What this switch does NOT touch (result integrity, deliberately preserved):
+  * ``unrestricted_mode()`` returns ``False`` unless ``HUNTER_UNRESTRICTED`` is
+    explicitly set to a truthy value (``1/true/yes/on/enabled/unrestricted``) or
+    enabled programmatically via ``set_unrestricted(True)``.
+  * ``web_governance_enforced()`` returns ``True`` unless
+    ``HUNTER_WEB_UNRESTRICTED`` is explicitly set to a truthy value.
+
+What these switches NEVER weaken (result integrity, deliberately preserved):
 
   * Proof-of-Execution is still required BEFORE a finding is CONFIRMED.
   * The Evidence Court still rejects reflection / free-text / assumption proofs.
   * Scanner signals still enter as hypotheses, not confirmed findings.
   * Secret sanitization still scrubs every artifact written to disk.
-
-In other words: full freedom to *execute* — zero freedom to *fake results*.
-
-Set ``HUNTER_UNRESTRICTED=0`` to restore fail-closed governance. The security
-test-suite sets this to exercise the guarded code paths.
 """
 from __future__ import annotations
 
@@ -25,22 +23,25 @@ import os
 _ENV_VAR = "HUNTER_UNRESTRICTED"
 _WEB_UNRESTRICTED_ENV_VAR = "HUNTER_WEB_UNRESTRICTED"
 
-# Values that explicitly disable unrestricted mode (i.e. restore governance).
+# Values that explicitly opt into unrestricted execution / disable governance.
 _FALSY = {"0", "false", "no", "off", "disabled", "governed", "restricted"}
 _TRUTHY = {"1", "true", "yes", "on", "enabled", "unrestricted"}
 
 
 def unrestricted_mode() -> bool:
-    """Return True when the owner grants the agent full execution permissions.
+    """Return True ONLY when the owner explicitly opts into unrestricted execution.
 
-    Defaults to True (owner machine, full permissions). Any of
-    ``0/false/no/off/disabled/governed/restricted`` in ``HUNTER_UNRESTRICTED``
-    restores fail-closed governance.
+    Defaults to ``False`` (fail-closed governance). Set ``HUNTER_UNRESTRICTED``
+    to an explicit truthy value (``1/true/yes/on/enabled/unrestricted``) or call
+    ``set_unrestricted(True)`` to opt into unrestricted mode.
     """
     value = os.getenv(_ENV_VAR)
     if value is None:
-        return True
-    return value.strip().lower() not in _FALSY
+        return False
+    clean = value.strip().lower()
+    if not clean:
+        return False
+    return clean in _TRUTHY
 
 
 def set_unrestricted(enabled: bool) -> None:
@@ -49,21 +50,18 @@ def set_unrestricted(enabled: bool) -> None:
 
 
 def web_governance_enforced() -> bool:
-    """Return True ONLY when strict web/API scope governance is explicitly enabled.
+    """Return True unless strict web/API scope governance is explicitly disabled.
 
-    Defaults to False (operator-selected explicit websites and lab targets are
-    permitted without ``in_scope``/``out_of_scope`` scope gating, while
-    non-overridable Cloud Metadata/link-local SSRF, dangerous schemes, shell
-    metacharacters, traversal, and CSRF/Origin checks remain enforced).
-
-    Set ``HUNTER_WEB_UNRESTRICTED`` to an explicit falsy/governed value
-    (``0/false/no/off/disabled/governed/restricted``) to opt into fail-closed
-    engagement/``in_scope``/``out_of_scope`` web scope governance.
+    Defaults to ``True`` (fail-closed web scope governance). Set
+    ``HUNTER_WEB_UNRESTRICTED`` to an explicit truthy value
+    (``1/true/yes/on/enabled/unrestricted``) to opt into unrestricted web target
+    mode (non-overridable Cloud Metadata/link-local SSRF, dangerous schemes,
+    shell metacharacters, traversal, and CSRF/Origin checks still remain enforced).
     """
     value = os.getenv(_WEB_UNRESTRICTED_ENV_VAR)
     if value is None:
-        return False
+        return True
     clean = value.strip().lower()
     if not clean:
-        return False
-    return clean in _FALSY
+        return True
+    return clean not in _TRUTHY

@@ -28,6 +28,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
+from core.governance.task_router import GovernedTaskRouter
+from core.secret_sanitizer import SecretSanitizer
 from models.base_model import Message, ModelResponse
 
 logger = logging.getLogger("hunter_ai.llm_router")
@@ -213,6 +215,21 @@ class LLMRouter:
             "choices": self._choices(local, cloud),
         }
 
+    def _effective_policy(self, task_kind: Optional[str] = None, redacted: bool = False) -> str:
+        if self.policy == "local_only":
+            return "local_only"
+        if GovernedTaskRouter.is_local_only_task(task_kind, redacted=redacted):
+            return "local_only"
+        return self.policy
+
+    @staticmethod
+    def _scrub_for_cloud(msgs: List[Message]) -> List[Message]:
+        """Scrub secrets before cloud LLM egress without mutating caller messages."""
+        return [
+            Message(role=m.role, content=SecretSanitizer.sanitize_text(m.content))
+            for m in msgs
+        ]
+
     # ── completion ───────────────────────────────────────────────────────────
     async def complete(
         self,
@@ -220,12 +237,15 @@ class LLMRouter:
         prefer: Optional[str] = None,
         system_prompt: str = "",
         errors: Optional[List[str]] = None,
+        task_kind: Optional[str] = None,
+        redacted: bool = False,
     ) -> ModelResponse:
-        """Generate a completion following the configured policy.
+        """Generate a completion following the configured policy and task governance.
 
-        ``prefer`` (optional) forces a specific target:
-          * ``"api:<provider>:<model>"`` — one cloud provider call (no fallback)
-          * ``"local:<ollama-model>"``   — one local Ollama call (no fallback)
+        ``prefer`` (optional) forces a specific target, subject to ``policy`` and
+        ``GovernedTaskRouter.LOCAL_ONLY_TASK_KINDS``:
+          * ``"api:<provider>:<model>"`` — one cloud provider call (blocked when ``local_only``)
+          * ``"local:<ollama-model>"``   — one local Ollama call (blocked when ``cloud_only``)
         """
         msgs = _coerce_messages(messages)
         if system_prompt and not any(m.role == "system" for m in msgs):
@@ -234,11 +254,13 @@ class LLMRouter:
             return ModelResponse(content="", model_name="none", role="router",
                                  error="no messages supplied")
 
+        effective_policy = self._effective_policy(task_kind=task_kind, redacted=redacted)
+
         if prefer:
-            return await self._dispatch(prefer, msgs)
+            return await self._dispatch(prefer, msgs, effective_policy=effective_policy)
 
         collected: List[str] = errors if errors is not None else []
-        for kind in self._order(self.policy):
+        for kind in self._order(effective_policy):
             res = (await self._complete_cloud(msgs, collected) if kind == "cloud"
                    else await self._complete_local(msgs, collected))
             if res and res.content:
@@ -265,8 +287,10 @@ class LLMRouter:
             f"[LLMRouter] {provider_label} refused request ('{check.matched_signature}'); "
             "retrying same model with reframed phrasing."
         )
-        reframed_msgs = _coerce_messages(
-            DefensivePromptFramer.reframe_messages_on_refusal(msgs, refusal_signature=check.matched_signature)
+        reframed_msgs = self._scrub_for_cloud(
+            _coerce_messages(
+                DefensivePromptFramer.reframe_messages_on_refusal(msgs, refusal_signature=check.matched_signature)
+            )
         )
         retry_res = await provider.chat(reframed_msgs)
         if retry_res and retry_res.content:
@@ -281,14 +305,15 @@ class LLMRouter:
         return None
 
     async def _complete_cloud(self, msgs: List[Message], errors: List[str]) -> Optional[ModelResponse]:
+        scrubbed_msgs = self._scrub_for_cloud(msgs)
         for spec in self.cloud_specs(only_available=True):
             try:
                 provider = self._load_provider(spec)
                 if hasattr(provider, "is_available") and not await provider.is_available():
                     continue
-                res = await provider.chat(msgs)
+                res = await provider.chat(scrubbed_msgs)
                 if res and res.content:
-                    checked = await self._retry_provider_on_refusal(provider, msgs, res, spec.id, errors)
+                    checked = await self._retry_provider_on_refusal(provider, scrubbed_msgs, res, spec.id, errors)
                     if checked and checked.content:
                         logger.info(f"[LLMRouter] answered via {spec.id}:{checked.model_name}")
                         return checked
@@ -319,8 +344,23 @@ class LLMRouter:
             errors.append(f"ollama: {e}")
         return None
 
-    async def _dispatch(self, prefer: str, msgs: List[Message]) -> ModelResponse:
+    async def _dispatch(
+        self,
+        prefer: str,
+        msgs: List[Message],
+        *,
+        effective_policy: Optional[str] = None,
+    ) -> ModelResponse:
+        policy = effective_policy or self.policy
+
         if prefer.startswith("local:"):
+            if policy == "cloud_only":
+                return ModelResponse(
+                    content="",
+                    model_name=prefer,
+                    role="router",
+                    error="policy violation: local model blocked under cloud_only policy",
+                )
             model = prefer[len("local:"):].strip()
             try:
                 from models.ollama_manager import OllamaManager
@@ -334,6 +374,14 @@ class LLMRouter:
                 return ModelResponse(content="", model_name=model, role="local", error=str(e))
 
         if prefer.startswith("api:"):
+            if policy == "local_only":
+                logger.warning("[LLMRouter] Blocked cloud dispatch '%s' under local_only policy", prefer)
+                return ModelResponse(
+                    content="",
+                    model_name=prefer,
+                    role="router",
+                    error="policy violation: cloud provider blocked under local_only policy",
+                )
             rest = prefer[len("api:"):]
             provider_id, _, model = rest.partition(":")
             spec = next((s for s in CLOUD_PROVIDERS if s.id == provider_id), None)
@@ -341,10 +389,11 @@ class LLMRouter:
                 return ModelResponse(content="", model_name=rest, role="api",
                                      error=f"unknown provider '{provider_id}'")
             try:
+                scrubbed_msgs = self._scrub_for_cloud(msgs)
                 provider = self._load_provider(spec, model=model or self.default_model_for(spec))
-                res = await provider.chat(msgs)
+                res = await provider.chat(scrubbed_msgs)
                 if res and res.content:
-                    checked = await self._retry_provider_on_refusal(provider, msgs, res, f"{spec.id}:{model}")
+                    checked = await self._retry_provider_on_refusal(provider, scrubbed_msgs, res, f"{spec.id}:{model}")
                     return checked or res
                 if res:
                     return res
@@ -364,6 +413,8 @@ class LLMRouter:
         system_prompt: str = "",
         on_token: Optional[Callable[[str], Awaitable[None]]] = None,
         errors: Optional[List[str]] = None,
+        task_kind: Optional[str] = None,
+        redacted: bool = False,
     ) -> ModelResponse:
         """Like :meth:`complete` but forwards token deltas to ``on_token``.
 
@@ -379,11 +430,13 @@ class LLMRouter:
             return ModelResponse(content="", model_name="none", role="router",
                                  error="no messages supplied")
 
+        effective_policy = self._effective_policy(task_kind=task_kind, redacted=redacted)
+
         if prefer:
-            return await self._dispatch_stream(prefer, msgs, on_token)
+            return await self._dispatch_stream(prefer, msgs, on_token, effective_policy=effective_policy)
 
         collected: List[str] = errors if errors is not None else []
-        for kind in self._order(self.policy):
+        for kind in self._order(effective_policy):
             res = (await self._complete_cloud_stream(msgs, on_token, collected) if kind == "cloud"
                    else await self._complete_local_stream(msgs, on_token, collected))
             if res and res.content:
@@ -413,12 +466,13 @@ class LLMRouter:
         self, msgs: List[Message], on_token: Optional[Callable[[str], Awaitable[None]]],
         errors: List[str],
     ) -> Optional[ModelResponse]:
+        scrubbed_msgs = self._scrub_for_cloud(msgs)
         for spec in self.cloud_specs(only_available=True):
             try:
                 provider = self._load_provider(spec)
                 if hasattr(provider, "is_available") and not await provider.is_available():
                     continue
-                res = await self._stream_provider(provider, msgs, on_token)
+                res = await self._stream_provider(provider, scrubbed_msgs, on_token)
                 if res and res.content:
                     logger.info(f"[LLMRouter] streamed via {spec.id}:{res.model_name}")
                     return res
@@ -453,10 +507,23 @@ class LLMRouter:
         return None
 
     async def _dispatch_stream(
-        self, prefer: str, msgs: List[Message],
+        self,
+        prefer: str,
+        msgs: List[Message],
         on_token: Optional[Callable[[str], Awaitable[None]]],
+        *,
+        effective_policy: Optional[str] = None,
     ) -> ModelResponse:
+        policy = effective_policy or self.policy
+
         if prefer.startswith("local:"):
+            if policy == "cloud_only":
+                return ModelResponse(
+                    content="",
+                    model_name=prefer,
+                    role="router",
+                    error="policy violation: local model blocked under cloud_only policy",
+                )
             model = prefer[len("local:"):].strip()
             try:
                 from models.ollama_manager import OllamaManager
@@ -471,6 +538,14 @@ class LLMRouter:
                 return ModelResponse(content="", model_name=model, role="local", error=str(e))
 
         if prefer.startswith("api:"):
+            if policy == "local_only":
+                logger.warning("[LLMRouter] Blocked cloud stream dispatch '%s' under local_only policy", prefer)
+                return ModelResponse(
+                    content="",
+                    model_name=prefer,
+                    role="router",
+                    error="policy violation: cloud provider blocked under local_only policy",
+                )
             rest = prefer[len("api:"):]
             provider_id, _, model = rest.partition(":")
             spec = next((s for s in CLOUD_PROVIDERS if s.id == provider_id), None)
@@ -478,8 +553,9 @@ class LLMRouter:
                 return ModelResponse(content="", model_name=rest, role="api",
                                      error=f"unknown provider '{provider_id}'")
             try:
+                scrubbed_msgs = self._scrub_for_cloud(msgs)
                 provider = self._load_provider(spec, model=model or self.default_model_for(spec))
-                res = await self._stream_provider(provider, msgs, on_token)
+                res = await self._stream_provider(provider, scrubbed_msgs, on_token)
                 if res:
                     return res
                 return ModelResponse(content="", model_name=model, role="api", error="empty response")

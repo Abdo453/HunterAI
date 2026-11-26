@@ -21,6 +21,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import stat
 import tempfile
 import time
 from dataclasses import asdict, dataclass, field
@@ -28,7 +30,25 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import parse_qs, urlparse
 
+from core.secret_sanitizer import SecretSanitizer
+
 logger = logging.getLogger("hunter_ai.capture_store")
+
+
+def _write_scrubbed_json(path: Path, payload: Any) -> None:
+    """Persist a SecretSanitizer-scrubbed JSON payload with 0o600 permissions on POSIX."""
+    scrubbed = SecretSanitizer.sanitize_data(payload)
+    serialized = json.dumps(scrubbed, indent=2)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, serialized.encode("utf-8"))
+        finally:
+            os.close(fd)
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    else:
+        path.write_text(serialized, encoding="utf-8")
 
 
 @dataclass
@@ -199,51 +219,50 @@ class CaptureStore:
         self.parameters.update(extracted_params)
         tx.parameter_ids = list(set(tx.parameter_ids + list(extracted_params)))
 
-        # Write request and response streams
+        # Write scrubbed request and response streams to disk (in-memory `tx` remains intact for replay)
         req_path = self.root_dir / "requests" / f"{tx.tx_id}.json"
-        with open(req_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "request_id": tx.request_id,
-                "tx_id": tx.tx_id,
-                "timestamp": tx.timestamp,
-                "method": tx.method,
-                "url": tx.url,
-                "headers": tx.req_headers,
-                "body": tx.req_body,
-                "tool": tx.tool_source,
-                "source": tx.source,
-                "parent_request": tx.parent_request,
-                "endpoint_id": tx.endpoint_id,
-                "parameter_ids": tx.parameter_ids,
-                "cookies": tx.cookies,
-                "auth_context": tx.auth_context,
-                "trace_id": tx.trace_id,
-                "browser_action_id": tx.browser_action_id
-            }, f, indent=2)
+        _write_scrubbed_json(req_path, {
+            "request_id": tx.request_id,
+            "tx_id": tx.tx_id,
+            "timestamp": tx.timestamp,
+            "method": tx.method,
+            "url": tx.url,
+            "headers": tx.req_headers,
+            "body": tx.req_body,
+            "tool": tx.tool_source,
+            "source": tx.source,
+            "parent_request": tx.parent_request,
+            "endpoint_id": tx.endpoint_id,
+            "parameter_ids": tx.parameter_ids,
+            "cookies": tx.cookies,
+            "auth_context": tx.auth_context,
+            "trace_id": tx.trace_id,
+            "browser_action_id": tx.browser_action_id,
+        })
 
         resp_path = self.root_dir / "responses" / f"{tx.tx_id}.json"
-        with open(resp_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "request_id": tx.request_id,
-                "tx_id": tx.tx_id,
-                "status_code": tx.status_code,
-                "content_type": tx.content_type,
-                "headers": tx.resp_headers,
-                "body": tx.resp_body[:10000]  # Store preview
-            }, f, indent=2)
+        _write_scrubbed_json(resp_path, {
+            "request_id": tx.request_id,
+            "tx_id": tx.tx_id,
+            "status_code": tx.status_code,
+            "content_type": tx.content_type,
+            "headers": tx.resp_headers,
+            "body": tx.resp_body[:10000],  # Store preview
+        })
 
-        # Detect identity context (Auth headers or cookies)
+        # Detect identity context (Auth headers or cookies) — never persist raw token snippets
         auth_hdr = tx.req_headers.get("authorization", "") or tx.req_headers.get("Authorization", "")
         if auth_hdr.startswith("Bearer "):
-            token_snippet = auth_hdr[7:20]
-            identity_name = f"BEARER_{hashlib.sha256(auth_hdr.encode()).hexdigest()[:6]}"
+            identity_hash = hashlib.sha256(auth_hdr.encode()).hexdigest()
+            identity_name = f"BEARER_{identity_hash[:6]}"
             tx.identity = identity_name
             tx.auth_context = identity_name
             self.identities[identity_name] = {
                 "type": "bearer",
-                "token_prefix": token_snippet,
+                "token_fingerprint": identity_hash[:12],
+                "token_prefix": SecretSanitizer.MASK_BULLET,
                 "last_seen": tx.timestamp,
-                "associated_urls": list(set(self.identities.get(identity_name, {}).get("associated_urls", []) + [endpoint_clean]))[:20]
+                "associated_urls": list(set(self.identities.get(identity_name, {}).get("associated_urls", []) + [endpoint_clean]))[:20],
             }
 
         # Cache in memory
@@ -353,17 +372,16 @@ class CaptureStore:
         if not child:
             return False
         child.parent_request = parent_id
-        # Re-save updated child request file
+        # Re-save updated child request file (scrubbed)
         req_path = self.root_dir / "requests" / f"{child.tx_id}.json"
         if req_path.exists():
             try:
                 with open(req_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 data["parent_request"] = parent_id
-                with open(req_path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2)
-            except Exception:
-                pass
+                _write_scrubbed_json(req_path, data)
+            except Exception as exc:
+                logger.warning("Failed updating correlated request %s: %s", child.tx_id, exc)
         self.record_timeline_event("REQUEST_CORRELATED", {
             "parent_id": parent_id,
             "child_id": child_id
@@ -405,8 +423,7 @@ class CaptureStore:
         finding_dict["id"] = finding_id
         self.findings.append(finding_dict)
         f_path = self.root_dir / "findings" / f"{finding_id}.json"
-        with open(f_path, "w", encoding="utf-8") as f:
-            json.dump(finding_dict, f, indent=2)
+        _write_scrubbed_json(f_path, finding_dict)
 
         self.record_timeline_event("FINDING_CONFIRMED", {
             "id": finding_id,
@@ -420,19 +437,15 @@ class CaptureStore:
             "event_type": event_type,
             "details": details
         })
-        with open(self.timeline_file, "w", encoding="utf-8") as f:
-            json.dump(self.timeline[-200:], f, indent=2)
+        _write_scrubbed_json(self.timeline_file, self.timeline[-200:])
 
     def _flush_indices(self):
         try:
-            with open(self.endpoints_file, "w", encoding="utf-8") as f:
-                json.dump(sorted(list(self.endpoints)), f, indent=2)
-            with open(self.parameters_file, "w", encoding="utf-8") as f:
-                json.dump(sorted(list(self.parameters)), f, indent=2)
-            with open(self.identities_file, "w", encoding="utf-8") as f:
-                json.dump(self.identities, f, indent=2)
-        except Exception:
-            pass
+            _write_scrubbed_json(self.endpoints_file, sorted(list(self.endpoints)))
+            _write_scrubbed_json(self.parameters_file, sorted(list(self.parameters)))
+            _write_scrubbed_json(self.identities_file, self.identities)
+        except Exception as exc:
+            logger.warning("Failed flushing CaptureStore indices: %s", exc)
 
     def get_summary(self) -> Dict[str, Any]:
         return {

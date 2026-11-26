@@ -5,29 +5,44 @@ import json
 import csv
 import os
 import html
+import re
 from typing import List, Dict, Any, Optional
+
+from core.secret_sanitizer import SecretSanitizer
+
+
+def _css_token(value: Any, fallback: str = "Info") -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_-]", "", str(value or ""))
+    return cleaned or fallback
 
 
 def export_json(findings: List[Dict], output_path: str) -> None:
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(findings, f, indent=2, ensure_ascii=False)
+        json.dump(SecretSanitizer.sanitize_data(findings), f, indent=2, ensure_ascii=False)
 
 
 def export_html(findings: List[Dict], output_path: str) -> None:
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     rows = []
     for f in findings:
-        sev = f.get("severity", "Info")
-        title = f.get("title", "")
-        target = f.get("param_name") or f.get("endpoint") or "-"
-        engine = f.get("tool", "")
+        sev = str(f.get("severity", "Info"))
+        sev_cls = _css_token(sev, "Info")
+        title = str(f.get("title", ""))
+        target = str(f.get("param_name") or f.get("endpoint") or "-")
+        engine = str(f.get("tool", ""))
         if f.get("fallback_used"):
             engine += f" (fallback: {f.get('fallback_engine')})"
-        evidence = str(f.get("evidence", ""))
-        verdict = f.get("lifecycle_verdict", "CONFIRMED")
+        evidence = SecretSanitizer.sanitize_text(str(f.get("evidence", "")))
+        verdict = str(f.get("lifecycle_verdict", "CONFIRMED"))
         rows.append(
-            f"<tr class=\"{sev}\"><td>{html.escape(verdict)}</td><td>{html.escape(sev)}</td><td>{html.escape(title)}</td><td>{html.escape(str(target))}</td><td>{html.escape(engine)}</td><td>{html.escape(evidence[:200])}</td></tr>"
+            f"<tr class=\"{html.escape(sev_cls, quote=True)}\">"
+            f"<td>{html.escape(verdict, quote=True)}</td>"
+            f"<td>{html.escape(sev, quote=True)}</td>"
+            f"<td>{html.escape(title, quote=True)}</td>"
+            f"<td>{html.escape(target, quote=True)}</td>"
+            f"<td>{html.escape(engine, quote=True)}</td>"
+            f"<td>{html.escape(evidence[:200], quote=True)}</td></tr>"
         )
     html_body = "\n".join(rows)
     content = f"""<!DOCTYPE html>
@@ -97,12 +112,12 @@ def export_interactive_dashboard(
     3. Secrets & Key Analysis
     4. Attack Surface & Scope Firewall
     """
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
     findings = scan_result.get("findings", [])
     duration = scan_result.get("duration", 0.0)
-    mode = scan_result.get("mode", "full")
-    obj_status = scan_result.get("objective_result", {}).get("status", "COMPLETE")
+    mode = str(scan_result.get("mode", "full"))
+    obj_status = str(scan_result.get("objective_result", {}).get("status", "COMPLETE"))
 
     # Metrics
     crit_count = sum(1 for f in findings if f.get("severity") == "Critical")
@@ -123,35 +138,36 @@ def export_interactive_dashboard(
     if not findings:
         cards_html.append("<div class='empty-state'>✅ No confirmed vulnerabilities found. Target passed all deterministic execution checks.</div>")
     for idx, f in enumerate(findings, start=1):
-        sev = f.get("severity", "Info")
-        title = f.get("title", "")
-        verdict = f.get("lifecycle_verdict", "CONFIRMED")
-        param = f.get("param_name") or f.get("endpoint") or "-"
-        evidence = str(f.get("evidence", ""))
-        remediation = f.get("remediation", "Implement parameter validation, prepared statements, and context encoding.")
-        payload = f.get("payload_used", "N/A")
-        tool = f.get("tool", "")
+        sev = str(f.get("severity", "Info"))
+        sev_cls = _css_token(sev, "Info")
+        title = str(f.get("title", ""))
+        verdict = str(f.get("lifecycle_verdict", "CONFIRMED"))
+        param = str(f.get("param_name") or f.get("endpoint") or "-")
+        evidence = SecretSanitizer.sanitize_text(str(f.get("evidence", "")))
+        remediation = str(f.get("remediation", "Implement parameter validation, prepared statements, and context encoding."))
+        payload = str(f.get("payload_used", "N/A"))
+        tool = str(f.get("tool", ""))
 
         card = f"""
-        <div class="finding-card border-{sev}">
+        <div class="finding-card border-{html.escape(sev_cls, quote=True)}">
             <div class="card-header">
-                <span class="badge badge-{sev}">{sev}</span>
-                <span class="badge badge-court">{verdict}</span>
-                <span class="tool-tag">{html.escape(tool)}</span>
-                <h3 class="finding-title">{html.escape(title)}</h3>
+                <span class="badge badge-{html.escape(sev_cls, quote=True)}">{html.escape(sev, quote=True)}</span>
+                <span class="badge badge-court">{html.escape(verdict, quote=True)}</span>
+                <span class="tool-tag">{html.escape(tool, quote=True)}</span>
+                <h3 class="finding-title">{html.escape(title, quote=True)}</h3>
             </div>
             <div class="card-body">
-                <p><strong>Target Parameter:</strong> <code>{html.escape(str(param))}</code></p>
+                <p><strong>Target Parameter:</strong> <code>{html.escape(param, quote=True)}</code></p>
                 <div class="code-box">
                     <span class="box-label">Payload Used</span>
-                    <code>{html.escape(str(payload))}</code>
+                    <code>{html.escape(payload, quote=True)}</code>
                 </div>
                 <div class="code-box">
                     <span class="box-label">Evidence / Deterministic Proof</span>
-                    <pre>{html.escape(evidence)}</pre>
+                    <pre>{html.escape(evidence, quote=True)}</pre>
                 </div>
                 <div class="remediation-box">
-                    <strong>Remediation:</strong> {html.escape(remediation)}
+                    <strong>Remediation:</strong> {html.escape(remediation, quote=True)}
                 </div>
             </div>
         </div>
@@ -164,37 +180,41 @@ def export_interactive_dashboard(
     if not endpoints:
         endpoints_rows.append("<tr><td colspan='5' class='text-center text-muted'>No API routes extracted.</td></tr>")
     for ep in endpoints:
-        path = ep.get("url_or_path", "")
-        method = ep.get("method", "GET")
-        params = ", ".join(ep.get("parameters", [])) or "-"
+        path = str(ep.get("url_or_path", ""))
+        method = str(ep.get("method", "GET"))
+        method_cls = _css_token(method, "GET")
+        params = ", ".join(str(p) for p in ep.get("parameters", [])) or "-"
         auth = "Yes" if ep.get("auth_required") else "No"
-        origin = ep.get("discovered_in", "source")
+        origin = str(ep.get("discovered_in", "source"))
         endpoints_rows.append(
-            f"<tr><td><span class='badge-method badge-{method}'>{method}</span></td>"
-            f"<td><code>{html.escape(path)}</code></td>"
-            f"<td><code>{html.escape(params)}</code></td>"
-            f"<td>{auth}</td>"
-            f"<td class='text-muted'>{html.escape(origin)}</td></tr>"
+            f"<tr><td><span class='badge-method badge-{html.escape(method_cls, quote=True)}'>{html.escape(method, quote=True)}</span></td>"
+            f"<td><code>{html.escape(path, quote=True)}</code></td>"
+            f"<td><code>{html.escape(params, quote=True)}</code></td>"
+            f"<td>{html.escape(auth, quote=True)}</td>"
+            f"<td class='text-muted'>{html.escape(origin, quote=True)}</td></tr>"
         )
     endpoints_table = "\n".join(endpoints_rows)
 
-    # Generate Tab 3: Secrets Table
+    # Generate Tab 3: Secrets Table (candidate_value fully masked — never leak raw prefixes)
     secrets_rows = []
     if not secrets:
         secrets_rows.append("<tr><td colspan='5' class='text-center text-muted'>No sensitive credentials or hardcoded keys detected.</td></tr>")
     for sec in secrets:
-        stype = sec.get("secret_type", "SECRET")
-        status = sec.get("status", "CANDIDATE")
-        entropy = sec.get("entropy", 0.0)
-        loc = sec.get("location", "-")
-        val_sample = sec.get("candidate_value", "")[:12] + "..." if sec.get("candidate_value") else "-"
+        stype = str(sec.get("secret_type", "SECRET"))
+        status = str(sec.get("status", "CANDIDATE"))
+        try:
+            entropy_str = f"{float(sec.get('entropy', 0.0)):.2f}"
+        except (TypeError, ValueError):
+            entropy_str = "0.00"
+        loc = str(sec.get("location", "-"))
+        val_sample = "[REDACTED]" if sec.get("candidate_value") else "-"
         s_class = "badge-low" if status == "VALIDATED" else "badge-high"
         secrets_rows.append(
-            f"<tr><td><span class='badge {s_class}'>{status}</span></td>"
-            f"<td><strong>{html.escape(stype)}</strong></td>"
-            f"<td><code>{html.escape(val_sample)}</code></td>"
-            f"<td>{entropy:.2f}</td>"
-            f"<td class='text-muted'>{html.escape(loc)}</td></tr>"
+            f"<tr><td><span class='badge {s_class}'>{html.escape(status, quote=True)}</span></td>"
+            f"<td><strong>{html.escape(stype, quote=True)}</strong></td>"
+            f"<td><code>{html.escape(val_sample, quote=True)}</code></td>"
+            f"<td>{html.escape(entropy_str, quote=True)}</td>"
+            f"<td class='text-muted'>{html.escape(loc, quote=True)}</td></tr>"
         )
     secrets_table = "\n".join(secrets_rows)
 
@@ -203,8 +223,14 @@ def export_interactive_dashboard(
         "googletagmanager.com", "google-analytics.com", "play.google.com",
         "apple.com", "cloudflare.com", "gstatic.com"
     ]
-    fw_items = "".join(f"<li><span class='badge badge-court'>FIREWALLED</span> <code>{d}</code> (Never tested)</li>" for d in firewall_domains)
-    tech_chips = "".join(f"<span class='tech-chip'>{html.escape(t)}</span>" for t in manifest.get("technologies", [])) or "<span class='text-muted'>Standard Web Stack</span>"
+    fw_items = "".join(
+        f"<li><span class='badge badge-court'>FIREWALLED</span> <code>{html.escape(d, quote=True)}</code> (Never tested)</li>"
+        for d in firewall_domains
+    )
+    tech_chips = "".join(
+        f"<span class='tech-chip'>{html.escape(str(t), quote=True)}</span>"
+        for t in manifest.get("technologies", [])
+    ) or "<span class='text-muted'>Standard Web Stack</span>"
 
     # Full HTML Dashboard Template
     dashboard_html = f"""<!DOCTYPE html>
@@ -212,7 +238,7 @@ def export_interactive_dashboard(
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>HunterAI Security Dashboard — {html.escape(target_url)}</title>
+<title>HunterAI Security Dashboard — {html.escape(str(target_url), quote=True)}</title>
 <style>
   :root {{
     --bg: #090d16;
@@ -337,10 +363,10 @@ def export_interactive_dashboard(
   <div class="header">
     <div>
       <h1>🛡️ HunterAI Security Audit Dashboard</h1>
-      <p>Target: <strong>{html.escape(target_url)}</strong> | Mode: <strong>{html.escape(mode)}</strong> | Duration: <strong>{duration}s</strong></p>
+      <p>Target: <strong>{html.escape(str(target_url), quote=True)}</strong> | Mode: <strong>{html.escape(mode, quote=True)}</strong> | Duration: <strong>{html.escape(str(duration), quote=True)}s</strong></p>
     </div>
     <div>
-      <span class="badge badge-court">Objective: {html.escape(obj_status)}</span>
+      <span class="badge badge-court">Objective: {html.escape(obj_status, quote=True)}</span>
     </div>
   </div>
 
@@ -362,7 +388,7 @@ def export_interactive_dashboard(
       <div class="metric-label">API Endpoints Discovered</div>
     </div>
     <div class="metric-card">
-      <div class="metric-val val-low">{manifest.get('js_analyzed', 0)}</div>
+      <div class="metric-val val-low">{html.escape(str(manifest.get('js_analyzed', 0)), quote=True)}</div>
       <div class="metric-label">JS Bundles Analyzed</div>
     </div>
   </div>

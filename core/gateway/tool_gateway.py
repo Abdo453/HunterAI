@@ -4,6 +4,7 @@ The centralized governed execution gateway.
 Every action proposal from agents/LLMs must be evaluated, policy-approved, safe-executed,
 and converted into immutable EvidenceItem records in SecurityState.
 """
+import os
 import time
 import logging
 from typing import Optional, List, Dict, Any
@@ -41,12 +42,19 @@ class GovernedToolGateway:
         self,
         policy_engine: Optional[PolicyEngine] = None,
         tool_manager: Optional[ToolManager] = None,
-        security_state: Optional[SecurityState] = None
+        security_state: Optional[SecurityState] = None,
+        allow_insecure_lab_tls: bool = False,
     ):
         self.policy = policy_engine or PolicyEngine()
         self.tool_manager = tool_manager or ToolManager()
         self.security_state = security_state
+        self.allow_insecure_lab_tls = allow_insecure_lab_tls
         self._audit_trail: List[Dict[str, Any]] = []
+
+    def _tls_verify_enabled(self) -> bool:
+        if self.allow_insecure_lab_tls:
+            return False
+        return os.getenv("HUNTER_LAB_INSECURE_TLS", "").strip().lower() not in {"1", "true", "yes"}
 
     def set_security_state(self, state: SecurityState):
         """ربط بوابة الأدوات بذاكرة حالة الهجوم النشطة"""
@@ -101,9 +109,13 @@ class GovernedToolGateway:
 
         try:
             if proposal.action_type.upper() == "HTTP_REQUEST" and not proposal.command_args:
-                # Direct HTTP request fallback via httpx
+                # Direct HTTP request fallback via httpx (verify=True, trust_env=False by default)
                 import httpx
-                async with httpx.AsyncClient(timeout=proposal.timeout, verify=False) as client:
+                async with httpx.AsyncClient(
+                    timeout=proposal.timeout,
+                    verify=self._tls_verify_enabled(),
+                    trust_env=False,
+                ) as client:
                     resp = await client.get(proposal.target)
                     raw_stdout = resp.text[:10000]
                     returncode = 0 if resp.status_code < 400 else 1

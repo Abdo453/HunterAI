@@ -15,8 +15,24 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
+from core.scope_engine import _check_resolved_ip_safety, normalize_ip_literal
 
 logger = logging.getLogger("hunter_ai.host_bridge")
+
+_HOST_BLOCKED_METADATA_NAMES = {
+    "169.254.169.254",
+    "100.100.100.200",
+    "fd00:ec2::254",
+    "metadata.google.internal",
+    "metadata.internal",
+    "metadata.azure.com",
+    "metadata.tencentyun.com",
+    "metadata.aliyun.com",
+    "local-metadata",
+    "instance-data",
+}
 
 
 class HostGuard:
@@ -38,9 +54,22 @@ class HostGuard:
             return False, f"Invalid path syntax: {e}"
 
     def validate_network_target(self, host: str, port: int) -> Tuple[bool, Optional[str]]:
-        # Hard invariants: block cloud metadata
-        if host in ["169.254.169.254", "metadata.google.internal"]:
+        clean_host = (host or "").strip().lower().rstrip(".")
+        if not clean_host:
+            return False, "HostGuard blocked empty network target."
+        # Hard invariants: block cloud metadata and link-local / NAT64 / IPv4-mapped IPv6
+        if clean_host in _HOST_BLOCKED_METADATA_NAMES:
             return False, "HostGuard blocked access to sensitive cloud metadata service."
+        ip_obj = normalize_ip_literal(clean_host)
+        if ip_obj is not None:
+            safe, reason = _check_resolved_ip_safety(
+                ip_obj,
+                f"HostGuard target {clean_host}",
+                allow_loopback=True,
+                allow_private=True,
+            )
+            if not safe:
+                return False, reason or "HostGuard blocked access to sensitive cloud metadata/link-local address."
         if port not in self.allowed_ports and port < 1024:
             return False, f"HostGuard blocked connection to privileged port {port}."
         return True, None
@@ -100,9 +129,46 @@ class NetworkInspector:
             return False
 
     def ping_http(self, url: str, timeout: float = 2.0) -> Dict[str, Any]:
+        parsed = urlparse((url or "").strip())
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in ("http", "https"):
+            reason = f"HostGuard blocked non-HTTP(S) scheme '{scheme or 'empty'}'"
+            logger.warning("HTTP ping blocked by HostGuard: %s (%s)", url, reason)
+            return {"reachable": False, "status_code": 0, "blocked": True, "error": reason}
+
+        host = parsed.hostname or ""
+        try:
+            port = parsed.port or (443 if scheme == "https" else 80)
+        except ValueError as exc:
+            return {"reachable": False, "status_code": 0, "blocked": True, "error": f"Invalid port: {exc}"}
+
+        ok, reason = self.guard.validate_network_target(host, port)
+        if not ok:
+            logger.warning("HTTP ping blocked by HostGuard: %s:%d (%s)", host, port, reason)
+            return {"reachable": False, "status_code": 0, "blocked": True, "error": reason}
+
+        guard = self.guard
+
+        class _GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                redir_parsed = urlparse(newurl)
+                r_scheme = (redir_parsed.scheme or "").lower()
+                if r_scheme not in ("http", "https"):
+                    raise urllib.error.URLError(f"HostGuard blocked redirect to non-HTTP(S) scheme '{r_scheme}'")
+                r_host = redir_parsed.hostname or ""
+                r_port = redir_parsed.port or (443 if r_scheme == "https" else 80)
+                r_ok, r_reason = guard.validate_network_target(r_host, r_port)
+                if not r_ok:
+                    raise urllib.error.URLError(r_reason or "HostGuard blocked redirect target")
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _GuardedRedirectHandler(),
+        )
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "HunterAI-NetworkInspector/2.0"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with opener.open(req, timeout=timeout) as resp:
                 return {
                     "reachable": True,
                     "status_code": resp.status,
