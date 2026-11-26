@@ -23,10 +23,10 @@ function GaugeBar({
   const clamped = valid ? Math.min(100, Math.max(0, percent)) : 0;
 
   return (
-    <div className="p-3 rounded-md bg-inset border border-border-subtle space-y-2">
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="font-semibold text-ink-secondary">{label}</span>
-        <span className="font-mono tabular-nums text-ink-primary ltr-isolate">
+    <div className="p-3 rounded-md bg-inset border border-border-subtle space-y-2 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs min-w-0">
+        <span className="font-semibold text-ink-secondary truncate">{label}</span>
+        <span className="font-mono tabular-nums text-ink-primary ltr-isolate truncate max-w-full">
           {valid ? `${clamped.toFixed(1)}%` : unavailableLabel}
         </span>
       </div>
@@ -69,7 +69,7 @@ export default function HardwareTelemetryCard({ compact = false }: { compact?: b
   }, [apiJson]);
 
   useEffect(() => {
-    if (hunterHubHealth.status !== "offline") {
+    if (hunterHubHealth.status === "connected") {
       void loadHardware();
     }
   }, [hunterHubHealth.status, loadHardware]);

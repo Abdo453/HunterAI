@@ -52,7 +52,7 @@ export default function ConnectionStatus() {
       data-connection-state={connectionState}
       role="status"
       aria-live="polite"
-      className={`fixed bottom-4 start-4 z-40 rounded-full border px-3 py-1.5 backdrop-blur-sm flex items-center gap-2 text-xs font-mono ${stateConfig.containerClass}`}
+      className={`fixed bottom-4 end-4 z-40 rounded-full border px-3 py-1.5 backdrop-blur-sm flex items-center gap-2 text-xs font-mono ${stateConfig.containerClass}`}
     >
       <span className={`w-2 h-2 rounded-full shrink-0 ${stateConfig.dotClass}`} aria-hidden="true" />
       <Icon className={`w-3.5 h-3.5 shrink-0 ${isSpinning ? "animate-spin" : ""}`} />

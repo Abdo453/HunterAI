@@ -216,12 +216,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 className={
                   hunterHubHealth.status === "connected"
                     ? "text-sentinel-success"
-                    : "text-sentinel-danger"
+                    : showAuthBanner
+                      ? "text-sentinel-warning"
+                      : "text-sentinel-danger"
                 }
               >
                 {hunterHubHealth.status === "connected"
                   ? t("status.connected")
-                  : t("status.offline")}
+                  : showAuthBanner
+                    ? t("status.checking")
+                    : t("status.offline")}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -368,7 +372,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
               )}
 
-              {!isStudio && hunterHubHealth.status === "offline" && (
+              {!isStudio && !showAuthBanner && hunterHubHealth.status === "offline" && (
                 <div className="px-4 py-2.5 rounded-md border border-sentinel-warning/35 bg-sentinel-warning/15 text-sentinel-warning text-xs flex items-center gap-2">
                   <Radio className="w-4 h-4 shrink-0" />
                   <span>{t("status.hubOfflineBanner")}</span>

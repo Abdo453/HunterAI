@@ -734,7 +734,11 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
             setAuthStatus("forbidden");
             setAuthError(errMsg || "Operator tier authentication required");
           }
-        } else if (res.ok && path.startsWith("/api/platform/")) {
+        } else if (
+          res.ok &&
+          path.startsWith("/api/platform/") &&
+          path !== "/api/platform/artex/health"
+        ) {
           setAuthStatus("authenticated");
           setAuthError("");
         }
@@ -999,6 +1003,20 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
             setHunterHubHealth(nextHub);
           } else {
             setHunterHubHealth((prev) => ({ ...prev, lastSyncedAt: nowTs, latestSeq }));
+          }
+        } else if (hubOverviewRes.status === 401 || hubOverviewRes.status === 403) {
+          // Django Hub responded over HTTP and is reachable, awaiting operator authentication.
+          const errMsg = hubOverviewRes.error || "Authentication required";
+          const nextHub: HunterHubHealth = {
+            status: "checking",
+            error: errMsg,
+            lastSyncedAt: nowTs,
+            latestSeq: lastSeqRef.current,
+          };
+          const fp = fingerprintData({ s: "checking", errMsg });
+          if (fpRef.current.hubHealth !== fp) {
+            fpRef.current.hubHealth = fp;
+            setHunterHubHealth(nextHub);
           }
         } else {
           const errMsg = hubOverviewRes.error || "Django Platform Hub unreachable";
@@ -1514,7 +1532,11 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
 
   // Canonical SSE /api/platform/stream subscription with Last-Event-ID + exponential backoff
   useEffect(() => {
-    if (hunterHubHealth.status === "offline") {
+    if (
+      hunterHubHealth.status === "offline" ||
+      authStatus === "auth_required" ||
+      authStatus === "forbidden"
+    ) {
       setConnectionState("offline");
       return;
     }
@@ -1751,6 +1773,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
     };
   }, [
     hunterHubHealth.status,
+    authStatus,
     streamGeneration,
     hunterFetch,
     addConsoleLog,
