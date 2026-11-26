@@ -704,8 +704,18 @@ def evaluate_action_policy(
                 "sanitized_args": "",
                 "proposal_id": proposal.id,
             }
-    except Exception as pg_exc:  # noqa: BLE001
-        logger.debug("[Copilot] PolicyGate secondary check note: %s", pg_exc)
+    except ImportError as pg_imp_exc:
+        logger.debug("[Copilot] PolicyGate unavailable during secondary check: %s", pg_imp_exc)
+    except Exception as pg_exc:  # noqa: BLE001 - fail closed on PolicyGate runtime errors
+        logger.warning("[Copilot] PolicyGate secondary check error (fail-closed): %s", pg_exc)
+        return {
+            "allowed": False,
+            "status": "BLOCKED_POLICY_GATE",
+            "reason": f"PolicyGate evaluation error (fail-closed): {pg_exc}",
+            "risk_tier": risk_tier.value,
+            "sanitized_args": "",
+            "proposal_id": proposal.id,
+        }
 
     verdict = engine.evaluate_proposal(proposal)
     return {

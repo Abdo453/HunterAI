@@ -381,18 +381,50 @@ def test_parse_content_tool_calls_depth_limit_and_policy_gate():
             {"name": "http_probe", "arguments": {"url": "https://api.example.com/health"}},
             {"name": "http_probe", "arguments": {"url": "http://169.254.169.254/latest/meta-data"}},
             {"name": "http_probe", "arguments": {"url": "https://evil-out-of-scope.org/"}},
+            # Regression: list-form command targeting cloud metadata must NOT bypass PolicyGate
+            {"name": "run_tool", "arguments": {"command": ["curl", "http://169.254.169.254/latest/meta-data/"]}},
+            # Regression: split command + list args targeting cloud metadata must NOT bypass PolicyGate
+            {"name": "run_tool", "arguments": {"command": "curl", "args": ["http://169.254.169.254/latest/meta-data/"]}},
+            # Regression: benign target paired with file:// or gopher:// URL must NOT bypass PolicyGate
+            {"name": "http_probe", "arguments": {"target": "example.com", "url": "file:///etc/passwd"}},
+            {"name": "http_probe", "arguments": {"target": "example.com", "url": "gopher://example.com:70/_GET"}},
+            # Regression: benign target paired with out-of-scope endpoint must NOT bypass PolicyGate
+            {"name": "http_probe", "arguments": {"target": "example.com", "endpoint": "https://evil-out-of-scope.org/leak"}},
         ]
     })
     approved, rejected = parse_and_gate_content_tool_calls(
         mixed_payload,
-        known_tools=["http_probe"],
+        known_tools=["http_probe", "run_tool"],
         policy_gate=gate,
     )
     assert len(approved) == 1
     assert approved[0].name == "http_probe"
     assert approved[0].arguments["url"] == "https://api.example.com/health"
-    assert len(rejected) == 2
+    assert len(rejected) == 7
     assert all(r.stage == "policy_gate" for r in rejected)
+
+
+def test_copilot_evaluate_action_policy_fails_closed_on_policy_gate_runtime_error(monkeypatch):
+    from core.control_plane.policy_gate import PolicyGate as RealPolicyGate
+    from core.copilot_service import evaluate_action_policy
+
+    def _boom(self, req):
+        raise RuntimeError("simulated PolicyGate internal failure")
+
+    monkeypatch.setattr(RealPolicyGate, "evaluate", _boom)
+    verdict = evaluate_action_policy(
+        action_type="PAUSE_RUN",
+        target="https://example.com",
+        tool_name="pause_run",
+        command_args="run_123",
+        in_scope=["example.com"],
+        out_of_scope=[],
+        allow_active_tests=True,
+        rationale="Pause run",
+    )
+    assert verdict["allowed"] is False
+    assert verdict["status"] == "BLOCKED_POLICY_GATE"
+    assert "fail-closed" in verdict["reason"]
 
 
 # ===========================================================================
