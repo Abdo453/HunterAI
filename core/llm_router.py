@@ -107,7 +107,9 @@ class LLMRouter:
     """Cloud-first model router with a uniform ``complete()`` interface."""
 
     def __init__(self, ollama_host: Optional[str] = None, policy: Optional[str] = None):
-        self.ollama_host = ollama_host or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        from models.ollama_manager import normalize_ollama_host
+
+        self.ollama_host = normalize_ollama_host(ollama_host or os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
         self._policy = (policy or os.getenv(POLICY_ENV, DEFAULT_POLICY)).strip().lower()
 
     # ── policy ───────────────────────────────────────────────────────────────
@@ -440,7 +442,8 @@ class LLMRouter:
 
             mgr = OllamaManager(host=self.ollama_host)
             payload = [{"role": m.role, "content": m.content} for m in msgs]
-            text = await mgr.chat_stream(model_name=model, messages=payload, token_cb=on_token)
+            keep_alive = int(os.getenv("HUNTER_OLLAMA_KEEP_ALIVE_SEC", "300"))
+            text = await mgr.chat_stream(model_name=model, messages=payload, keep_alive=keep_alive, token_cb=on_token)
             if text:
                 logger.info(f"[LLMRouter] streamed via local:{model}")
                 return ModelResponse(content=text, model_name=model, role="local")
@@ -460,7 +463,8 @@ class LLMRouter:
 
                 mgr = OllamaManager(host=self.ollama_host)
                 payload = [{"role": m.role, "content": m.content} for m in msgs]
-                text = await mgr.chat_stream(model_name=model, messages=payload, token_cb=on_token)
+                keep_alive = int(os.getenv("HUNTER_OLLAMA_KEEP_ALIVE_SEC", "300"))
+                text = await mgr.chat_stream(model_name=model, messages=payload, keep_alive=keep_alive, token_cb=on_token)
                 return ModelResponse(content=text, model_name=model, role="local",
                                      error=None if text else "empty local response")
             except Exception as e:  # noqa: BLE001

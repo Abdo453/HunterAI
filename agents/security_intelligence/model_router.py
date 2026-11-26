@@ -22,7 +22,9 @@ class IntelligenceModelRouter:
     """موجه النماذج الذكي: اختيار النموذج الأنسب لكل مهمة لتوفير الموارد والوقت"""
 
     def __init__(self):
-        self.ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+        from models.ollama_manager import normalize_ollama_host
+
+        self.ollama_host = normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
 
     def select_model_for_task(self, tier: ModelTier) -> str:
         if tier == ModelTier.FAST:

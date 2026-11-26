@@ -981,7 +981,8 @@ async def check_preflight():
     gateway_online = tcp_ready("127.0.0.1", 8085)
 
     # 2. Ollama Local Server Check
-    ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+    from models.ollama_manager import normalize_ollama_host
+    ollama_host = normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
     ollama_online = False
     try:
         async with httpx.AsyncClient(timeout=2, trust_env=False) as c:

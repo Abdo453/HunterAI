@@ -13,8 +13,32 @@ class TestAIModelConnectivity:
     def test_ollama_host_normalization(self):
         """Verify local Ollama host normalization to prevent connection errors"""
         assert normalize_ollama_host("0.0.0.0:11434") == "http://127.0.0.1:11434"
+        assert normalize_ollama_host("0.0.0.0") == "http://127.0.0.1:11434"
+        assert normalize_ollama_host("http://0.0.0.0") == "http://127.0.0.1:11434"
+        assert normalize_ollama_host("::") == "http://127.0.0.1:11434"
         assert normalize_ollama_host("http://localhost:11434/") == "http://localhost:11434"
         assert normalize_ollama_host("") == "http://127.0.0.1:11434"
+
+    def test_copilot_detect_live_providers_normalizes_wildcard_ollama_host(self, monkeypatch):
+        """Verify OLLAMA_HOST=0.0.0.0 normalizes to 127.0.0.1:11434 for live provider detection."""
+        import core.copilot_service as cs
+        from core.llm_router import LLMRouter
+
+        seen_targets = []
+
+        def fake_tcp(host, port, timeout=0.3):
+            seen_targets.append((host, port))
+            return host == "127.0.0.1" and port == 11434
+
+        monkeypatch.setenv("OLLAMA_HOST", "0.0.0.0")
+        monkeypatch.setattr(cs, "is_tcp_reachable", fake_tcp)
+
+        providers = cs.detect_live_providers()
+        assert providers["ollama_host"] == "http://127.0.0.1:11434"
+        assert providers["ollama_reachable"] is True
+        assert providers["any_live"] is True
+        assert ("127.0.0.1", 11434) in seen_targets
+        assert LLMRouter().ollama_host == "http://127.0.0.1:11434"
 
     @pytest.mark.asyncio
     async def test_resource_manager_gpu_lock_cycle(self):

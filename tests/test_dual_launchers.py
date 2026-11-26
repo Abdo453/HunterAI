@@ -143,3 +143,58 @@ def test_manifest_and_mcp_config_integrity():
     cdata = json.loads(opencode_cfg.read_text(encoding="utf-8"))
     assert "mcp" in cdata
     assert "hunter-arsenal" in cdata["mcp"]
+
+
+def test_artex_windows_native_go_launcher(monkeypatch, tmp_path):
+    """Verify _launch_go_backend prefers native artex-server.exe over WSL on win32."""
+    import pentest
+
+    backend_dir = tmp_path / "backend"
+    (backend_dir / "cmd" / "server").mkdir(parents=True)
+    port_checks = iter([False, False, True])
+
+    monkeypatch.setattr(pentest.sys, "platform", "win32")
+    monkeypatch.setattr(pentest, "_is_port_open", lambda host, port: next(port_checks, True))
+
+    calls = {"run": [], "popen": []}
+
+    def fake_run(cmd, cwd=None, check=False, **kwargs):
+        calls["run"].append((cmd, cwd))
+        (backend_dir / "bin" / "artex-server.exe").parent.mkdir(parents=True, exist_ok=True)
+        (backend_dir / "bin" / "artex-server.exe").write_bytes(b"MZ")
+        return None
+
+    class FakeProc:
+        def poll(self):
+            return None
+
+    def fake_popen(cmd, cwd=None, **kwargs):
+        calls["popen"].append((cmd, cwd))
+        return FakeProc()
+
+    import shutil
+    import subprocess
+
+    monkeypatch.setattr(shutil, "which", lambda name: "C:\\Go\\bin\\go.exe" if name == "go" else None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    proc = pentest._launch_go_backend(backend_dir)
+    assert proc is not None
+    assert calls["run"] and calls["run"][0][0][0].endswith("go.exe")
+    assert calls["popen"] and calls["popen"][0][0][0].endswith("artex-server.exe")
+    assert "wsl" not in calls["popen"][0][0][0].lower()
+
+
+def test_ensure_local_postgres_handles_missing_install(monkeypatch, tmp_path):
+    """Verify _ensure_local_postgres returns False cleanly when no local Postgres exists."""
+    import shutil
+    import pentest
+
+    monkeypatch.setattr(pentest.sys, "platform", "win32")
+    monkeypatch.setattr(pentest, "_is_port_open", lambda host, port: False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.delenv("PGDATA", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+
+    assert pentest._ensure_local_postgres() is False

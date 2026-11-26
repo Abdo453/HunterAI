@@ -92,7 +92,8 @@ def call_provider_sync(prompt: str, provider: str = "auto", max_tokens: int = 15
 
     # 1. Try Local Ollama if requested or auto
     if prov in ["ollama", "local", "auto"]:
-        ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+        from models.ollama_manager import normalize_ollama_host
+        ollama_host = normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
         try:
             with httpx.Client(timeout=4.0, trust_env=False) as client:
                 # Find available model

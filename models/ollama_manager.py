@@ -11,14 +11,26 @@ from typing import Optional
 log = logging.getLogger("ollama_manager")
 
 def normalize_ollama_host(h: str) -> str:
-    if not h:
+    """Normalize OLLAMA_HOST (including bind addresses like 0.0.0.0) into a connectable base URL."""
+    from urllib.parse import urlparse, urlunparse
+
+    if not h or not str(h).strip():
         return "http://127.0.0.1:11434"
-    h = str(h).strip().rstrip("/")
-    if not h.startswith("http://") and not h.startswith("https://"):
-        h = f"http://{h}"
-    # 0.0.0.0 is for binding, clients must connect to 127.0.0.1
-    h = h.replace("://0.0.0.0:", "://127.0.0.1:")
-    return h
+    raw = str(h).strip().rstrip("/")
+    if not raw.startswith(("http://", "https://")):
+        raw = f"http://{raw}"
+    try:
+        parsed = urlparse(raw)
+        hostname = parsed.hostname or "127.0.0.1"
+        if hostname in ("0.0.0.0", "::", "[::]"):
+            hostname = "127.0.0.1"
+        port = parsed.port
+        if port is None and parsed.scheme == "http":
+            port = 11434
+        netloc = f"{hostname}:{port}" if port else hostname
+        return urlunparse(parsed._replace(netloc=netloc)).rstrip("/")
+    except Exception:
+        return "http://127.0.0.1:11434"
 
 
 def _wsl_gateway_host() -> Optional[str]:

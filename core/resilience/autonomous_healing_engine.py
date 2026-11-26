@@ -207,11 +207,13 @@ class AICascadeFailover:
 
     def __init__(
         self,
-        ollama_url: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
+        ollama_url: Optional[str] = None,
         gemini_key: Optional[str] = None,
         openrouter_key: Optional[str] = None,
     ):
-        self.ollama_url = ollama_url
+        from models.ollama_manager import normalize_ollama_host
+
+        self.ollama_url = normalize_ollama_host(ollama_url or os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
         self.gemini_key = gemini_key
         self.openrouter_key = openrouter_key
         self.active_tier = "local_ollama"

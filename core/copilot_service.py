@@ -655,13 +655,15 @@ def detect_live_providers() -> Dict[str, Any]:
     except Exception:
         pass
 
-    ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-    parsed_ol = urlparse(ollama_host if "://" in ollama_host else f"http://{ollama_host}")
-    ollama_reachable = is_tcp_reachable(parsed_ol.hostname or "127.0.0.1", parsed_ol.port or 11434, timeout=0.15)
+    from models.ollama_manager import normalize_ollama_host
+
+    ollama_host = normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
+    parsed_ol = urlparse(ollama_host)
+    ollama_reachable = is_tcp_reachable(parsed_ol.hostname or "127.0.0.1", parsed_ol.port or 11434, timeout=0.3)
 
     lm_host = os.getenv("LM_STUDIO_HOST", "http://127.0.0.1:1234")
     parsed_lm = urlparse(lm_host if "://" in lm_host else f"http://{lm_host}")
-    lm_reachable = is_tcp_reachable(parsed_lm.hostname or "127.0.0.1", parsed_lm.port or 1234, timeout=0.15)
+    lm_reachable = is_tcp_reachable(parsed_lm.hostname or "127.0.0.1", parsed_lm.port or 1234, timeout=0.3)
 
     return {
         "cloud": cloud_available,

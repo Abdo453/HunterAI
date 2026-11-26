@@ -21,6 +21,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from models.ollama_manager import normalize_ollama_host
+
 log = logging.getLogger("agent_ai_bridge")
 
 
@@ -73,7 +75,7 @@ AI_MODEL_CATALOG: Dict[str, AIModelProfile] = {
         specialization="Offensive attack chains, WAF evasions, filter breakout payloads",
         strengths=["Uncensored security reasoning", "Bypass syntax crafting", "Zero-refusal offensive tactics"],
         context_window=8192,
-        endpoint_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
+        endpoint_url=normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")),
         hardware_notes="CUDA Hardware Accelerated Ollama host (configurable via OLLAMA_HOST)"
     ),
     "qwen_coder": AIModelProfile(
@@ -84,7 +86,7 @@ AI_MODEL_CATALOG: Dict[str, AIModelProfile] = {
         specialization="Source code auditing, AST parsing, high-precision PoC verification",
         strengths=["Code vulnerability analysis", "Safe differential probe generation", "Syntax validation"],
         context_window=32768,
-        endpoint_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
+        endpoint_url=normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")),
         hardware_notes="VRAM Optimized on Ollama Host"
     ),
     "xploiter": AIModelProfile(
@@ -95,7 +97,7 @@ AI_MODEL_CATALOG: Dict[str, AIModelProfile] = {
         specialization="High-speed parameter triage and initial vulnerability hypothesis",
         strengths=["Ultra-low latency", "Quick risk scoring", "Parameter surface ranking"],
         context_window=4096,
-        endpoint_url=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
+        endpoint_url=normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")),
         hardware_notes="Lightweight in-memory model"
     ),
     "gemini_flash": AIModelProfile(
@@ -147,8 +149,8 @@ class AgentAICognitiveBridge:
     - Continuously tracks model health and failovers transparently.
     """
 
-    def __init__(self, ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")):
-        self.ollama_host = ollama_host
+    def __init__(self, ollama_host: Optional[str] = None):
+        self.ollama_host = normalize_ollama_host(ollama_host or os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
         self.catalog = AI_MODEL_CATALOG
         self._health_cache: Dict[str, bool] = {}
         self._last_health_check = 0.0
