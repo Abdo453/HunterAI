@@ -81,7 +81,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     try {
       const params = new URLSearchParams(window.location.search);
       const qLang = normalizeLang(params.get("lang"));
-      const stored = normalizeLang(window.localStorage.getItem(LANG_STORAGE_KEY));
+      const stored =
+        normalizeLang(window.localStorage.getItem(LANG_STORAGE_KEY)) ||
+        normalizeLang(window.localStorage.getItem("lang"));
       if (qLang) {
         resolved = qLang;
         window.localStorage.setItem(LANG_STORAGE_KEY, qLang);
@@ -95,7 +97,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     applyDomLang(resolved);
 
     const onStorage = (ev: StorageEvent) => {
-      if (ev.key === LANG_STORAGE_KEY) {
+      if (ev.key === LANG_STORAGE_KEY || ev.key === "lang") {
         const next = normalizeLang(ev.newValue);
         if (next) {
           setLangState(next);
@@ -113,11 +115,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       applyDomLang(next);
       try {
         window.localStorage.setItem(LANG_STORAGE_KEY, next);
-        const url = new URL(window.location.href);
-        url.searchParams.set("lang", next);
-        window.history.replaceState(null, "", url.toString());
       } catch {
-        // Ignore storage or history errors in restricted contexts
+        // Ignore storage errors in restricted contexts
       }
     },
     [applyDomLang]

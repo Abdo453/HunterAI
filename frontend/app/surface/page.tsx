@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   GitCompare,
@@ -13,6 +13,7 @@ import {
 import AssetDualGraph from "@/components/AssetDualGraph";
 import { usePlatform } from "@/lib/platform-context";
 import { useI18n } from "@/lib/i18n";
+import { sanitizePlainTerminalText } from "@/lib/terminal-sanitizer";
 
 interface SwarmRosterItem {
   agent: string;
@@ -49,6 +50,7 @@ interface AttackGraphNode {
   label?: string;
   name?: string;
   node_type?: string;
+  type?: string;
   risk_score?: number;
 }
 
@@ -83,7 +85,11 @@ interface SwarmTelemetryPayload {
   target?: string | null;
   swarm_status?: string;
   active_runs_count?: number;
-  graph?: { nodes?: unknown[]; edges?: unknown[]; nodes_count?: number };
+  graph?: {
+    nodes?: AttackGraphNode[] | Record<string, AttackGraphNode>;
+    edges?: AttackGraphEdge[] | Record<string, AttackGraphEdge>;
+    nodes_count?: number;
+  };
   wiretap_events?: WiretapEvent[];
   two_brain_diffs?: TwoBrainDiffItem[];
   swarm_roster?: SwarmRosterItem[];
@@ -114,7 +120,7 @@ export default function SurfacePage() {
     if (swRes.ok && swRes.data) {
       setTelemetry(swRes.data);
       if (swRes.data.two_brain_diffs?.length) {
-        setSelectedDiff(swRes.data.two_brain_diffs[0]);
+        setSelectedDiff((prev) => prev || swRes.data!.two_brain_diffs![0]);
       }
     }
     if (cgRes.ok && cgRes.data) {
@@ -161,57 +167,74 @@ export default function SurfacePage() {
   const roster = Array.isArray(telemetry?.swarm_roster) ? telemetry.swarm_roster : [];
   const wiretap = Array.isArray(telemetry?.wiretap_events) ? telemetry.wiretap_events : [];
   const diffs = Array.isArray(telemetry?.two_brain_diffs) ? telemetry.two_brain_diffs : [];
-  const causalNodes = coerceGraphArray<AttackGraphNode>(causalGraph?.nodes);
-  const causalEdges = coerceGraphArray<AttackGraphEdge>(causalGraph?.edges);
+
+  // Combine AttackGraphSnapshot with swarm telemetry export_graph() nodes/edges cleanly
+  const { mergedNodes, mergedEdges } = useMemo(() => {
+    const snapNodes = coerceGraphArray<AttackGraphNode>(causalGraph?.nodes);
+    const telemNodes = coerceGraphArray<AttackGraphNode>(telemetry?.graph?.nodes);
+    const seenNodeIds = new Set<string>();
+    const combinedNodes: AttackGraphNode[] = [];
+    for (const n of [...snapNodes, ...telemNodes]) {
+      const nid = String(n.id || n.node_id || n.label || n.name || "");
+      if (nid && seenNodeIds.has(nid)) continue;
+      if (nid) seenNodeIds.add(nid);
+      combinedNodes.push(n);
+    }
+
+    const snapEdges = coerceGraphArray<AttackGraphEdge>(causalGraph?.edges);
+    const telemEdges = coerceGraphArray<AttackGraphEdge>(telemetry?.graph?.edges);
+    const combinedEdges = [...snapEdges, ...telemEdges];
+    return { mergedNodes: combinedNodes, mergedEdges: combinedEdges };
+  }, [causalGraph, telemetry?.graph]);
+
+  const swarmStatusNorm = (telemetry?.swarm_status || "").toUpperCase();
+  const isSwarmActive = swarmStatusNorm === "ACTIVE" || swarmStatusNorm === "ONLINE";
 
   return (
     <div className="space-y-5">
       {/* Primary Dual Graph + Paginated Table + Asset Inspector */}
       <AssetDualGraph />
 
-      {/* Attack Path Snapshot & Swarm Roster */}
+      {/* Attack Path Snapshot (export_graph + causal snapshot) & Swarm Roster */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <section className="lg:col-span-7 sentinel-surface p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border-subtle">
             <div className="flex items-center gap-2">
               <Network className="w-4 h-4 text-sentinel-primary" />
-              <h2 className="text-sm font-semibold text-ink-primary">{t("assets.attackGraphTitle")}</h2>
-              <span
-                title={`${causalEdges.length} edges`}
-                className="text-xs font-mono px-2 py-0.5 rounded bg-elevated border border-border-subtle text-ink-secondary"
-              >
-                {causalNodes.length} {t("assets.nodesCount")}
+              <h1 className="text-sm font-semibold text-ink-primary">{t("assets.attackGraphTitle")}</h1>
+              <span className="text-xs font-mono px-2 py-0.5 rounded bg-elevated border border-border-subtle text-ink-secondary tabular-nums">
+                {mergedNodes.length} {t("assets.nodesCount")} · {mergedEdges.length} {t("surface.edgesCount")}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void loadSurfaceTelemetry()}
-                className="h-8 px-2.5 rounded border border-border-subtle bg-elevated hover:border-border-strong text-xs text-ink-primary flex items-center gap-1"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>{t("common.refresh")}</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => void loadSurfaceTelemetry()}
+              className="h-8 px-2.5 rounded border border-border-subtle bg-elevated hover:border-border-strong text-xs text-ink-primary flex items-center gap-1"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>{t("common.refresh")}</span>
+            </button>
           </div>
 
-          {causalNodes.length === 0 ? (
+          {mergedNodes.length === 0 ? (
             <div className="py-6 text-center text-xs text-ink-muted">
               {t("assets.emptyAssets")}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-              {causalNodes.map((n, idx) => (
+              {mergedNodes.map((n, idx) => (
                 <div key={`${n.id || n.node_id || "node"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-sentinel-primary">{n.node_type || "NODE"}</span>
+                    <span className="font-mono text-sentinel-primary">{n.node_type || n.type || "NODE"}</span>
                     {typeof n.risk_score === "number" && (
                       <span className="font-mono text-sentinel-warning tabular-nums">
-                        Risk {n.risk_score}
+                        {t("surface.riskLabel")} {n.risk_score}
                       </span>
                     )}
                   </div>
-                  <div className="font-mono text-ink-primary ltr-isolate truncate">{n.label || n.name || n.id || n.node_id}</div>
+                  <div className="font-mono text-ink-primary ltr-isolate truncate">
+                    {n.label || n.name || n.id || n.node_id}
+                  </div>
                 </div>
               ))}
             </div>
@@ -222,12 +245,12 @@ export default function SurfacePage() {
           <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-sentinel-ai" />
-              <h2 className="text-sm font-semibold text-ink-primary">Swarm Roster</h2>
+              <h2 className="text-sm font-semibold text-ink-primary">{t("surface.swarmRosterTitle")}</h2>
             </div>
             <span
               className={`text-xs font-mono px-2 py-0.5 rounded border ${
-                telemetry?.swarm_status === "ONLINE"
-                  ? "bg-[var(--accent-success-bg)] text-sentinel-success border-[var(--accent-success)]/35"
+                isSwarmActive
+                  ? "bg-sentinel-success/15 text-sentinel-success border-sentinel-success/35"
                   : "bg-elevated text-ink-muted border-border-subtle"
               }`}
             >
@@ -237,7 +260,7 @@ export default function SurfacePage() {
 
           {roster.length === 0 ? (
             <div className="py-6 text-center text-xs text-ink-muted">
-              No active runs in swarm roster (STANDBY).
+              {t("surface.swarmStandbyEmpty")}
             </div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -245,12 +268,13 @@ export default function SurfacePage() {
                 <div key={`${item.role || "role"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-semibold text-ink-primary ltr-isolate">{item.agent}</span>
-                    <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-primary-bg)] text-sentinel-primary">
+                    <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-sentinel-primary/15 text-sentinel-primary">
                       {item.status}
                     </span>
                   </div>
                   <div className="text-[11px] font-mono text-ink-muted ltr-isolate">
                     {item.role} · {item.node}
+                    {item.active_tool ? ` · ${item.active_tool}` : ""}
                   </div>
                 </div>
               ))}
@@ -273,7 +297,7 @@ export default function SurfacePage() {
               className="h-8 px-2.5 rounded border border-border-subtle bg-elevated hover:border-border-strong text-xs text-ink-secondary hover:text-ink-primary flex items-center gap-1"
             >
               <Sparkles className="w-3.5 h-3.5 text-sentinel-ai" />
-              <span>Emit Test Step</span>
+              <span>{t("surface.emitTestStep")}</span>
             </button>
           </div>
 
@@ -289,8 +313,8 @@ export default function SurfacePage() {
                     </span>
                     <div className="flex items-center gap-1.5">
                       {ev.simulated && (
-                        <span className="px-1.5 py-0.5 rounded bg-[var(--accent-warning-bg)] text-sentinel-warning border border-[var(--accent-warning)]/35">
-                          SIMULATED
+                        <span className="px-1.5 py-0.5 rounded bg-sentinel-warning/15 text-sentinel-warning border border-sentinel-warning/35">
+                          {t("surface.simulatedTag")}
                         </span>
                       )}
                       <span className="text-ink-muted tabular-nums">{ev.time}</span>
@@ -309,8 +333,29 @@ export default function SurfacePage() {
               <GitCompare className="w-4 h-4 text-sentinel-success" />
               <h2 className="text-sm font-semibold text-ink-primary">{t("findings.twoBrainTitle")}</h2>
             </div>
-            <span className="text-xs font-mono text-ink-muted">{diffs.length} verdicts</span>
+            <span className="text-xs font-mono text-ink-muted tabular-nums">
+              {diffs.length} {t("surface.verdictsCount")}
+            </span>
           </div>
+
+          {diffs.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              {diffs.slice(0, 6).map((d, idx) => (
+                <button
+                  key={`${d.diff_id}-${idx}`}
+                  type="button"
+                  onClick={() => setSelectedDiff(d)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-mono border ${
+                    selectedDiff?.diff_id === d.diff_id
+                      ? "bg-sentinel-primary/15 border-sentinel-primary/40 text-sentinel-primary"
+                      : "bg-elevated border-border-subtle text-ink-muted"
+                  }`}
+                >
+                  {d.title || d.diff_id}
+                </button>
+              ))}
+            </div>
+          )}
 
           {selectedDiff && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
@@ -329,16 +374,17 @@ export default function SurfacePage() {
           <form onSubmit={runDiffAnalyzer} className="space-y-2 pt-2 border-t border-border-subtle text-xs">
             <div className="font-semibold text-ink-secondary flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-sentinel-primary" />
-              <span>Differential Response Comparator (/api/analyzer/diff)</span>
+              <span>{t("surface.diffComparatorTitle")}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-ink-muted">
-                  <span>Baseline Status</span>
+                  <span>{t("surface.baselineStatus")}</span>
                   <input
                     type="number"
                     value={baseStatus}
                     onChange={(e) => setBaseStatus(Number(e.target.value) || 200)}
+                    aria-label={t("surface.baselineStatus")}
                     className="w-20 h-6 px-2 rounded bg-inset border border-border-subtle font-mono ltr-isolate"
                   />
                 </div>
@@ -347,16 +393,18 @@ export default function SurfacePage() {
                   dir="ltr"
                   value={baseBody}
                   onChange={(e) => setBaseBody(e.target.value)}
+                  aria-label={t("surface.baselineStatus")}
                   className="ltr-isolate w-full p-2 rounded bg-inset border border-border-subtle font-mono text-[11px]"
                 />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-ink-muted">
-                  <span>Mutated Status</span>
+                  <span>{t("surface.mutatedStatus")}</span>
                   <input
                     type="number"
                     value={testStatus}
                     onChange={(e) => setTestStatus(Number(e.target.value) || 200)}
+                    aria-label={t("surface.mutatedStatus")}
                     className="w-20 h-6 px-2 rounded bg-inset border border-border-subtle font-mono ltr-isolate"
                   />
                 </div>
@@ -365,19 +413,20 @@ export default function SurfacePage() {
                   dir="ltr"
                   value={testBody}
                   onChange={(e) => setTestBody(e.target.value)}
+                  aria-label={t("surface.mutatedStatus")}
                   className="ltr-isolate w-full p-2 rounded bg-inset border border-border-subtle font-mono text-[11px]"
                 />
               </div>
             </div>
             <button
               type="submit"
-              className="h-8 px-3 rounded bg-elevated border border-border-strong hover:border-sentinel-primary text-ink-primary font-medium"
+              className="min-h-[44px] sm:min-h-[32px] px-3 rounded bg-elevated border border-border-strong hover:border-sentinel-primary text-ink-primary font-medium"
             >
-              Compute Causal Diff
+              {t("surface.computeDiffBtn")}
             </button>
             {diffResult && (
               <pre dir="ltr" className="ltr-isolate p-2.5 rounded bg-inset border border-border-subtle font-mono text-[11px] text-ink-secondary overflow-x-auto max-h-36">
-                {JSON.stringify(diffResult, null, 2)}
+                {sanitizePlainTerminalText(JSON.stringify(diffResult, null, 2))}
               </pre>
             )}
           </form>

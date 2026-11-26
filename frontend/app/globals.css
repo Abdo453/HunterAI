@@ -4,37 +4,45 @@
 
 /* ==========================================================================
    Obsidian Sentinel Dark & Paper Slate Light Design System
-   WCAG 2.2 AA Contrast Compliant (>= 4.5:1 text, >= 3:1 UI & focus)
+   RGB channel triplets enable Tailwind <alpha-value> opacity utilities.
+   WCAG 2.2 AA Contrast Compliant (>= 4.5:1 text, >= 3:1 UI borders & focus)
    ========================================================================== */
 
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-canvas: #0b0f17;
-  --bg-surface: #111827;
-  --bg-elevated: #1a2332;
-  --bg-inset: #070a10;
+  --bg-canvas: 11 15 23;
+  --bg-surface: 17 24 39;
+  --bg-elevated: 26 35 50;
+  --bg-inset: 7 10 16;
 
-  --border-subtle: #1f2937;
-  --border-strong: #475569;
+  --border-subtle: 59 75 99;
+  --border-strong: 100 116 139;
 
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
+  --text-primary: 248 250 252;
+  --text-secondary: 203 213 225;
+  --text-muted: 148 163 184;
 
-  --accent-primary: #38bdf8;
-  --accent-success: #34d399;
-  --accent-warning: #fbbf24;
-  --accent-danger: #fb7185;
-  --accent-ai: #a78bfa;
+  --accent-primary: 56 189 248;
+  --accent-success: 52 211 153;
+  --accent-warning: 251 191 36;
+  --accent-danger: 251 113 133;
+  --accent-ai: 167 139 250;
 
-  --accent-primary-bg: rgba(56, 189, 248, 0.14);
-  --accent-success-bg: rgba(52, 211, 153, 0.14);
-  --accent-warning-bg: rgba(251, 191, 36, 0.14);
-  --accent-danger-bg: rgba(251, 113, 133, 0.14);
-  --accent-ai-bg: rgba(167, 139, 250, 0.14);
-  --on-accent: #070a10;
+  --accent-primary-bg: rgb(56 189 248 / 0.14);
+  --accent-success-bg: rgb(52 211 153 / 0.14);
+  --accent-warning-bg: rgb(251 191 36 / 0.14);
+  --accent-danger-bg: rgb(251 113 133 / 0.14);
+  --accent-ai-bg: rgb(167 139 250 / 0.14);
+  --on-accent: 7 10 16;
+
+  /* AA-tuned code & terminal syntax tokens */
+  --syntax-keyword: 192 132 252;
+  --syntax-string: 52 211 153;
+  --syntax-number: 251 191 36;
+  --syntax-comment: 148 163 184;
+  --syntax-fn: 56 189 248;
 
   --font-sans: "Inter", "Cairo", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -43,8 +51,8 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.45);
-  --shadow-md: 0 4px 12px rgba(2, 6, 23, 0.55);
+  --shadow-sm: 0 1px 2px rgb(2 6 23 / 0.45);
+  --shadow-md: 0 4px 12px rgb(2 6 23 / 0.55);
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
   --transition-fast: 150ms cubic-bezier(0.2, 0, 0, 1);
@@ -53,33 +61,39 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --bg-canvas: #f8fafc;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f1f5f9;
-  --bg-inset: #eef2f6;
+  --bg-canvas: 248 250 252;
+  --bg-surface: 255 255 255;
+  --bg-elevated: 241 245 249;
+  --bg-inset: 238 242 246;
 
-  --border-subtle: #dde4ee;
-  --border-strong: #64748b;
+  --border-subtle: 148 163 184;
+  --border-strong: 100 116 139;
 
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #475569;
+  --text-primary: 15 23 42;
+  --text-secondary: 51 65 85;
+  --text-muted: 71 85 105;
 
-  --accent-primary: #0369a1;
-  --accent-success: #047857;
-  --accent-warning: #92400e;
-  --accent-danger: #be123c;
-  --accent-ai: #6d28d9;
+  --accent-primary: 3 105 161;
+  --accent-success: 4 120 87;
+  --accent-warning: 146 64 14;
+  --accent-danger: 190 18 60;
+  --accent-ai: 109 40 217;
 
-  --accent-primary-bg: rgba(3, 105, 161, 0.1);
-  --accent-success-bg: rgba(4, 120, 87, 0.1);
-  --accent-warning-bg: rgba(180, 83, 9, 0.1);
-  --accent-danger-bg: rgba(190, 18, 60, 0.1);
-  --accent-ai-bg: rgba(109, 40, 217, 0.1);
-  --on-accent: #ffffff;
+  --accent-primary-bg: rgb(3 105 161 / 0.1);
+  --accent-success-bg: rgb(4 120 87 / 0.1);
+  --accent-warning-bg: rgb(146 64 14 / 0.1);
+  --accent-danger-bg: rgb(190 18 60 / 0.1);
+  --accent-ai-bg: rgb(109 40 217 / 0.1);
+  --on-accent: 255 255 255;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --syntax-keyword: 109 40 217;
+  --syntax-string: 4 120 87;
+  --syntax-number: 146 64 14;
+  --syntax-comment: 71 85 105;
+  --syntax-fn: 3 105 161;
+
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / 0.08);
 }
 
 :root[lang="en"],
@@ -94,24 +108,24 @@
 
 html,
 body {
-  background-color: var(--bg-canvas);
-  color: var(--text-primary);
+  background-color: rgb(var(--bg-canvas));
+  color: rgb(var(--text-primary));
   font-family: var(--font-sans);
 }
 
 .sentinel-surface {
-  background-color: var(--bg-surface);
-  border: var(--border-width) solid var(--border-subtle);
+  background-color: rgb(var(--bg-surface));
+  border: var(--border-width) solid rgb(var(--border-subtle));
   border-radius: var(--radius-lg);
-  color: var(--text-primary);
+  color: rgb(var(--text-primary));
   box-shadow: var(--shadow-sm);
 }
 
 .sentinel-elevated {
-  background-color: var(--bg-elevated);
-  border: var(--border-width) solid var(--border-strong);
+  background-color: rgb(var(--bg-elevated));
+  border: var(--border-width) solid rgb(var(--border-strong));
   border-radius: var(--radius-md);
-  color: var(--text-primary);
+  color: rgb(var(--text-primary));
   box-shadow: var(--shadow-md);
 }
 
@@ -145,34 +159,34 @@ samp {
   [role="tab"],
   [role="menuitem"]
 ):focus-visible {
-  outline: var(--focus-ring-width) solid var(--accent-primary);
+  outline: var(--focus-ring-width) solid rgb(var(--accent-primary));
   outline-offset: var(--focus-ring-offset);
 }
 
 /* Clean React Flow theming matching Obsidian Sentinel & Paper Slate */
 .sentinel-flow .react-flow__controls {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  background: rgb(var(--bg-surface));
+  border: 1px solid rgb(var(--border-subtle));
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
 .sentinel-flow .react-flow__controls-button {
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
+  background: rgb(var(--bg-surface));
+  color: rgb(var(--text-secondary));
+  border-bottom: 1px solid rgb(var(--border-subtle));
   fill: currentColor;
 }
 
 .sentinel-flow .react-flow__controls-button:hover {
-  background: var(--bg-elevated);
-  color: var(--accent-primary);
+  background: rgb(var(--bg-elevated));
+  color: rgb(var(--accent-primary));
 }
 
 .sentinel-flow .react-flow__minimap {
-  background: var(--bg-inset);
-  border: 1px solid var(--border-subtle);
+  background: rgb(var(--bg-inset));
+  border: 1px solid rgb(var(--border-subtle));
   border-radius: var(--radius-md);
 }
 
@@ -184,7 +198,7 @@ samp {
 .sentinel-prose {
   font-size: 0.875rem;
   line-height: 1.6;
-  color: var(--text-primary);
+  color: rgb(var(--text-primary));
 }
 
 .sentinel-prose p {
@@ -196,7 +210,7 @@ samp {
 .sentinel-prose h3,
 .sentinel-prose h4 {
   font-weight: 600;
-  color: var(--text-primary);
+  color: rgb(var(--text-primary));
   margin: 0.75rem 0 0.35rem;
 }
 
@@ -219,30 +233,30 @@ samp {
   direction: ltr;
   unicode-bidi: isolate;
   text-align: left;
-  background-color: var(--bg-inset);
-  border: 1px solid var(--border-subtle);
+  background-color: rgb(var(--bg-inset));
+  border: 1px solid rgb(var(--border-subtle));
   border-radius: var(--radius-md);
   padding: 0.75rem;
   overflow-x: auto;
   margin: 0.5rem 0;
   font-size: 0.75rem;
   line-height: 1.5;
-  color: var(--text-secondary);
+  color: rgb(var(--text-secondary));
 }
 
 .sentinel-prose code:not(pre code) {
   direction: ltr;
   unicode-bidi: isolate;
-  background-color: var(--bg-inset);
-  border: 1px solid var(--border-subtle);
+  background-color: rgb(var(--bg-inset));
+  border: 1px solid rgb(var(--border-subtle));
   border-radius: var(--radius-sm);
   padding: 0.1rem 0.35rem;
   font-size: 0.8125rem;
-  color: var(--accent-primary);
+  color: rgb(var(--accent-primary));
 }
 
 .sentinel-prose a {
-  color: var(--accent-primary);
+  color: rgb(var(--accent-primary));
   text-decoration: underline;
   text-underline-offset: 2px;
 }

@@ -27,6 +27,7 @@ import {
   usePlatform,
   validateScanTarget,
 } from "@/lib/platform-context";
+import { normalizeRunProgressPercent } from "@/lib/api-types";
 import {
   TARGET_PRESETS,
   TargetPreset,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/target-presets";
 import { useTheme } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
+import NotificationPopover from "@/components/NotificationPopover";
 
 function formatSyncTime(ts: number | null, neverLabel: string): string {
   if (!ts) return neverLabel;
@@ -48,27 +50,23 @@ function getStatusBadgeStyle(status: ServiceConnectivity): {
   switch (status) {
     case "connected":
       return {
-        dotClass: "bg-[var(--accent-success)]",
-        pillClass:
-          "border-[var(--accent-success)]/30 bg-[var(--accent-success-bg)] text-[var(--accent-success)]",
+        dotClass: "bg-sentinel-success",
+        pillClass: "border-sentinel-success/35 bg-sentinel-success/15 text-sentinel-success",
       };
     case "degraded":
       return {
-        dotClass: "bg-[var(--accent-warning)]",
-        pillClass:
-          "border-[var(--accent-warning)]/30 bg-[var(--accent-warning-bg)] text-[var(--accent-warning)]",
+        dotClass: "bg-sentinel-warning",
+        pillClass: "border-sentinel-warning/35 bg-sentinel-warning/15 text-sentinel-warning",
       };
     case "checking":
       return {
-        dotClass: "bg-[var(--accent-primary)]",
-        pillClass:
-          "border-[var(--accent-primary)]/30 bg-[var(--accent-primary-bg)] text-[var(--accent-primary)]",
+        dotClass: "bg-sentinel-primary",
+        pillClass: "border-sentinel-primary/35 bg-sentinel-primary/15 text-sentinel-primary",
       };
     default:
       return {
-        dotClass: "bg-[var(--accent-danger)]",
-        pillClass:
-          "border-[var(--accent-danger)]/30 bg-[var(--accent-danger-bg)] text-[var(--accent-danger)]",
+        dotClass: "bg-sentinel-danger",
+        pillClass: "border-sentinel-danger/35 bg-sentinel-danger/15 text-sentinel-danger",
       };
   }
 }
@@ -187,7 +185,9 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
 
   const activeRun = useMemo(() => {
     const isLive = (r: { status?: string }) =>
-      ["running", "paused", "pending"].includes((r.status || "").toLowerCase());
+      ["running", "paused", "pending", "queued", "waiting"].includes(
+        (r.status || "").toLowerCase()
+      );
     if (activeRunId) {
       const m = runs.find((r) => r.run_id === activeRunId && isLive(r));
       if (m) return m;
@@ -204,9 +204,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
     const check = validateScanTarget(targetInput);
     if (!check.valid) {
       const msgKey =
-        check.reason === "empty"
-          ? "nav.scopeInvalidEmpty"
-          : "nav.scopeFormatHint";
+        check.reason === "empty" ? "nav.scopeInvalidEmpty" : "nav.scopeFormatHint";
       setValidationError(t(msgKey));
       return;
     }
@@ -216,8 +214,11 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
       if (res.error) setValidationError(res.error);
       return;
     }
-    const engineLabel = res.via === "go_core" ? "Go Core Scanner" : "Django Pipeline";
-    setLaunchNotice(`Scan dispatched for ${check.normalizedTarget} (${engineLabel})`);
+    const engineLabel =
+      res.via === "go_core" ? t("runs.kindGoCore") : t("runs.kindPipeline");
+    setLaunchNotice(
+      t("nav.scanDispatched", { target: check.normalizedTarget, engine: engineLabel })
+    );
     window.setTimeout(() => setLaunchNotice(""), 6500);
   };
 
@@ -293,7 +294,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
 
             <div className="relative flex-1 min-w-[160px]">
               <label htmlFor="scan-target-input" className="sr-only">
-                {t("nav.targetPlaceholder", "Target domain (e.g. example.com)")}
+                {t("nav.targetPlaceholder")}
               </label>
               <input
                 ref={targetInputRef}
@@ -301,7 +302,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
                 type="text"
                 dir="ltr"
                 list="target-example-presets"
-                placeholder={t("nav.targetPlaceholder", "Target domain (e.g. example.com)")}
+                placeholder={t("nav.targetPlaceholder")}
                 value={targetInput}
                 onChange={(e) => {
                   userEditedTargetRef.current = true;
@@ -330,7 +331,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
               aria-label={t("nav.presetsAriaLabel")}
               className={`min-h-[44px] lg:min-h-0 lg:h-9 px-2.5 rounded-md border text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0 ${
                 presetsOpen
-                  ? "border-sentinel-primary bg-[var(--accent-primary-bg)] text-sentinel-primary"
+                  ? "border-sentinel-primary bg-sentinel-primary/15 text-sentinel-primary"
                   : "border-border-subtle bg-elevated hover:border-border-strong text-ink-primary"
               }`}
             >
@@ -382,7 +383,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
                   type="button"
                   onClick={() => setPresetsOpen(false)}
                   aria-label={t("common.close")}
-                  className="h-7 w-7 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-muted hover:text-ink-primary flex items-center justify-center shrink-0"
+                  className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:h-7 lg:w-7 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-muted hover:text-ink-primary flex items-center justify-center shrink-0"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -401,7 +402,9 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
                           <Server className="w-3.5 h-3.5 text-sentinel-warning shrink-0" />
                         )}
                         <span>
-                          {isPublic ? t("targets.presetGroupPublic") : t("targets.presetGroupLocal")}
+                          {isPublic
+                            ? t("targets.presetGroupPublic")
+                            : t("targets.presetGroupLocal")}
                         </span>
                       </span>
                       <span className="font-mono text-[10px] text-ink-muted tabular-nums">
@@ -419,7 +422,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
                             onClick={() => handleSelectPreset(preset)}
                             className={`w-full text-start p-2 rounded-md border transition-colors flex flex-col gap-1 ${
                               isActive
-                                ? "border-sentinel-primary bg-[var(--accent-primary-bg)]"
+                                ? "border-sentinel-primary bg-sentinel-primary/15"
                                 : "border-border-subtle bg-elevated/60 hover:bg-elevated hover:border-border-strong"
                             }`}
                           >
@@ -473,18 +476,19 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
           )}
         </div>
 
-        {/* Status Pills, Command Palette, Approvals, Theme/Lang, Copilot */}
+        {/* Status Pills, Command Palette, Notifications, Approvals, Theme/Lang, Copilot */}
         <div className="flex items-center gap-1.5 order-2">
           {activeRun && (
             <button
               type="button"
               onClick={() => router.push("/")}
               title={`${activeRun.kind} · ${activeRun.target}`}
-              className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-full border border-[var(--accent-primary)]/35 bg-[var(--accent-primary-bg)] text-sentinel-primary text-xs font-mono"
+              className="hidden sm:flex items-center gap-1.5 h-9 px-2.5 rounded-full border border-sentinel-primary/35 bg-sentinel-primary/15 text-sentinel-primary text-xs font-mono"
             >
               <Activity className="w-3.5 h-3.5 animate-pulse" />
-              <span className="truncate max-w-[130px] ltr-isolate">
-                {activeRun.kind}: {activeRun.current_phase || activeRun.status}
+              <span className="truncate max-w-[140px] ltr-isolate tabular-nums">
+                {activeRun.kind}: {activeRun.current_phase || activeRun.status} (
+                {normalizeRunProgressPercent(activeRun.progress)}%)
               </span>
             </button>
           )}
@@ -520,12 +524,16 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
             <span className="hidden xl:inline font-mono text-[11px]">Ctrl+K</span>
           </button>
 
+          <NotificationPopover />
+
           <button
             type="button"
             onClick={() => {
               router.push("/");
               window.setTimeout(() => {
-                document.getElementById("approvals-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                document
+                  .getElementById("approvals-panel")
+                  ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
               }, 120);
             }}
             aria-label={t("approvals.title")}
@@ -538,7 +546,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
               }`}
             />
             {pendingApprovalsCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono tabular-nums bg-[var(--accent-warning-bg)] text-sentinel-warning border border-[var(--accent-warning)]/30">
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono tabular-nums bg-sentinel-warning/15 text-sentinel-warning border border-sentinel-warning/35">
                 {pendingApprovalsCount}
               </span>
             )}
@@ -546,6 +554,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
 
           <button
             type="button"
+            data-testid="lang-toggle-btn"
             onClick={toggleLang}
             aria-label={t("topbar.languageToggle")}
             title={t("topbar.languageToggle")}
@@ -557,6 +566,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
 
           <button
             type="button"
+            data-testid="theme-toggle-btn"
             onClick={toggleTheme}
             aria-label={t("topbar.themeToggle")}
             title={t("topbar.themeToggle")}
@@ -571,13 +581,14 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
 
           <button
             type="button"
+            data-testid="copilot-toggle-btn"
             onClick={() => setCopilotOpen((prev) => !prev)}
             aria-expanded={copilotOpen}
             aria-label={t("nav.copilotBtn")}
-            title="Copilot (Ctrl+J)"
+            title={t("nav.copilotShortcut")}
             className={`min-h-[44px] lg:min-h-0 lg:h-9 px-3 rounded-md border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
               copilotOpen
-                ? "border-sentinel-ai bg-[var(--accent-ai-bg)] text-sentinel-ai"
+                ? "border-sentinel-ai bg-sentinel-ai/15 text-sentinel-ai"
                 : "border-border-subtle bg-elevated text-ink-primary hover:border-border-strong"
             }`}
           >

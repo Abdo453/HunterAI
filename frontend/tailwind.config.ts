@@ -1,33 +1,43 @@
 import type { Config } from "tailwindcss";
 
+const withAlpha = (variableName: string) => `rgb(var(${variableName}) / <alpha-value>)`;
+
 const config: Config = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./lib/**/*.{js,ts,jsx,tsx,mdx}",
+    "./hooks/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
       colors: {
-        canvas: "var(--bg-canvas)",
-        surface: "var(--bg-surface)",
-        elevated: "var(--bg-elevated)",
-        inset: "var(--bg-inset)",
-        "border-subtle": "var(--border-subtle)",
-        "border-strong": "var(--border-strong)",
+        canvas: withAlpha("--bg-canvas"),
+        surface: withAlpha("--bg-surface"),
+        elevated: withAlpha("--bg-elevated"),
+        inset: withAlpha("--bg-inset"),
+        "border-subtle": withAlpha("--border-subtle"),
+        "border-strong": withAlpha("--border-strong"),
         ink: {
-          primary: "var(--text-primary)",
-          secondary: "var(--text-secondary)",
-          muted: "var(--text-muted)",
+          primary: withAlpha("--text-primary"),
+          secondary: withAlpha("--text-secondary"),
+          muted: withAlpha("--text-muted"),
         },
         sentinel: {
-          primary: "var(--accent-primary)",
-          success: "var(--accent-success)",
-          warning: "var(--accent-warning)",
-          danger: "var(--accent-danger)",
-          ai: "var(--accent-ai)",
-          onAccent: "var(--on-accent)",
+          primary: withAlpha("--accent-primary"),
+          success: withAlpha("--accent-success"),
+          warning: withAlpha("--accent-warning"),
+          danger: withAlpha("--accent-danger"),
+          ai: withAlpha("--accent-ai"),
+          onAccent: withAlpha("--on-accent"),
+        },
+        syntax: {
+          keyword: withAlpha("--syntax-keyword"),
+          string: withAlpha("--syntax-string"),
+          number: withAlpha("--syntax-number"),
+          comment: withAlpha("--syntax-comment"),
+          fn: withAlpha("--syntax-fn"),
         },
       },
       fontFamily: {

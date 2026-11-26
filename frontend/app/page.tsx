@@ -1,20 +1,27 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Rocket,
   Play,
   Pause,
   Square,
+  RotateCcw,
   Eye,
   X,
-  DollarSign,
   Loader2,
   AlertCircle,
   CheckCircle2,
   Activity,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Bookmark,
 } from "lucide-react";
 import StatsCards from "@/components/StatsCards";
+import HardwareTelemetryCard from "@/components/HardwareTelemetryCard";
+import TokenCostPanel from "@/components/TokenCostPanel";
+import TaskSubtaskTree from "@/components/TaskSubtaskTree";
 import ApprovalsPanel from "@/components/ApprovalsPanel";
 import LiveConsole from "@/components/LiveConsole";
 import TargetPresetStrip from "@/components/TargetPresetStrip";
@@ -24,25 +31,11 @@ import {
   usePlatform,
   validateScanTarget,
 } from "@/lib/platform-context";
+import { normalizeRunProgressPercent } from "@/lib/api-types";
 import { TargetPreset } from "@/lib/target-presets";
 import { useI18n } from "@/lib/i18n";
-
-interface BudgetSnapshot {
-  budget?: {
-    per_run_usd?: number | null;
-    per_solver_usd?: number | null;
-    per_day_usd?: number | null;
-  };
-  spent?: {
-    today_usd?: number;
-    total_usd?: number;
-  };
-  per_run_usd?: number | null;
-  per_solver_usd?: number | null;
-  per_day_usd?: number | null;
-  today_usd?: number;
-  total_usd?: number;
-}
+import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { sanitizePlainTerminalText } from "@/lib/terminal-sanitizer";
 
 interface RunDetailsData {
   events: Array<{ event_id?: string; event_type?: string; timestamp?: number | string; payload?: Record<string, unknown> }>;
@@ -50,26 +43,28 @@ interface RunDetailsData {
   findings: Array<{ evidence_id?: string; title?: string; affected_asset?: string; confidence?: number; verification_status?: string; evidence?: string }>;
 }
 
-const RUN_KINDS: Array<{ id: MissionLaunchInput["kind"]; label: string }> = [
-  { id: "omni", label: "OmniHunter (Full Loop)" },
-  { id: "pipeline", label: "Recon Pipeline" },
-  { id: "mission", label: "Autonomous Mission" },
-  { id: "engine", label: "CLI Engine Worker" },
-  { id: "go_core", label: "Go Core Scanner" },
+const RUN_KINDS: Array<{ id: MissionLaunchInput["kind"]; labelKey: string }> = [
+  { id: "omni", labelKey: "runs.kindOmni" },
+  { id: "pipeline", labelKey: "runs.kindPipeline" },
+  { id: "mission", labelKey: "runs.kindMission" },
+  { id: "engine", labelKey: "runs.kindEngine" },
+  { id: "go_core", labelKey: "runs.kindGoCore" },
 ];
+
+const ARCHIVE_PAGE_SIZE = 8;
 
 function statusPillClass(status: string): string {
   const norm = status.toLowerCase();
   if (norm === "running") {
-    return "bg-[var(--accent-primary-bg)] text-sentinel-primary border-[var(--accent-primary)]/35";
+    return "bg-sentinel-primary/15 text-sentinel-primary border-sentinel-primary/35";
   }
-  if (norm === "paused" || norm === "pending") {
-    return "bg-[var(--accent-warning-bg)] text-sentinel-warning border-[var(--accent-warning)]/35";
+  if (norm === "paused" || norm === "pending" || norm === "interrupted") {
+    return "bg-sentinel-warning/15 text-sentinel-warning border-sentinel-warning/35";
   }
   if (norm === "completed") {
-    return "bg-[var(--accent-success-bg)] text-sentinel-success border-[var(--accent-success)]/35";
+    return "bg-sentinel-success/15 text-sentinel-success border-sentinel-success/35";
   }
-  return "bg-[var(--accent-danger-bg)] text-sentinel-danger border-[var(--accent-danger)]/35";
+  return "bg-sentinel-danger/15 text-sentinel-danger border-sentinel-danger/35";
 }
 
 export default function OverviewPage() {
@@ -78,15 +73,15 @@ export default function OverviewPage() {
     engagementSelectionSeq,
     targetDomain,
     runs,
-    tasks,
-    engagements,
+    activeRunId,
+    setActiveRunId,
     isScanning,
     launchMission,
     controlRun,
+    recoverRun,
     apiJson,
-    hunterHubHealth,
   } = usePlatform();
-  const { t } = useI18n();
+  const { t, dir } = useI18n();
 
   const [kind, setKind] = useState<MissionLaunchInput["kind"]>("omni");
   const [target, setTarget] = useState<string>(targetDomain || "");
@@ -98,21 +93,38 @@ export default function OverviewPage() {
   const [proxyUrl, setProxyUrl] = useState<string>("");
   const [launchError, setLaunchError] = useState<string>("");
   const [launchFeedback, setLaunchFeedback] = useState<string>("");
+  const [runControlError, setRunControlError] = useState<string>("");
+  const [runControlBusyId, setRunControlBusyId] = useState<string | null>(null);
+
+  // Paginated Mission Archive (?q=&page=)
+  const [archiveQuery, setArchiveQuery] = useState<string>("");
+  const [archivePage, setArchivePage] = useState<number>(1);
+  const [splitPercent, setSplitPercent] = useState<number>(55);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [inspectedRun, setInspectedRun] = useState<RunRecord | null>(null);
   const [runTab, setRunTab] = useState<"events" | "evidence" | "findings">("events");
   const [runDetails, setRunDetails] = useState<RunDetailsData>({ events: [], evidence: [], findings: [] });
   const [runLoading, setRunLoading] = useState<boolean>(false);
 
-  const [budget, setBudget] = useState<BudgetSnapshot | null>(null);
-  const [perRunUsd, setPerRunUsd] = useState<string>("");
-  const [perSolverUsd, setPerSolverUsd] = useState<string>("");
-  const [perDayUsd, setPerDayUsd] = useState<string>("");
-  const [budgetMsg, setBudgetMsg] = useState<string>("");
+  const runDrawerTrapRef = useFocusTrap(Boolean(inspectedRun), () => setInspectedRun(null));
 
   const lastSyncedEngIdRef = useRef<string>("");
   const userEditedOverviewTargetRef = useRef<boolean>(false);
   const lastManualPickSeqRef = useRef<number>(engagementSelectionSeq);
+
+  // Hydrate initial ?q= and ?page= archive query params cleanly
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get("q");
+      const p = Number.parseInt(params.get("page") || "1", 10);
+      if (q) setArchiveQuery(q);
+      if (Number.isFinite(p) && p >= 1) setArchivePage(p);
+    } catch {
+      // Ignore query errors
+    }
+  }, []);
 
   useEffect(() => {
     if (engagementSelectionSeq !== lastManualPickSeqRef.current) {
@@ -139,22 +151,6 @@ export default function OverviewPage() {
     }
   }, [selectedEngagement, engagementSelectionSeq]);
 
-  const loadBudget = useCallback(async () => {
-    if (hunterHubHealth.status === "offline") return;
-    const res = await apiJson<BudgetSnapshot>("/api/budget");
-    if (res.ok && res.data) {
-      setBudget(res.data);
-      const b = res.data.budget || res.data;
-      setPerRunUsd(b.per_run_usd !== undefined && b.per_run_usd !== null ? String(b.per_run_usd) : "");
-      setPerSolverUsd(b.per_solver_usd !== undefined && b.per_solver_usd !== null ? String(b.per_solver_usd) : "");
-      setPerDayUsd(b.per_day_usd !== undefined && b.per_day_usd !== null ? String(b.per_day_usd) : "");
-    }
-  }, [apiJson, hunterHubHealth.status]);
-
-  useEffect(() => {
-    void loadBudget();
-  }, [loadBudget]);
-
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
     userEditedOverviewTargetRef.current = true;
@@ -164,11 +160,9 @@ export default function OverviewPage() {
     if (kind !== "engine" || target.trim()) {
       const check = validateScanTarget(target);
       if (!check.valid) {
-        setLaunchError(t(
-          check.reason === "empty"
-            ? "nav.scopeInvalidEmpty"
-            : "nav.scopeFormatHint"
-        ));
+        setLaunchError(
+          t(check.reason === "empty" ? "nav.scopeInvalidEmpty" : "nav.scopeFormatHint")
+        );
         return;
       }
     }
@@ -184,14 +178,36 @@ export default function OverviewPage() {
       proxy: proxyUrl.trim() || null,
     });
     if (!res.ok) {
-      setLaunchError(res.error || "Launch failed");
+      setLaunchError(res.error || t("runs.launchFailed"));
       return;
     }
-    setLaunchFeedback(res.run?.run_id ? `Started ${res.run.run_id}` : "Dispatched");
+    setLaunchFeedback(
+      res.run?.run_id
+        ? t("runs.startedRun", { id: res.run.run_id })
+        : t("runs.dispatchedOk")
+    );
   };
+
+  const handleRunControl = useCallback(
+    async (runId: string, action: "pause" | "resume" | "stop" | "recover") => {
+      setRunControlError("");
+      setRunControlBusyId(runId);
+      try {
+        const res =
+          action === "recover" ? await recoverRun(runId) : await controlRun(runId, action);
+        if (!res.ok) {
+          setRunControlError(res.error || t("runs.controlFailed"));
+        }
+      } finally {
+        setRunControlBusyId(null);
+      }
+    },
+    [controlRun, recoverRun, t]
+  );
 
   const inspectRunDetails = async (run: RunRecord) => {
     setInspectedRun(run);
+    setActiveRunId(run.run_id);
     setRunTab("events");
     setRunLoading(true);
     const [evRes, eviRes, fRes] = await Promise.all([
@@ -207,26 +223,53 @@ export default function OverviewPage() {
     setRunLoading(false);
   };
 
-  const saveBudget = async (e: React.FormEvent) => {
+  const filteredRuns = useMemo(() => {
+    const q = archiveQuery.trim().toLowerCase();
+    if (!q) return runs;
+    return runs.filter(
+      (r) =>
+        (r.run_id || "").toLowerCase().includes(q) ||
+        (r.target || "").toLowerCase().includes(q) ||
+        (r.kind || "").toLowerCase().includes(q) ||
+        (r.current_phase || "").toLowerCase().includes(q) ||
+        (r.status || "").toLowerCase().includes(q)
+    );
+  }, [runs, archiveQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRuns.length / ARCHIVE_PAGE_SIZE));
+  const safePage = Math.min(archivePage, totalPages);
+  const pageRuns = useMemo(() => {
+    const start = (safePage - 1) * ARCHIVE_PAGE_SIZE;
+    return filteredRuns.slice(start, start + ARCHIVE_PAGE_SIZE);
+  }, [filteredRuns, safePage]);
+
+  const handleSplitPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
-    setBudgetMsg("");
-    const toNum = (v: string): number | null => {
-      const n = Number.parseFloat(v);
-      return Number.isFinite(n) && n >= 0 ? n : null;
+    const rect = splitContainerRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return;
+
+    const onMove = (moveEv: PointerEvent) => {
+      const relX =
+        dir === "rtl" ? rect.right - moveEv.clientX : moveEv.clientX - rect.left;
+      const pct = Math.min(72, Math.max(32, Math.round((relX / rect.width) * 100)));
+      setSplitPercent(pct);
     };
-    const res = await apiJson<BudgetSnapshot>("/api/budget", {
-      method: "POST",
-      body: {
-        per_run_usd: toNum(perRunUsd),
-        per_solver_usd: toNum(perSolverUsd),
-        per_day_usd: toNum(perDayUsd),
-      },
-    });
-    if (res.ok && res.data) {
-      setBudget(res.data);
-      setBudgetMsg(t("common.save"));
-    } else {
-      setBudgetMsg(res.error || "Failed");
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const handleSplitKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = 4;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      setSplitPercent((p) => Math.min(72, Math.max(32, p + (dir === "rtl" ? step : -step))));
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      setSplitPercent((p) => Math.min(72, Math.max(32, p + (dir === "rtl" ? -step : step))));
     }
   };
 
@@ -234,14 +277,24 @@ export default function OverviewPage() {
     <div className="space-y-5">
       <StatsCards />
 
+      {/* Live Hardware Telemetry + Persisted Token & Cost Analytics */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <div className="xl:col-span-5">
+          <HardwareTelemetryCard compact />
+        </div>
+        <div className="xl:col-span-7">
+          <TokenCostPanel runId={activeRunId} />
+        </div>
+      </div>
+
       {/* Unified Mission Launcher */}
       <section aria-labelledby="mission-launcher-heading" className="sentinel-surface p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border-subtle">
           <div className="flex items-center gap-2">
             <Rocket className="w-4 h-4 text-sentinel-primary" />
-            <h2 id="mission-launcher-heading" className="text-sm font-semibold text-ink-primary">
+            <h1 id="mission-launcher-heading" className="text-sm font-semibold text-ink-primary">
               {t("runs.title")}
-            </h2>
+            </h1>
           </div>
 
           <div className="flex flex-wrap gap-1 bg-inset p-1 rounded-md border border-border-subtle">
@@ -256,7 +309,7 @@ export default function OverviewPage() {
                     : "text-ink-muted hover:text-ink-primary"
                 }`}
               >
-                {item.label}
+                {t(item.labelKey)}
               </button>
             ))}
           </div>
@@ -316,7 +369,7 @@ export default function OverviewPage() {
 
           <div className="md:col-span-2 space-y-1">
             <label htmlFor="overview-proxy" className="text-xs text-ink-muted">
-              Proxy (Optional)
+              {t("runs.proxyOptional")}
             </label>
             <input
               id="overview-proxy"
@@ -333,7 +386,7 @@ export default function OverviewPage() {
             <button
               type="submit"
               disabled={isScanning}
-              className="w-full h-9 px-3 rounded-md bg-sentinel-primary text-sentinel-onAccent text-xs font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50"
+              className="w-full min-h-[44px] sm:min-h-[36px] px-3 rounded-md bg-sentinel-primary text-sentinel-onAccent text-xs font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50"
             >
               {isScanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
               <span>{t("runs.launchMission")}</span>
@@ -344,7 +397,7 @@ export default function OverviewPage() {
             <>
               <div className="md:col-span-3 space-y-1">
                 <label htmlFor="overview-engine" className="text-xs text-ink-muted">
-                  CLI Engine
+                  {t("runs.cliEngineLabel")}
                 </label>
                 <select
                   id="overview-engine"
@@ -360,20 +413,20 @@ export default function OverviewPage() {
               </div>
               <div className="md:col-span-7 space-y-1">
                 <label htmlFor="overview-prompt" className="text-xs text-ink-muted">
-                  Task Prompt
+                  {t("runs.taskPromptLabel")}
                 </label>
                 <input
                   id="overview-prompt"
                   type="text"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Instruction for autonomous CLI engine..."
+                  placeholder={t("runs.taskPromptPlaceholder")}
                   className="w-full h-9 px-3 rounded-md bg-inset border border-border-subtle text-xs text-ink-primary"
                 />
               </div>
               <div className="md:col-span-2 space-y-1">
                 <label htmlFor="overview-cov" className="text-xs text-ink-muted">
-                  Coverage Target
+                  {t("runs.coverageTargetLabel")}
                 </label>
                 <input
                   id="overview-cov"
@@ -404,41 +457,69 @@ export default function OverviewPage() {
         />
 
         {launchError && (
-          <div role="alert" className="px-3 py-2 rounded bg-[var(--accent-danger-bg)] border border-[var(--accent-danger)]/40 text-sentinel-danger text-xs flex items-center gap-2">
+          <div role="alert" className="px-3 py-2 rounded bg-sentinel-danger/10 border border-sentinel-danger/40 text-sentinel-danger text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{launchError}</span>
           </div>
         )}
         {launchFeedback && (
-          <div role="status" className="px-3 py-2 rounded bg-[var(--accent-success-bg)] border border-[var(--accent-success)]/40 text-sentinel-success text-xs flex items-center gap-2">
+          <div role="status" className="px-3 py-2 rounded bg-sentinel-success/10 border border-sentinel-success/40 text-sentinel-success text-xs flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span className="font-mono">{launchFeedback}</span>
           </div>
         )}
       </section>
 
-      {/* Active Runs + Budget Guard */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
-        <section className="xl:col-span-8 sentinel-surface p-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2 pb-2 border-b border-border-subtle">
+      {/* Split Resizable Mission Workspace: Paginated Mission Archive <-> Flow->Task->Subtask Tree */}
+      <div
+        ref={splitContainerRef}
+        data-testid="mission-split-workspace"
+        className="flex flex-col xl:flex-row gap-4 xl:gap-0 items-stretch"
+      >
+        <section
+          style={{ flexBasis: `${splitPercent}%` }}
+          className="xl:min-w-0 sentinel-surface p-4 flex flex-col gap-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border-subtle">
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-sentinel-primary" />
-              <h3 className="text-sm font-semibold text-ink-primary">Managed Runs</h3>
+              <h2 className="text-sm font-semibold text-ink-primary">{t("runs.archiveTitle")}</h2>
               <span className="text-xs font-mono tabular-nums px-2 py-0.5 rounded bg-elevated border border-border-subtle text-ink-secondary">
-                {runs.length}
+                {filteredRuns.length}
               </span>
+            </div>
+            <div className="relative flex-1 sm:flex-initial sm:w-56">
+              <Search className="w-3.5 h-3.5 text-ink-muted absolute start-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="search"
+                value={archiveQuery}
+                onChange={(e) => {
+                  setArchiveQuery(e.target.value);
+                  setArchivePage(1);
+                }}
+                placeholder={t("runs.searchArchivePlaceholder")}
+                aria-label={t("runs.searchArchivePlaceholder")}
+                className="w-full h-8 ps-8 pe-2.5 rounded bg-inset border border-border-subtle text-xs text-ink-primary placeholder:text-ink-muted"
+              />
             </div>
           </div>
 
-          {runs.length === 0 ? (
+          {runControlError && (
+            <div role="alert" className="px-3 py-2 rounded bg-sentinel-danger/10 border border-sentinel-danger/40 text-sentinel-danger text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{runControlError}</span>
+            </div>
+          )}
+
+          {pageRuns.length === 0 ? (
             <div className="py-8 text-center text-xs text-ink-muted">{t("runs.emptyRuns")}</div>
           ) : (
             <div className="overflow-x-auto border border-border-subtle rounded-md bg-inset">
               <table className="w-full text-xs border-collapse">
                 <thead className="bg-elevated border-b border-border-subtle text-ink-muted">
                   <tr>
-                    <th className="py-2 px-3 text-start font-semibold">Run ID</th>
-                    <th className="py-2 px-3 text-start font-semibold">Kind</th>
+                    <th className="py-2 px-3 text-start font-semibold">{t("runs.colRunId")}</th>
+                    <th className="py-2 px-3 text-start font-semibold">{t("runs.colKind")}</th>
                     <th className="py-2 px-3 text-start font-semibold">{t("common.target")}</th>
                     <th className="py-2 px-3 text-start font-semibold">{t("runs.activePhase")}</th>
                     <th className="py-2 px-3 text-start font-semibold">{t("common.status")}</th>
@@ -446,22 +527,43 @@ export default function OverviewPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle">
-                  {runs.slice(0, 20).map((run, idx) => {
+                  {pageRuns.map((run, idx) => {
                     const st = (run.status || "").toLowerCase();
+                    const pct = normalizeRunProgressPercent(run.progress);
+                    const isBusy = runControlBusyId === run.run_id;
+                    const canRecover =
+                      Boolean(run.recoverable) ||
+                      ["paused", "interrupted", "failed", "stopped"].includes(st);
                     return (
-                      <tr key={`${run.run_id || "run"}-${idx}`} className="hover:bg-elevated/60">
+                      <tr
+                        key={`${run.run_id || "run"}-${idx}`}
+                        className={`hover:bg-elevated/60 ${activeRunId === run.run_id ? "bg-sentinel-primary/5" : ""}`}
+                      >
                         <td className="py-2 px-3 font-mono text-ink-primary ltr-isolate whitespace-nowrap">
-                          {run.run_id}
+                          <div className="flex items-center gap-1.5">
+                            <span>{run.run_id}</span>
+                            {run.checkpoint_id && (
+                              <span
+                                title={run.checkpoint_id}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-sentinel-ai/15 text-sentinel-ai border border-sentinel-ai/35 text-[10px]"
+                              >
+                                <Bookmark className="w-2.5 h-2.5" />
+                                <span>{t("runs.checkpointBadge")}</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-2 px-3 font-mono text-sentinel-primary uppercase whitespace-nowrap">
                           {run.kind}
                         </td>
-                        <td className="py-2 px-3 font-mono text-ink-secondary ltr-isolate max-w-[180px] truncate">
+                        <td className="py-2 px-3 font-mono text-ink-secondary ltr-isolate max-w-[160px] truncate">
                           {run.target || "—"}
                         </td>
                         <td className="py-2 px-3 font-mono text-ink-muted tabular-nums whitespace-nowrap">
-                          {run.current_phase || "—"}
-                          {typeof run.progress === "number" ? ` (${Math.round(run.progress)}%)` : ""}
+                          <span>{run.current_phase || "—"}</span>
+                          {typeof run.progress === "number" && (
+                            <span className="ms-1 text-ink-primary">({pct}%)</span>
+                          )}
                         </td>
                         <td className="py-2 px-3 whitespace-nowrap">
                           <span className={`text-[11px] font-mono px-2 py-0.5 rounded border uppercase ${statusPillClass(st)}`}>
@@ -473,9 +575,11 @@ export default function OverviewPage() {
                             {st === "running" && (
                               <button
                                 type="button"
-                                onClick={() => void controlRun(run.run_id, "pause")}
+                                disabled={isBusy}
+                                onClick={() => void handleRunControl(run.run_id, "pause")}
+                                aria-label={t("runs.pauseRun")}
                                 title={t("runs.pauseRun")}
-                                className="h-7 px-2 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-primary"
+                                className="h-7 px-2 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-primary disabled:opacity-40"
                               >
                                 <Pause className="w-3.5 h-3.5 text-sentinel-warning" />
                               </button>
@@ -483,9 +587,11 @@ export default function OverviewPage() {
                             {st === "paused" && (
                               <button
                                 type="button"
-                                onClick={() => void controlRun(run.run_id, "resume")}
+                                disabled={isBusy}
+                                onClick={() => void handleRunControl(run.run_id, "resume")}
+                                aria-label={t("runs.resumeRun")}
                                 title={t("runs.resumeRun")}
-                                className="h-7 px-2 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-primary"
+                                className="h-7 px-2 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-primary disabled:opacity-40"
                               >
                                 <Play className="w-3.5 h-3.5 text-sentinel-success" />
                               </button>
@@ -493,16 +599,32 @@ export default function OverviewPage() {
                             {["running", "paused", "pending"].includes(st) && (
                               <button
                                 type="button"
-                                onClick={() => void controlRun(run.run_id, "stop")}
+                                disabled={isBusy}
+                                onClick={() => void handleRunControl(run.run_id, "stop")}
+                                aria-label={t("runs.stopRun")}
                                 title={t("runs.stopRun")}
-                                className="h-7 px-2 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-primary"
+                                className="h-7 px-2 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-primary disabled:opacity-40"
                               >
                                 <Square className="w-3.5 h-3.5 text-sentinel-danger" />
+                              </button>
+                            )}
+                            {canRecover && (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => void handleRunControl(run.run_id, "recover")}
+                                aria-label={t("runs.recoverRun")}
+                                title={t("runs.recoverRun")}
+                                className="h-7 px-2 rounded border border-sentinel-primary/40 bg-sentinel-primary/15 text-sentinel-primary hover:bg-sentinel-primary/25 flex items-center gap-1 disabled:opacity-40"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span className="hidden sm:inline">{t("runs.recoverRun")}</span>
                               </button>
                             )}
                             <button
                               type="button"
                               onClick={() => void inspectRunDetails(run)}
+                              aria-label={`${t("common.details")} ${run.run_id}`}
                               title={t("common.details")}
                               className="h-7 px-2 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-secondary hover:text-ink-primary flex items-center gap-1"
                             >
@@ -519,121 +641,52 @@ export default function OverviewPage() {
             </div>
           )}
 
-          {tasks.length > 0 && (
-            <div data-testid="go-core-tasks-panel" className="pt-2 border-t border-border-subtle space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-ink-secondary">Go Core Worker Tasks</span>
-                <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-elevated border border-border-subtle text-ink-muted tabular-nums">
-                  {tasks.length}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto">
-                {tasks.slice(0, 8).map((tk, idx) => {
-                  const st = (tk.status || "PENDING").toUpperCase();
-                  const engMatch = engagements.find((e) => e.id === tk.engagement_id);
-                  const summaryParts = Object.entries(tk.output_summary || {})
-                    .slice(0, 3)
-                    .map(([k, v]) => `${k}: ${String(v)}`)
-                    .join(" · ");
-                  return (
-                    <div
-                      key={`${tk.id || "task"}-${idx}`}
-                      className="p-2 rounded bg-inset border border-border-subtle text-xs flex flex-col gap-1"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-sentinel-primary font-semibold truncate">
-                          {tk.agent_role} · {engMatch?.target || tk.title}
-                        </span>
-                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${statusPillClass(st)}`}>
-                          {st}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-ink-muted truncate">{tk.title}</div>
-                      {summaryParts && (
-                        <div className="text-[10px] font-mono text-ink-secondary truncate ltr-isolate">
-                          {summaryParts}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+          {/* Archive Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+              <span className="font-mono text-ink-muted tabular-nums">
+                {t("graph.pageOf", { page: safePage, total: totalPages })}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={safePage <= 1}
+                  onClick={() => setArchivePage((p) => Math.max(1, p - 1))}
+                  className="h-7 px-2.5 rounded border border-border-subtle bg-elevated text-ink-primary disabled:opacity-40 flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                  <span>{t("graph.prevPage")}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setArchivePage((p) => Math.min(totalPages, p + 1))}
+                  className="h-7 px-2.5 rounded border border-border-subtle bg-elevated text-ink-primary disabled:opacity-40 flex items-center gap-1"
+                >
+                  <span>{t("graph.nextPage")}</span>
+                  <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
+                </button>
               </div>
             </div>
           )}
         </section>
 
-        {/* Budget Guard */}
-        <section className="xl:col-span-4 sentinel-surface p-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
-            <div className="flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-sentinel-success" />
-              <h3 className="text-sm font-semibold text-ink-primary">Cost & Budget Guard</h3>
-            </div>
-            <span className="text-xs font-mono tabular-nums text-ink-muted ltr-isolate">
-              Today: ${(budget?.spent?.today_usd ?? budget?.today_usd ?? 0).toFixed(2)}
-            </span>
-          </div>
+        {/* Desktop Resizable Split Divider */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("runs.resizeWorkspace")}
+          tabIndex={0}
+          onPointerDown={handleSplitPointerDown}
+          onKeyDown={handleSplitKeyDown}
+          className="hidden xl:flex w-3 shrink-0 cursor-col-resize items-center justify-center group"
+        >
+          <div className="w-1 h-16 rounded-full bg-border-subtle group-hover:bg-sentinel-primary transition-colors" />
+        </div>
 
-          <form onSubmit={saveBudget} className="space-y-2.5 text-xs">
-            <div className="space-y-1">
-              <label htmlFor="budget-run" className="text-ink-muted">
-                Per Run Limit (USD)
-              </label>
-              <input
-                id="budget-run"
-                type="number"
-                step="0.5"
-                min={0}
-                value={perRunUsd}
-                onChange={(e) => setPerRunUsd(e.target.value)}
-                placeholder="No cap"
-                className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono text-ink-primary ltr-isolate"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label htmlFor="budget-solver" className="text-ink-muted">
-                Per Solver Limit (USD)
-              </label>
-              <input
-                id="budget-solver"
-                type="number"
-                step="0.25"
-                min={0}
-                value={perSolverUsd}
-                onChange={(e) => setPerSolverUsd(e.target.value)}
-                placeholder="No cap"
-                className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono text-ink-primary ltr-isolate"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label htmlFor="budget-day" className="text-ink-muted">
-                Daily Limit (USD)
-              </label>
-              <input
-                id="budget-day"
-                type="number"
-                step="1"
-                min={0}
-                value={perDayUsd}
-                onChange={(e) => setPerDayUsd(e.target.value)}
-                placeholder="No cap"
-                className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono text-ink-primary ltr-isolate"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <button
-                type="submit"
-                className="h-8 px-3 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold hover:opacity-90"
-              >
-                {t("common.save")}
-              </button>
-              {budgetMsg && <span className="font-mono text-sentinel-success">{budgetMsg}</span>}
-            </div>
-          </form>
-        </section>
+        <div style={{ flexBasis: `${100 - splitPercent}%` }} className="xl:min-w-0 flex flex-col">
+          <TaskSubtaskTree />
+        </div>
       </div>
 
       {/* Approvals & Live Console */}
@@ -653,16 +706,19 @@ export default function OverviewPage() {
           onClick={() => setInspectedRun(null)}
         >
           <div
+            ref={runDrawerTrapRef}
             role="dialog"
             aria-modal="true"
-            aria-label={`Run ${inspectedRun.run_id}`}
+            aria-label={`${t("runs.colRunId")} ${inspectedRun.run_id}`}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl h-full bg-surface border-s border-border-subtle shadow-sentinelMd flex flex-col overflow-hidden"
+            className="w-full max-w-2xl h-full bg-surface border-s border-border-strong shadow-sentinelMd flex flex-col overflow-hidden"
           >
             <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs font-mono text-sentinel-primary ltr-isolate">
-                  {inspectedRun.kind} · {inspectedRun.run_id}
+                  {inspectedRun.kind} · {inspectedRun.run_id} ·{" "}
+                  {normalizeRunProgressPercent(inspectedRun.progress)}%
                 </div>
                 <h3 className="text-sm font-semibold text-ink-primary truncate ltr-isolate">
                   {inspectedRun.target || inspectedRun.run_id}
@@ -672,7 +728,7 @@ export default function OverviewPage() {
                 type="button"
                 onClick={() => setInspectedRun(null)}
                 aria-label={t("common.close")}
-                className="h-9 w-9 rounded border border-border-subtle bg-elevated text-ink-primary flex items-center justify-center"
+                className="min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded border border-border-subtle bg-elevated text-ink-primary flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -686,7 +742,7 @@ export default function OverviewPage() {
                   onClick={() => setRunTab(tabKey)}
                   className={`px-3 py-1 rounded text-xs font-medium ${
                     runTab === tabKey
-                      ? "bg-[var(--accent-primary-bg)] text-sentinel-primary border border-[var(--accent-primary)]/40"
+                      ? "bg-sentinel-primary/15 text-sentinel-primary border border-sentinel-primary/40"
                       : "text-ink-muted hover:text-ink-primary"
                   }`}
                 >
@@ -715,7 +771,7 @@ export default function OverviewPage() {
                         {ev.event_type || "EVENT"}
                       </div>
                       <pre className="ltr-isolate font-mono text-[11px] text-ink-secondary overflow-x-auto">
-                        {JSON.stringify(ev.payload || {}, null, 2)}
+                        {sanitizePlainTerminalText(JSON.stringify(ev.payload || {}, null, 2))}
                       </pre>
                     </div>
                   ))
@@ -731,7 +787,7 @@ export default function OverviewPage() {
                         <span>{Math.round((evi.confidence || 0) * 100)}%</span>
                       </div>
                       <pre className="ltr-isolate font-mono text-[11px] text-ink-secondary whitespace-pre-wrap break-all">
-                        {evi.sanitized_content || ""}
+                        {sanitizePlainTerminalText(evi.sanitized_content || "")}
                       </pre>
                     </div>
                   ))
@@ -744,7 +800,7 @@ export default function OverviewPage() {
                     <div className="font-semibold text-ink-primary">{fd.title}</div>
                     <div className="font-mono text-sentinel-warning ltr-isolate">{fd.affected_asset}</div>
                     <div className="font-mono text-[11px] text-ink-secondary whitespace-pre-wrap break-all">
-                      {fd.evidence || ""}
+                      {sanitizePlainTerminalText(fd.evidence || "")}
                     </div>
                   </div>
                 ))
