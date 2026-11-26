@@ -1,6 +1,6 @@
 # HunterAI Pre-Kali Certification Report
 
-**Timestamp:** 2026-11-25T00:14:20.615017+00:00  
+**Timestamp:** 2026-11-25T17:24:25.879234+00:00  
 **Certification Status:** ✅ PASS — CERTIFIED FOR KALI LINUX  
 **Gates Evaluated:** 16 | **Passed:** 16 | **Failed:** 0  
 
@@ -11,21 +11,21 @@
 | Gate ID | Gate Name | Result | Duration | Details |
 | :--- | :--- | :---: | :---: | :--- |
 | `GATE-00` | Freeze & Baseline Artifacts | ✅ PASS | 0.00s | Verified baseline file: version.txt; Verified baseline file: requirements.lock; Verified baseline file: model_manifest.j |
-| `GATE-01` | Static Code, Paths & Secrets Audit | ✅ PASS | 2.46s | All Python files compiled cleanly with zero syntax errors.; Zero hardcoded system paths and zero exposed raw tokens foun |
-| `GATE-02` | Dependency & Tool Adapter Probe | ✅ PASS | 0.88s | Module 'playwright' loaded successfully.; Module 'httpx' loaded successfully.; Module 'sqlite3' loaded successfully.; Mo |
-| `GATE-03` | Local Model Contract & Inviolability | ✅ PASS | 0.48s | Model requested out-of-scope action: Correctly REJECTED by PolicyGate. |
-| `GATE-04` | Autonomous Playwright Browser Worker | ✅ PASS | 6.36s | Playwright worker launched, navigated, filled form, clicked, captured screenshot and storage. |
-| `GATE-05` | Burp Suite & Traffic DB Integration | ✅ PASS | 0.07s | TrafficBridge correctly parsed request/response into SQLite and registered Endpoint in EvidenceGraph. |
+| `GATE-01` | Static Code, Paths & Secrets Audit | ✅ PASS | 7.71s | All Python files compiled cleanly with zero syntax errors.; Zero hardcoded system paths and zero exposed raw tokens foun |
+| `GATE-02` | Dependency & Tool Adapter Probe | ✅ PASS | 0.57s | Module 'playwright' loaded successfully.; Module 'httpx' loaded successfully.; Module 'sqlite3' loaded successfully.; Mo |
+| `GATE-03` | Local Model Contract & Inviolability | ✅ PASS | 0.24s | Model requested out-of-scope action: Correctly REJECTED by PolicyGate. |
+| `GATE-04` | Autonomous Playwright Browser Worker | ✅ PASS | 4.84s | Playwright worker launched, navigated, filled form, clicked, captured screenshot and storage. |
+| `GATE-05` | Burp Suite & Traffic DB Integration | ✅ PASS | 0.04s | TrafficBridge correctly parsed request/response into SQLite and registered Endpoint in EvidenceGraph. |
 | `GATE-06` | Tool Output Parsers & Normalizers | ✅ PASS | 0.00s | Tool parsers validated against JSONL and plain-text stream contracts. |
 | `GATE-07` | Evidence Graph & Deterministic Nonce Gate | ✅ PASS | 0.00s | Deterministic Evidence Validator proved arithmetic nonce ($((41+1))->42) and verified finding. |
-| `GATE-08` | Context Compressor & Handoff Contract | ✅ PASS | 0.12s | ContextCompressor reduced raw artifacts to 1284 character structured handoff payload. |
-| `GATE-09` | Autonomous Action Loop & Anti-Loop Memory | ✅ PASS | 1.24s | AutonomousActionLoop executed OODA cycle: Observe -> Think -> Plan -> Act -> Validate -> Decide. |
+| `GATE-08` | Context Compressor & Handoff Contract | ✅ PASS | 0.15s | ContextCompressor reduced raw artifacts to 1284 character structured handoff payload. |
+| `GATE-09` | Autonomous Action Loop & Anti-Loop Memory | ✅ PASS | 0.55s | AutonomousActionLoop executed OODA cycle: Observe -> Think -> Plan -> Act -> Validate -> Decide. |
 | `GATE-10` | Failure Injection & Graceful Recovery | ✅ PASS | 0.00s | Injected failures handled gracefully with zero unhandled exceptions or crashes. |
 | `GATE-11` | Security Scope Invariants & Bomb Blocking | ✅ PASS | 0.00s | All safety invariants strictly enforced: Metadata, Destructive commands & Out-of-scope BLOCKED. |
-| `GATE-12` | Dry Run Simulation Engine | ✅ PASS | 0.35s | Dry run initialized: Safe execution simulation ready without transmitting real packets. |
-| `GATE-13` | Lab Target End-to-End Artifact Pipeline | ✅ PASS | 0.05s | Lab Target engagement artifact tree created and verified. |
-| `GATE-14` | Cross-Platform POSIX Path Compliance | ✅ PASS | 0.12s | Current OS: Windows. Pathlib dynamically resolves paths across POSIX & Windows. |
-| `GATE-15` | Network Scope Firewall, Host/Service Model & External Pipeline | ✅ PASS | 0.19s | Network scope fail-closed; metadata blocked; lab endpoint allowed; HostGraph + masscan normalizer + discover→fingerprint |
+| `GATE-12` | Dry Run Simulation Engine | ✅ PASS | 0.30s | Dry run initialized: Safe execution simulation ready without transmitting real packets. |
+| `GATE-13` | Lab Target End-to-End Artifact Pipeline | ✅ PASS | 0.04s | Lab Target engagement artifact tree created and verified. |
+| `GATE-14` | Cross-Platform POSIX Path Compliance | ✅ PASS | 0.09s | Current OS: Windows. Pathlib dynamically resolves paths across POSIX & Windows. |
+| `GATE-15` | Network Scope Firewall, Host/Service Model & External Pipeline | ✅ PASS | 0.22s | Network scope fail-closed; metadata blocked; lab endpoint allowed; HostGraph + masscan normalizer + discover→fingerprint |
 
 ---
 
