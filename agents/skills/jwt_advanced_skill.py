@@ -63,8 +63,7 @@ class JWTAdvancedSkill(BaseSkill):
             raw_token = auth_hdr.split("Bearer ")[1].strip()
 
         if not raw_token or raw_token.count(".") != 2:
-            # Synthetic fallback for hermetic unit testing
-            return self._fallback_result(target_url, param_name)
+            return self._fallback_result(target_url, param_name, reason="missing_or_invalid_jwt_token")
 
         verified = False
         evidence = ""
@@ -131,7 +130,7 @@ class JWTAdvancedSkill(BaseSkill):
 
         except Exception as exc:
             logs.append(f"[!] JWT analysis error: {exc}")
-            return self._fallback_result(target_url, param_name)
+            return self._fallback_result(target_url, param_name, reason=str(exc))
 
         if not verified:
             return SkillResult(
@@ -163,20 +162,22 @@ class JWTAdvancedSkill(BaseSkill):
             logs=logs,
         )
 
-    def _fallback_result(self, target_url: str, param_name: str) -> SkillResult:
-        """Synthetic fallback result for offline testing."""
+    def _fallback_result(self, target_url: str, param_name: str, reason: str = "transport_or_token_unavailable") -> SkillResult:
+        """Fail closed honestly when JWT token or target transport is unavailable."""
         return SkillResult(
-            verified=True,
+            verified=False,
+            status="UNAVAILABLE",
             vuln_type=self.vuln_type,
-            title=f"JWT Signature Bypass Candidate on {target_url}",
-            severity="Critical",
+            title=f"JWT Audit Unavailable on {target_url}",
+            severity="Info",
             endpoint=target_url,
             param_name=param_name or "Authorization",
-            evidence="Simulated 'none' algorithm signature bypass: server accepted forged unverified token with admin: true claim.",
-            payload_used="eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMzM3IiwiYWRtaW4iOnRydWV9.",
-            confidence=0.95,
-            fallback_used=True,
+            evidence=f"Unable to perform live JWT audit ({reason}); no synthetic finding emitted.",
+            payload_used="",
+            confidence=0.0,
+            fallback_used=False,
             cwe=self.cwe,
             owasp_top10=self.owasp_top10,
-            logs=["[Fallback] Offline simulated JWT advanced vulnerability verification"],
+            logs=[f"[UNAVAILABLE] Live JWT check skipped: {reason}"],
+            extra={"status": "UNAVAILABLE", "reason": reason},
         )

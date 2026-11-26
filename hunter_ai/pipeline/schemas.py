@@ -25,9 +25,16 @@ class AssetCategory(str, Enum):
 
 
 class FindingStatus(str, Enum):
-    CONFIRMED = "CONFIRMED"
-    LIKELY = "LIKELY"
+    # Canonical 7 states
     UNVERIFIED = "UNVERIFIED"
+    CANDIDATE = "CANDIDATE"
+    CONFIRMED = "CONFIRMED"
+    REJECTED = "REJECTED"
+    INCONCLUSIVE = "INCONCLUSIVE"
+    UNAVAILABLE = "UNAVAILABLE"
+    ERROR = "ERROR"
+    # Legacy compatibility aliases (never promoted to CONFIRMED)
+    LIKELY = "LIKELY"
     FALSE_POSITIVE = "FALSE_POSITIVE"
 
 
@@ -174,7 +181,7 @@ class VerificationEvidence(BaseModel):
     type: str = "behavioral"
     description: str
     proof_snippet: str
-    verified: bool = True
+    verified: bool = False
     request_hash: Optional[str] = None
     response_hash: Optional[str] = None
     request_raw: Optional[str] = None

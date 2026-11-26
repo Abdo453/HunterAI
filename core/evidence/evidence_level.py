@@ -91,7 +91,7 @@ class EvidenceLevelEvaluator:
     for any security finding based on verifiable physical artifacts.
     """
 
-    MINIMUM_CONFIRMED_LEVEL = EvidenceLevel.E2_REPRODUCIBLE_BEHAVIOR
+    MINIMUM_CONFIRMED_LEVEL = EvidenceLevel.E3_INVARIANT_VIOLATION
 
     @classmethod
     def evaluate(

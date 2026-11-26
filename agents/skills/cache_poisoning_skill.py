@@ -98,10 +98,8 @@ class CachePoisoningSkill(BaseSkill):
                     findings.append(fat_finding)
 
         except Exception as exc:
-            logs.append(f"[CachePoison] Transport error: {exc} -- running fallback")
-            fb = self._fallback_check(target_url)
-            if fb:
-                findings.append(fb)
+            logs.append(f"[CachePoison] Transport error: {exc} -- returning UNAVAILABLE")
+            return self._fallback_result(target_url, param_name, reason=str(exc))
 
         if findings:
             best = max(findings, key=lambda f: f.get("confidence", 0))
@@ -231,13 +229,29 @@ class CachePoisoningSkill(BaseSkill):
         return body[start:end]
 
     # ------------------------------------------------------------------
+    def _fallback_result(self, url: str, param_name: str = "", reason: str = "transport_unavailable") -> SkillResult:
+        """Fail closed honestly when target transport is unavailable."""
+        return SkillResult(
+            verified=False,
+            status="UNAVAILABLE",
+            vuln_type=self.vuln_type,
+            title=f"Cache Poisoning Audit Unavailable on {url}",
+            severity="Info",
+            endpoint=url,
+            param_name=param_name,
+            evidence=f"Target unreachable or transport unavailable ({reason}); no synthetic finding emitted.",
+            confidence=0.0,
+            fallback_used=False,
+            tool=self.name,
+            cwe=self.cwe,
+            owasp_top10=self.owasp_top10,
+            logs=[f"[UNAVAILABLE] Cache poisoning check skipped: {reason}"],
+            extra={"status": "UNAVAILABLE", "reason": reason},
+        )
+
     def _fallback_check(self, url: str) -> Optional[Dict]:
-        return {
-            "header": "X-Forwarded-Host",
-            "title": "Web Cache Poisoning (Synthetic/Offline)",
-            "evidence": f"Fallback: {url} unreachable; synthetic result for testing.",
-            "confidence": 0.10,
-        }
+        """Disabled: synthetic offline findings are never fabricated."""
+        return None
 
     # ------------------------------------------------------------------
     def can_handle(self, param_name: str, url: str = "", sample_value: str = "") -> float:

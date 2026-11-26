@@ -1,21 +1,29 @@
 """
-محكمة الأدلة (Evidence Court) لـ HunterAI
-يحقق في نجاح تجاوز WAF ويؤكد أن النتيجة جاءت من تجاوز الدفاع فعلاً،
-وليس من ثغرة في منطق التطبيق فقط.
-يدعم غير المتزامن (async)، السجلات، والتكوينات المركزية
+WAF Bypass Evidence Court Compatibility Adapter
+===============================================
+Delegates all WAF-bypass verification decisions to the single authoritative
+``core.evidence_court.EvidenceCourt.adjudicate()``.
+
+Naive substring reflection (``bypass_payload in response_body``) NEVER confirms
+a WAF bypass or direct vulnerability (Reflection != Execution).
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from core.config.settings import config
-from core.exceptions import EvidenceCourtError, HunterAIError
+from core.evidence_court import (
+    CourtJudgment,
+    CourtVerdict as CanonicalCourtVerdict,
+    EvidenceCourt as AuthoritativeEvidenceCourt,
+    ProofPayload,
+    ProofStrength,
+)
 from core.logging.logger import logger
 
 
@@ -28,7 +36,7 @@ class CourtVerdict(str, Enum):
 
 @dataclass
 class BypassContext:
-    """سياق محاولة التجاوز للتحقق من المحكمة."""
+    """Context of a WAF bypass verification probe."""
     target: str
     endpoint: str
     original_payload: str
@@ -42,6 +50,11 @@ class BypassContext:
     response_time_ms: float
     technique_level: str
     timestamp: float = field(default_factory=time.time)
+    baseline_body: str = ""
+    expected_token: str = ""
+    expected_result: str = ""
+    vuln_class: str = ""
+    proof_payload: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -53,7 +66,7 @@ class BypassContext:
             "waf_detected": self.waf_detected,
             "status_code": self.status_code,
             "response_body_hash": hashlib.sha256(
-                self.response_body.encode("utf-8")
+                self.response_body.encode("utf-8", errors="replace")
             ).hexdigest()[:16],
             "response_headers": self.response_headers,
             "request_headers": self.request_headers,
@@ -65,18 +78,22 @@ class BypassContext:
 
 @dataclass
 class CourtResult:
-    """نتيجة حكم المحكمة."""
+    """Result mapped back from canonical EvidenceCourt adjudication."""
     verdict: CourtVerdict
     confidence: float
     reasoning: str
     evidence: Dict[str, Any]
     bypass_confirmed: bool
     direct_vuln_confirmed: bool
+    canonical_verdict: str = CanonicalCourtVerdict.INCONCLUSIVE.value
+    proof_strength: str = ProofStrength.NONE.value
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "verdict": self.verdict.value,
+            "canonical_verdict": self.canonical_verdict,
+            "proof_strength": self.proof_strength,
             "confidence": self.confidence,
             "reasoning": self.reasoning,
             "evidence": self.evidence,
@@ -87,15 +104,7 @@ class CourtResult:
 
 
 class EvidenceCourt:
-    """
-    محكمة الأدلة للتحقق من نجاح تجاوز WAF.
-    
-    المحكمة تطرح أسئلة على كل نتيجة "ناجحة" للتأكد من:
-    1. هل الطلب وصل فعلاً للخادم أم حُجب من WAF؟
-    2. هل الاستجابة تحتوي على دليل على تنفيذ الحمولة؟
-    3. هل الفرق بين الطلب الأصلي والطلب المُجاوز مؤشر على تجاوز الدفاع؟
-    4. هل يمكن إعادة إنتاج النتيجة؟
-    """
+    """WAF bypass court adapter delegating adjudication to canonical core.evidence_court.EvidenceCourt."""
 
     def __init__(self, config_override: Optional[Any] = None):
         self.court_config = config_override or config.evidence_court
@@ -107,7 +116,6 @@ class EvidenceCourt:
         context: BypassContext,
         case_id: Optional[str] = None,
     ) -> CourtResult:
-        """التحقق من نجاح تجاوز WAF بشكل غير متزامن."""
         async with self._lock:
             return self._verify_bypass_sync(context, case_id)
 
@@ -116,7 +124,6 @@ class EvidenceCourt:
         context: BypassContext,
         case_id: Optional[str] = None,
     ) -> CourtResult:
-        """التحقق من نجاح تجاوز WAF بشكل متزامن."""
         return self._verify_bypass_sync(context, case_id)
 
     def _verify_bypass_sync(
@@ -125,99 +132,116 @@ class EvidenceCourt:
         case_id: Optional[str] = None,
     ) -> CourtResult:
         case_id = case_id or f"court-{int(time.time() * 1000)}"
-        reasoning_parts: List[str] = []
-        evidence: Dict[str, Any] = {}
 
+        waf_blocked = context.status_code in (403, 406, 429, 503)
+        payload_reflected = bool(
+            context.bypass_payload
+            and context.bypass_payload.lower() in (context.response_body or "").lower()
+        )
+
+        # Build checkable ProofPayload ONLY from explicit proof artifacts (never bare reflection)
+        proof_payload: Optional[ProofPayload] = None
+        if context.proof_payload is not None:
+            proof_payload = ProofPayload.from_mapping(context.proof_payload)
+        elif context.expected_token or context.expected_result or context.vuln_class:
+            proof_payload = ProofPayload(
+                response_text=context.response_body or "",
+                baseline_text=context.baseline_body or "",
+                artifact_type=context.vuln_class or ("token" if context.expected_token else ""),
+                probed_expression=context.bypass_payload or context.original_payload,
+                expected_result=context.expected_result or "",
+                expected_token=context.expected_token or "",
+                metadata={
+                    "status_code": context.status_code,
+                    "response_headers": dict(context.response_headers or {}),
+                },
+            )
+        else:
+            # Attempt deterministic PoE signature derivation (e.g. DBMS banner / /etc/passwd)
+            proof_payload = ProofPayload.from_vuln_evidence(
+                context.vuln_class or "",
+                context.response_body or "",
+            )
+
+        # Mere substring reflection without deterministic proof is explicitly flagged as reflection
+        is_reflection_only = payload_reflected and proof_payload is None
+
+        verifier_result: Dict[str, Any] = {
+            "reproduced": (not waf_blocked) and (not is_reflection_only) and context.status_code > 0,
+            "status_code": context.status_code,
+            "response_body": context.response_body,
+            "waf_blocked": waf_blocked,
+            "is_reflection": is_reflection_only,
+        }
+
+        target_url = (
+            context.endpoint
+            if str(context.endpoint).startswith(("http://", "https://"))
+            else f"{context.target.rstrip('/')}/{context.endpoint.lstrip('/')}"
+        )
+
+        judgment: CourtJudgment = AuthoritativeEvidenceCourt.adjudicate(
+            target_url=target_url,
+            parameter="",
+            vuln_class=context.vuln_class or "waf_bypass",
+            finder_claim={
+                "waf_type": context.waf_type,
+                "technique_level": context.technique_level,
+                "original_payload": context.original_payload,
+                "bypass_payload": context.bypass_payload,
+            },
+            verifier_result=verifier_result,
+            is_in_scope=True,
+            is_blocked_by_waf=waf_blocked,
+            proof_payload=proof_payload,
+            allow_declared_proof=False,
+        )
+
+        canon = judgment.canonical_verdict
         bypass_confirmed = False
         direct_vuln_confirmed = False
-        confidence = 0.0
 
-        # Frage 1: هل وصل الطلب للخادم أم حُجب؟
-        if context.status_code in (403, 406, 429, 503):
-            reasoning_parts.append(
-                f"الطلب حُجب برمز حالة {context.status_code} — لم يصل للخادم"
-            )
+        if canon == CanonicalCourtVerdict.CONFIRMED and judgment.proof_strength == ProofStrength.DERIVED.value:
+            if context.waf_detected:
+                verdict = CourtVerdict.PROVEN_BYPASS
+                bypass_confirmed = True
+            else:
+                verdict = CourtVerdict.PROVEN_DIRECT
+                direct_vuln_confirmed = True
+        elif canon == CanonicalCourtVerdict.REJECTED:
             verdict = CourtVerdict.REFUTED
-            confidence = 0.95
-        elif context.status_code == 200:
-            reasoning_parts.append(
-                f"الطلب وصل للخادم برمز حالة 200 — مرر الحاجز الأول"
-            )
-            confidence += 0.3
-        else:
-            reasoning_parts.append(
-                f"رمز حالة غير معتاد: {context.status_code}"
-            )
-            confidence += 0.1
-
-        # Frage 2: هل تستجيب الاستجابة للحمولة المُجاوزة؟
-        response_body_lower = context.response_body.lower()
-        if context.bypass_payload.lower() in response_body_lower:
-            reasoning_parts.append(
-                "الحمولة المُجاوزة ظهرت في الاستجابة — دليل على التنفيذ"
-            )
-            bypass_confirmed = True
-            confidence += 0.3
-            evidence["payload_reflected"] = True
-        else:
-            reasoning_parts.append(
-                "الحمولة المُجاوزة لم تظهر في الاستجابة"
-            )
-            evidence["payload_reflected"] = False
-
-        # Frage 3: هل كان هناك WAF مفعل وتم تجاوزه؟
-        if context.waf_detected:
-            reasoning_parts.append(
-                f"تم كشف WAF ({context.waf_type}) وتم تجاوزه عبر المستوى {context.technique_level}"
-            )
-            bypass_confirmed = True
-            confidence += self.court_config.bypass_confidence_boost
-            evidence["waf_bypassed"] = True
-        else:
-            reasoning_parts.append(
-                "لم يُكشف WAF — قد تكون ثغرة مباشرة"
-            )
-            direct_vuln_confirmed = True
-            confidence += 0.1
-            evidence["waf_bypassed"] = False
-
-        # Frage 4: هل زمن الاستجابة يشير إلى معالجة فعلية؟
-        if context.response_time_ms > 0:
-            reasoning_parts.append(
-                f"زمن الاستجابة: {context.response_time_ms:.0f}ms — indicates processing"
-            )
-            confidence += 0.1
-        evidence["response_time_ms"] = context.response_time_ms
-
-        # Determine final verdict
-        if bypass_confirmed and context.waf_detected:
-            verdict = CourtVerdict.PROVEN_BYPASS
-            confidence = min(confidence, 0.98)
-        elif direct_vuln_confirmed and not context.waf_detected:
-            verdict = CourtVerdict.PROVEN_DIRECT
-            confidence = min(confidence, 0.90)
-        elif context.status_code in (403, 406, 429, 503):
-            verdict = CourtVerdict.REFUTED
-            confidence = min(confidence, 0.95)
         else:
             verdict = CourtVerdict.INCONCLUSIVE
-            confidence = min(confidence, 0.50)
 
-        reasoning = " | ".join(reasoning_parts)
+        evidence: Dict[str, Any] = {
+            "payload_reflected": payload_reflected,
+            "waf_blocked": waf_blocked,
+            "waf_bypassed": bypass_confirmed,
+            "response_time_ms": context.response_time_ms,
+            "canonical_verdict": canon.value,
+            "proof_strength": judgment.proof_strength,
+            "proof_kind": judgment.proof_kind,
+            "court_judgment_id": judgment.judgment_id,
+        }
 
         result = CourtResult(
             verdict=verdict,
-            confidence=confidence,
-            reasoning=reasoning,
+            confidence=judgment.confidence_score,
+            reasoning=judgment.adjudication_rationale,
             evidence=evidence,
             bypass_confirmed=bypass_confirmed,
             direct_vuln_confirmed=direct_vuln_confirmed,
+            canonical_verdict=canon.value,
+            proof_strength=judgment.proof_strength,
         )
 
         self.cases[case_id] = result
         logger.info(
-            f"[Court] حالة '{case_id}': الحكم={verdict.value}, الثقة={confidence:.2f}, "
-            f"التجاوز={bypass_confirmed}, directa={direct_vuln_confirmed}"
+            "[Court-WAF-Adapter] case='%s': legacy=%s canonical=%s proof_strength=%s",
+            case_id,
+            verdict.value,
+            canon.value,
+            judgment.proof_strength,
         )
         return result
 
@@ -240,12 +264,10 @@ class EvidenceCourt:
         }
 
     def clear_cases(self) -> int:
-        """مسح جميع القضايا المخزنة."""
         count = len(self.cases)
         self.cases.clear()
-        logger.info(f"[Court] تم مسح {count} قضية")
+        logger.info("[Court] Cleared %d cases", count)
         return count
 
 
-# مثيل عام للمحكمة
 evidence_court = EvidenceCourt()

@@ -44,6 +44,8 @@ class BurpBrowserFusionSkill(BaseSkill):
                 headless=True,
                 timeout_secs=30.0,
             )
+            if raw_report is None or not getattr(raw_report, "success", True) or "Synthetic Fallback" in str(getattr(raw_report, "title", "")):
+                raise RuntimeError("Browser operator returned unavailable/synthetic fallback report")
             report_data = {
                 "pages_visited": raw_report.pages_visited,
                 "actions_performed": raw_report.actions_performed,
@@ -51,8 +53,17 @@ class BurpBrowserFusionSkill(BaseSkill):
                 "captured_tokens": raw_report.captured_tokens_and_cookies,
             }
         except Exception as exc:
-            logger.warning("[BurpBrowserFusion] Live session failed: %s; using synthetic fusion fallback", exc)
-            report_data = self._fallback_fusion(target_url, proxy_url)
+            logger.warning("[BurpBrowserFusion] Live session unavailable: %s (failing closed)", exc)
+            result.success = False
+            result.findings = []
+            result.metadata = {
+                "status": "UNAVAILABLE",
+                "verified": False,
+                "endpoints_count": 0,
+                "proxy": proxy_url,
+                "reason": str(exc),
+            }
+            return result
 
         endpoints = report_data.get("intercepted_api_endpoints", [])
         pages = report_data.get("pages_visited", [])
@@ -126,19 +137,12 @@ class BurpBrowserFusionSkill(BaseSkill):
         return result
 
     def _fallback_fusion(self, target_url: str, proxy: str) -> Dict[str, Any]:
-        """Synthetic fallback data when Burp or Playwright is offline."""
-        clean = target_url.replace("https://", "").replace("http://", "").split("/")[0]
+        """Disabled: never return fabricated synthetic endpoints or tokens when offline."""
         return {
-            "pages_visited": [target_url, f"https://{clean}/app", f"https://{clean}/profile", f"https://{clean}/settings"],
-            "actions_performed": [
-                {"action_type": "click", "target_selector": "button#nav-menu", "ai_thought": "Navigate app drawer"},
-                {"action_type": "fill", "target_selector": "input#search", "ai_thought": "Submit test probe"},
-            ],
-            "intercepted_api_endpoints": [
-                {"method": "GET", "url": f"https://{clean}/api/v1/user/profile", "resource_type": "fetch"},
-                {"method": "GET", "url": f"https://{clean}/api/v1/notifications", "resource_type": "xhr"},
-                {"method": "POST", "url": f"https://{clean}/api/v1/telemetry", "resource_type": "fetch"},
-                {"method": "POST", "url": f"https://{clean}/api/v1/auth/refresh", "resource_type": "xhr"},
-            ],
-            "captured_tokens_and_cookies": {"cookies": ["sessionid"], "localStorage_keys": ["access_token"]},
+            "pages_visited": [],
+            "actions_performed": [],
+            "intercepted_api_endpoints": [],
+            "captured_tokens_and_cookies": {"cookies": [], "localStorage_keys": []},
+            "status": "UNAVAILABLE",
+            "verified": False,
         }
