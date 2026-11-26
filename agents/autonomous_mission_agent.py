@@ -92,7 +92,8 @@ class AutonomousMissionAgent(BaseAgent):
         target = task.target.strip()
         mode = task.mode or task.extra.get("mode", "full")
         session_id = task.session_id or str(int(time.time()))[-6:]
-        total_mission_timeout = float(task.extra.get("total_timeout", 1800.0)) # 30 min default watchdog
+        default_timeout = 25.0 if mode == "quick" else 1800.0  # 30 min default watchdog for full runs
+        total_mission_timeout = float(task.extra.get("total_timeout", default_timeout))
 
         # Initialize or resume mission state
         ws_path = self.workspace.create_workspace(target, session_id)
@@ -123,84 +124,87 @@ class AutonomousMissionAgent(BaseAgent):
         max_iterations = task.extra.get("max_iterations", 30)
         iteration = 0
 
-        try:
-            # Global Watchdog wrapper
-            async with asyncio.timeout(total_mission_timeout):
-                while not planner.should_terminate(state) and iteration < max_iterations:
-                    iteration += 1
-                    ready_skills = planner.get_ready_skills(state)
-                    if not ready_skills:
-                        break
+        async def _run_mission_loop() -> None:
+            nonlocal iteration
+            while not planner.should_terminate(state) and iteration < max_iterations:
+                iteration += 1
+                ready_skills = planner.get_ready_skills(state)
+                if not ready_skills:
+                    break
 
-                    # Group independent ready skills into parallel batches (e.g. max 3 concurrent)
-                    batches = planner.group_independent_skills(ready_skills, max_batch_size=3)
+                # Group independent ready skills into parallel batches (e.g. max 3 concurrent)
+                batches = planner.group_independent_skills(ready_skills, max_batch_size=3)
 
-                    for batch in batches:
-                        # Execute skills in current batch in parallel
-                        tasks = [
-                            self._execute_skill_resilient(skill_meta, state, target, session_id, mode, task.extra)
-                            for skill_meta in batch
-                        ]
-                        results = await asyncio.gather(*tasks, return_exceptions=True)
+                for batch in batches:
+                    # Execute skills in current batch in parallel
+                    tasks = [
+                        self._execute_skill_resilient(skill_meta, state, target, session_id, mode, task.extra)
+                        for skill_meta in batch
+                    ]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                        # Process results, ingest into KnowledgeDB, and update state
-                        for skill_meta, res in zip(batch, results):
-                            if isinstance(res, Exception):
-                                state.mark_skill_failed(skill_meta.name, str(res))
+                    # Process results, ingest into KnowledgeDB, and update state
+                    for skill_meta, res in zip(batch, results):
+                        if isinstance(res, Exception):
+                            state.mark_skill_failed(skill_meta.name, str(res))
+                            await self.emit("skill_failed", {
+                                "session_id": session_id,
+                                "skill": skill_meta.name,
+                                "errors": [str(res)]
+                            })
+                        elif isinstance(res, SkillResult):
+                            if res.success:
+                                state.mark_skill_done(skill_meta.name, output_files=res.output_files)
+
+                                # Ingest discovered endpoints & parameters into KnowledgeDB
+                                self._ingest_skill_results_into_db(skill_meta.name, res, knowledge_db, target)
+
+                                for f in res.findings:
+                                    # Calculate CVSS score
+                                    vrt = VRTMapper.lookup(f.get("type", "general"))
+                                    cvss_val = f.get("cvss_score") or CVSSCalculator.derive_from_vrt(vrt.vrt_id, f.get("severity", "Info"))
+                                    f["cvss_score"] = cvss_val
+                                    state.add_finding(f)
+
+                                    self.evidence_mgr.add_evidence(
+                                        title=f.get("title", f"Finding from {skill_meta.name}"),
+                                        content=f.get("evidence", ""),
+                                        tool=f.get("tool", skill_meta.name),
+                                        severity=f.get("severity", "Info"),
+                                        vuln_type=f.get("type", ""),
+                                        target=target,
+                                        url=f.get("url", ""),
+                                        cvss_score=cvss_val
+                                    )
+
+                                await self.emit("skill_completed", {
+                                    "session_id": session_id,
+                                    "skill": skill_meta.name,
+                                    "findings_count": len(res.findings),
+                                    "output_files": list(res.output_files.keys()),
+                                    "duration": res.duration
+                                })
+                            else:
+                                err_msg = "; ".join(res.errors) if res.errors else "Execution failed"
+                                state.mark_skill_failed(skill_meta.name, err_msg)
                                 await self.emit("skill_failed", {
                                     "session_id": session_id,
                                     "skill": skill_meta.name,
-                                    "errors": [str(res)]
+                                    "errors": res.errors
                                 })
-                            elif isinstance(res, SkillResult):
-                                if res.success:
-                                    state.mark_skill_done(skill_meta.name, output_files=res.output_files)
 
-                                    # Ingest discovered endpoints & parameters into KnowledgeDB
-                                    self._ingest_skill_results_into_db(skill_meta.name, res, knowledge_db, target)
+                    # Trigger Observation -> Hypothesis generation cycle
+                    with knowledge_db._get_conn() as conn:
+                        eps = [dict(r) for r in conn.cursor().execute("SELECT * FROM endpoints").fetchall()]
+                        params = [dict(r) for r in conn.cursor().execute("SELECT * FROM parameters").fetchall()]
+                    reasoning_engine.generate_hypotheses_from_observations(target, eps, params, [])
 
-                                    for f in res.findings:
-                                        # Calculate CVSS score
-                                        vrt = VRTMapper.lookup(f.get("type", "general"))
-                                        cvss_val = f.get("cvss_score") or CVSSCalculator.derive_from_vrt(vrt.vrt_id, f.get("severity", "Info"))
-                                        f["cvss_score"] = cvss_val
-                                        state.add_finding(f)
+                    # Save state after each batch
+                    state.save(state_file)
 
-                                        self.evidence_mgr.add_evidence(
-                                            title=f.get("title", f"Finding from {skill_meta.name}"),
-                                            content=f.get("evidence", ""),
-                                            tool=f.get("tool", skill_meta.name),
-                                            severity=f.get("severity", "Info"),
-                                            vuln_type=f.get("type", ""),
-                                            target=target,
-                                            url=f.get("url", ""),
-                                            cvss_score=cvss_val
-                                        )
-
-                                    await self.emit("skill_completed", {
-                                        "session_id": session_id,
-                                        "skill": skill_meta.name,
-                                        "findings_count": len(res.findings),
-                                        "output_files": list(res.output_files.keys()),
-                                        "duration": res.duration
-                                    })
-                                else:
-                                    err_msg = "; ".join(res.errors) if res.errors else "Execution failed"
-                                    state.mark_skill_failed(skill_meta.name, err_msg)
-                                    await self.emit("skill_failed", {
-                                        "session_id": session_id,
-                                        "skill": skill_meta.name,
-                                        "errors": res.errors
-                                    })
-
-                        # Trigger Observation -> Hypothesis generation cycle
-                        with knowledge_db._get_conn() as conn:
-                            eps = [dict(r) for r in conn.cursor().execute("SELECT * FROM endpoints").fetchall()]
-                            params = [dict(r) for r in conn.cursor().execute("SELECT * FROM parameters").fetchall()]
-                        reasoning_engine.generate_hypotheses_from_observations(target, eps, params, [])
-
-                        # Save state after each batch
-                        state.save(state_file)
+        try:
+            # Global Watchdog wrapper (Python 3.10+ compatible)
+            await asyncio.wait_for(_run_mission_loop(), timeout=total_mission_timeout)
 
         except asyncio.TimeoutError:
             state.status = "timeout"

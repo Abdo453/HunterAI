@@ -133,6 +133,7 @@ class EliteSkillRequest(BaseModel):
     skill_name: str
     target_url: str
     param_name: str = ""
+    proxy: Optional[str] = None
 
 
 def _serialize_event(ev: Any) -> Dict[str, Any]:
@@ -897,18 +898,44 @@ async def mission_start_view(request: HttpRequest) -> JsonResponse:
     return django_json({"ok": True, "session_id": session_id, "run_id": run["run_id"], "run": run})
 
 
+def _serialize_skill_meta(skill: Any) -> Dict[str, Any]:
+    """Normalize a SkillMeta object, dataclass, or dict into a JSON-serializable dict."""
+    if isinstance(skill, dict):
+        return {k: str(v) if isinstance(v, Path) else v for k, v in skill.items()}
+    to_dict = getattr(skill, "to_dict", None)
+    if callable(to_dict):
+        data = to_dict()
+        if isinstance(data, dict):
+            return {k: str(v) if isinstance(v, Path) else v for k, v in data.items()}
+    if dataclasses.is_dataclass(skill) and not isinstance(skill, type):
+        raw = dataclasses.asdict(skill)
+        return {k: str(v) if isinstance(v, Path) else v for k, v in raw.items()}
+    return {
+        "name": str(getattr(skill, "name", str(skill))),
+        "category": str(getattr(skill, "category", "general")),
+        "description": str(getattr(skill, "description", "")),
+        "version": str(getattr(skill, "version", "1.0")),
+        "enabled": bool(getattr(skill, "enabled", True)),
+    }
+
+
 class MissionSkillsView(APIView):
     """GET /api/mission/skills."""
 
     def get(self, request: Any) -> Any:
+        category = request.GET.get("category") or None
         try:
             from core.skill_registry import SkillRegistry
 
             reg = SkillRegistry()
-            skills = getattr(reg, "list_skills", lambda: [])()
-            return ok_json({"skills": skills})
+            raw_skills = getattr(reg, "list_skills", lambda: [])()
+            skills = [_serialize_skill_meta(s) for s in (raw_skills or [])]
+            if category:
+                cat_low = category.lower()
+                skills = [s for s in skills if str(s.get("category", "")).lower() == cat_low]
+            return ok_json({"skills": skills, "count": len(skills)})
         except Exception as exc:
-            return ok_json({"skills": [], "error": str(exc)})
+            return ok_json({"skills": [], "count": 0, "error": str(exc)})
 
 
 class MissionStatusView(APIView):
@@ -1365,10 +1392,14 @@ async def enhanced_skills_elite_run_view(request: HttpRequest) -> JsonResponse:
 
         reg = SkillRegistry()
         await asyncio.to_thread(reg.discover)
+        wanted_base = wanted_norm[:-6] if wanted_norm.endswith("_skill") else wanted_norm
         meta = reg.get_skill(wanted)
         if meta is None:
-            for cand in reg.get_all():
-                if cand.name.lower().replace("-", "_") == wanted_norm:
+            for cand in reg.get_all(include_agent_skills=True):
+                cand_norm = cand.name.lower().replace("-", "_")
+                cand_base = cand_norm[:-6] if cand_norm.endswith("_skill") else cand_norm
+                cand_vuln = str(getattr(cand, "vuln_type", "") or "").lower().replace("-", "_")
+                if wanted_norm in (cand_norm, cand_vuln) or wanted_base == cand_base:
                     meta = cand
                     break
 
@@ -1378,7 +1409,8 @@ async def enhanced_skills_elite_run_view(request: HttpRequest) -> JsonResponse:
                 return django_json(
                     {
                         "ok": False,
-                        "skill_name": meta.name,
+                        "skill_name": wanted,
+                        "resolved_skill_name": meta.name,
                         "target_url": req.target_url,
                         "param_name": req.param_name,
                         "verified": False,
@@ -1413,7 +1445,8 @@ async def enhanced_skills_elite_run_view(request: HttpRequest) -> JsonResponse:
             return django_json(
                 {
                     "ok": success,
-                    "skill_name": meta.name,
+                    "skill_name": wanted,
+                    "resolved_skill_name": meta.name,
                     "registry": "SkillRegistry",
                     "target_url": req.target_url,
                     "param_name": req.param_name,
@@ -1434,35 +1467,64 @@ async def enhanced_skills_elite_run_view(request: HttpRequest) -> JsonResponse:
 
         builtin_reg = bootstrap_builtin_skills()
         matched_skill = None
+        wanted_base = wanted_norm[:-6] if wanted_norm.endswith("_skill") else wanted_norm
         all_skills = getattr(builtin_reg, "_skills", None) or {}
         if isinstance(all_skills, dict):
             for k, sk in all_skills.items():
                 sk_name = str(getattr(sk, "name", "") or type(sk).__name__ or k)
                 sk_vuln = str(getattr(sk, "vuln_type", "") or "")
+                sk_norm = sk_name.lower().replace("-", "_")
+                sk_base = sk_norm[:-6] if sk_norm.endswith("_skill") else sk_norm
                 if wanted_norm in {
                     str(k).lower().replace("-", "_"),
-                    sk_name.lower().replace("-", "_"),
+                    sk_norm,
                     sk_vuln.lower().replace("-", "_"),
-                }:
+                } or wanted_base == sk_base:
                     matched_skill = sk
                     break
         if matched_skill is not None:
-            sk_res = await matched_skill.run(req.target_url, param_name=req.param_name or "")
-            is_fb = bool(getattr(sk_res, "fallback_used", False))
-            verified = bool(getattr(sk_res, "verified", False)) and not is_fb
+            runner = matched_skill
+            skill_cls = getattr(matched_skill, "cls", None)
+            if callable(skill_cls):
+                try:
+                    runner = skill_cls()
+                except TypeError:
+                    runner = skill_cls(timeout=12.0)
+            elif isinstance(matched_skill, type):
+                runner = matched_skill()
+            try:
+                sk_res = runner.run(req.target_url, param_name=req.param_name or "")
+            except TypeError:
+                sk_res = runner.run(req.target_url)
+            if asyncio.iscoroutine(sk_res) or hasattr(sk_res, "__await__"):
+                sk_res = await sk_res
+            is_fb = bool(
+                sk_res.get("fallback_used", False)
+                if isinstance(sk_res, dict)
+                else getattr(sk_res, "fallback_used", False)
+            )
+            verified = bool(
+                sk_res.get("verified", False)
+                if isinstance(sk_res, dict)
+                else getattr(sk_res, "verified", False)
+            ) and not is_fb
             return django_json(
                 {
                     "ok": True,
-                    "skill_name": getattr(matched_skill, "name", wanted),
+                    "skill_name": wanted,
+                    "resolved_skill_name": getattr(matched_skill, "name", wanted),
                     "registry": "agents.skills.registry",
                     "target_url": req.target_url,
                     "param_name": req.param_name,
                     "verified": verified,
                     "status": "UNAVAILABLE" if is_fb else "completed",
-                    "title": getattr(sk_res, "title", ""),
-                    "evidence": getattr(sk_res, "evidence", ""),
-                    "confidence": float(getattr(sk_res, "confidence", 0.0) or 0.0),
-                    "cwe": getattr(sk_res, "cwe", ""),
+                    "title": (sk_res.get("title", "") if isinstance(sk_res, dict) else getattr(sk_res, "title", "")),
+                    "evidence": (sk_res.get("evidence", "") if isinstance(sk_res, dict) else getattr(sk_res, "evidence", "")),
+                    "confidence": float(
+                        (sk_res.get("confidence", 0.0) if isinstance(sk_res, dict) else getattr(sk_res, "confidence", 0.0))
+                        or 0.0
+                    ),
+                    "cwe": (sk_res.get("cwe", "") if isinstance(sk_res, dict) else getattr(sk_res, "cwe", "")),
                 }
             )
     except Exception as exc:  # noqa: BLE001

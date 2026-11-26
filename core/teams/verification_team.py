@@ -10,6 +10,7 @@ Ensures zero-tolerance for hallucinations and false positives:
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -143,20 +144,41 @@ class CausalVerificationAgent:
                 unresolved_unknowns=["Refuted by counterexample analysis"],
             )
 
-        # 2. Causal Evidence Generation — carries the RAW observed bodies so the
-        # reviewer and the EvidenceCourt can re-evaluate the differential rather
-        # than trusting a self-declared flag.
+        # 2. Causal Evidence Generation — carries the RAW observed bodies (plus any
+        # caller-supplied proof fields) so the reviewer and EvidenceCourt can re-evaluate
+        # rather than trusting a self-declared flag.
+        diff_payload: Dict[str, Any] = {
+            "baseline_text": baseline_response,
+            "probed_text": probed_response,
+            "delta_bytes": abs(len(probed_response) - len(baseline_response)),
+        }
+        for key in (
+            "proof_payload",
+            "artifact_type",
+            "expected_token",
+            "victim_canary",
+            "owner_marker",
+            "actor_id",
+            "owner_id",
+            "status_code",
+            "probe_status",
+            "baseline_status",
+            "probed_expression",
+            "expected_result",
+            "metadata",
+        ):
+            if key in context and context[key] is not None:
+                diff_payload[key] = context[key]
+            elif key in task.parameters and task.parameters[key] is not None:
+                diff_payload[key] = task.parameters[key]
+
         evidence = [
             EvidenceArtifact(
                 significance=EvidenceSignificance.PROOF,
                 source_tool=self.name,
                 target=target,
                 description=f"Verified causal differential delta on {target}",
-                diff_data={
-                    "baseline_text": baseline_response,
-                    "probed_text": probed_response,
-                    "delta_bytes": abs(len(probed_response) - len(baseline_response)),
-                },
+                diff_data=diff_payload,
                 poe_verified=True,
             )
         ]
@@ -177,6 +199,64 @@ class CausalVerificationAgent:
         )
 
 
+_IDOR_ID_KEYS = ("id", "user_id", "uid", "account_id", "owner_id", "tenant_id", "member_id")
+_IDOR_PII_KEYS = (
+    "email",
+    "ssn",
+    "phone",
+    "secret",
+    "token",
+    "api_key",
+    "private_key",
+    "password_hash",
+    "address",
+    "credit_card",
+    "iban",
+)
+
+
+def _extract_structured_idor_proof(
+    probed_text: str,
+    baseline_text: str,
+) -> Optional[Tuple[str, str, str]]:
+    """Derive (actor_id, owner_id, victim_pii_token) strictly from distinct-owner JSON bodies.
+
+    Returns None for non-JSON responses, same-owner objects, or responses without a
+    victim-specific PII/secret value absent from the baseline (bare diffs stay rejected).
+    """
+    if not probed_text or not baseline_text:
+        return None
+    try:
+        probed_obj = json.loads(probed_text)
+        baseline_obj = json.loads(baseline_text)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(probed_obj, dict) or not isinstance(baseline_obj, dict):
+        return None
+
+    actor_id = ""
+    owner_id = ""
+    for key in _IDOR_ID_KEYS:
+        if key in probed_obj and key in baseline_obj:
+            p_val = str(probed_obj[key] if probed_obj[key] is not None else "").strip()
+            b_val = str(baseline_obj[key] if baseline_obj[key] is not None else "").strip()
+            if p_val and b_val and p_val != b_val:
+                actor_id = b_val
+                owner_id = p_val
+                break
+    if not actor_id or not owner_id:
+        return None
+
+    for pii_key in _IDOR_PII_KEYS:
+        raw_val = probed_obj.get(pii_key)
+        if raw_val is None:
+            continue
+        token = str(raw_val).strip()
+        if len(token) >= 4 and token not in baseline_text:
+            return actor_id, owner_id, token
+    return None
+
+
 class EvidenceCourtReviewer:
     """Prepares and adjudicates final verified evidence in the EvidenceCourt."""
     def __init__(self, agent_name: str = "EvidenceCourtReviewer"):
@@ -192,26 +272,117 @@ class EvidenceCourtReviewer:
             task.reject_review(self.name, f"Evidence Court rejected unproven claim: {verdict}")
             return False
 
+        params = dict(task.parameters or {})
+        vuln_class = str(params.get("vuln_class", "IDOR"))
+        vuln_low = vuln_class.lower().strip()
+
         # The agent's own verdict is an INPUT, not a court ruling. Re-adjudicate
-        # with the raw observed bodies where available and never with a fabricated
-        # token: the court must DERIVE the proof, otherwise the claim is refused.
-        proof_payload = None
+        # with the raw observed bodies and real proof fields where available, never
+        # with a fabricated token: bare diffs without a real proof token/invariant
+        # remain rejected by EvidenceCourt.
+        proof_payload: Optional[Dict[str, Any]] = None
+        explicit_param_payload = params.get("proof_payload")
+        if isinstance(explicit_param_payload, dict):
+            proof_payload = dict(explicit_param_payload)
+
         for artifact in task.result.evidence_artifacts or []:
             diff = getattr(artifact, "diff_data", None) or {}
-            probed = diff.get("probed_text")
+            if not isinstance(diff, dict):
+                continue
+            if isinstance(diff.get("proof_payload"), dict):
+                proof_payload = dict(diff["proof_payload"])
+                if not proof_payload.get("response_text") and diff.get("probed_text"):
+                    proof_payload["response_text"] = str(diff["probed_text"])
+                if not proof_payload.get("baseline_text") and diff.get("baseline_text"):
+                    proof_payload["baseline_text"] = str(diff["baseline_text"])
+                break
+
+            probed = diff.get("probed_text") or diff.get("response_text")
             if probed:
-                proof_payload = {
-                    "artifact_type": "differential",
+                baseline = str(diff.get("baseline_text", ""))
+                artifact_type = str(
+                    diff.get("artifact_type")
+                    or params.get("artifact_type")
+                    or vuln_low
+                ).strip()
+                expected_token = str(
+                    diff.get("expected_token")
+                    or diff.get("victim_canary")
+                    or diff.get("owner_marker")
+                    or params.get("expected_token")
+                    or params.get("victim_canary")
+                    or params.get("owner_marker")
+                    or ""
+                )
+                meta: Dict[str, Any] = {}
+                if isinstance(params.get("metadata"), dict):
+                    meta.update(params["metadata"])
+                if isinstance(diff.get("metadata"), dict):
+                    meta.update(diff["metadata"])
+                for meta_key in (
+                    "actor_id",
+                    "owner_id",
+                    "status_code",
+                    "probe_status",
+                    "baseline_status",
+                    "oob_callbacks",
+                    "oob_nonce",
+                    "dom_executed",
+                    "boolean_true_matches_baseline",
+                    "boolean_false_diverges",
+                    "control_matches_baseline",
+                    "concurrent_success_count",
+                    "expected_max_success",
+                    "state_delta_verified",
+                    "probe_origin",
+                    "acao",
+                    "acac",
+                    "probe_redirect_host",
+                    "location",
+                    "raw_jwt",
+                    "cracked_secret",
+                    "sensitive_data_leaked",
+                ):
+                    if diff.get(meta_key) is not None:
+                        meta[meta_key] = diff[meta_key]
+                    elif params.get(meta_key) is not None and meta_key not in meta:
+                        meta[meta_key] = params[meta_key]
+
+                if not expected_token and vuln_low in ("idor", "bola", "broken_object_level_authorization"):
+                    extracted = _extract_structured_idor_proof(str(probed), baseline)
+                    if extracted is not None:
+                        ext_actor, ext_owner, ext_token = extracted
+                        meta.setdefault("actor_id", ext_actor)
+                        meta.setdefault("owner_id", ext_owner)
+                        expected_token = ext_token
+
+                payload_dict: Dict[str, Any] = {
+                    "artifact_type": artifact_type,
                     "response_text": str(probed),
-                    "baseline_text": str(diff.get("baseline_text", "")),
+                    "baseline_text": baseline,
+                    "metadata": meta,
                 }
+                if expected_token:
+                    payload_dict["expected_token"] = expected_token
+                if diff.get("probed_expression") is not None:
+                    payload_dict["probed_expression"] = str(diff["probed_expression"])
+                elif params.get("probed_expression") is not None:
+                    payload_dict["probed_expression"] = str(params["probed_expression"])
+                elif vuln_low not in ("cmdi", "command_injection", "cmd_injection", "rce"):
+                    payload_dict["probed_expression"] = ""
+                if diff.get("expected_result") is not None:
+                    payload_dict["expected_result"] = str(diff["expected_result"])
+                elif params.get("expected_result") is not None:
+                    payload_dict["expected_result"] = str(params["expected_result"])
+
+                proof_payload = payload_dict
                 break
 
         # Adjudicate via EvidenceCourt (declared proof is never trusted here).
         judgment = EvidenceCourt.adjudicate(
             target_url=task.target,
-            parameter=task.parameters.get("parameter", "id"),
-            vuln_class=task.parameters.get("vuln_class", "IDOR"),
+            parameter=params.get("parameter", "id"),
+            vuln_class=vuln_class,
             finder_claim={"claim": "Differential object access observed"},
             verifier_result={
                 "reproduced": True,

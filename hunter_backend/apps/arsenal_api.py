@@ -390,6 +390,27 @@ async def control_agent_chat_view(request: HttpRequest) -> JsonResponse:
     return django_json({"agent_id": req.agent_id, "reply": reply, "target": req.target})
 
 
+def _serialize_skill_meta(skill: Any) -> Dict[str, Any]:
+    """Normalize a SkillMeta object, dataclass, or dict into a JSON-serializable dict."""
+    if isinstance(skill, dict):
+        return {k: str(v) if isinstance(v, Path) else v for k, v in skill.items()}
+    to_dict = getattr(skill, "to_dict", None)
+    if callable(to_dict):
+        data = to_dict()
+        if isinstance(data, dict):
+            return {k: str(v) if isinstance(v, Path) else v for k, v in data.items()}
+    if dataclasses.is_dataclass(skill) and not isinstance(skill, type):
+        raw = dataclasses.asdict(skill)
+        return {k: str(v) if isinstance(v, Path) else v for k, v in raw.items()}
+    return {
+        "name": str(getattr(skill, "name", str(skill))),
+        "category": str(getattr(skill, "category", "general")),
+        "description": str(getattr(skill, "description", "")),
+        "version": str(getattr(skill, "version", "1.0")),
+        "enabled": bool(getattr(skill, "enabled", True)),
+    }
+
+
 class ControlSkillsListView(APIView):
     def get(self, request: Any) -> Any:
         category = request.GET.get("category") or None
@@ -397,9 +418,11 @@ class ControlSkillsListView(APIView):
             from core.skill_registry import SkillRegistry
 
             reg = SkillRegistry()
-            skills = getattr(reg, "list_skills", lambda: [])()
+            raw_skills = getattr(reg, "list_skills", lambda: [])()
+            skills = [_serialize_skill_meta(s) for s in (raw_skills or [])]
             if category:
-                skills = [s for s in skills if str(s.get("category", "")).lower() == category.lower()]
+                cat_low = category.lower()
+                skills = [s for s in skills if str(s.get("category", "")).lower() == cat_low]
             return ok_json({"skills": skills, "count": len(skills)})
         except Exception:
             return ok_json({"skills": [], "count": 0})

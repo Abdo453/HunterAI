@@ -28,6 +28,35 @@ from core.business_logic.schemas import (
 logger = logging.getLogger("hunter_ai.race_condition")
 
 
+class _AsyncBarrierCompat:
+    """Python 3.10-compatible asyncio barrier fallback (native asyncio.Barrier added in 3.11)."""
+
+    def __init__(self, parties: int) -> None:
+        if parties < 1:
+            raise ValueError("parties must be >= 1")
+        self._parties = parties
+        self._count = 0
+        self._generation = 0
+        self._cond = asyncio.Condition()
+
+    async def wait(self) -> int:
+        async with self._cond:
+            gen = self._generation
+            index = self._count
+            self._count += 1
+            if self._count >= self._parties:
+                self._count = 0
+                self._generation += 1
+                self._cond.notify_all()
+                return index
+            while gen == self._generation:
+                await self._cond.wait()
+            return index
+
+
+_AsyncBarrier = getattr(asyncio, "Barrier", _AsyncBarrierCompat)
+
+
 @dataclass
 class ConcurrentRequestResult:
     request_index: int
@@ -75,7 +104,7 @@ class RaceConditionEngine:
         """
         success_codes = success_status_codes or [200, 201, 204]
         headers = headers or {}
-        barrier = asyncio.Barrier(concurrency)
+        barrier = _AsyncBarrier(concurrency)
         results: List[ConcurrentRequestResult] = []
 
         limits = httpx.Limits(max_keepalive_connections=concurrency, max_connections=concurrency)
