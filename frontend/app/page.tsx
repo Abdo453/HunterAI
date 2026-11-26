@@ -133,18 +133,12 @@ export default function OverviewPage() {
     setLaunchFeedback("");
 
     if (kind !== "engine" || target.trim()) {
-      const check = validateScanTarget(target, selectedEngagement);
+      const check = validateScanTarget(target);
       if (!check.valid) {
         setLaunchError(t(
           check.reason === "empty"
             ? "nav.scopeInvalidEmpty"
-            : check.reason === "blocked_metadata"
-              ? "nav.scopeInvalidMetadata"
-              : check.reason === "out_of_scope"
-                ? "nav.scopeOutOfScope"
-                : check.reason === "not_in_scope"
-                  ? "nav.scopeNotInScope"
-                  : "nav.scopeFormatHint"
+            : "nav.scopeFormatHint"
         ));
         return;
       }

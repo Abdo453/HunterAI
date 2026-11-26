@@ -254,139 +254,13 @@ export interface EngagementCreateInput {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function parseIpv4Int(host: string): number | null {
-  const parts = host.split(".");
-  if (parts.length !== 4) return null;
-  let val = 0;
-  for (const part of parts) {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const n = Number.parseInt(part, 10);
-    if (n < 0 || n > 255) return null;
-    val = ((val << 8) | n) >>> 0;
-  }
-  return val;
-}
-
-function isIpLiteral(host: string): boolean {
-  const h = host.replace(/^\[|\]$/g, "");
-  return parseIpv4Int(h) !== null || h.includes(":");
-}
-
-function isCloudMetadataHost(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, "").split("%")[0];
-  return (
-    h === "metadata.google.internal" ||
-    h === "metadata.internal" ||
-    h === "instance-data" ||
-    h === "100.100.100.200" ||
-    h === "fd00:ec2::254" ||
-    h === "0.0.0.0" ||
-    h === "::" ||
-    h === "::ffff:0.0.0.0" ||
-    h === "::ffff:0:0" ||
-    /^169\.254\./.test(h) ||
-    h.startsWith("::ffff:169.254.") ||
-    h.startsWith("::ffff:a9fe:")
-  );
-}
-
-function isPublicFqdn(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
-  if (!h || !h.includes(".") || h.includes(":")) return false;
-  if (isIpLiteral(h)) return false;
-  if (
-    h === "localhost" ||
-    h.endsWith(".localhost") ||
-    h.endsWith(".local") ||
-    h.endsWith(".localdomain") ||
-    h.endsWith(".internal") ||
-    h.endsWith(".intranet") ||
-    h.endsWith(".corp") ||
-    h.endsWith(".home") ||
-    h.endsWith(".lan") ||
-    h.endsWith(".arpa") ||
-    h === "instance-data"
-  ) {
-    return false;
-  }
-  const labels = h.split(".");
-  if (labels.length < 2) return false;
-  const tld = labels[labels.length - 1];
-  if (!/^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/.test(tld)) return false;
-  return labels.every((lbl) => /^[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$/.test(lbl));
-}
-
-export type TargetValidationReason =
-  | "empty"
-  | "invalid_format"
-  | "blocked_metadata"
-  | "out_of_scope"
-  | "not_in_scope";
+export type TargetValidationReason = "empty" | "invalid_format";
 
 export interface TargetValidationResult {
   valid: boolean;
   normalizedTarget: string;
   hostname: string;
   reason?: TargetValidationReason;
-}
-
-function extractPatternHost(rawPattern: string): { host: string; hasNonRootPath: boolean } {
-  let clean = rawPattern.trim().toLowerCase().replace(/^https?:\/\//, "");
-  const slashIdx = clean.indexOf("/");
-  let hasNonRootPath = false;
-  if (slashIdx !== -1) {
-    const rest = clean.slice(slashIdx);
-    hasNonRootPath = rest !== "/" && !rest.startsWith("/?") && !rest.startsWith("/#");
-    clean = clean.slice(0, slashIdx);
-  }
-  clean = clean.split("?")[0].split("#")[0];
-  if (clean.includes("@")) {
-    clean = clean.slice(clean.lastIndexOf("@") + 1);
-  }
-  if (clean.startsWith("[")) {
-    const end = clean.indexOf("]");
-    return { host: end !== -1 ? clean.slice(1, end) : clean.slice(1), hasNonRootPath };
-  }
-  const firstColon = clean.indexOf(":");
-  if (firstColon !== -1 && clean.indexOf(":", firstColon + 1) === -1) {
-    clean = clean.slice(0, firstColon);
-  }
-  return { host: clean, hasNonRootPath };
-}
-
-function matchesScopePattern(hostname: string, pattern: string, isExclusion = false): boolean {
-  const normHost = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  const raw = pattern.trim().toLowerCase();
-  if (!normHost || !raw) return false;
-  if (raw === "*") return true;
-
-  const noScheme = raw.replace(/^https?:\/\//, "");
-  const cidrMatch = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\/(\d{1,2})$/.exec(noScheme);
-  if (cidrMatch) {
-    const netInt = parseIpv4Int(cidrMatch[1]);
-    const hostInt = parseIpv4Int(normHost);
-    const prefix = Number.parseInt(cidrMatch[2], 10);
-    if (netInt !== null && hostInt !== null && prefix >= 0 && prefix <= 32) {
-      const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
-      return (hostInt & mask) === (netInt & mask);
-    }
-    return false;
-  }
-
-  const { host: clean, hasNonRootPath } = extractPatternHost(noScheme);
-  if (!clean) return false;
-  if (isExclusion && hasNonRootPath) {
-    return false;
-  }
-
-  if (isIpLiteral(clean)) {
-    return normHost === clean;
-  }
-  if (clean.startsWith("*.")) {
-    const base = clean.slice(2);
-    return normHost === base || normHost.endsWith(`.${base}`);
-  }
-  return normHost === clean || normHost.endsWith(`.${clean}`);
 }
 
 function prepareUrlCandidate(trimmed: string): string {
@@ -405,15 +279,19 @@ function prepareUrlCandidate(trimmed: string): string {
   return `https://${trimmed}`;
 }
 
-export function validateScanTarget(
-  rawInput: string,
-  engagement?: EngagementRecord | null
-): TargetValidationResult {
+export function validateScanTarget(rawInput: string): TargetValidationResult {
   const trimmed = rawInput.trim();
   if (!trimmed) {
     return { valid: false, normalizedTarget: "", hostname: "", reason: "empty" };
   }
   if (/[\s"'`<>|;&$()]/.test(trimmed)) {
+    return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
+  }
+  if (
+    !trimmed.includes("://") &&
+    !trimmed.startsWith("[") &&
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d+(?:[/?#]|$))/.test(trimmed)
+  ) {
     return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
   }
 
@@ -434,14 +312,6 @@ export function validateScanTarget(
     return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
   }
 
-  if (isCloudMetadataHost(hostname)) {
-    return { valid: false, normalizedTarget: hostname, hostname, reason: "blocked_metadata" };
-  }
-
-  if (hostname !== "localhost" && !hostname.includes(".") && !hostname.includes(":")) {
-    return { valid: false, normalizedTarget: "", hostname, reason: "invalid_format" };
-  }
-
   const hasExplicitScheme = trimmed.includes("://");
   const hasExplicitPathOrQuery =
     (parsed.pathname && parsed.pathname !== "/") || Boolean(parsed.search);
@@ -455,18 +325,6 @@ export function validateScanTarget(
     : parsed.port || hasExplicitPathOrQuery
       ? `${parsed.host}${pathSuffix}`
       : rawHostname;
-
-  if (engagement) {
-    if (engagement.out_of_scope.some((rule) => matchesScopePattern(hostname, rule, true))) {
-      return { valid: false, normalizedTarget, hostname, reason: "out_of_scope" };
-    }
-    if (
-      engagement.in_scope.length > 0 &&
-      !engagement.in_scope.some((rule) => matchesScopePattern(hostname, rule, false))
-    ) {
-      return { valid: false, normalizedTarget, hostname, reason: "not_in_scope" };
-    }
-  }
 
   return { valid: true, normalizedTarget, hostname };
 }
@@ -1589,7 +1447,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
   const launchMission = useCallback(
     async (input: MissionLaunchInput): Promise<{ ok: boolean; run?: RunRecord; error?: string }> => {
       if (input.kind !== "engine" || input.target.trim()) {
-        const check = validateScanTarget(input.target, selectedEngagement);
+        const check = validateScanTarget(input.target);
         if (!check.valid) {
           return { ok: false, error: check.reason || "invalid_format" };
         }
@@ -1617,6 +1475,21 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           return { ok: true };
         }
 
+        const resolvedScope =
+          input.scope ??
+          (normTarget
+            ? [normTarget]
+            : selectedEngagement?.in_scope?.length
+              ? selectedEngagement.in_scope
+              : undefined);
+        const resolvedOutOfScope =
+          input.out_of_scope ??
+          (normTarget
+            ? undefined
+            : selectedEngagement?.out_of_scope?.length
+              ? selectedEngagement.out_of_scope
+              : undefined);
+
         addConsoleLog("INFO", "dispatcher", `Starting ${input.kind} mission for ${normTarget || input.engine}`);
         const res = await apiJson<{ status?: string; run?: RunRecord }>("/api/platform/runs/start", {
           method: "POST",
@@ -1624,10 +1497,8 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
             kind: input.kind,
             target: normTarget,
             engagement_id: input.engagement_id ?? (selectedEngagementId || null),
-            scope: input.scope ?? (selectedEngagement?.in_scope?.length ? selectedEngagement.in_scope : undefined),
-            out_of_scope:
-              input.out_of_scope ??
-              (selectedEngagement?.out_of_scope?.length ? selectedEngagement.out_of_scope : undefined),
+            scope: resolvedScope,
+            out_of_scope: resolvedOutOfScope,
             mode: input.mode || "full",
             prompt: input.prompt || "",
             engine: input.engine || "claude",
@@ -1659,7 +1530,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
 
   const launchScan = useCallback(
     async (rawTarget: string): Promise<{ ok: boolean; error?: string; via?: string }> => {
-      const check = validateScanTarget(rawTarget, selectedEngagement);
+      const check = validateScanTarget(rawTarget);
       if (!check.valid) {
         return { ok: false, error: check.reason || "invalid_format" };
       }
@@ -1669,22 +1540,14 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         return { ok: res.ok, error: res.error, via: "go_core" };
       }
 
-      const defaultScope = selectedEngagement
-        ? selectedEngagement.in_scope?.length
-          ? selectedEngagement.in_scope
-          : undefined
-        : isPublicFqdn(check.hostname)
-          ? [check.hostname]
-          : undefined;
-
       const res = await launchMission({
         kind: "pipeline",
         target: check.normalizedTarget,
-        scope: defaultScope,
+        scope: [check.normalizedTarget],
       });
       return { ok: res.ok, error: res.error, via: "django_pipeline" };
     },
-    [goCoreHealth.status, launchMission, selectedEngagement]
+    [goCoreHealth.status, launchMission]
   );
 
   const decideApproval = useCallback(

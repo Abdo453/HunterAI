@@ -126,18 +126,12 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
     e.preventDefault();
     setValidationError("");
 
-    const check = validateScanTarget(targetInput, selectedEngagement);
+    const check = validateScanTarget(targetInput);
     if (!check.valid) {
       const msgKey =
         check.reason === "empty"
           ? "nav.scopeInvalidEmpty"
-          : check.reason === "blocked_metadata"
-            ? "nav.scopeInvalidMetadata"
-            : check.reason === "out_of_scope"
-              ? "nav.scopeOutOfScope"
-              : check.reason === "not_in_scope"
-                ? "nav.scopeNotInScope"
-                : "nav.scopeFormatHint";
+          : "nav.scopeFormatHint";
       setValidationError(t(msgKey));
       return;
     }
@@ -184,7 +178,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
           <span className="font-bold text-sm text-ink-primary">{t("brand.name")}</span>
         </div>
 
-        {/* Engagement Selector + Scope-Guarded Target Launcher */}
+        {/* Workspace Selector + Target Launcher */}
         <div className="flex-1 min-w-[240px] max-w-2xl flex flex-col gap-1 order-3 lg:order-1 w-full lg:w-auto">
           <form onSubmit={handleSubmit} className="flex flex-wrap sm:flex-nowrap items-center gap-2">
             <label htmlFor="engagement-selector" className="sr-only">

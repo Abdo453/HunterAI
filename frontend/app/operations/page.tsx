@@ -368,7 +368,7 @@ export default function OperationsPage() {
               }`}
             >
               <div className="font-mono font-semibold">
-                {scopeCheck.allowed ? "ALLOWED (IN-SCOPE)" : "DENIED (GUARDED)"}
+                {scopeCheck.allowed ? "MATCHED (IN-SCOPE)" : "OUTSIDE WORKSPACE SCOPE"}
               </div>
               <div>{scopeCheck.reason}</div>
             </div>
