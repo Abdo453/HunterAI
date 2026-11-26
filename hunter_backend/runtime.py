@@ -522,7 +522,6 @@ async def _run_pipeline_task(
     engagement_id: Optional[str],
 ) -> None:
     store = ensure_platform_wiring()
-    handle = GLOBAL_RUN_CONTROLLER.get(run_id)
     try:
         store.update_run(run_id, status="running", current_phase="RECON", progress=0.15)
         store.append_event(
@@ -539,16 +538,17 @@ async def _run_pipeline_task(
         if phase_delay > 0:
             await asyncio.sleep(phase_delay)
 
-        if handle is not None and await handle.wait_if_paused():
-            return
-        if GLOBAL_RUN_CONTROLLER.should_stop(run_id):
+        if not await GLOBAL_RUN_CONTROLLER.checkpoint(run_id):
             store.update_run(run_id, status="stopped", finished_at=time.time())
+            if target in _active_pipelines:
+                _active_pipelines[target]["status"] = "stopped"
             return
 
         # Attempt real pipeline execution if orchestrator exists, with safe progression fallback
         from core.scope_guard import ScopeGuard
 
         guard = ScopeGuard(in_scope=scope or [target], out_of_scope=out_of_scope)
+        store.update_run(run_id, status="running", current_phase="SCOPE_VERIFIED", progress=0.55)
         store.append_event(
             "pipeline.scope_verified",
             run_id=run_id,
@@ -558,10 +558,10 @@ async def _run_pipeline_task(
         )
         if phase_delay > 0:
             await asyncio.sleep(phase_delay)
-        if handle is not None and await handle.wait_if_paused():
-            return
-        if GLOBAL_RUN_CONTROLLER.should_stop(run_id):
+        if not await GLOBAL_RUN_CONTROLLER.checkpoint(run_id):
             store.update_run(run_id, status="stopped", finished_at=time.time())
+            if target in _active_pipelines:
+                _active_pipelines[target]["status"] = "stopped"
             return
 
         store.update_run(
@@ -688,10 +688,69 @@ async def start_platform_run(
     )
     handle = reg["handle"]
     handle.task = task
+    handle.state = "running"
+    handle.started_at = time.time()
+    task.add_done_callback(lambda t, rid=run_id: GLOBAL_RUN_CONTROLLER._on_task_done(rid, t))
     _active_mission_tasks[run_id] = task
     task.add_done_callback(lambda _t: _active_mission_tasks.pop(run_id, None))
     log_activity_event("platform", f"run.started:{kind}", clean_target or engine)
     return reg["run"]
+
+
+def control_managed_run_sync(run_id: str, action: str) -> bool:
+    """Thread-safe sync bridge for pause/resume/stop onto the managed task's event loop."""
+    handle = GLOBAL_RUN_CONTROLLER.get(run_id)
+    task = getattr(handle, "task", None) if handle is not None else None
+    task_loop: Optional[asyncio.AbstractEventLoop] = None
+    if task is not None:
+        try:
+            task_loop = task.get_loop()
+        except Exception:
+            task_loop = None
+
+    def _run_sync_action() -> bool:
+        if action == "pause":
+            return GLOBAL_RUN_CONTROLLER.pause(run_id)
+        if action == "resume":
+            return GLOBAL_RUN_CONTROLLER.resume(run_id)
+        if action == "stop":
+            from asgiref.sync import async_to_sync
+
+            async def _stop() -> bool:
+                return await GLOBAL_RUN_CONTROLLER.stop(run_id, force=True)
+
+            return async_to_sync(_stop)()
+        return False
+
+    if task_loop is not None and task_loop.is_running():
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+        if running_loop is not task_loop:
+            if action == "stop":
+                fut = asyncio.run_coroutine_threadsafe(
+                    GLOBAL_RUN_CONTROLLER.stop(run_id, force=True), task_loop
+                )
+                return bool(fut.result(timeout=3.0))
+            import concurrent.futures
+
+            res_fut: concurrent.futures.Future[bool] = concurrent.futures.Future()
+
+            def _invoke() -> None:
+                try:
+                    val = (
+                        GLOBAL_RUN_CONTROLLER.pause(run_id)
+                        if action == "pause"
+                        else GLOBAL_RUN_CONTROLLER.resume(run_id)
+                    )
+                    res_fut.set_result(bool(val))
+                except Exception as exc:
+                    res_fut.set_exception(exc)
+
+            task_loop.call_soon_threadsafe(_invoke)
+            return bool(res_fut.result(timeout=3.0))
+    return _run_sync_action()
 
 
 async def execute_approved_action(

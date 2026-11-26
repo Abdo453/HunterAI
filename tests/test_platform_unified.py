@@ -854,3 +854,75 @@ def test_run_tool_policy_and_shell_metacharacter_gate(isolated_client: ASGISyncC
     assert d2["success"] is True
     assert "api.example.com" in d2["output"]
     assert len(executed) == 2
+
+
+def test_pipeline_task_cooperative_pause_resume_and_stop(isolated_client: ASGISyncClient, monkeypatch):
+    """Verify _run_pipeline_task holds cleanly on pause via GLOBAL_RUN_CONTROLLER.checkpoint and resumes or stops."""
+    import time
+
+    monkeypatch.setenv("HUNTER_PIPELINE_PHASE_DELAY_S", "0.15")
+
+    eng = isolated_client.post(
+        "/api/platform/engagements",
+        json={
+            "name": "Pause Control Target",
+            "target": "https://pause.example.com",
+            "in_scope": ["pause.example.com"],
+            "set_active": True,
+        },
+    ).json()["engagement"]
+    eid = eng["engagement_id"]
+
+    # 1. Start -> Pause (must hold inside checkpoint without AttributeError/failed) -> Resume -> Complete
+    started1 = isolated_client.post(
+        "/api/platform/runs/start",
+        json={"kind": "pipeline", "target": "https://pause.example.com", "engagement_id": eid},
+    )
+    assert started1.status_code == 200
+    rid1 = started1.json()["run_id"]
+
+    paused1 = isolated_client.post(f"/api/platform/runs/{rid1}/pause")
+    assert paused1.status_code == 200
+    assert paused1.json()["status"] == "paused"
+
+    # Wait longer than the phase delay; run MUST remain paused (not failed/completed)
+    time.sleep(0.45)
+    store = ps.get_platform_store()
+    run_while_paused = store.get_run(rid1)
+    assert run_while_paused is not None
+    assert run_while_paused["status"] == "paused"
+    assert run_while_paused["error"] == ""
+
+    resumed1 = isolated_client.post(f"/api/platform/runs/{rid1}/resume")
+    assert resumed1.status_code == 200
+    assert resumed1.json()["status"] == "running"
+
+    deadline = time.time() + 3.0
+    final_status = ""
+    while time.time() < deadline:
+        cur = store.get_run(rid1)
+        final_status = str((cur or {}).get("status") or "")
+        if final_status == "completed":
+            break
+        assert final_status != "failed", f"Run failed unexpectedly: {cur}"
+        time.sleep(0.05)
+    assert final_status == "completed"
+
+    # 2. Start -> Pause -> Stop cleanly marks run stopped without AttributeError
+    started2 = isolated_client.post(
+        "/api/platform/runs/start",
+        json={"kind": "pipeline", "target": "https://pause.example.com", "engagement_id": eid},
+    )
+    assert started2.status_code == 200
+    rid2 = started2.json()["run_id"]
+
+    assert isolated_client.post(f"/api/platform/runs/{rid2}/pause").status_code == 200
+    time.sleep(0.25)
+    stopped2 = isolated_client.post(f"/api/platform/runs/{rid2}/stop")
+    assert stopped2.status_code == 200
+    assert stopped2.json()["status"] == "stopped"
+    time.sleep(0.1)
+    run_after_stop = store.get_run(rid2)
+    assert run_after_stop is not None
+    assert run_after_stop["status"] == "stopped"
+    assert run_after_stop["error"] == ""

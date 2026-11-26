@@ -43,10 +43,40 @@ interface TwoBrainDiffItem {
   verdict?: string;
 }
 
+interface AttackGraphNode {
+  id?: string;
+  node_id?: string;
+  label?: string;
+  name?: string;
+  node_type?: string;
+  risk_score?: number;
+}
+
+interface AttackGraphEdge {
+  id?: string;
+  edge_id?: string;
+  source?: string;
+  source_node_id?: string;
+  target?: string;
+  target_node_id?: string;
+  label?: string;
+  relation_type?: string;
+}
+
 interface AttackGraphSnapshot {
   target?: string;
-  nodes?: Array<{ id?: string; label?: string; node_type?: string; risk_score?: number }>;
-  edges?: Array<{ source?: string; target?: string; label?: string }>;
+  nodes?: AttackGraphNode[] | Record<string, AttackGraphNode>;
+  edges?: AttackGraphEdge[] | Record<string, AttackGraphEdge>;
+}
+
+function coerceGraphArray<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) {
+    return raw as T[];
+  }
+  if (raw && typeof raw === "object") {
+    return Object.values(raw as Record<string, T>);
+  }
+  return [];
 }
 
 interface SwarmTelemetryPayload {
@@ -88,7 +118,11 @@ export default function SurfacePage() {
       }
     }
     if (cgRes.ok && cgRes.data) {
-      setCausalGraph(cgRes.data);
+      setCausalGraph({
+        ...cgRes.data,
+        nodes: coerceGraphArray<AttackGraphNode>(cgRes.data.nodes),
+        edges: coerceGraphArray<AttackGraphEdge>(cgRes.data.edges),
+      });
     }
   }, [apiJson, effectiveTarget]);
 
@@ -124,10 +158,11 @@ export default function SurfacePage() {
     }
   };
 
-  const roster = telemetry?.swarm_roster || [];
-  const wiretap = telemetry?.wiretap_events || [];
-  const diffs = telemetry?.two_brain_diffs || [];
-  const causalNodes = causalGraph?.nodes || [];
+  const roster = Array.isArray(telemetry?.swarm_roster) ? telemetry.swarm_roster : [];
+  const wiretap = Array.isArray(telemetry?.wiretap_events) ? telemetry.wiretap_events : [];
+  const diffs = Array.isArray(telemetry?.two_brain_diffs) ? telemetry.two_brain_diffs : [];
+  const causalNodes = coerceGraphArray<AttackGraphNode>(causalGraph?.nodes);
+  const causalEdges = coerceGraphArray<AttackGraphEdge>(causalGraph?.edges);
 
   return (
     <div className="space-y-5">
@@ -141,7 +176,10 @@ export default function SurfacePage() {
             <div className="flex items-center gap-2">
               <Network className="w-4 h-4 text-sentinel-primary" />
               <h2 className="text-sm font-semibold text-ink-primary">{t("assets.attackGraphTitle")}</h2>
-              <span className="text-xs font-mono px-2 py-0.5 rounded bg-elevated border border-border-subtle text-ink-secondary">
+              <span
+                title={`${causalEdges.length} edges`}
+                className="text-xs font-mono px-2 py-0.5 rounded bg-elevated border border-border-subtle text-ink-secondary"
+              >
                 {causalNodes.length} {t("assets.nodesCount")}
               </span>
             </div>
@@ -164,7 +202,7 @@ export default function SurfacePage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
               {causalNodes.map((n, idx) => (
-                <div key={`${n.id || "node"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
+                <div key={`${n.id || n.node_id || "node"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-sentinel-primary">{n.node_type || "NODE"}</span>
                     {typeof n.risk_score === "number" && (
@@ -173,7 +211,7 @@ export default function SurfacePage() {
                       </span>
                     )}
                   </div>
-                  <div className="font-mono text-ink-primary ltr-isolate truncate">{n.label || n.id}</div>
+                  <div className="font-mono text-ink-primary ltr-isolate truncate">{n.label || n.name || n.id || n.node_id}</div>
                 </div>
               ))}
             </div>

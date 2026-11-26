@@ -97,7 +97,7 @@ export default function OperationsPage() {
   const [leadTarget, setLeadTarget] = useState<string>("example.com");
   const [leads, setLeads] = useState<LeadItem[]>([]);
   const [leadCounts, setLeadCounts] = useState<Record<string, number>>({});
-  const [newLeadSkill, setNewLeadSkill] = useState<string>("idor");
+  const [newLeadSkill, setNewLeadSkill] = useState<string>("hunt-idor");
   const [newLeadEvidence, setNewLeadEvidence] = useState<string>("");
 
   const loadAll = useCallback(async () => {

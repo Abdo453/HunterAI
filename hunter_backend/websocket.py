@@ -167,7 +167,7 @@ async def _handle_ws_platform(ws: WSConnection) -> None:
                         elif action == "resume":
                             ok = GLOBAL_RUN_CONTROLLER.resume(rid)
                         elif action == "stop":
-                            ok = GLOBAL_RUN_CONTROLLER.stop(rid, force=True)
+                            ok = await GLOBAL_RUN_CONTROLLER.stop(rid, force=True)
                         await ws.send_json({"type": "control_ack", "action": action, "run_id": rid, "ok": ok})
                     recv_task = asyncio.create_task(ws.receive_raw())
         finally:

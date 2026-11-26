@@ -193,18 +193,24 @@ class RunControlActionView(APIView):
     action: str = "pause"
 
     def post(self, request: Any, run_id: str) -> Any:
+        from hunter_backend.runtime import control_managed_run_sync
+
+        store = rt.ensure_platform_wiring()
         if self.action == "pause":
-            if not GLOBAL_RUN_CONTROLLER.pause(run_id):
+            if not control_managed_run_sync(run_id, "pause"):
                 return err_json("Run not found or cannot be paused", status=404)
+            store.update_run(run_id, status="paused")
             return ok_json({"run_id": run_id, "state": "paused"})
 
         if self.action == "resume":
-            if not GLOBAL_RUN_CONTROLLER.resume(run_id):
+            if not control_managed_run_sync(run_id, "resume"):
                 return err_json("Run not found or not paused", status=404)
+            store.update_run(run_id, status="running")
             return ok_json({"run_id": run_id, "state": "running"})
 
-        if not GLOBAL_RUN_CONTROLLER.stop(run_id, force=True):
+        if not control_managed_run_sync(run_id, "stop"):
             return err_json("Run not found or already completed", status=404)
+        store.update_run(run_id, status="stopped", finished_at=time.time())
         return ok_json({"run_id": run_id, "state": "stopped"})
 
 

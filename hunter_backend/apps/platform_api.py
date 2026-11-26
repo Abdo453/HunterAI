@@ -7,6 +7,7 @@ import inspect
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, List, Optional
 
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
@@ -15,6 +16,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 from pydantic import BaseModel, Field
 from rest_framework.views import APIView
 
+from agents.security_intelligence.schemas import ScopeDecision, ScopeMode, ScopeRule
 from core.copilot_service import (
     detect_live_providers,
     evaluate_action_policy,
@@ -35,12 +37,14 @@ from hunter_backend.apps.common import (
     parse_query_float,
     parse_query_int,
     split_out_of_scope_exclusions,
+    validate_http_url_ssrf_and_scope,
     validate_model,
     validate_scan_target,
 )
 from hunter_backend.runtime import (
     ARTEX_BASE_URL,
     EVENT_BUS,
+    control_managed_run_sync,
     ensure_platform_wiring,
     execute_approved_action,
     get_go_client,
@@ -433,8 +437,11 @@ class PlatformRunControlView(APIView):
         if not run:
             return err_json(f"Run {run_id} not found", status=404)
 
+        current_status = str(run.get("status") or "")
         if self.action == "pause":
-            ok = GLOBAL_RUN_CONTROLLER.pause(run_id)
+            ok = control_managed_run_sync(run_id, "pause")
+            if not ok and current_status in {"completed", "stopped", "failed"}:
+                return ok_json({"ok": False, "run": run, "status": current_status, "state": current_status})
             updated = store.update_run(run_id, status="paused") or run
             store.append_event(
                 "run.paused",
@@ -446,7 +453,9 @@ class PlatformRunControlView(APIView):
             return ok_json({"ok": True, "run": updated, "status": "paused", "state": "paused"})
 
         if self.action == "resume":
-            ok = GLOBAL_RUN_CONTROLLER.resume(run_id)
+            ok = control_managed_run_sync(run_id, "resume")
+            if not ok and current_status in {"completed", "stopped", "failed"}:
+                return ok_json({"ok": False, "run": run, "status": current_status, "state": current_status})
             updated = store.update_run(run_id, status="running") or run
             store.append_event(
                 "run.resumed",
@@ -457,8 +466,8 @@ class PlatformRunControlView(APIView):
             )
             return ok_json({"ok": True, "run": updated, "status": "running", "state": "running"})
 
-        ok = await_sync(GLOBAL_RUN_CONTROLLER.stop(run_id, force=True))
-        updated = store.update_run(run_id, status="stopped") or run
+        ok = control_managed_run_sync(run_id, "stop")
+        updated = store.update_run(run_id, status="stopped", finished_at=time.time()) or run
         store.append_event(
             "run.stopped",
             run_id=run_id,
@@ -545,6 +554,138 @@ class PlatformApprovalsListView(APIView):
         return ok_json({"approvals": items, "count": len(items)})
 
 
+class _ApprovalScopeGuardAdapter:
+    """Adapter bridging Engagement scope and common/policy guards to PolicyEngine."""
+
+    def __init__(
+        self,
+        in_scope: List[str],
+        out_of_scope: List[str],
+        *,
+        engagement_id: Optional[str] = None,
+        allow_active_tests: bool = True,
+    ) -> None:
+        self._in_scope = [str(s).strip() for s in (in_scope or []) if str(s).strip()]
+        self._out_of_scope = [str(s).strip() for s in (out_of_scope or []) if str(s).strip()]
+        self._engagement_id = engagement_id
+        host_out, path_exclusions = split_out_of_scope_exclusions(self._out_of_scope)
+        self._host_out_scope = host_out
+        self.rule = ScopeRule(
+            target=self._in_scope[0] if self._in_scope else "",
+            allowed_domains=list(self._in_scope),
+            excluded_paths=[p for _h, p in path_exclusions],
+            allow_active_tests=allow_active_tests,
+            mode=ScopeMode.ACTIVE if allow_active_tests else ScopeMode.PASSIVE,
+        )
+
+    def set_scope(self, rule: ScopeRule) -> None:
+        self.rule = rule
+
+    def evaluate_scope_decision(
+        self, target: str, action: str = "passive_analysis"
+    ) -> ScopeDecision:
+        clean_target = (target or "").strip()
+        if not clean_target:
+            return ScopeDecision(
+                allowed=False,
+                mode=ScopeMode.BLOCKED,
+                target=target,
+                action=action,
+                reason="Target is empty.",
+            )
+        if not self._in_scope:
+            return ScopeDecision(
+                allowed=False,
+                mode=ScopeMode.BLOCKED,
+                target=clean_target,
+                action=action,
+                reason="No authorized target scope configured (empty in_scope fails closed).",
+            )
+
+        if "://" in clean_target:
+            ok, reason, _policy = validate_http_url_ssrf_and_scope(
+                clean_target,
+                scope=self._in_scope,
+                out_of_scope=self._out_of_scope,
+                engagement_id=self._engagement_id,
+                action_type=action or "CLI_TOOL",
+            )
+        else:
+            ok, reason, _policy = validate_scan_target(
+                clean_target,
+                scope=self._in_scope,
+                out_of_scope=self._out_of_scope,
+                engagement_id=self._engagement_id,
+                action_type=action or "CLI_TOOL",
+            )
+        if not ok:
+            return ScopeDecision(
+                allowed=False,
+                mode=ScopeMode.BLOCKED,
+                target=clean_target,
+                action=action,
+                reason=reason or "Target blocked by ScopeGuard.",
+            )
+
+        policy = evaluate_action_policy(
+            action_type=action or "CLI_TOOL",
+            target=clean_target,
+            in_scope=self._in_scope,
+            out_of_scope=self._host_out_scope,
+            allow_active_tests=bool(self.rule.allow_active_tests),
+        )
+        allowed = bool(policy.get("allowed"))
+        return ScopeDecision(
+            allowed=allowed,
+            mode=(
+                ScopeMode.ACTIVE if self.rule.allow_active_tests else ScopeMode.PASSIVE
+            )
+            if allowed
+            else ScopeMode.BLOCKED,
+            target=clean_target,
+            action=action,
+            reason=str(policy.get("reason") or reason or ""),
+        )
+
+
+def _validate_approval_scope_precheck(
+    existing: Dict[str, Any],
+    in_scope: List[str],
+    out_of_scope: List[str],
+) -> Dict[str, Any]:
+    """Fail-closed scope/SSRF/risk validation before persisting an approval decision."""
+    if not in_scope:
+        return {
+            "allowed": False,
+            "status": "BLOCKED_SCOPE",
+            "reason": "No authorized target scope configured (empty in_scope fails closed).",
+        }
+    target_str = str(existing.get("target") or "").strip()
+    host_out_scope, _ = split_out_of_scope_exclusions(out_of_scope)
+    ok_tgt, reason_tgt, policy_tgt = validate_scan_target(
+        target_str,
+        scope=in_scope,
+        out_of_scope=out_of_scope,
+        engagement_id=existing.get("engagement_id"),
+        action_type=existing["action_type"],
+    )
+    if not ok_tgt:
+        blocked = dict(policy_tgt or {})
+        blocked["allowed"] = False
+        blocked["reason"] = reason_tgt or str(blocked.get("reason") or "Blocked by ScopeGuard")
+        return blocked
+    return evaluate_action_policy(
+        action_type=existing["action_type"],
+        target=target_str,
+        tool_name=existing.get("tool_name") or "",
+        command_args=existing.get("command_args") or "",
+        in_scope=in_scope,
+        out_of_scope=host_out_scope,
+        allow_active_tests=True,
+        rationale=existing.get("rationale") or "",
+    )
+
+
 @require_http_methods(["POST"])
 async def platform_approval_decide_view(
     request: HttpRequest, approval_id: str
@@ -576,6 +717,8 @@ async def platform_approval_decide_view(
             status=409,
         )
 
+    in_scope: List[str] = []
+    out_of_scope: List[str] = []
     if decision == "approved":
         eng = (
             store.get_engagement(existing["engagement_id"])
@@ -584,16 +727,7 @@ async def platform_approval_decide_view(
         )
         in_scope = [str(s).strip() for s in ((eng or {}).get("in_scope") or []) if str(s).strip()]
         out_of_scope = [str(s).strip() for s in ((eng or {}).get("out_of_scope") or []) if str(s).strip()]
-        policy = evaluate_action_policy(
-            action_type=existing["action_type"],
-            target=existing.get("target") or "",
-            tool_name=existing.get("tool_name") or "",
-            command_args=existing.get("command_args") or "",
-            in_scope=in_scope,
-            out_of_scope=out_of_scope,
-            allow_active_tests=True,
-            rationale=existing.get("rationale") or "",
-        )
+        policy = _validate_approval_scope_precheck(existing, in_scope, out_of_scope)
         if not policy.get("allowed"):
             rejected = store.decide_approval(
                 approval_id,
@@ -636,41 +770,75 @@ async def platform_approval_decide_view(
         if updated.get("action_type") == "RUN_TOOL" or (
             updated.get("tool_name") and updated.get("action_type") not in {"platform_run", "scan", "mission", "pipeline"}
         ):
-            from core.gateway.policy_engine import PolicyEngine
-            from core.gateway.schemas import ActionProposal
-            from core.gateway.tool_gateway import GovernedToolGateway
-            from core.scope_guard import ScopeGuard
+            try:
+                from core.gateway.policy_engine import PolicyEngine
+                from core.gateway.schemas import ActionProposal
+                from core.gateway.tool_gateway import GovernedToolGateway
 
-            eng_id = updated.get("engagement_id")
-            eng = store.get_engagement(eng_id) if eng_id else None
-            sg = ScopeGuard(
-                in_scope=list((eng or {}).get("in_scope") or ([updated["target"]] if updated.get("target") else [])),
-                out_of_scope=list((eng or {}).get("out_of_scope") or []),
-            )
-            gw = GovernedToolGateway(policy_engine=PolicyEngine(scope_guard=sg))
-            proposal = ActionProposal(
-                proposing_agent="ApprovalQueue",
-                target=str(updated.get("target") or ""),
-                tool_name=str(updated.get("tool_name") or "nmap"),
-                command_args=str(updated.get("command_args") or updated.get("target") or ""),
-                action_type="CLI_TOOL",
-                rationale=str(updated.get("rationale") or "Operator approved action"),
-            )
-            gw_res = gw.execute_proposal(proposal)
-            if inspect.isawaitable(gw_res):
-                gw_res = await gw_res
-            execution = {
-                "executed": bool(getattr(gw_res, "success", False)),
-                "blocked": bool(getattr(gw_res, "blocked", False)),
-                "returncode": getattr(gw_res, "returncode", 0),
-                "stdout_excerpt": str(getattr(gw_res, "raw_stdout", "") or "")[:2000],
-                "stderr_excerpt": str(getattr(gw_res, "raw_stderr", "") or "")[:1000],
-                "action_type": updated.get("action_type"),
-                "target": updated.get("target"),
-                "approval_id": approval_id,
-            }
+                eng_id = updated.get("engagement_id")
+                sg = _ApprovalScopeGuardAdapter(
+                    in_scope=in_scope,
+                    out_of_scope=out_of_scope,
+                    engagement_id=eng_id,
+                    allow_active_tests=True,
+                )
+                gw = GovernedToolGateway(policy_engine=PolicyEngine(scope_guard=sg))
+                proposal_action = (
+                    "HTTP_REQUEST"
+                    if str(updated.get("action_type") or "").upper() == "HTTP_REQUEST"
+                    else "CLI_TOOL"
+                )
+                proposal = ActionProposal(
+                    proposing_agent="ApprovalQueue",
+                    target=str(updated.get("target") or ""),
+                    tool_name=str(updated.get("tool_name") or "nmap"),
+                    command_args=str(updated.get("command_args") or updated.get("target") or ""),
+                    action_type=proposal_action,
+                    rationale=str(updated.get("rationale") or "Operator approved action"),
+                )
+                gw_res = gw.execute_proposal(proposal)
+                if inspect.isawaitable(gw_res):
+                    gw_res = await gw_res
+                execution = {
+                    "executed": bool(getattr(gw_res, "success", False)),
+                    "blocked": bool(getattr(gw_res, "blocked", False)),
+                    "returncode": getattr(gw_res, "returncode", 0),
+                    "stdout_excerpt": str(getattr(gw_res, "raw_stdout", "") or "")[:2000],
+                    "stderr_excerpt": str(getattr(gw_res, "raw_stderr", "") or "")[:1000],
+                    "error": getattr(gw_res, "error", None),
+                    "action_type": updated.get("action_type"),
+                    "target": updated.get("target"),
+                    "approval_id": approval_id,
+                }
+            except Exception as exc:
+                logger.exception("Approved tool execution failed for %s", approval_id)
+                execution = {
+                    "executed": False,
+                    "blocked": False,
+                    "returncode": -1,
+                    "stdout_excerpt": "",
+                    "stderr_excerpt": str(exc)[:1000],
+                    "error": str(exc),
+                    "action_type": updated.get("action_type"),
+                    "target": updated.get("target"),
+                    "approval_id": approval_id,
+                }
         else:
-            execution = await execute_approved_action(updated)
+            try:
+                execution = await execute_approved_action(updated)
+            except Exception as exc:
+                logger.exception("Approved action execution failed for %s", approval_id)
+                execution = {
+                    "executed": False,
+                    "blocked": False,
+                    "returncode": -1,
+                    "stdout_excerpt": "",
+                    "stderr_excerpt": str(exc)[:1000],
+                    "error": str(exc),
+                    "action_type": updated.get("action_type"),
+                    "target": updated.get("target"),
+                    "approval_id": approval_id,
+                }
 
     return django_json(
         {

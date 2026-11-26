@@ -242,3 +242,112 @@ def test_hmac_policy_secret_persists_and_detects_tampering(tmp_path, monkeypatch
         status_bad = client.get("/api/control/redteam-policy").json()
         assert status_bad["active"] is False
         assert status_bad["valid_signature"] is False
+
+
+def test_approval_decide_unmocked_gateway_and_scope_boundaries(isolated_platform_client, monkeypatch):
+    """Un-mocked GovernedToolGateway + PolicyEngine regression coverage for /api/platform/approvals/<id>/decide."""
+    import shutil
+    import sys
+    import core.platform_store as ps
+
+    store = ps.get_platform_store()
+
+    # 1. Explicit lab engagement for 127.0.0.1
+    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
+    eng_resp = isolated_platform_client.post(
+        "/api/platform/engagements",
+        json={
+            "name": "Unmocked Lab",
+            "target": "http://127.0.0.1:8080",
+            "in_scope": ["127.0.0.1", "example.com"],
+            "out_of_scope": ["127.0.0.1:8080/logout", "blocked.example.com"],
+            "set_active": True,
+        },
+    )
+    assert eng_resp.status_code == 201, eng_resp.text
+    eid = eng_resp.json()["engagement_id"]
+
+    # 2. SSRF metadata, RFC1918, excluded path, and unscoped approvals fail 403 BEFORE 'approved' is persisted
+    for label, case_eid, tgt, cmd in (
+        ("metadata", eid, "http://169.254.169.254/latest/meta-data/", "http://169.254.169.254/latest/meta-data/"),
+        ("rfc1918", eid, "http://10.0.0.1/admin", "http://10.0.0.1/admin"),
+        ("excluded_path", eid, "http://127.0.0.1:8080/logout", "http://127.0.0.1:8080/logout"),
+        ("out_of_scope", eid, "https://blocked.example.com/api", "https://blocked.example.com/api"),
+        ("unscoped", None, "https://example.com/api", "https://example.com/api"),
+    ):
+        apr = store.create_approval(
+            action_type="RUN_TOOL",
+            target=tgt,
+            tool_name="python",
+            command_args=cmd,
+            engagement_id=case_eid,
+            rationale=f"Negative unmocked check: {label}",
+        )
+        res = isolated_platform_client.post(
+            f"/api/platform/approvals/{apr['approval_id']}/decide",
+            json={"decision": "approved"},
+        )
+        assert res.status_code == 403, f"Expected 403 for {label}, got {res.status_code}: {res.text}"
+        persisted = store.get_approval(apr["approval_id"])
+        assert persisted is not None
+        assert persisted["status"] == "rejected"
+
+    # 3. With HUNTER_ALLOW_LOCALHOST_SCOPE disabled, loopback approval fails 403 before approval persists
+    monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
+    loop_apr = store.create_approval(
+        action_type="RUN_TOOL",
+        target="http://127.0.0.1:8080/api/item",
+        tool_name="python",
+        command_args="-V",
+        engagement_id=eid,
+        rationale="Loopback without opt-in",
+    )
+    loop_res = isolated_platform_client.post(
+        f"/api/platform/approvals/{loop_apr['approval_id']}/decide",
+        json={"decision": "approved"},
+    )
+    assert loop_res.status_code == 403
+    assert store.get_approval(loop_apr["approval_id"])["status"] == "rejected"
+
+    # 4. With HUNTER_ALLOW_LOCALHOST_SCOPE=1, un-mocked GovernedToolGateway executes real command without HTTP 500
+    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
+    py_tool = "python" if shutil.which("python") else ("python3" if shutil.which("python3") else Path(sys.executable).name)
+    ok_apr = store.create_approval(
+        action_type="RUN_TOOL",
+        target="http://127.0.0.1:8080/api/item",
+        tool_name=py_tool,
+        command_args="-V",
+        engagement_id=eid,
+        rationale="Unmocked scoped command execution",
+    )
+    ok_res = isolated_platform_client.post(
+        f"/api/platform/approvals/{ok_apr['approval_id']}/decide",
+        json={"decision": "approved", "note": "Unmocked gateway pass"},
+    )
+    assert ok_res.status_code == 200, ok_res.text
+    body = ok_res.json()
+    assert body["decision"] == "approved"
+    assert body["approval"]["status"] == "approved"
+    assert body["execution"]["blocked"] is False
+    assert body["execution"]["executed"] is True
+    assert body["execution"]["returncode"] == 0
+    assert "python" in (body["execution"]["stdout_excerpt"] + body["execution"]["stderr_excerpt"]).lower()
+
+    # 5. Missing binary on an approved scoped target returns clean 200 (executed=False), never HTTP 500
+    missing_apr = store.create_approval(
+        action_type="RUN_TOOL",
+        target="https://app.example.com",
+        tool_name="nonexistent_hunter_probe_bin",
+        command_args="app.example.com",
+        engagement_id=eid,
+        rationale="Missing binary should not 500",
+    )
+    miss_res = isolated_platform_client.post(
+        f"/api/platform/approvals/{missing_apr['approval_id']}/decide",
+        json={"decision": "approved"},
+    )
+    assert miss_res.status_code == 200, miss_res.text
+    miss_body = miss_res.json()
+    assert miss_body["decision"] == "approved"
+    assert miss_body["execution"]["blocked"] is False
+    assert miss_body["execution"]["executed"] is False

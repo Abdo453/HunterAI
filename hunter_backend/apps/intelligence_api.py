@@ -412,12 +412,37 @@ class AttackGraphSnapshotView(APIView):
 
             g = AttackSurfaceGraph()
             exported = g.export_graph()
-            exported.setdefault("target", "target.local")
-            exported.setdefault("summary", {"nodes_count": len(exported.get("nodes", {})), "edges_count": len(exported.get("edges", []))})
-            exported.setdefault("edges", [])
+            if not isinstance(exported, dict):
+                exported = {}
+            raw_nodes = exported.get("nodes")
+            raw_edges = exported.get("edges")
+            nodes = (
+                list(raw_nodes.values())
+                if isinstance(raw_nodes, dict)
+                else (raw_nodes if isinstance(raw_nodes, list) else [])
+            )
+            edges = (
+                list(raw_edges.values())
+                if isinstance(raw_edges, dict)
+                else (raw_edges if isinstance(raw_edges, list) else [])
+            )
+            exported["nodes"] = nodes
+            exported["edges"] = edges
+            exported.setdefault("target", exported.get("target_domain") or "target.local")
+            exported["summary"] = {
+                "nodes_count": len(nodes),
+                "edges_count": len(edges),
+            }
             return ok_json(exported)
         except Exception:
-            return ok_json({"target": "target.local", "summary": {}, "nodes": {}, "edges": []})
+            return ok_json(
+                {
+                    "target": "target.local",
+                    "summary": {"nodes_count": 0, "edges_count": 0},
+                    "nodes": [],
+                    "edges": [],
+                }
+            )
 
 
 @require_http_methods(["POST"])
