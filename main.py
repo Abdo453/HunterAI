@@ -2,7 +2,7 @@
 """
 PentestAI Unified — Entry Point
 
-  python main.py              -> Web UI  http://localhost:7070
+  python main.py              -> Web UI  http://localhost:8000
   python main.py --cli        -> CLI
   python main.py -t 192.168.1.1 --mode full  -> direct scan
 """
@@ -33,7 +33,7 @@ def main():
     p.add_argument("--browser-type", choices=["firefox", "chromium", "webkit"], default=os.getenv("BROWSER_TYPE", "firefox"), help="Headless browser engine (default: firefox)")
     p.add_argument("--firefox", dest="browser_type", action="store_const", const="firefox", help="Force Firefox browser engine (recommended for Kali Linux)")
     p.add_argument("--chromium", "--chrome", dest="browser_type", action="store_const", const="chromium", help="Use Chromium browser engine")
-    p.add_argument("--port", type=int, default=int(os.getenv("WEB_PORT","7070")))
+    p.add_argument("--port", type=int, default=int(os.getenv("WEB_PORT", "8000")))
     p.add_argument("--host", default=os.getenv("WEB_HOST", "127.0.0.1"), help="Host to bind Web UI")
     # Keep the dashboard local by default. This does not affect Burp Suite or
     # outbound scan traffic; set WEB_HOST=0.0.0.0 only for remote dashboard access.
@@ -179,17 +179,21 @@ def main():
     except Exception as e:
         print(f"[*] AI Diagnostics notice: {e}")
 
-    # Web UI (default)
+    # Unified Django ASGI Web Backend
     try:
         import uvicorn
-        print(f"\n[*] PentestAI Unified - Web UI Server Starting...")
-        print(f"    🟢 Dashboard URL -> http://localhost:{args.port}")
-        print(f"    🟢 Remote Access -> http://{args.host}:{args.port}")
-        print(f"    Taskade: {'ENABLED' if os.getenv('TASKADE_API_KEY') else 'disabled'}")
-        print(f"    👉 افتح المتصفح الآن على: http://localhost:{args.port}")
-        print(f"    (الخادم شغال وينتظر طلبات المتصفح - اضغط Ctrl+C للإيقاف)\n")
-        uvicorn.run("ui.web.app:app", host=args.host, port=args.port,
-                    reload=False, log_level="info")
+        print(f"\n[*] HunterAI Unified - Django ASGI Server Starting...")
+        print(f"    -> API / ASGI URL -> http://{args.host}:{args.port}")
+        print(f"    -> Next.js UI URL -> http://127.0.0.1:3000")
+        print(f"    Taskade: {'ENABLED' if os.getenv('TASKADE_API_KEY') else 'disabled'}\n")
+        uvicorn.run(
+            "hunter_backend.asgi:application",
+            host=args.host,
+            port=args.port,
+            workers=1,
+            reload=False,
+            log_level="info",
+        )
 
     except ImportError:
         print("[!] uvicorn not found - pip install uvicorn")

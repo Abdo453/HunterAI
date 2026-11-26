@@ -101,6 +101,6 @@ class SupplyChainDefenseGuard:
                 break
 
         if not is_allowed:
-            return False, f"STRICT SCOPE REJECTION: Target '{target_url}' is strictly outside the authorized scope: {authorized_scope}"
+            return False, f"STRICT SCOPE REJECTION: Target '{target_url}' is strictly outside authorized scope: {authorized_scope}"
 
         return True, "In Scope"

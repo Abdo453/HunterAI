@@ -1,40 +1,48 @@
 """
-HunterAI Adversarial Evidence Court (المحكمة विरोधية للأدلة)
-مقتبس من فكرة HunterAI Architecture: Finder → Advocate → Adversarial Prosecutor → Verifier → Justice
+HunterAI Adversarial Evidence Court Compatibility Shim
+======================================================
+Legacy compatibility adapter preserving ``Verdict``, ``CourtEvidence``,
+``CourtArgument``, ``CourtCase``, and ``EvidenceCourt.try_case()`` while
+delegating ALL proof adjudication to the single authoritative
+``core.evidence_court.EvidenceCourt.adjudicate()``.
 
-المبدأ: لا نتيجة تُبلَغ كـ Confirmed إلا بعد اجتياز محاكمة من خمسة أدوار:
-1. Finder — يكتشف الدليل الأولي
-2. Advocate — يدافع عن الدليل ويجمع الأدلة المؤيدة
-3. Adversarial Prosecutor — يتحدى الدليل ويبحث عن الثغرات في الاستدلال
-4. Verifier — يتحقق من إعادة الإنتاج والاستقلالية
-5. Justice — يصدر الحكم النهائي (Confirmed / Rejected / Inconclusive)
+No confidence-score arithmetic (``>= 0.75``) can ever confirm a finding.
 """
 from __future__ import annotations
 
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
+from core.evidence_court import (
+    CausalEvidence,
+    CourtJudgment,
+    CourtVerdict as CanonicalCourtVerdict,
+    EvidenceCourt as AuthoritativeEvidenceCourt,
+    ProofPayload,
+    ProofStrength,
+)
 
 log = logging.getLogger("hunter_ai.evidence_court")
 
 
 class Verdict(str, Enum):
-    CONFIRMED = "confirmed"      # أثبتت الأدلة بعد المحاكمة
-    REJECTED = "rejected"        # دحضت الأدلة أو كاذبة
-    INCONCLUSIVE = "inconclusive" # غير حاسمة — تحتاج تحقيق يدوي
-    ESCALATED = "escalated"      # أُحيلت لمراجعة بشرية
+    CONFIRMED = "confirmed"        # Canonical CONFIRMED with DERIVED proof
+    REJECTED = "rejected"          # Canonical REJECTED / FALSE_POSITIVE / DISPROVED / BLOCKED / OUT_OF_SCOPE
+    INCONCLUSIVE = "inconclusive"  # Canonical UNVERIFIED / CANDIDATE / INCONCLUSIVE / UNAVAILABLE / ERROR
+    ESCALATED = "escalated"        # Escalated for human review
 
 
 @dataclass
 class CourtEvidence:
-    """قطعة أدلة واحدة تُعرض على المحكمة"""
+    """Single piece of evidence submitted to the compatibility tribunal."""
     evidence_id: str
-    source: str                  # أي أداة اكتشفتها (nuclei, sherlock, ...)
-    type: str                    # username_match, open_port, sqli_indicator, ...
+    source: str
+    type: str
     description: str
-    confidence: float            # 0.0 → 1.0
+    confidence: float
     raw_data: Dict[str, Any] = field(default_factory=dict)
     captured_at: float = field(default_factory=time.time)
 
@@ -52,11 +60,11 @@ class CourtEvidence:
 
 @dataclass
 class CourtArgument:
-    """حجة من أحد الأدوار في المحكمة"""
-    role: str                    # finder, advocate, prosecutor, verifier, justice
+    """Argument recorded during compatibility tribunal adjudication."""
+    role: str
     argument: str
     supporting_evidence: List[str] = field(default_factory=list)
-    confidence_delta: float = 0.0  # كم تغيرت الثقة بسبب هذه الحجة
+    confidence_delta: float = 0.0
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict:
@@ -71,16 +79,19 @@ class CourtArgument:
 
 @dataclass
 class CourtCase:
-    """قضية واحدة تمثل نتيجة أمنية واحدة تُعرض على المحكمة"""
+    """Case record tracking canonical judgment and mapped legacy Verdict."""
     case_id: str
     finding_type: str
     target: str
     evidence: List[CourtEvidence] = field(default_factory=list)
     arguments: List[CourtArgument] = field(default_factory=list)
-    verdict: str = Verdict.INCONCLUSIVE
+    verdict: Verdict = Verdict.INCONCLUSIVE
     final_confidence: float = 0.0
     reasoning_summary: str = ""
     requires_manual_review: bool = False
+    canonical_verdict: str = CanonicalCourtVerdict.UNVERIFIED.value
+    proof_strength: str = ProofStrength.NONE.value
+    court_judgment_id: str = ""
     created_at: float = field(default_factory=time.time)
     concluded_at: Optional[float] = None
 
@@ -91,7 +102,10 @@ class CourtCase:
             "target": self.target,
             "evidence": [e.to_dict() for e in self.evidence],
             "arguments": [a.to_dict() for a in self.arguments],
-            "verdict": self.verdict,
+            "verdict": self.verdict.value if isinstance(self.verdict, Enum) else str(self.verdict),
+            "canonical_verdict": self.canonical_verdict,
+            "proof_strength": self.proof_strength,
+            "court_judgment_id": self.court_judgment_id,
             "final_confidence": round(self.final_confidence, 3),
             "reasoning_summary": self.reasoning_summary,
             "requires_manual_review": self.requires_manual_review,
@@ -101,16 +115,87 @@ class CourtCase:
 
 
 class EvidenceCourt:
-    """
-    محكمة الأدلة विरोधية — تصدر أحكامًا على النتائج الأمنية قبل الإبلاغ عنها.
-    كل نتيجة تمر عبر خمسة أدوار قبل أن تُصنف كـ Confirmed.
-    """
+    """Compatibility tribunal delegating every verdict to canonical core.evidence_court.EvidenceCourt."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.cases: Dict[str, CourtCase] = {}
         self.verdict_history: List[CourtCase] = []
 
-    # ── واجهة رئيسية ──────────────────────────────────────────────
+    @staticmethod
+    def _extract_adjudication_inputs(
+        finding_type: str,
+        evidence: List[CourtEvidence],
+    ) -> Tuple[Dict[str, Any], Optional[ProofPayload], Optional[CausalEvidence], bool, bool]:
+        """Extract raw checkable artifacts from legacy CourtEvidence items."""
+        verifier_result: Dict[str, Any] = {}
+        proof_payload: Optional[ProofPayload] = None
+        causal_evidence: Optional[CausalEvidence] = None
+        is_in_scope = True
+        is_blocked_by_waf = False
+
+        for item in evidence:
+            raw = item.raw_data if isinstance(item.raw_data, dict) else {}
+            if raw.get("is_in_scope") is False:
+                is_in_scope = False
+            if raw.get("waf_blocked"):
+                is_blocked_by_waf = True
+            if raw.get("is_reflection"):
+                verifier_result["is_reflection"] = True
+            if raw.get("length_delta_only"):
+                verifier_result["length_delta_only"] = True
+            if raw.get("status_change_only"):
+                verifier_result["status_change_only"] = True
+            if raw.get("error") or raw.get("exception"):
+                verifier_result["error"] = raw.get("error") or raw.get("exception")
+            if raw.get("timeout") or raw.get("timed_out") or raw.get("unavailable") or raw.get("missing_binary"):
+                verifier_result["unavailable"] = True
+                verifier_result["reason"] = str(raw.get("reason") or "verifier_unavailable")
+            if raw.get("reproduced"):
+                verifier_result["reproduced"] = True
+            if "status_code" in raw:
+                verifier_result["status_code"] = raw["status_code"]
+
+            # Structured CausalEvidence object if present
+            ce = raw.get("causal_evidence")
+            if isinstance(ce, CausalEvidence):
+                causal_evidence = ce
+                verifier_result["reproduced"] = True
+
+            # Explicit ProofPayload
+            if proof_payload is None and raw.get("proof_payload"):
+                proof_payload = ProofPayload.from_mapping(raw.get("proof_payload"))
+                if proof_payload is not None:
+                    verifier_result["reproduced"] = True
+
+            # Raw HTTP response / baseline / token fields inside raw_data
+            if proof_payload is None and any(
+                k in raw for k in ("response_text", "response_body", "expected_token", "expected_result")
+            ):
+                proof_payload = ProofPayload(
+                    response_text=str(raw.get("response_text") or raw.get("response_body") or ""),
+                    baseline_text=str(raw.get("baseline_text") or raw.get("baseline_body") or ""),
+                    artifact_type=str(raw.get("artifact_type") or finding_type),
+                    probed_expression=str(raw.get("probed_expression") or "53+19"),
+                    expected_result=str(raw.get("expected_result") or "72"),
+                    expected_token=str(raw.get("expected_token") or ""),
+                    metadata=dict(raw.get("metadata") or raw),
+                )
+                verifier_result["reproduced"] = True
+
+        # If evidence exists without explicit failure/reflection flags, mark signal observed (NOT proven)
+        if evidence and not verifier_result:
+            verifier_result = {"reproduced": False, "status": "CANDIDATE"}
+
+        return verifier_result, proof_payload, causal_evidence, is_in_scope, is_blocked_by_waf
+
+    @staticmethod
+    def _map_canonical_to_legacy(judgment: CourtJudgment) -> Tuple[Verdict, bool]:
+        canon = judgment.canonical_verdict
+        if canon == CanonicalCourtVerdict.CONFIRMED and judgment.proof_strength == ProofStrength.DERIVED.value:
+            return Verdict.CONFIRMED, False
+        if canon == CanonicalCourtVerdict.REJECTED:
+            return Verdict.REJECTED, False
+        return Verdict.INCONCLUSIVE, True
 
     async def try_case(
         self,
@@ -120,152 +205,72 @@ class EvidenceCourt:
         evidence: List[CourtEvidence],
         initial_confidence: float = 0.5,
     ) -> CourtCase:
-        """
-        محاكمة قضية واحدة عبر الأدوار الخمسة.
-        يرجع CourtCase مع الحكم النهائي.
-        """
+        """Adjudicate a case by delegating directly to canonical core.evidence_court.EvidenceCourt."""
+        verifier_result, proof_payload, causal_evidence, is_in_scope, is_blocked_by_waf = (
+            self._extract_adjudication_inputs(finding_type, evidence)
+        )
+
+        judgment = AuthoritativeEvidenceCourt.adjudicate(
+            target_url=target,
+            parameter="",
+            vuln_class=finding_type,
+            finder_claim={
+                "case_id": case_id,
+                "evidence_count": len(evidence),
+                "sources": sorted({e.source for e in evidence}),
+            },
+            verifier_result=verifier_result or None,
+            is_in_scope=is_in_scope,
+            is_blocked_by_waf=is_blocked_by_waf,
+            causal_evidence=causal_evidence,
+            proof_payload=proof_payload,
+            allow_declared_proof=False,
+        )
+
+        legacy_verdict, requires_manual = self._map_canonical_to_legacy(judgment)
+
         case = CourtCase(
             case_id=case_id,
             finding_type=finding_type,
             target=target,
             evidence=evidence,
-            verdict=Verdict.INCONCLUSIVE,
-            final_confidence=initial_confidence,
+            verdict=legacy_verdict,
+            final_confidence=judgment.confidence_score,
+            reasoning_summary=judgment.adjudication_rationale,
+            requires_manual_review=requires_manual,
+            canonical_verdict=judgment.canonical_verdict.value,
+            proof_strength=judgment.proof_strength,
+            court_judgment_id=judgment.judgment_id,
+            concluded_at=time.time(),
         )
 
-        # 역할 1: Finder — تقديم الدليل الأولي
-        case.arguments.append(CourtArgument(
-            role="finder",
-            argument=f"تم اكتشاف {finding_type} على {target} من خلال أداة OSINT/سكانر أولية",
-            supporting_evidence=[e.evidence_id for e in evidence],
-            confidence_delta=0.0,
-        ))
-
-        # 역할 2: Advocate — الدفاع عن الدليل
-        advocate_conf = self._advocate_role(case)
-        case.final_confidence = advocate_conf
-
-        # 역할 3: Adversarial Prosecutor — التحدي والبحث عن ثغرات
-        prosecutor_conf = self._prosecutor_role(case)
-        case.final_confidence = prosecutor_conf
-
-        # 역할 4: Verifier — التحقق من إعادة الإنتاج والاستقلالية
-        verifier_conf = self._verifier_role(case)
-        case.final_confidence = verifier_conf
-
-        # 역할 5: Justice — الحكم النهائي
-        verdict, requires_manual = self._justice_role(case)
-        case.verdict = verdict
-        case.requires_manual_review = requires_manual
-        case.concluded_at = time.time()
+        case.arguments.extend([
+            CourtArgument(
+                role="finder",
+                argument=f"Submitted {len(evidence)} evidence item(s) for {finding_type} on {target}.",
+                supporting_evidence=[e.evidence_id for e in evidence],
+            ),
+            CourtArgument(
+                role="verifier",
+                argument=f"Canonical EvidenceCourt proof evaluation: strength={judgment.proof_strength}, kind={judgment.proof_kind or 'none'}.",
+                supporting_evidence=[e.evidence_id for e in evidence],
+            ),
+            CourtArgument(
+                role="justice",
+                argument=f"Canonical verdict={judgment.canonical_verdict.value} -> legacy={legacy_verdict.value}. {judgment.adjudication_rationale}",
+            ),
+        ])
 
         self.cases[case_id] = case
         self.verdict_history.append(case)
-
         log.info(
-            f"[EvidenceCourt] Case {case_id}: {verdict.value} "
-            f"(confidence={case.final_confidence:.2f}, manual_review={requires_manual})"
+            "[EvidenceCourt-Shim] Case %s: legacy=%s canonical=%s proof_strength=%s",
+            case_id,
+            legacy_verdict.value,
+            judgment.canonical_verdict.value,
+            judgment.proof_strength,
         )
         return case
-
-    # ── الأدوار الخمسة ────────────────────────────────────────────
-
-    def _advocate_role(self, case: CourtCase) -> float:
-        """المدافع — يبحث عن أدلة مؤيدة ويقوي القضية"""
-        conf = case.final_confidence
-        supporting = sum(1 for e in case.evidence if e.confidence > 0.6)
-        if supporting >= 2:
-            conf += 0.15
-            case.arguments.append(CourtArgument(
-                role="advocate",
-                argument=f"دعمت القضية {supporting} أدلة عالية الثقة، مما يزيد من مصداقية الاكتشاف",
-                supporting_evidence=[e.evidence_id for e in case.evidence if e.confidence > 0.6],
-                confidence_delta=+0.15,
-            ))
-        else:
-            case.arguments.append(CourtArgument(
-                role="advocate",
-                argument="أدلة محدودة — لا يمكن تعزيز الثقة بشكل كبير",
-                confidence_delta=0.0,
-            ))
-        return min(conf, 1.0)
-
-    def _prosecutor_role(self, case: CourtCase) -> float:
-        """المدعي العام المعارض — يتحدى الدليل ويبحث عن تناقضات"""
-        conf = case.final_confidence
-        penalties = 0.0
-
-        # إذا كان المصدر أداة واحدة فقط → خصم
-        sources = {e.source for e in case.evidence}
-        if len(sources) == 1:
-            penalties += 0.20
-            case.arguments.append(CourtArgument(
-                role="prosecutor",
-                argument="المصدر الوحيد للأدلة — قد يكون نتيجة كاذبة (False Positive) من أداة واحدة",
-                confidence_delta=-0.20,
-            ))
-
-        # إذا كانت الثقة الأولية منخفضة → خصم
-        if case.final_confidence < 0.4:
-            penalties += 0.15
-            case.arguments.append(CourtArgument(
-                role="prosecutor",
-                argument="ثقة أولية منخفضة — الاكتشاف غير مؤكد",
-                confidence_delta=-0.15,
-            ))
-
-        # إذا لم تكن هناك أدلة corroborating → خصم
-        corroborating = [e for e in case.evidence if e.type == "corroboration"]
-        if not corroborating:
-            penalties += 0.10
-            case.arguments.append(CourtArgument(
-                role="prosecutor",
-                argument="لا توجد أدلة مصادقة (corroboration) مستقلة",
-                confidence_delta=-0.10,
-            ))
-
-        case.final_confidence = max(conf - penalties, 0.0)
-        return case.final_confidence
-
-    def _verifier_role(self, case: CourtCase) -> float:
-        """المدقق — يتحقق من إمكانية إعادة الإنتاج والاستقلالية"""
-        conf = case.final_confidence
-
-        # إذا كان هناك أدلة من مصادر متعددة → زيادة الثقة
-        sources = {e.source for e in case.evidence}
-        if len(sources) >= 2:
-            conf += 0.10
-            case.arguments.append(CourtArgument(
-                role="verifier",
-                argument=f"أُكدت النتيجة من {len(sources)} مصادر مختلفة — زيادة الموثوقية",
-                confidence_delta=+0.10,
-            ))
-
-        # إذا كانت هناك أدلة من نوع E1 (مؤكدة) → زيادة
-        e1_count = sum(1 for e in case.evidence if "E1" in str(e.raw_data.get("evidence_level", "")))
-        if e1_count > 0:
-            conf += 0.10
-            case.arguments.append(CourtArgument(
-                role="verifier",
-                argument=f"يوجد {e1_count} أدلة على مستوى E1 (مؤكدة) — 강화 الثقة",
-                confidence_delta=+0.10,
-            ))
-
-        case.final_confidence = min(conf, 1.0)
-        return case.final_confidence
-
-    def _justice_role(self, case: CourtCase) -> tuple:
-        """القاضي — يصدر الحكم النهائي"""
-        conf = case.final_confidence
-
-        if conf >= 0.75:
-            return Verdict.CONFIRMED, False
-        elif conf >= 0.40:
-            return Verdict.INCONCLUSIVE, True  # تحتاج مراجعة يدوية
-        else:
-            return Verdict.REJECTED, False
-
-    # ── استرجاع النتائج ──────────────────────────────────────────
 
     def get_confirmed_cases(self) -> List[CourtCase]:
         return [c for c in self.cases.values() if c.verdict == Verdict.CONFIRMED]
@@ -279,10 +284,9 @@ class EvidenceCourt:
     def get_all_cases(self) -> List[CourtCase]:
         return list(self.cases.values())
 
-    def clear(self):
+    def clear(self) -> None:
         self.cases.clear()
         self.verdict_history.clear()
 
 
-# مثيل افتراضي يمكن استخدامه في toda the system
 evidence_court = EvidenceCourt()

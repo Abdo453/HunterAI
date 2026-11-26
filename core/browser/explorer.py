@@ -90,6 +90,11 @@ class HumanLikeExplorationEngine:
         time_budget_sec: float = 120.0,
         coverage_target_pct: float = 80.0,
         on_progress_cb: Optional[Callable[[str], Any]] = None,
+        state_graph: Optional[ApplicationStateGraph] = None,
+        coverage: Optional[CoverageEngine] = None,
+        memory: Optional[ExplorationMemory] = None,
+        event_bus: Optional[BrowserEventBus] = None,
+        discovered_forms: Optional[List[Dict[str, Any]]] = None,
     ):
         self.session = session
         self.base_host = (urlparse(session.target_url).hostname or "").lower()
@@ -99,16 +104,30 @@ class HumanLikeExplorationEngine:
         self.coverage_target_pct = coverage_target_pct
         self.on_progress = on_progress_cb
 
-        self.state_graph = ApplicationStateGraph(self.base_host)
+        # Share injected triad instances directly so BrowserBrainLoop and Explorer
+        # observe the exact same StateGraph, CoverageEngine, Memory, and forms list.
+        self.state_graph = state_graph if state_graph is not None else ApplicationStateGraph(self.base_host)
         self.request_dedup = RequestDeduplicator()
-        self.memory = ExplorationMemory(self.base_host)
-        self.coverage = CoverageEngine(self.session.target_url)
-        self.event_bus = getattr(session, "event_bus", None) or BrowserEventBus()
+        self.memory = memory if memory is not None else ExplorationMemory(self.base_host)
+        self.coverage = coverage if coverage is not None else CoverageEngine(self.session.target_url)
+        self.event_bus = (
+            event_bus
+            if event_bus is not None
+            else (getattr(session, "event_bus", None) or BrowserEventBus())
+        )
 
         self.discovered_endpoints: Set[str] = set()
         self.discovered_params: Set[str] = set()
         self.discovered_js_files: Set[str] = set()
-        self.discovered_forms: List[Dict[str, Any]] = []
+        self.discovered_forms: List[Dict[str, Any]] = (
+            discovered_forms if discovered_forms is not None else []
+        )
+        self._discovered_form_signatures: Set[str] = {
+            str(f.get("signature"))
+            for f in self.discovered_forms
+            if isinstance(f, dict) and f.get("signature")
+        }
+        self.captured_pages: Dict[str, str] = {}
 
         # Queue: list of dict(url=str, depth=int, referrer=str)
         self._queue: List[Dict[str, Any]] = []
@@ -182,6 +201,7 @@ class HumanLikeExplorationEngine:
             if not html:
                 self.memory.record_action(selector="document", action_type="navigate", url=url, success=False, error="Empty HTML")
                 continue
+            self.captured_pages[url] = html
 
             # 2. Extract DOM and compute state
             dom_hash = DOMDiffEngine.compute_structural_hash(html)
@@ -194,22 +214,24 @@ class HumanLikeExplorationEngine:
             for a in actions:
                 self.coverage.register_action(f"{a.element_type}:{a.selector}")
 
-            state = self.state_graph.register_state(
-                url=url,
-                dom_hash=dom_hash,
-                title=page_title,
-                forms_count=sum(1 for a in actions if a.category == ActionCategory.USER_INPUT),
-                interactive_affordances=affordance_labels,
-            )
-            self.coverage.register_state(state.state_id, explored=True)
-            self.memory.record_seen_state(state.state_id)
+            # 4. Harvest endpoints, forms, inputs & JS from HTML & Network
+            page_forms_count, page_inputs_count = self._harvest_page_artifacts(html, url)
 
             # Detect semantic state
             detected_state = StateDetector.detect_state(url, html, self.session.cookies, self.session.local_storage)
             self.coverage.register_auth_state(detected_state.value)
 
-            # 4. Harvest endpoints & JS from HTML & Network
-            self._harvest_page_artifacts(html, url)
+            state = self.state_graph.register_state(
+                url=url,
+                dom_hash=dom_hash,
+                title=page_title,
+                auth_status=detected_state.value,
+                forms_count=max(page_forms_count, sum(1 for a in actions if a.element_type == "form")),
+                inputs_count=page_inputs_count,
+                interactive_affordances=affordance_labels,
+            )
+            self.coverage.register_state(state.state_id, explored=True)
+            self.memory.record_seen_state(state.state_id)
 
             # 5. Rank actions by Information Gain and execute top candidates
             ranked_actions = InteractionPlanner.rank_actions(
@@ -257,6 +279,7 @@ class HumanLikeExplorationEngine:
         )
 
         # Save artifacts
+        self.session.output_dir.mkdir(parents=True, exist_ok=True)
         self.state_graph.save_json(self.session.output_dir / "states.json")
         self.memory.save_json(self.session.output_dir / "exploration_memory.json")
         with open(self.session.output_dir / "exploration_manifest.json", "w", encoding="utf-8") as f:
@@ -266,7 +289,8 @@ class HumanLikeExplorationEngine:
         with open(self.session.output_dir / "discovered_endpoints.json", "w", encoding="utf-8") as f:
             json.dump(sorted(list(self.discovered_endpoints)), f, indent=2)
 
-        self.session.save_artifacts()
+        if hasattr(self.session, "save_artifacts"):
+            self.session.save_artifacts()
 
         # Print Coverage Summary Table
         cov_table = self.coverage.format_coverage_table()
@@ -286,22 +310,88 @@ class HumanLikeExplorationEngine:
             "params": sorted(list(self.discovered_params)),
             "js_urls": sorted(list(self.discovered_js_files)),
             "forms": self.discovered_forms,
+            "captured_pages": dict(self.captured_pages),
         }
 
-    def _harvest_page_artifacts(self, html: str, page_url: str):
-        """Extracts scripts, endpoints, and form fields from HTML and session network activity"""
+    def _harvest_page_artifacts(self, html: str, page_url: str) -> Tuple[int, int]:
+        """Extracts scripts, endpoints, and form fields from HTML and session network activity."""
         scripts = re.findall(r'<script[^>]+src=["\']([^"\'\s>]+)["\']', html, re.IGNORECASE)
         for s in scripts:
             full_s = urljoin(page_url, s)
             if self._is_in_scope(full_s):
+                is_new = full_s not in self.discovered_js_files
                 self.discovered_js_files.add(full_s)
                 self.coverage.register_js(full_s, analyzed=False)
+                if is_new and self.event_bus:
+                    self.event_bus.publish_sync(BrowserEvent(
+                        event_type=BrowserEventType.NEW_JS,
+                        source_url=page_url,
+                        data={"js_url": full_s},
+                    ))
 
         api_matches = re.findall(r'["\'](/(?:api|v1|v2|graphql|auth)/[^"\'\s<>]+)["\']', html)
         for ep in api_matches:
             full_ep = urljoin(page_url, ep)
             self.discovered_endpoints.add(full_ep)
             self.coverage.register_api(full_ep, observed=False)
+
+        # Harvest <form> elements and their inputs into shared discovered_forms & CoverageEngine
+        page_forms_count = 0
+        page_inputs_count = 0
+        try:
+            from core.code_intel.collector import PageCollector
+            bundle = PageCollector.collect_from_html(target_url=page_url, raw_html=html)
+            raw_forms = bundle.forms
+        except Exception:
+            raw_forms = []
+            for attrs, body in re.findall(r"<form\b([^>]*)>(.*?)</form>", html, flags=re.DOTALL | re.IGNORECASE):
+                action_m = re.search(r'action=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
+                method_m = re.search(r'method=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
+                inputs = [
+                    {"name": inp_name, "type": "text", "value": ""}
+                    for inp_name in re.findall(r'<(?:input|textarea|select)[^>]+name=["\']([^"\']+)["\']', body, re.IGNORECASE)
+                ]
+                raw_forms.append({
+                    "action": urljoin(page_url, action_m.group(1) if action_m else ""),
+                    "method": (method_m.group(1) if method_m else "GET").upper(),
+                    "inputs": inputs,
+                })
+
+        for form in raw_forms:
+            action_url = urljoin(page_url, str(form.get("action") or ""))
+            if not self._is_in_scope(action_url):
+                continue
+            method = str(form.get("method") or "GET").upper()
+            inputs = list(form.get("inputs") or [])
+            input_names = sorted({str(i.get("name") or "").strip() for i in inputs if isinstance(i, dict) and i.get("name")})
+            form_sig = f"{method}:{action_url}:{','.join(input_names)}"
+            page_forms_count += 1
+            page_inputs_count += len(input_names)
+
+            for name in input_names:
+                self.discovered_params.add(name)
+
+            self.coverage.register_form(form_sig, tested=False)
+            if form_sig not in self._discovered_form_signatures:
+                self._discovered_form_signatures.add(form_sig)
+                form_entry = {
+                    "action": action_url,
+                    "method": method,
+                    "inputs": inputs,
+                    "input_names": input_names,
+                    "page_url": page_url,
+                    "signature": form_sig,
+                }
+                self.discovered_forms.append(form_entry)
+                if hasattr(self.session, "discovered_forms") and isinstance(self.session.discovered_forms, list):
+                    if self.session.discovered_forms is not self.discovered_forms:
+                        self.session.discovered_forms.append(form_entry)
+                if self.event_bus:
+                    self.event_bus.publish_sync(BrowserEvent(
+                        event_type=BrowserEventType.FORM_DISCOVERED,
+                        source_url=page_url,
+                        data=form_entry,
+                    ))
 
         for req in self.session.network_history[-50:]:
             if self._is_in_scope(req.url):
@@ -311,6 +401,8 @@ class HumanLikeExplorationEngine:
                     self.coverage.register_api(req.url, observed=True)
                 for qk in parse_qs(parsed.query).keys():
                     self.discovered_params.add(qk)
+
+        return page_forms_count, page_inputs_count
 
     async def _explore_interactive_affordances(self, state: AppState, actions: List[ActionCandidate], current_html: str, current_url: str):
         """Interacts with highest information gain elements"""
@@ -330,18 +422,27 @@ class HumanLikeExplorationEngine:
             if not interacted:
                 self.memory.record_action(action.selector, "click", current_url, success=False, error="Selector not interactable")
                 continue
+            self.coverage.register_action(f"{action.element_type}:{action.selector}", executed=True)
 
             # Check DOM mutation
             after_html = await self.session.get_dom()
             if after_html:
                 diff = DOMDiffEngine.diff(current_html, after_html)
                 new_network = [r.to_dict() for r in self.session.network_history[network_snapshot_idx:]]
-                new_state_id = ApplicationStateGraph.generate_state_id(current_url, DOMDiffEngine.compute_structural_hash(after_html))
+                after_hash = DOMDiffEngine.compute_structural_hash(after_html)
+                new_state_id = ApplicationStateGraph.generate_state_id(current_url, after_hash, state.auth_status)
 
                 if diff.has_changes:
+                    new_state = self.state_graph.register_state(
+                        url=current_url,
+                        dom_hash=after_hash,
+                        title=state.title,
+                        auth_status=state.auth_status,
+                    )
+                    self.coverage.register_state(new_state.state_id, explored=True)
                     self.state_graph.record_transition(
                         from_state_id=state.state_id,
-                        to_state_id=new_state_id,
+                        to_state_id=new_state.state_id,
                         trigger_action=f"click:{action.label}",
                         network_requests=new_network,
                         dom_diff=diff.to_dict()

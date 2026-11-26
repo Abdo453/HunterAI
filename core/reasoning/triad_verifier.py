@@ -174,9 +174,14 @@ class TriadVerifier:
                     epistemic_verdict="PARTIALLY_VERIFIED",
                 )
 
-        # 2. Check for Control Equivalence (C produced the exact same response as E1)
+        # 2. Check for Control Equivalence (C produced the same response as E1,
+        #    either literally or after stripping volatile nonces/timestamps/jitter comments)
         # If adding benign text causes identical response as E1, behavior is benign input handling / noise.
-        if e1.status_code == c.status_code and e1.body == c.body:
+        from core.reasoning.causal_invariants import normalize_volatile_content
+        e1_norm = normalize_volatile_content(e1.body)
+        c_norm = normalize_volatile_content(c.body)
+        b_norm = normalize_volatile_content(b.body)
+        if e1.status_code == c.status_code and (e1.body == c.body or (not custom_invariant_evaluator and e1_norm == c_norm)):
             return TriadVerificationResult(
                 is_causally_differentiated=False,
                 control_divergence_explained=False,
@@ -189,7 +194,7 @@ class TriadVerifier:
             )
 
         # 3. Check for Zero Differentiation (E1 produced no change from Baseline)
-        if e1.status_code == b.status_code and e1.body == b.body and not custom_invariant_evaluator:
+        if e1.status_code == b.status_code and (e1.body == b.body or e1_norm == b_norm) and not custom_invariant_evaluator:
             return TriadVerificationResult(
                 is_causally_differentiated=False,
                 control_divergence_explained=True,

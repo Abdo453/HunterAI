@@ -13,9 +13,9 @@ depends_on:
   - live_host_detection
 next_skills:
   - parameter_discovery
-  - xss
-  - sqli
-  - idor
+  - xss_hunter
+  - sqli_hunter
+  - idor_tester
 fallback_skills:
   - api_surface_audit
 tools_required:

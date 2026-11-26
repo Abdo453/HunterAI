@@ -11,17 +11,19 @@ import os
 import sys
 
 _PKG = os.path.dirname(os.path.abspath(__file__))
-if _PKG not in sys.path:
-    sys.path.insert(0, _PKG)
+_PARENT = os.path.dirname(_PKG)
+for _p in (_PARENT, _PKG):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 
 def main():
-    import engine
+    from bughunter import engine
     engine.main()
 
 
 def agent_main():
-    import agent
+    from bughunter import agent
     agent.main()
 
 

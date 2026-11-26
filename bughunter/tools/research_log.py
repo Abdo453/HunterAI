@@ -10,9 +10,9 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from memory.hunt_journal import HuntJournal, default_journal_path
-from memory.research_case import build_false_positive_case, write_research_case
-from memory.schemas import (
+from bughunter.memory.hunt_journal import HuntJournal, default_journal_path
+from bughunter.memory.research_case import build_false_positive_case, write_research_case
+from bughunter.memory.schemas import (
     make_journal_entry,
     make_research_event,
 )

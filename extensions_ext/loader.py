@@ -32,7 +32,7 @@ class HostAPI:
                  tool_runner: Optional[Callable] = None,
                  llm_caller: Optional[Callable] = None):
         self._manifest = manifest
-        self._workspace = workspace
+        self._workspace = Path(workspace).resolve()
         self._tool_runner = tool_runner
         self._llm_caller = llm_caller
         self._granted = set(manifest.permissions)
@@ -46,14 +46,14 @@ class HostAPI:
     def read_workspace(self, relpath: str) -> bytes:
         self._check(Permission.READ_WORKSPACE)
         target = (self._workspace / relpath).resolve()
-        if not str(target).startswith(str(self._workspace.resolve())):
+        if not target.is_relative_to(self._workspace):
             raise PermissionDenied("خارج مجلد العمل (path traversal)")
         return target.read_bytes()
 
     def write_workspace(self, relpath: str, data: bytes) -> Path:
         self._check(Permission.WRITE_WORKSPACE)
         target = (self._workspace / relpath).resolve()
-        if not str(target).startswith(str(self._workspace.resolve())):
+        if not target.is_relative_to(self._workspace):
             raise PermissionDenied("خارج مجلد العمل (path traversal)")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
@@ -84,10 +84,10 @@ def activate_extension(
     tool_runner: Optional[Callable] = None,
     llm_caller: Optional[Callable] = None,
 ) -> ModuleType:
-    """تحميل إضافة وإرجاع الوحدة المحلّية + حقن الـ HostAPI."""
-    ext_dir = Path(ext_dir)
-    entry_path = (ext_dir / manifest.entry).resolve()
-    if not str(entry_path).startswith(str(ext_dir.resolve())):
+    """تحميل إضافة وإرجاع الوحدة المحلّية + حقن الـ HostAPI قبل التنفيذ."""
+    ext_dir_resolved = Path(ext_dir).resolve()
+    entry_path = (ext_dir_resolved / manifest.entry).resolve()
+    if not entry_path.is_relative_to(ext_dir_resolved):
         raise ExtensionError("entry خارج مجلد الإضافة")
     if not entry_path.exists():
         raise ExtensionError(f"entry غير موجود: {manifest.entry}")
@@ -98,19 +98,20 @@ def activate_extension(
         raise ExtensionError(f"تعذّر إنشاء spec لـ {entry_path}")
 
     module = importlib.util.module_from_spec(spec)
+    # Bind restricted HostAPI and manifest BEFORE exec_module so module import
+    # code sees the governed host surface immediately.
+    host = HostAPI(
+        manifest, Path(workspace),
+        tool_runner=tool_runner, llm_caller=llm_caller)
+    module.__dict__["HUNTER_HOST"] = host
+    module.__dict__["HUNTER_MANIFEST"] = manifest
+
     sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
     except Exception as exc:  # noqa: BLE001
         sys.modules.pop(module_name, None)
         raise ExtensionError(f"فشل تنفيذ وحدة الإضافة: {exc}") from exc
-
-    # حقن الـ HostAPI المقيّد
-    host = HostAPI(
-        manifest, Path(workspace),
-        tool_runner=tool_runner, llm_caller=llm_caller)
-    module.__dict__["HUNTER_HOST"] = host
-    module.__dict__["HUNTER_MANIFEST"] = manifest
 
     # التحقق من وجود نقطة الدخول المعلنة
     if not hasattr(module, "register") and not hasattr(module, "run"):

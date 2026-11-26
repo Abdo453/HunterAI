@@ -384,6 +384,9 @@ class AIToolCommandSynthesizer:
                     signals.append(f"WAF:{context.waf_name}")
                 else:
                     args.extend(["-rate", "40"])
+            elif name == "gobuster":
+                args.extend(["dir", "-u", target_url, "-w", wl_path, "-q", "--no-error"])
+                reasoning_points.append(f"Gobuster directory enumeration using wordlist: {wl_path}")
             else:
                 args.extend(["-u", target_url])
                 args.extend(["-w", wl_path])
@@ -428,7 +431,13 @@ class AIToolCommandSynthesizer:
             reasoning_points.append("High-speed HTTP probing with technology detection")
 
         # ── SUBFINDER / AMASS / ASSETFINDER ───────────────────────────────────
-        elif name in ["subfinder", "amass", "assetfinder"]:
+        elif name == "assetfinder":
+            args.extend(["--subs-only", clean_host])
+            reasoning_points.append("Passive OSINT subdomain enumeration via assetfinder --subs-only")
+        elif name == "amass":
+            args.extend(["enum", "-passive", "-d", clean_host, "-silent"])
+            reasoning_points.append("Passive OSINT subdomain enumeration via amass enum -passive")
+        elif name == "subfinder":
             args.extend(["-d", clean_host, "-silent"])
             reasoning_points.append("Passive OSINT subdomain enumeration without perimeter alerts")
 

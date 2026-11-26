@@ -1,7 +1,7 @@
 @echo off
 REM ==============================================================================
 REM  ARTEX-Pro Unified Multi-Agent Offensive Security Architecture Launcher
-REM  ONE COMMAND FOR EVERYTHING: Go Core + PostgreSQL 16+ + Next.js 15 + AI Agent
+REM  ONE COMMAND FOR EVERYTHING: PostgreSQL + Go Core + Django ASGI + Next.js
 REM ==============================================================================
 
 python pentest.py artex %*

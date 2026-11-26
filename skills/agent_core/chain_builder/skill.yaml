@@ -9,9 +9,8 @@ input:
 output:
   - exploit_chains.json
 depends_on:
-  - validation_gate
+  - triage_gate
 next_skills:
-  - validation_gate
   - report_generator
 fallback_skills: []
 tools_required: []

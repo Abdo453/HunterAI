@@ -3,8 +3,7 @@ Tests for AI Startup Diagnostics Engine
 """
 import pytest
 from core.ai_diagnostics import check_local_ai_status, check_cloud_ai_status, run_full_ai_diagnostics, run_startup_ai_diagnostic
-from starlette.testclient import TestClient
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 
 @pytest.mark.asyncio
@@ -42,8 +41,8 @@ def test_run_startup_ai_diagnostic_sync():
 
 
 def test_api_ai_diagnostics_endpoint():
-    client = TestClient(app)
-    r = client.get("/api/ai/diagnostics")
+    with ASGISyncClient() as client:
+        r = client.get("/api/ai/diagnostics")
     assert r.status_code == 200
     data = r.json()
     assert "local" in data

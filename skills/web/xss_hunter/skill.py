@@ -9,11 +9,15 @@ import asyncio
 import hashlib
 import json
 import re
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
+from core.scope_engine import validate_http_url_target
 from skills.base_skill import BaseSkill, SkillContext, SkillResult
 
 
@@ -37,11 +41,24 @@ class XSSHunterSkill(BaseSkill):
     async def execute(self, ctx: SkillContext) -> SkillResult:
         result = SkillResult(skill_name=self.name, success=True, tool_used="xss_hunter")
         target = ctx.target
-        urls: List[str] = ctx.extra.get("urls", []) or []
+        urls: List[str] = list(ctx.extra.get("urls", []) or [])
+        if not urls:
+            urls = self._read_workspace_urls(ctx, target)
         candidates: List[Dict[str, Any]] = []
+        allow_loopback = bool(ctx.extra.get("allow_loopback", False))
+        in_scope = ctx.extra.get("in_scope")
 
-        async with httpx.AsyncClient(timeout=12, verify=False, follow_redirects=True, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=12, verify=False, follow_redirects=False, trust_env=False) as client:
             for url in urls[:40]:
+                ok_url, _ = validate_http_url_target(
+                    url,
+                    in_scope=in_scope,
+                    allow_loopback=allow_loopback,
+                    resolve_dns=False,
+                    fail_closed=False,
+                )
+                if not ok_url:
+                    continue
                 params = self._extract_params(url)
                 if not params:
                     continue
@@ -49,7 +66,7 @@ class XSSHunterSkill(BaseSkill):
                     marker = f"{self.MARKER_PREFIX}{int(time.time()*1000)%100000}"
                     try:
                         inj = await self._inject(client, url, param, marker)
-                        await asyncio.sleep(0.2)
+                        await asyncio.sleep(0.1)
                     except Exception as exc:
                         self.logger.warning(f"XSS request failed {url}: {exc}")
                         continue
@@ -84,26 +101,52 @@ class XSSHunterSkill(BaseSkill):
                 evidence=c["evidence"],
                 severity=c["severity"],
                 vuln_type="xss",
-                recommendation="ترميز المخرجات (output encoding) وسياسة أمان المحتوى (CSP). aplic البوابة السباعية قبل الإبلاغ.",
+                recommendation="ترميز المخرجات (output encoding) وسياسة أمان المحتوى (CSP). طبّق البوابة السباعية قبل الإبلاغ.",
                 url=c["url"],
             )
-            result.next_skills.append("validation_gate")
+            if "triage_gate" not in result.next_skills:
+                result.next_skills.append("triage_gate")
 
         self.logger.info(f"[XSS] tested {len(urls)} URLs, {len(candidates)} candidates")
         return result
 
+    def _read_workspace_urls(self, ctx: SkillContext, target: str) -> List[str]:
+        found: List[str] = []
+        try:
+            ws = ctx.workspace.get_workspace_path(target, ctx.session_id)
+            for rel in ("web/urls.txt", "urls.txt"):
+                p = ws / rel
+                if p.is_file():
+                    for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+                        s = line.strip()
+                        if s.startswith(("http://", "https://")) and "?" in s:
+                            found.append(s)
+        except Exception:
+            pass
+        return found
+
     def _extract_params(self, url: str) -> List[str]:
-        if "?" not in url:
+        parsed = urlsplit(url)
+        if not parsed.query:
             return []
-        qs = url.split("?", 1)[1]
-        params = re.findall(r"([\w\-]+)=[^&]*", qs)
+        params = [k for k, _ in parse_qsl(parsed.query, keep_blank_values=True) if k]
         return list(dict.fromkeys(params))[:5]
 
     async def _inject(self, client: httpx.AsyncClient, url: str, param: str, marker: str) -> Dict[str, Any]:
-        value = f"{self.MARKER_PREFIX}{marker}"
-        new_url = re.sub(rf"([?&]{re.escape(param)}=)[^&]+", rf"\g<1>{value}", url, flags=re.I)
-        if new_url == url:
-            new_url = url + (("&" if "?" in url else "?") + f"{param}={value}")
+        value = marker if marker.startswith(self.MARKER_PREFIX) else f"{self.MARKER_PREFIX}{marker}"
+        parsed = urlsplit(url)
+        pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        updated = False
+        new_pairs: List[tuple[str, str]] = []
+        for k, v in pairs:
+            if k.lower() == param.lower() and not updated:
+                new_pairs.append((k, value))
+                updated = True
+            else:
+                new_pairs.append((k, v))
+        if not updated:
+            new_pairs.append((param, value))
+        new_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(new_pairs), parsed.fragment))
         resp = await client.get(new_url)
         return {
             "url": new_url,
@@ -121,8 +164,7 @@ if __name__ == "__main__":
 
     class FakeWS:
         def write_file(self, *a, **k):
-            from pathlib import Path
-            return Path("/tmp/x")
+            return Path(tempfile.gettempdir()) / "xss_candidates.json"
 
     class FakeCtx:
         target = "example.com"

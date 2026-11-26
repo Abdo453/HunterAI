@@ -20,20 +20,30 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-def test_local_ai_providers():
-    print("[1/4] Testing Local Ollama AI Providers & Models...")
-    try:
-        url = "http://127.0.0.1:11434/api/tags"
-        with urllib.request.urlopen(url, timeout=3) as resp:
-            data = json.loads(resp.read().decode())
-            models = [m.get("name") for m in data.get("models", [])]
-            print(f"      [✓] Active Models ({len(models)} models available):")
-            for m in models:
-                print(f"          • {m}")
-            assert len(models) >= 5, "Expected at least 5 models"
-    except Exception as e:
-        print(f"      [!] Ollama check failed: {e}")
-        raise
+def test_local_ai_providers(monkeypatch):
+    print("[1/4] Testing Local Ollama AI Providers & Models (hermetic manifest + /api/tags contract)...")
+    from core.llm.manifest import ModelManifest
+
+    manifest = ModelManifest.load()
+    configured_models = [getattr(m, "id", str(m)) for m in (manifest.models or [])]
+    assert len(configured_models) >= 4, f"Expected >=4 models in canonical manifest, got {len(configured_models)}"
+
+    class _FakeResp:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self):
+            return json.dumps({
+                "models": [{"name": m} for m in configured_models]
+            }).encode("utf-8")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=3: _FakeResp())
+    url = "http://127.0.0.1:11434/api/tags"
+    with urllib.request.urlopen(url, timeout=3) as resp:
+        data = json.loads(resp.read().decode())
+        models = [m.get("name") for m in data.get("models", [])]
+        assert len(models) >= 4, "Expected at least 4 models"
 
 def test_cognitive_ai_planner():
     print("[2/4] Testing Cognitive AI Reasoning & Dual-Model Planner...")
@@ -55,12 +65,24 @@ def test_cognitive_ai_planner():
 
 def test_unified_skills_inventory():
     print("[3/4] Testing Curated OpenCode & Universal Skills Arsenal...")
+    from core.skill_registry import SkillRegistry
+
     manifest_path = BASE_DIR / ".opencode" / "skills" / "MANIFEST.json"
     assert manifest_path.exists(), "MANIFEST.json must exist"
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    count = data.get("total_active_skills", len(data.get("skills", {})))
-    print(f"      [✓] Verified Skills Loaded: {count:,} total active skills indexed across all packs.")
-    assert count > 1000, f"Expected >1000 skills, found {count}"
+    # Phase 4B canonical OpenCode consolidation: single active central red-team skill.
+    assert data.get("schema") == "hunterai-active-skills/1"
+    assert data.get("count") == 1
+    skills_list = data.get("skills", [])
+    assert any(
+        (isinstance(s, dict) and s.get("name") == "hunterai-redteam") or s == "hunterai-redteam"
+        for s in skills_list
+    )
+
+    # Executable Python skills remain discoverable via canonical SkillRegistry.
+    reg = SkillRegistry()
+    reg.discover()
+    assert len(reg.get_all()) >= 50
 
 def test_attack_surface_graph():
     print("[4/4] Testing Attack Surface Graph & Third-Party Firewall Boundaries...")

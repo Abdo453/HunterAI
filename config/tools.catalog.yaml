@@ -1,0 +1,1303 @@
+# ==============================================================================
+# HunterAI Canonical Tool & MCP Catalog (Single Source of Truth)
+# ==============================================================================
+# Synchronize derived manifests (`config/tools.json`, `config/tools.yaml`,
+# `tools_mcp.json`) via:
+#     python scripts/sync_tool_manifests.py --write
+# Validate parity in CI via:
+#     python scripts/sync_tool_manifests.py --check
+# ==============================================================================
+version: "1.0.0"
+schema: "hunterai-tools-catalog/1"
+description: >-
+  Tool and MCP surface available to the root controller tree. Every entry is
+  bound by the policy engine before execution; nothing here runs without a
+  signed grant and an in-scope target.
+
+browser:
+  burpsuite_proxy: "127.0.0.1:8080"
+  zap_proxy: "127.0.0.1:8090"
+  use_proxy: false
+  headless: true
+
+tiers:
+  recon:
+    risk: low
+    requires_authorization: false
+    action_class: read_only
+    tools: [subfinder, assetfinder, dnsx, httpx, whatweb, katana, gau, browser]
+  network_scan:
+    risk: medium
+    requires_authorization: true
+    action_class: active_test
+    tools: [nmap, naabu, masscan, enum4linux-ng, netexec, ssh-audit]
+  web_active:
+    risk: medium
+    requires_authorization: true
+    action_class: active_test
+    tools: [ffuf, arjun, paramspider, dalfox, nikto, wpscan, wafw00f]
+  vuln_scanning:
+    risk: high
+    requires_authorization: true
+    action_class: active_test
+    tools: [nuclei]
+  exploit_proof:
+    risk: high
+    requires_authorization: true
+    action_class: exploit_proof
+    tools: [sqlmap]
+  tls:
+    risk: medium
+    requires_authorization: true
+    action_class: active_test
+    tools: [testssl.sh, sslscan]
+  proxy_orchestration:
+    risk: medium
+    requires_authorization: true
+    action_class: active_test
+    tools: [burp_scanner]
+  wireless:
+    risk: high
+    requires_authorization: true
+    action_class: active_test
+    tools: [kismet, aircrack-ng, wifite]
+  ot_iot:
+    risk: high
+    requires_authorization: true
+    action_class: active_test
+    tools: [modbus-cli, zigbee2mqtt]
+  credential_review:
+    risk: high
+    requires_authorization: true
+    action_class: active_test
+    tools: [hydra, medusa, john, hashcat]
+    constraints:
+      - operator-provided wordlists only
+      - operator-provided accounts only
+      - rate limited, no spraying across unrelated hosts
+      - credential_dump invariant still applies to password stores and hashes at scale
+  reverse_engineering:
+    risk: low
+    requires_authorization: false
+    action_class: read_only
+    tools: [radare2, gdb, binwalk, checksec, strings, file]
+  cloud_posture:
+    risk: medium
+    requires_authorization: true
+    action_class: read_only
+    tools: [prowler, trivy, kube_hunter, checkov]
+  osint:
+    risk: low
+    requires_authorization: false
+    action_class: read_only
+    tools: [sherlock, recon-ng, spiderfoot, theharvester, shodan]
+
+tools:
+  # ── Core Security / Recon / Web / Network Tools (in config/tools.json) ──────
+  - id: burp_scanner
+    name: burp_scanner
+    executable: burp
+    type: security
+    category: vuln
+    tier: proxy_orchestration
+    risk: medium
+    permissions: [recon, scan, active_testing]
+    purpose: Burp Suite automated scanner integration for vulnerability discovery
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "burp --scan {target}"
+
+  - id: subfinder
+    name: subfinder
+    executable: subfinder
+    type: recon
+    category: dns
+    yaml_group: recon
+    yaml_key: subfinder
+    yaml_args: ""
+    tier: recon
+    risk: low
+    permissions: [recon]
+    purpose: Passive subdomain enumeration via multiple public sources
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "subfinder -d {target} -silent -json"
+
+  - id: assetfinder
+    name: assetfinder
+    executable: assetfinder
+    type: recon
+    category: dns
+    yaml_group: recon
+    yaml_key: assetfinder
+    yaml_args: ""
+    tier: recon
+    risk: low
+    permissions: [recon]
+    purpose: Fast asset and subdomain discovery using public archives
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "assetfinder --subs-only {target}"
+
+  - id: dnsx
+    name: dnsx
+    executable: dnsx
+    type: recon
+    category: dns
+    tier: recon
+    risk: low
+    permissions: [recon]
+    purpose: High-throughput DNS query, resolution, and brute-forcer
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "dnsx -l {input_file} -silent -json"
+
+  - id: httpx
+    name: httpx
+    executable: httpx
+    type: recon
+    category: http
+    yaml_group: web
+    yaml_key: httpx
+    yaml_args: ""
+    tier: recon
+    risk: low
+    permissions: [recon]
+    purpose: Fast HTTP probing, status code checking, and tech detection
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "httpx -l {input_file} -silent -json -tech-detect"
+
+  - id: nmap
+    name: nmap
+    executable: nmap
+    type: scanner
+    category: ports
+    yaml_group: network
+    yaml_key: nmap
+    yaml_args: "-sV -sC"
+    tier: network_scan
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Network port scanning, OS detection, and service fingerprinter
+    requires_authorization: false
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "nmap -sV -T3 -Pn --top-ports 100 {target}"
+
+  - id: naabu
+    name: naabu
+    executable: naabu
+    type: scanner
+    category: ports
+    tier: network_scan
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Fast SYN/CONNECT port scanner focused on reliability
+    requires_authorization: false
+    timeout_s: 180
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "naabu -host {target} -silent"
+
+  - id: masscan
+    name: masscan
+    executable: masscan
+    type: scanner
+    category: ports
+    yaml_group: network
+    yaml_key: masscan
+    yaml_args: "--rate 1000"
+    tier: network_scan
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Ultra-fast asynchronous port discovery feeding the network pipeline discovery stage
+    requires_authorization: true
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "masscan -p{ports} --rate {rate} -oJ {output}"
+
+  - id: netexec
+    name: netexec
+    executable: netexec
+    type: scanner
+    category: ad
+    yaml_group: network
+    yaml_key: netexec
+    yaml_args: ""
+    tier: network_scan
+    risk: high
+    permissions: [recon, scan, active_testing]
+    purpose: Active Directory / SMB / LDAP / WinRM enumeration and credential validation
+    requires_authorization: true
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "netexec {protocol} {target} {args}"
+
+  - id: enum4linux-ng
+    name: enum4linux-ng
+    executable: enum4linux-ng
+    type: recon
+    category: ad
+    yaml_group: network
+    yaml_key: enum4linux
+    yaml_args: "-A"
+    tier: network_scan
+    risk: medium
+    permissions: [recon, scan]
+    purpose: SMB/RPC/AD enumeration (users, shares, groups, password policy)
+    requires_authorization: true
+    timeout_s: 180
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "enum4linux-ng -A -oJ {output} {target}"
+
+  - id: katana
+    name: katana
+    executable: katana
+    type: crawler
+    category: crawling
+    yaml_group: web
+    yaml_key: katana
+    yaml_args: ""
+    tier: recon
+    risk: low
+    permissions: [recon, crawling]
+    purpose: Modern web crawler and endpoint spider supporting headless browser mode
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "katana -u {target} -silent -json"
+
+  - id: gau
+    name: gau
+    executable: gau
+    type: crawler
+    category: crawling
+    yaml_group: web
+    yaml_key: gau
+    yaml_args: ""
+    tier: recon
+    risk: low
+    permissions: [recon, crawling]
+    purpose: Fetch known URLs from AlienVault, Wayback Machine, and Common Crawl
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "gau {target} --subs"
+
+  - id: ffuf
+    name: ffuf
+    executable: ffuf
+    type: fuzzer
+    category: fuzzing
+    yaml_group: web
+    yaml_key: ffuf
+    yaml_args: ""
+    tier: web_active
+    risk: medium
+    permissions: [fuzzing, active_testing]
+    purpose: Fast web fuzzer for directory, endpoint, and parameter discovery
+    requires_authorization: false
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "ffuf -u {target}/FUZZ -w {wordlist} -of json -s"
+
+  - id: nuclei
+    name: nuclei
+    executable: nuclei
+    type: security
+    category: vuln
+    yaml_group: web
+    yaml_key: nuclei
+    yaml_args: ""
+    tier: vuln_scanning
+    risk: high
+    permissions: [scan, active_testing]
+    purpose: Vulnerability scanner powered by community YAML templates
+    requires_authorization: true
+    timeout_s: 600
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "nuclei -l {input_file} -silent -jsonl"
+
+  - id: sqlmap
+    name: sqlmap
+    executable: sqlmap
+    type: security
+    category: vuln
+    yaml_group: web
+    yaml_key: sqlmap
+    yaml_args: "--batch"
+    tier: exploit_proof
+    risk: high
+    permissions: [active_testing, exploit_verify]
+    purpose: Automatic SQL injection detection, verification, and database auditing
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "sqlmap -u {target} --batch --banner"
+
+  - id: testssl.sh
+    name: testssl.sh
+    executable: testssl.sh
+    type: scanner
+    category: tls
+    tier: tls
+    risk: medium
+    permissions: [recon, scan, active_testing]
+    purpose: TLS/SSL configuration and cipher intelligence via testssl.sh
+    requires_authorization: true
+    timeout_s: 180
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "testssl.sh --json {target}"
+
+  - id: whatweb
+    name: whatweb
+    executable: whatweb
+    type: recon
+    category: http
+    tier: recon
+    risk: low
+    permissions: [recon]
+    purpose: Web technology fingerprinting via whatweb
+    requires_authorization: false
+    timeout_s: 90
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "whatweb --color=never --log-json=- {target}"
+
+  - id: sslscan
+    name: sslscan
+    executable: sslscan
+    type: scanner
+    category: tls
+    tier: tls
+    risk: medium
+    permissions: [recon, scan, active_testing]
+    purpose: TLS cipher and protocol intelligence via sslscan
+    requires_authorization: true
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "sslscan --xml=- {target}"
+
+  - id: browser
+    name: browser
+    executable: playwright
+    type: browser
+    category: crawling
+    tier: recon
+    risk: low
+    permissions: [recon, browser_automation]
+    purpose: Playwright automated browser session controller for DOM analysis
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "playwright launch {target}"
+
+  - id: kismet
+    name: kismet
+    executable: kismet
+    type: scanner
+    category: wireless
+    tier: wireless
+    risk: medium
+    permissions: [recon, scan, active_testing]
+    purpose: Wireless network detection, sniffing, and IDS for 802.11
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "kismet --json {target}"
+
+  - id: aircrack-ng
+    name: aircrack-ng
+    executable: aircrack-ng
+    type: scanner
+    category: wireless
+    tier: wireless
+    risk: high
+    permissions: [recon, scan, active_testing]
+    purpose: "WiFi security auditing: capture, injection, and WEP/WPA cracking"
+    requires_authorization: true
+    timeout_s: 600
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "aircrack-ng {capture_file} -w {wordlist}"
+
+  - id: wifite
+    name: wifite
+    executable: wifite
+    type: scanner
+    category: wireless
+    tier: wireless
+    risk: high
+    permissions: [recon, scan, active_testing]
+    purpose: Automated WiFi auditing tool (WEP/WPA/WPS)
+    requires_authorization: true
+    timeout_s: 600
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "wifite -i {interface} --wps"
+
+  - id: zigbee2mqtt
+    name: zigbee2mqtt
+    executable: zigbee2mqtt
+    type: recon
+    category: iot
+    tier: ot_iot
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Zigbee to MQTT bridge for IoT device discovery and control
+    requires_authorization: true
+    timeout_s: 180
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "zigbee2mqtt {target}"
+
+  - id: modbus-cli
+    name: modbus-cli
+    executable: modbus-cli
+    type: scanner
+    category: ot
+    tier: ot_iot
+    risk: high
+    permissions: [recon, scan, active_testing]
+    purpose: Modbus TCP client for OT/ICS register read/write testing
+    requires_authorization: true
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: true
+    command_template: "modbus-cli read -u {target} -a 0 -i {unit_id}"
+
+  # ── Additional CLI Tools (in config/tools.yaml & tools_mcp.json) ────────────
+  - id: rustscan
+    name: rustscan
+    executable: rustscan
+    type: scanner
+    category: ports
+    yaml_group: network
+    yaml_key: rustscan
+    yaml_args: "-a"
+    tier: network_scan
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Fast modern port scanner
+    requires_authorization: true
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "rustscan -a {target}"
+
+  - id: ssh-audit
+    name: ssh-audit
+    executable: ssh-audit
+    type: scanner
+    category: ports
+    yaml_group: network
+    yaml_key: ssh-audit
+    yaml_args: ""
+    tier: network_scan
+    risk: medium
+    permissions: [recon, scan]
+    purpose: SSH server and client algorithm configuration auditing
+    requires_authorization: true
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "ssh-audit -j {target}"
+
+  - id: responder
+    name: responder
+    executable: responder
+    type: scanner
+    category: ports
+    yaml_group: network
+    yaml_key: responder
+    yaml_args: "-I eth0"
+    risk: high
+    permissions: [active_testing]
+    purpose: LLMNR, NBT-NS, and MDNS poisoner for authorized internal assessments
+    requires_authorization: true
+    timeout_s: 0
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "responder -I eth0"
+
+  - id: nbtscan
+    name: nbtscan
+    executable: nbtscan
+    type: recon
+    category: ports
+    yaml_group: network
+    yaml_key: nbtscan
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: NetBIOS name network scanner
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "nbtscan {target}"
+
+  - id: snmpwalk
+    name: snmpwalk
+    executable: snmpwalk
+    type: recon
+    category: ports
+    yaml_group: network
+    yaml_key: snmpwalk
+    yaml_args: ""
+    risk: medium
+    permissions: [recon, scan]
+    purpose: SNMP tree enumeration tool
+    requires_authorization: true
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "snmpwalk {target}"
+
+  - id: gobuster
+    name: gobuster
+    executable: gobuster
+    type: fuzzer
+    category: fuzzing
+    yaml_group: web
+    yaml_key: gobuster
+    yaml_args: "dir"
+    tier: web_active
+    risk: medium
+    permissions: [fuzzing, active_testing]
+    purpose: Directory, DNS, and vhost brute-force tool
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "gobuster dir -u {target} -w {wordlist}"
+
+  - id: feroxbuster
+    name: feroxbuster
+    executable: feroxbuster
+    type: fuzzer
+    category: fuzzing
+    yaml_group: web
+    yaml_key: feroxbuster
+    yaml_args: ""
+    tier: web_active
+    risk: medium
+    permissions: [fuzzing, active_testing]
+    purpose: Fast recursive content discovery tool
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "feroxbuster -u {target} -w {wordlist}"
+
+  - id: nikto
+    name: nikto
+    executable: nikto
+    type: scanner
+    category: vuln
+    yaml_group: web
+    yaml_key: nikto
+    yaml_args: ""
+    tier: web_active
+    risk: medium
+    permissions: [scan, active_testing]
+    purpose: Web server vulnerability and misconfiguration scanner
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "nikto -h {target}"
+
+  - id: dalfox
+    name: dalfox
+    executable: dalfox
+    type: scanner
+    category: vuln
+    yaml_group: web
+    yaml_key: dalfox
+    yaml_args: ""
+    tier: web_active
+    risk: medium
+    permissions: [scan, active_testing]
+    purpose: Parameter analysis and XSS scanner
+    requires_authorization: true
+    timeout_s: 180
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "dalfox url {target}"
+
+  - id: wpscan
+    name: wpscan
+    executable: wpscan
+    type: scanner
+    category: vuln
+    yaml_group: web
+    yaml_key: wpscan
+    yaml_args: ""
+    tier: web_active
+    risk: medium
+    permissions: [scan, active_testing]
+    purpose: WordPress vulnerability scanner
+    requires_authorization: true
+    timeout_s: 180
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "wpscan --url {target}"
+
+  - id: wafw00f
+    name: wafw00f
+    executable: wafw00f
+    type: recon
+    category: http
+    yaml_group: web
+    yaml_key: wafw00f
+    yaml_args: ""
+    tier: web_active
+    risk: low
+    permissions: [recon]
+    purpose: Web Application Firewall fingerprinting tool
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "wafw00f {target}"
+
+  - id: arjun
+    name: arjun
+    executable: arjun
+    type: recon
+    category: api
+    yaml_group: web
+    yaml_key: arjun
+    yaml_args: ""
+    tier: web_active
+    risk: medium
+    permissions: [recon, active_testing]
+    purpose: HTTP parameter discovery suite
+    requires_authorization: true
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "arjun -u {target}"
+
+  - id: paramspider
+    name: paramspider
+    executable: paramspider
+    type: recon
+    category: crawling
+    yaml_group: web
+    yaml_key: paramspider
+    yaml_args: ""
+    tier: web_active
+    risk: low
+    permissions: [recon]
+    purpose: Parameter mining from web archives
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "paramspider -d {target}"
+
+  - id: dirsearch
+    name: dirsearch
+    executable: dirsearch
+    type: fuzzer
+    category: fuzzing
+    yaml_group: web
+    yaml_key: dirsearch
+    yaml_args: ""
+    tier: web_active
+    risk: medium
+    permissions: [fuzzing, active_testing]
+    purpose: Web path scanner with extension discovery
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "dirsearch -u {target}"
+
+  - id: hakrawler
+    name: hakrawler
+    executable: hakrawler
+    type: crawler
+    category: crawling
+    yaml_group: web
+    yaml_key: hakrawler
+    yaml_args: ""
+    tier: recon
+    risk: low
+    permissions: [recon, crawling]
+    purpose: Fast web crawler for gathering URLs and JS files
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "hakrawler -d 3 -plain"
+
+  - id: waybackurls
+    name: waybackurls
+    executable: waybackurls
+    type: crawler
+    category: crawling
+    yaml_group: web
+    yaml_key: waybackurls
+    yaml_args: ""
+    tier: recon
+    risk: low
+    permissions: [recon]
+    purpose: Fetch known URLs from the Wayback Machine
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "waybackurls {target}"
+
+  - id: amass
+    name: amass
+    executable: amass
+    type: recon
+    category: dns
+    yaml_group: recon
+    yaml_key: amass
+    yaml_args: "enum"
+    tier: recon
+    risk: low
+    permissions: [recon]
+    purpose: In-depth attack surface mapping and subdomain discovery
+    requires_authorization: false
+    timeout_s: 600
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "amass enum -passive -d {target}"
+
+  - id: fierce
+    name: fierce
+    executable: fierce
+    type: recon
+    category: dns
+    yaml_group: recon
+    yaml_key: fierce
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: DNS reconnaissance tool for locating non-contiguous IP space
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "fierce --domain {target}"
+
+  - id: dnsenum
+    name: dnsenum
+    executable: dnsenum
+    type: recon
+    category: dns
+    yaml_group: recon
+    yaml_key: dnsenum
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: Multithreaded DNS information enumeration
+    requires_authorization: false
+    timeout_s: 180
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "dnsenum {target}"
+
+  - id: theharvester
+    name: theharvester
+    executable: theHarvester
+    type: recon
+    category: recon
+    yaml_group: recon
+    yaml_key: theharvester
+    yaml_args: ""
+    tier: osint
+    risk: low
+    permissions: [recon]
+    purpose: OSINT gathering of emails, names, subdomains, and IPs
+    requires_authorization: false
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "theHarvester -d {target}"
+
+  - id: findomain
+    name: findomain
+    executable: findomain
+    type: recon
+    category: dns
+    yaml_group: recon
+    yaml_key: findomain
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: Fast cross-platform subdomain enumerator
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "findomain -t {target} -q"
+
+  - id: shodan
+    name: shodan
+    executable: shodan
+    type: recon
+    category: recon
+    yaml_group: recon
+    yaml_key: shodan
+    yaml_args: ""
+    tier: osint
+    risk: low
+    permissions: [recon]
+    purpose: Shodan internet-wide service intelligence CLI
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "shodan domain {target}"
+
+  - id: hydra
+    name: hydra
+    executable: hydra
+    type: scanner
+    category: vuln
+    yaml_group: password
+    yaml_key: hydra
+    yaml_args: ""
+    tier: credential_review
+    risk: high
+    permissions: [active_testing]
+    purpose: Authorized credential audit and network login verification
+    requires_authorization: true
+    timeout_s: 600
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "hydra {target}"
+
+  - id: john
+    name: john
+    executable: john
+    type: security
+    category: vuln
+    yaml_group: password
+    yaml_key: john
+    yaml_args: ""
+    tier: credential_review
+    risk: high
+    permissions: [active_testing]
+    purpose: Offline password hash strength auditor (John the Ripper)
+    requires_authorization: true
+    timeout_s: 3600
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "john {target}"
+
+  - id: hashcat
+    name: hashcat
+    executable: hashcat
+    type: security
+    category: vuln
+    yaml_group: password
+    yaml_key: hashcat
+    yaml_args: ""
+    tier: credential_review
+    risk: high
+    permissions: [active_testing]
+    purpose: GPU-accelerated offline password hash strength auditor
+    requires_authorization: true
+    timeout_s: 3600
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "hashcat {target}"
+
+  - id: medusa
+    name: medusa
+    executable: medusa
+    type: scanner
+    category: vuln
+    yaml_group: password
+    yaml_key: medusa
+    yaml_args: ""
+    tier: credential_review
+    risk: high
+    permissions: [active_testing]
+    purpose: Modular parallel login auditor
+    requires_authorization: true
+    timeout_s: 600
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "medusa -h {target}"
+
+  - id: gdb
+    name: gdb
+    executable: gdb
+    type: analysis
+    category: reporting
+    yaml_group: binary
+    yaml_key: gdb
+    yaml_args: ""
+    tier: reverse_engineering
+    risk: low
+    permissions: [recon]
+    purpose: GNU debugger for binary analysis
+    requires_authorization: false
+    timeout_s: 0
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "gdb -batch {target}"
+
+  - id: radare2
+    name: radare2
+    executable: r2
+    type: analysis
+    category: reporting
+    yaml_group: binary
+    yaml_key: radare2
+    yaml_args: ""
+    tier: reverse_engineering
+    risk: low
+    permissions: [recon]
+    purpose: Reverse engineering and disassembly framework
+    requires_authorization: false
+    timeout_s: 0
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "r2 -q {target}"
+
+  - id: binwalk
+    name: binwalk
+    executable: binwalk
+    type: analysis
+    category: reporting
+    yaml_group: binary
+    yaml_key: binwalk
+    yaml_args: ""
+    tier: reverse_engineering
+    risk: low
+    permissions: [recon]
+    purpose: Firmware analysis and extraction tool
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "binwalk {target}"
+
+  - id: checksec
+    name: checksec
+    executable: checksec
+    type: analysis
+    category: reporting
+    yaml_group: binary
+    yaml_key: checksec
+    yaml_args: ""
+    tier: reverse_engineering
+    risk: low
+    permissions: [recon]
+    purpose: Binary hardening property inspector
+    requires_authorization: false
+    timeout_s: 30
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "checksec --file={target}"
+
+  - id: strings
+    name: strings
+    executable: strings
+    type: analysis
+    category: reporting
+    yaml_group: binary
+    yaml_key: strings
+    yaml_args: ""
+    tier: reverse_engineering
+    risk: low
+    permissions: [recon]
+    purpose: Extract printable strings from binary files
+    requires_authorization: false
+    timeout_s: 30
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "strings {target}"
+
+  - id: file
+    name: file
+    executable: file
+    type: analysis
+    category: reporting
+    yaml_group: binary
+    yaml_key: file
+    yaml_args: ""
+    tier: reverse_engineering
+    risk: low
+    permissions: [recon]
+    purpose: File type classification utility
+    requires_authorization: false
+    timeout_s: 10
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "file {target}"
+
+  - id: prowler
+    name: prowler
+    executable: prowler
+    type: scanner
+    category: cloud
+    yaml_group: cloud
+    yaml_key: prowler
+    yaml_args: ""
+    tier: cloud_posture
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Cloud security posture assessment (AWS/Azure/GCP)
+    requires_authorization: true
+    timeout_s: 600
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "prowler {target}"
+
+  - id: trivy
+    name: trivy
+    executable: trivy
+    type: scanner
+    category: cloud
+    yaml_group: cloud
+    yaml_key: trivy
+    yaml_args: ""
+    tier: cloud_posture
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Container, IaC, and dependency vulnerability scanner
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "trivy fs {target}"
+
+  - id: kube_hunter
+    name: kube_hunter
+    executable: kube-hunter
+    type: scanner
+    category: cloud
+    yaml_group: cloud
+    yaml_key: kube_hunter
+    yaml_args: ""
+    tier: cloud_posture
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Kubernetes cluster security posture hunter
+    requires_authorization: true
+    timeout_s: 300
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "kube-hunter --remote {target}"
+
+  - id: checkov
+    name: checkov
+    executable: checkov
+    type: scanner
+    category: cloud
+    yaml_group: cloud
+    yaml_key: checkov
+    yaml_args: ""
+    tier: cloud_posture
+    risk: medium
+    permissions: [recon, scan]
+    purpose: Infrastructure-as-Code static security analyzer
+    requires_authorization: true
+    timeout_s: 120
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "checkov -d {target}"
+
+  - id: sherlock
+    name: sherlock
+    executable: sherlock
+    type: recon
+    category: recon
+    yaml_group: osint
+    yaml_key: sherlock
+    yaml_args: ""
+    tier: osint
+    risk: low
+    permissions: [recon]
+    purpose: Username OSINT across public platforms
+    requires_authorization: false
+    timeout_s: 300
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "sherlock {target}"
+
+  - id: recon_ng
+    name: recon-ng
+    executable: recon-ng
+    type: recon
+    category: recon
+    yaml_group: osint
+    yaml_key: recon_ng
+    yaml_args: ""
+    tier: osint
+    risk: low
+    permissions: [recon]
+    purpose: Modular web reconnaissance framework
+    requires_authorization: false
+    timeout_s: 0
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "recon-ng"
+
+  - id: spiderfoot
+    name: spiderfoot
+    executable: spiderfoot
+    type: recon
+    category: recon
+    yaml_group: osint
+    yaml_key: spiderfoot
+    yaml_args: ""
+    tier: osint
+    risk: low
+    permissions: [recon]
+    purpose: Automated OSINT intelligence collector
+    requires_authorization: false
+    timeout_s: 0
+    scope_relevant: true
+    in_tools_json: false
+    command_template: "spiderfoot -s {target}"
+
+  - id: volatility
+    name: volatility
+    executable: vol
+    type: analysis
+    category: reporting
+    yaml_group: ctf
+    yaml_key: volatility
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: Memory forensics analysis framework
+    requires_authorization: false
+    timeout_s: 600
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "vol -f {target}"
+
+  - id: exiftool
+    name: exiftool
+    executable: exiftool
+    type: analysis
+    category: reporting
+    yaml_group: ctf
+    yaml_key: exiftool
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: File metadata extractor
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "exiftool {target}"
+
+  - id: zsteg
+    name: zsteg
+    executable: zsteg
+    type: analysis
+    category: reporting
+    yaml_group: ctf
+    yaml_key: zsteg
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: PNG/BMP steganography detector
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "zsteg {target}"
+
+  - id: steghide
+    name: steghide
+    executable: steghide
+    type: analysis
+    category: reporting
+    yaml_group: ctf
+    yaml_key: steghide
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: Steganography inspection utility
+    requires_authorization: false
+    timeout_s: 60
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "steghide info {target}"
+
+  - id: foremost
+    name: foremost
+    executable: foremost
+    type: analysis
+    category: reporting
+    yaml_group: ctf
+    yaml_key: foremost
+    yaml_args: ""
+    risk: low
+    permissions: [recon]
+    purpose: File carving forensic utility
+    requires_authorization: false
+    timeout_s: 120
+    scope_relevant: false
+    in_tools_json: false
+    command_template: "foremost -i {target}"
+
+mcp_servers:
+  - server_id: filesystem-local
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "<workspace>"]
+    tools:
+      - {tool_name: read_file, risk_level: low, requires_approval: false}
+      - {tool_name: list_directory, risk_level: low, requires_approval: false}
+      - {tool_name: write_file, risk_level: high, requires_approval: true}
+    constraints:
+      - root path pinned to the engagement workspace
+  - server_id: github-mcp
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    auth_token_env: GITHUB_PERSONAL_ACCESS_TOKEN
+    tools:
+      - {tool_name: search_repositories, risk_level: low, requires_approval: false}
+      - {tool_name: create_issue, risk_level: medium, requires_approval: true}
+    constraints:
+      - read-only tools run freely; writes require approval
+
+invariants:
+  - A tool is never invoked before the policy engine returns allowed=true.
+  - An out-of-scope target is rejected before the process starts.
+  - Command arguments are passed as an argv array, never as a shell string.
+  - Executable paths are checked against an allowlist.
+  - Output is size-capped and secret-redacted before it returns to an agent.
+  - Every execution appends a hash-chained audit record.

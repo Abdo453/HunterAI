@@ -131,12 +131,15 @@ def test_dynamic_tool_agent_attaches_cognitive_deliberation():
         verbose_thinking=False,
     )
 
-    assert res.success
+    # Phase 3 truthfulness: force_fallback=True returns UNAVAILABLE (no fake tool output)
+    # while still attaching the cognitive deliberation trace.
+    assert res.success is False
+    assert res.used_fallback is False
+    assert res.structured_data["status"] == "UNAVAILABLE"
     assert "cognitive_deliberation" in res.structured_data
     delib_info = res.structured_data["cognitive_deliberation"]
     assert "hypothesis_tested" in delib_info
     assert "verdict" in delib_info
-    assert delib_info["verdict"] == "CONFIRMED"
     assert delib_info["confidence_posterior"] >= 0.80
 
 

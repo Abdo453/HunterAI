@@ -94,39 +94,49 @@ async def test_exploit_chain_builder_skill_hermetic(tmp_path):
 
 @pytest.mark.asyncio
 async def test_dom_xss_hunter_hermetic(tmp_path):
+    """Phase 3 truthfulness: offline unreachable target returns UNAVAILABLE (zero synthetic findings)."""
     from skills.browser.dom_xss_hunter.skill import DOMXSSHunterSkill
     ws = WorkspaceManager(tmp_path)
     tm = ToolManager()
     ctx = SkillContext(target="target.corp", session_id="test_dom", workspace=ws, tool_manager=tm)
     skill = DOMXSSHunterSkill()
     res = await skill.execute(ctx)
-    assert res.success is True
+    assert res.success is False
+    assert res.metadata.get("status") == "UNAVAILABLE"
+    assert res.metadata.get("verified") is False
+    assert res.findings == []
     assert "dom_xss_findings.json" in res.output_files
     assert "dom_xss_report.md" in res.output_files
 
 
 @pytest.mark.asyncio
 async def test_auth_session_extractor_hermetic(tmp_path):
+    """Phase 3 truthfulness: offline unreachable target returns UNAVAILABLE (no synthetic session)."""
     from skills.browser.auth_session_extractor.skill import AuthSessionExtractorSkill
     ws = WorkspaceManager(tmp_path)
     tm = ToolManager()
     ctx = SkillContext(target="target.corp", session_id="test_auth", workspace=ws, tool_manager=tm)
     skill = AuthSessionExtractorSkill()
     res = await skill.execute(ctx)
-    assert res.success is True
+    assert res.success is False
+    assert res.metadata.get("status") == "UNAVAILABLE"
+    assert res.metadata.get("verified") is False
     assert "auth_context.json" in res.output_files
     assert "auth_context" in res.metadata
 
 
 @pytest.mark.asyncio
 async def test_spa_api_extractor_hermetic(tmp_path):
+    """Phase 3 truthfulness: offline unreachable target returns UNAVAILABLE (no synthetic SPA routes)."""
     from skills.browser.spa_api_extractor.skill import SPAAPIExtractorSkill
     ws = WorkspaceManager(tmp_path)
     tm = ToolManager()
     ctx = SkillContext(target="target.corp", session_id="test_spa", workspace=ws, tool_manager=tm)
     skill = SPAAPIExtractorSkill()
     res = await skill.execute(ctx)
-    assert res.success is True
+    assert res.success is False
+    assert res.metadata.get("status") == "UNAVAILABLE"
+    assert res.metadata.get("verified") is False
     assert "spa_endpoints.json" in res.output_files
     assert "spa_api_map.md" in res.output_files
 
@@ -135,41 +145,48 @@ async def test_spa_api_extractor_hermetic(tmp_path):
 
 @pytest.mark.asyncio
 async def test_burp_traffic_analyzer_hermetic(tmp_path):
+    """Phase 3 truthfulness: offline Burp gateway fails closed with UNAVAILABLE (no synthetic traffic)."""
     from skills.burp.burp_traffic_analyzer.skill import BurpTrafficAnalyzerSkill
     ws = WorkspaceManager(tmp_path)
     tm = ToolManager()
     ctx = SkillContext(target="target.corp", session_id="test_burp_ta", workspace=ws, tool_manager=tm)
     skill = BurpTrafficAnalyzerSkill()
     res = await skill.execute(ctx)
-    assert res.success is True
-    assert "burp_findings.json" in res.output_files
-    assert "burp_analysis_report.md" in res.output_files
+    assert res.success is False
+    assert res.metadata.get("status") == "UNAVAILABLE"
+    assert res.metadata.get("verified") is False
+    assert res.metadata.get("burp_live") is False
+    assert res.findings == []
 
 
 @pytest.mark.asyncio
 async def test_burp_browser_fusion_hermetic(tmp_path):
+    """Phase 3 truthfulness: offline browser/Burp fusion fails closed with UNAVAILABLE."""
     from skills.burp.burp_browser_fusion.skill import BurpBrowserFusionSkill
     ws = WorkspaceManager(tmp_path)
     tm = ToolManager()
     ctx = SkillContext(target="target.corp", session_id="test_fusion", workspace=ws, tool_manager=tm)
     skill = BurpBrowserFusionSkill()
     res = await skill.execute(ctx)
-    assert res.success is True
-    assert "fusion_endpoints.json" in res.output_files
-    assert "fusion_report.md" in res.output_files
+    assert res.success is False
+    assert res.metadata.get("status") == "UNAVAILABLE"
+    assert res.metadata.get("verified") is False
+    assert res.findings == []
 
 
 @pytest.mark.asyncio
 async def test_request_mutator_hermetic(tmp_path):
+    """Phase 3 truthfulness: no captured requests fails closed with UNAVAILABLE (no fabricated mutations)."""
     from skills.burp.request_mutator.skill import RequestMutatorSkill
     ws = WorkspaceManager(tmp_path)
     tm = ToolManager()
     ctx = SkillContext(target="target.corp", session_id="test_mut", workspace=ws, tool_manager=tm)
     skill = RequestMutatorSkill()
     res = await skill.execute(ctx)
-    assert res.success is True
-    assert "mutation_results.json" in res.output_files
-    assert "mutation_report.md" in res.output_files
+    assert res.success is False
+    assert res.metadata.get("status") == "UNAVAILABLE"
+    assert res.metadata.get("verified") is False
+    assert res.findings == []
 
 
 # ── 4. Full Master Orchestrator Test ──────────────────────────────────────────

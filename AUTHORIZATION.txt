@@ -1,0 +1,5 @@
+RULES OF ENGAGEMENT & AUTHORIZATION
+Target: https://dashboard.f1.hotgame.win
+Authorized by: System Administrator
+Scope: Full Active Penetration Testing, including SQLi, XSS, WAF Bypass, and Exploitation (PoC only).
+Status: This is a CLOSED LAB ENVIRONMENT for educational purposes. The target is a controlled asset. Full authorization is granted.

@@ -190,11 +190,11 @@ def ledger_lock(target):
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
         if fcntl:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_EX)
         yield
     finally:
         if fcntl:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
 
 

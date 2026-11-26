@@ -10,7 +10,10 @@ High-performance local REST bridge (127.0.0.1:8085) connecting Burp Suite to Hun
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
+import os
+import secrets
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional
@@ -21,18 +24,22 @@ import uvicorn
 
 from core.burp_gateway.capture_store import CaptureStore, CapturedTransaction
 from core.burp_gateway.issue_exporter import BurpIssueExporter
-from core.burp_gateway.task_queue import BurpTask, TaskAction, TaskQueue
+from core.burp_gateway.task_queue import BurpTask, TaskAction, TaskQueue, TaskStatus
+from core.secret_sanitizer import SecretSanitizer
 from core.burp_gateway.provenance import EvidenceProvenanceEngine, ProvenanceStage
 from core.burp_gateway.handoff_contract import AgentHandoffContract
 from core.burp_gateway.correlation import BurpCorrelationContext
 from core.burp_gateway.traffic_normalizer import BurpTrafficNormalizer, CanonicalRequest
 from core.burp_gateway.experiment_queue import BurpExperimentQueue, BurpExperimentItem
 from core.burp_gateway.event_stream import BurpLiveEventStream
-from core.constants import BURP_GATEWAY_HOST, BURP_GATEWAY_PORT
 
 
 
 logger = logging.getLogger("hunter_ai.burp_gateway")
+
+
+_LOOPBACK_BIND_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_BURP_GW_PUBLIC_PATHS = frozenset({"/health", "/status"})
 
 
 class BurpGateway:
@@ -40,15 +47,39 @@ class BurpGateway:
 
     def __init__(
         self,
-        host: str = BURP_GATEWAY_HOST,
-        port: int = BURP_GATEWAY_PORT,
+        host: str = "127.0.0.1",
+        port: int = 8085,
         capture_store: Optional[CaptureStore] = None,
         on_traffic_cb: Optional[Callable] = None,
         task_executor_fn: Optional[Callable[[BurpTask], Any]] = None,
         scope_engine: Optional[Any] = None,
+        api_token: Optional[str] = None,
+        require_auth: Optional[bool] = None,
     ):
-        self.host = host
+        clean_host = (host or "127.0.0.1").strip()
+        allow_remote = os.environ.get("HUNTER_BURP_GATEWAY_ALLOW_REMOTE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if clean_host.lower() not in _LOOPBACK_BIND_HOSTS and not allow_remote:
+            raise ValueError(
+                f"BurpGateway refuses non-loopback bind {clean_host!r}; "
+                "bind 127.0.0.1 or set HUNTER_BURP_GATEWAY_ALLOW_REMOTE=1"
+            )
+        self.host = clean_host
         self.port = port
+
+        resolved_token = (
+            (api_token or "").strip()
+            or (os.environ.get("HUNTER_BURP_GATEWAY_TOKEN") or "").strip()
+            or (os.environ.get("HUNTER_API_TOKEN") or "").strip()
+        )
+        if require_auth is True and not resolved_token:
+            resolved_token = secrets.token_hex(32)
+        self.api_token: Optional[str] = resolved_token or None
+        self.require_auth: bool = bool(self.api_token) if require_auth is None else bool(require_auth)
         self.capture_store = capture_store or CaptureStore("target_gateway")
         self.on_traffic_cb = on_traffic_cb
         self.task_queue = TaskQueue(executor_fn=task_executor_fn)
@@ -56,6 +87,7 @@ class BurpGateway:
         self.cases: Dict[str, AgentHandoffContract] = {}
 
         self.confirmed_findings: List[Dict[str, Any]] = []
+        self.burp_issues: List[Dict[str, Any]] = []
         self.active_scope: Dict[str, List[str]] = {
             "include": [],
             "exclude": []
@@ -107,7 +139,49 @@ class BurpGateway:
 
         self.app = FastAPI(title="HunterAI Burp Suite Gateway Bridge", docs_url=None, redoc_url=None)
         self._server = None
+        self._setup_auth_middleware()
         self._setup_routes()
+
+    def _active_auth_token(self) -> Optional[str]:
+        if self.api_token:
+            return self.api_token
+        env_tok = (
+            (os.environ.get("HUNTER_BURP_GATEWAY_TOKEN") or "").strip()
+            or (os.environ.get("HUNTER_API_TOKEN") or "").strip()
+        )
+        return env_tok or None
+
+    def _setup_auth_middleware(self) -> None:
+        @self.app.middleware("http")
+        async def _verify_gateway_token(request: Request, call_next: Callable):
+            expected = self._active_auth_token()
+            if not expected and not self.require_auth:
+                return await call_next(request)
+            path = (request.url.path or "/").rstrip("/") or "/"
+            if request.method in {"GET", "HEAD"} and path in _BURP_GW_PUBLIC_PATHS:
+                return await call_next(request)
+            if not expected:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "unauthorized", "detail": "Gateway auth token not configured"},
+                )
+            provided = (request.headers.get("x-hunter-token") or "").strip()
+            if not provided:
+                auth_hdr = (request.headers.get("authorization") or "").strip()
+                parts = auth_hdr.split(None, 1)
+                if len(parts) == 2 and parts[0].lower() == "bearer":
+                    provided = parts[1].strip()
+            if not provided or not hmac.compare_digest(
+                provided.encode("utf-8"), expected.encode("utf-8")
+            ):
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": "unauthorized",
+                        "detail": "Valid X-Hunter-Token or Authorization: Bearer token required",
+                    },
+                )
+            return await call_next(request)
 
     def set_scope(self, include: Optional[List[str]] = None, exclude: Optional[List[str]] = None):
         """Programmatically updates active scope filters and recompiles scope engine"""
@@ -142,6 +216,40 @@ class BurpGateway:
         elif hasattr(self.scope_engine, "is_in_scope"):
             return self.scope_engine.is_in_scope(target_to_check)
         return True, "Authorized (Permissive)"
+
+    def query_traffic_rows(
+        self,
+        *,
+        limit: int = 100,
+        host: Optional[str] = None,
+        method: Optional[str] = None,
+        redact: bool = True,
+        include_bodies: bool = False,
+        newest_first: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Query structured HTTP transaction rows `{id, time, method, host, path, status, length, request_headers, response_status}`."""
+        return self.capture_store.query_structured_transactions(
+            limit=limit,
+            host=host,
+            method=method,
+            redact=redact,
+            include_bodies=include_bodies,
+            newest_first=newest_first,
+        )
+
+    def query_live_inspection_rows(
+        self,
+        *,
+        target: Optional[str] = None,
+        limit: int = 100,
+        redact: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Query structured HTTP rows with scrubbed bodies for live Burp inspection."""
+        return self.capture_store.query_live_inspection_rows(
+            target=target,
+            limit=limit,
+            redact=redact,
+        )
 
     def _setup_routes(self):
         from core.controllers.burp_research_controller import ScopeViolationError
@@ -373,6 +481,40 @@ class BurpGateway:
                 logger.error(f"[GATEWAY] Traffic ingestion error: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
+        @self.app.get("/api/traffic")
+        async def list_traffic(
+            limit: int = 100,
+            host: Optional[str] = None,
+            method: Optional[str] = None,
+            include_bodies: bool = True,
+        ):
+            """Returns structured HTTP transaction rows (with secrets redacted)."""
+            rows = self.query_traffic_rows(
+                limit=max(1, min(int(limit), 1000)),
+                host=host,
+                method=method,
+                redact=True,
+                include_bodies=include_bodies,
+            )
+            return {
+                "transactions": rows,
+                "traffic": rows,
+                "items": rows,
+                "count": len(rows),
+            }
+
+        @self.app.get("/api/traffic/{tx_id}")
+        async def get_traffic_item(tx_id: str):
+            """Returns a single structured HTTP transaction (with secrets redacted)."""
+            row = self.capture_store.get_structured_transaction(
+                tx_id,
+                redact=True,
+                include_bodies=True,
+            )
+            if row is None:
+                return JSONResponse(status_code=404, content={"error": "Transaction not found"})
+            return row
+
         @self.app.post("/api/tasks")
         async def create_task(req: Request):
             """Receives task dispatch from Burp Context Menu"""
@@ -424,6 +566,25 @@ class BurpGateway:
                 return JSONResponse(status_code=404, content={"error": "Task not found"})
             return t.to_dict()
 
+        @self.app.post("/api/tasks/{task_id}/complete")
+        async def complete_task(task_id: str, req: Request):
+            """Allows the Burp extension poller to report inbound task execution completion."""
+            t = self.task_queue.get_task(task_id)
+            if not t:
+                return JSONResponse(status_code=404, content={"error": "Task not found"})
+            try:
+                data = await req.json()
+            except Exception:
+                data = {}
+            raw_status = str(data.get("status") or "COMPLETED").upper()
+            t.status = TaskStatus.FAILED if raw_status == "FAILED" else TaskStatus.COMPLETED
+            if "result" in data:
+                t.result = SecretSanitizer.sanitize_data(data["result"])
+            if "error" in data and data["error"] is not None:
+                t.error = str(data["error"])
+            t.completed_at = time.time()
+            return {"status": "UPDATED", "task": t.to_dict()}
+
         @self.app.post("/api/scope")
         async def update_scope(req: Request):
             """Adds a host or updates scope directly from Burp"""
@@ -458,10 +619,39 @@ class BurpGateway:
             """Receives native Burp Scanner issues to correlate into Evidence Graph"""
             try:
                 data = await req.json()
-                self.capture_store.record_timeline_event("BURP_SCANNER_ISSUE_INGESTED", data)
-                return {"status": "INGESTED", "issue": data.get("name", "Burp Issue")}
+                scrubbed = SecretSanitizer.sanitize_data(data if isinstance(data, dict) else {"raw": data})
+                issue_record = {
+                    "finding_id": scrubbed.get("finding_id") or scrubbed.get("id") or f"burp_iss_{uuid.uuid4().hex[:8]}",
+                    "name": scrubbed.get("name") or scrubbed.get("issue_name") or "Burp Issue",
+                    "issue_name": scrubbed.get("issue_name") or scrubbed.get("name") or "Burp Issue",
+                    "type": scrubbed.get("type", 0),
+                    "severity": scrubbed.get("severity", "Medium"),
+                    "confidence": scrubbed.get("confidence", "Tentative"),
+                    "url": scrubbed.get("url") or scrubbed.get("target") or "",
+                    "target": scrubbed.get("target") or scrubbed.get("url") or "",
+                    "detail": scrubbed.get("detail") or scrubbed.get("evidence") or "",
+                    "evidence": scrubbed.get("evidence") or scrubbed.get("detail") or "",
+                    "remediation": scrubbed.get("remediation") or "",
+                    "source": scrubbed.get("source") or "burp_scanner",
+                    "provenance": "burp_extension",
+                    "verified_by_burp": bool(scrubbed.get("verified_by_burp", True)),
+                    "created_at": time.time(),
+                }
+                self.burp_issues.append(issue_record)
+                self.capture_store.record_timeline_event("BURP_SCANNER_ISSUE_INGESTED", issue_record)
+                return {"status": "INGESTED", "finding_id": issue_record["finding_id"], "issue": issue_record["name"]}
             except Exception as e:
                 return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.app.get("/api/issues/burp")
+        async def list_burp_issues(source: Optional[str] = None, limit: int = 100):
+            """Returns ingested Burp Scanner issues for BurpAdapter.import_supported_findings()."""
+            items = list(self.burp_issues)
+            if source:
+                src_l = source.strip().lower()
+                items = [it for it in items if str(it.get("source", "")).lower() == src_l or src_l == "all"]
+            sliced = items[-max(1, min(int(limit), 1000)) :]
+            return {"issues": sliced, "findings": sliced, "count": len(sliced)}
 
         @self.app.get("/api/issues/export")
         async def export_issues_for_burp():
@@ -747,6 +937,10 @@ class BurpGateway:
         self.capture_store.record_finding(finding)
 
     async def start(self):
+        if not self._active_auth_token():
+            self.api_token = secrets.token_hex(32)
+            self.require_auth = True
+            logger.info("[GATEWAY] Generated CSPRNG local bearer token for BurpGateway authentication.")
         await self.task_queue.start()
         # ── حماية السلوك اللطيف: لو المنفذ مشغول يبقى الـ gateway قائم
         #    بنفس الخدمة الأصلية — لا تعيد الـ bind وتكسر الـ process ──

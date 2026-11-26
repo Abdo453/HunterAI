@@ -9,7 +9,11 @@ import asyncio
 import logging
 import os
 import re
+import shlex
+import sys
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -34,6 +38,39 @@ class ToolSpec:
     confidence: float = 0.85
     next_stage: str = "NEXT"
     risk_level: str = "AUDIT"  # SAFE, AUDIT, ACTIVE
+    argv_template: Optional[List[str]] = None
+    stdin_template: Optional[str] = None       # e.g. "{url}\n" fed to process stdin
+    stdin_file_key: Optional[str] = None       # e.g. "targets_file" read and fed to stdin
+
+    def render_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Populate cross-platform temp paths so no Linux-only ``/tmp/*`` is ever used."""
+        ctx = dict(context)
+        tmp_dir = Path(tempfile.gettempdir())
+        ctx.setdefault("temp_dir", str(tmp_dir))
+        ctx.setdefault("ffuf_out", str(tmp_dir / f"hunterai_ffuf_{os.getpid()}.json"))
+        ctx.setdefault("dnsrecon_out", str(tmp_dir / f"hunterai_dnsrecon_{os.getpid()}.csv"))
+        return ctx
+
+    def build_argv(self, context: Dict[str, Any]) -> List[str]:
+        """Render a cross-platform argv list (never relying on bash pipes or single quotes)."""
+        ctx = self.render_context(context)
+        if self.argv_template:
+            return [part.format(**ctx) for part in self.argv_template]
+        if not self.command_template:
+            return []
+        formatted = self.command_template.format(**ctx)
+        return shlex.split(formatted, posix=(os.name != "nt"))
+
+    def build_stdin_bytes(self, context: Dict[str, Any]) -> Optional[bytes]:
+        ctx = self.render_context(context)
+        if self.stdin_file_key:
+            file_path = ctx.get(self.stdin_file_key)
+            if file_path and Path(str(file_path)).is_file():
+                return Path(str(file_path)).read_bytes()
+            return b""
+        if self.stdin_template:
+            return self.stdin_template.format(**ctx).encode("utf-8")
+        return None
 
 
 class MasterToolRegistry:
@@ -392,7 +429,12 @@ class MasterToolRegistry:
             purpose="Ultra-fast multi-mode HTTP fuzzer: directories, parameters, vhosts, and content discovery",
             input_desc="Target URL with FUZZ keyword and wordlist",
             output_desc="Discovered paths, parameters, and vhosts with status codes and sizes",
-            command_template="ffuf -u {url}/FUZZ -w {wordlist} -mc 200,201,204,301,302,307,401,403,405 -t 40 -of json -o /tmp/ffuf_out.json -s",
+            command_template='ffuf -u {url}/FUZZ -w {wordlist} -mc 200,201,204,301,302,307,401,403,405 -t 40 -of json -o "{ffuf_out}" -s',
+            argv_template=[
+                "ffuf", "-u", "{url}/FUZZ", "-w", "{wordlist}",
+                "-mc", "200,201,204,301,302,307,401,403,405",
+                "-t", "40", "-of", "json", "-o", "{ffuf_out}", "-s",
+            ],
             prerequisites=["ffuf"],
             timeout=300,
             fallback_tool="python_dir_fuzz",
@@ -410,6 +452,11 @@ class MasterToolRegistry:
             input_desc="Target URL with FUZZ keyword substituted into parameter position",
             output_desc="Valid parameter names that produce different HTTP responses",
             command_template="ffuf -u {url}?FUZZ=testvalue -w {wordlist} -mc 200,302 -fs {content_size} -t 20 -timeout 8 -rate 20 -s",
+            argv_template=[
+                "ffuf", "-u", "{url}?FUZZ=testvalue", "-w", "{wordlist}",
+                "-mc", "200,302", "-fs", "{content_size}",
+                "-t", "20", "-timeout", "8", "-rate", "20", "-s",
+            ],
             prerequisites=["ffuf"],
             timeout=240,
             fallback_tool="python_param_extract",
@@ -426,7 +473,12 @@ class MasterToolRegistry:
             purpose="Virtual host discovery by fuzzing Host header for hidden vhosts",
             input_desc="Base URL and wordlist of hostnames",
             output_desc="Discovered virtual hosts with different response sizes",
-            command_template="ffuf -u {url} -H 'Host: FUZZ.{domain}' -w {wordlist} -mc 200,302,400 -fs {content_size} -t 30 -s",
+            command_template='ffuf -u {url} -H "Host: FUZZ.{domain}" -w {wordlist} -mc 200,302,400 -fs {content_size} -t 30 -s',
+            argv_template=[
+                "ffuf", "-u", "{url}", "-H", "Host: FUZZ.{domain}",
+                "-w", "{wordlist}", "-mc", "200,302,400",
+                "-fs", "{content_size}", "-t", "30", "-s",
+            ],
             prerequisites=["ffuf"],
             timeout=240,
             fallback_tool="crtsh",
@@ -483,7 +535,11 @@ class MasterToolRegistry:
             purpose="DNS zone transfer attempts, record enumeration (A, MX, NS, TXT, SRV, SOA), and DNSSEC checks",
             input_desc="Target domain",
             output_desc="DNS records, zone transfer results, and subdomain enumeration",
-            command_template="dnsrecon -d {domain} -t std,axfr,brt -D {wordlist} --csv /tmp/dnsrecon_out.csv -q",
+            command_template='dnsrecon -d {domain} -t std,axfr,brt -D {wordlist} --csv "{dnsrecon_out}" -q',
+            argv_template=[
+                "dnsrecon", "-d", "{domain}", "-t", "std,axfr,brt",
+                "-D", "{wordlist}", "--csv", "{dnsrecon_out}", "-q",
+            ],
             prerequisites=["dnsrecon"],
             timeout=180,
             fallback_tool="crtsh",
@@ -538,9 +594,11 @@ class MasterToolRegistry:
             name="kxss",
             stage="18_ACTIVE_TESTING",
             purpose="Fast reflected XSS detection by testing special character reflection in HTTP responses",
-            input_desc="Target URLs piped via stdin",
+            input_desc="Target URLs fed via stdin",
             output_desc="URLs reflecting dangerous characters unencoded",
-            command_template="echo {url} | kxss",
+            command_template="kxss",
+            argv_template=["kxss"],
+            stdin_template="{url}\n",
             prerequisites=["kxss"],
             timeout=60,
             fallback_tool="python_xss_probe",
@@ -559,7 +617,9 @@ class MasterToolRegistry:
             purpose="Fast, focused web crawler for links, forms, JS sources, and API endpoints",
             input_desc="Target URL",
             output_desc="Discovered URLs, forms, and API endpoints",
-            command_template="echo {url} | hakrawler -depth 3 -plain",
+            command_template="hakrawler -d 3 -plain",
+            argv_template=["hakrawler", "-d", "3", "-plain"],
+            stdin_template="{url}\n",
             prerequisites=["hakrawler"],
             timeout=120,
             fallback_tool="python_crawler",
@@ -613,10 +673,12 @@ class MasterToolRegistry:
         self.specs["httprobe"] = ToolSpec(
             name="httprobe",
             stage="06_HTTPX_LIVE_HOSTS",
-            purpose="Fast HTTP/HTTPS alive host prober — pipes subdomain list and returns live URLs only",
+            purpose="Fast HTTP/HTTPS alive host prober — feeds subdomain list via stdin and returns live URLs only",
             input_desc="List of subdomains from file or stdin",
             output_desc="Live HTTP/HTTPS URLs confirmed with 200/301 responses",
-            command_template="cat {targets_file} | httprobe -c 50",
+            command_template="httprobe -c 50",
+            argv_template=["httprobe", "-c", "50"],
+            stdin_file_key="targets_file",
             prerequisites=["httprobe"],
             timeout=120,
             fallback_tool="python_http_probe",
@@ -702,6 +764,65 @@ class MasterToolRegistry:
         print("-" * 60 + "\n")
 
 
+    async def _execute_argv_with_stdin(
+        self,
+        spec: ToolSpec,
+        context: Dict[str, Any],
+        timeout: int,
+    ) -> ToolResult:
+        """Cross-platform argv subprocess execution with optional stdin bytes (no bash pipe)."""
+        import time as _time
+        argv = spec.build_argv(context)
+        if not argv:
+            return ToolResult(tool=spec.name, command="", stdout="", stderr="Empty argv", returncode=-1, duration=0.0, error="Empty argv")
+        resolved_exe = self.tm.resolve_binary(argv[0])
+        argv[0] = resolved_exe
+        cmd_display = " ".join(argv)
+
+        # Enforce ToolManager PolicyGate governance before launching
+        denial = self.tm._govern(spec.name, cmd_display)
+        if denial is not None:
+            return denial
+
+        stdin_bytes = spec.build_stdin_bytes(context)
+        t0 = _time.time()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                stdin=asyncio.subprocess.PIPE if stdin_bytes is not None else None,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                out, err = await asyncio.wait_for(proc.communicate(input=stdin_bytes), timeout=timeout)
+            except asyncio.TimeoutError:
+                from core.process_utils import kill_process_tree
+                await kill_process_tree(proc)
+                dur = _time.time() - t0
+                return ToolResult(
+                    tool=spec.name, command=cmd_display, stdout="", stderr="",
+                    returncode=-1, duration=dur, error=f"Timeout after {timeout}s",
+                    error_category="TIMEOUT",
+                )
+            dur = _time.time() - t0
+            stdout_str = (out or b"").decode("utf-8", errors="replace")
+            stderr_str = (err or b"").decode("utf-8", errors="replace")
+            rc = proc.returncode or 0
+            out_f = self.tm._save_tool_output(spec.name, cmd_display, stdout_str, stderr_str, rc, dur)
+            return ToolResult(
+                tool=spec.name, command=cmd_display, stdout=stdout_str, stderr=stderr_str,
+                returncode=rc, duration=dur,
+                error=None if rc == 0 else f"'{spec.name}' exited with code {rc}.",
+                output_file=out_f,
+            )
+        except FileNotFoundError:
+            dur = _time.time() - t0
+            return ToolResult(
+                tool=spec.name, command=cmd_display, stdout="", stderr="",
+                returncode=127, duration=dur, error=f"'{argv[0]}' not found in PATH",
+                error_category="TOOL_UNAVAILABLE",
+            )
+
     async def execute(self, tool_name: str, context: Dict[str, Any]) -> Tuple[List[Any], Optional[str]]:
         """
         Execute tool with automatic fallback handling.
@@ -718,9 +839,13 @@ class MasterToolRegistry:
         effective_timeout = int(spec.timeout * mult) if spec else 300
 
         # Check if primary tool is available
-        if self.is_available(tool_name) and spec.command_template:
-            cmd = spec.command_template.format(**context)
-            res = await self.tm.execute(cmd, timeout=effective_timeout)
+        if self.is_available(tool_name) and (spec.argv_template or spec.command_template):
+            if spec.stdin_template or spec.stdin_file_key or spec.argv_template:
+                res = await self._execute_argv_with_stdin(spec, context, timeout=effective_timeout)
+            else:
+                render_ctx = spec.render_context(context)
+                cmd = spec.command_template.format(**render_ctx)
+                res = await self.tm.execute(cmd, timeout=effective_timeout)
             parsed = spec.parser(res.stdout) if spec.parser else res.stdout.splitlines()
             return (parsed, res.output_file)
 
@@ -749,7 +874,10 @@ class MasterToolRegistry:
         spec = self.specs.get(tool_name)
         mult = getattr(self, "timeout_multiplier", float(os.getenv("TOOL_TIMEOUT_MULTIPLIER", "1.0")))
         effective_timeout = int(spec.timeout * mult) if spec else 300
-        cmd_str = spec.command_template.format(**context) if (spec and spec.command_template) else (context.get("command") or tool_name)
+        if spec and (spec.argv_template or spec.command_template):
+            cmd_str = " ".join(spec.build_argv(context)) if spec.argv_template else spec.command_template.format(**spec.render_context(context))
+        else:
+            cmd_str = context.get("command") or tool_name
         t0 = time.time()
 
         status = "success"
@@ -759,9 +887,12 @@ class MasterToolRegistry:
         contract_result = None
 
         try:
-            if self.is_available(tool_name) and spec and spec.command_template:
+            if self.is_available(tool_name) and spec and (spec.argv_template or spec.command_template):
                 print(f"[*] [{stage.upper()}] ⚡ Dispatching {tool_name} (Max Timeout: {effective_timeout}s)...")
-                res = await self.tm.execute(cmd_str, timeout=effective_timeout)
+                if spec.stdin_template or spec.stdin_file_key or spec.argv_template:
+                    res = await self._execute_argv_with_stdin(spec, context, timeout=effective_timeout)
+                else:
+                    res = await self.tm.execute(cmd_str, timeout=effective_timeout)
                 contract_result = res.to_contract(action=tool_name)
                 raw_str = res.output
                 parsed = spec.parser(res.stdout) if spec.parser else res.stdout.splitlines()

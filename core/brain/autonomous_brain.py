@@ -11,20 +11,16 @@ Autonomous Pentest Brain — OODA Loop
 - rate limit على عدد الـ probe requests
 """
 import asyncio
-import inspect
 import os
 import re
 import json
 import time
 import logging
 from copy import deepcopy
-from dataclasses import asdict
 from typing import Dict, Any, List, Optional, Callable, Tuple
 from urllib.parse import urlparse, parse_qs, urljoin
-from core.constants import CourtVerdict
-from core.evidence_court import EvidenceCourt
+from core.evidence_court import EvidenceCourt, CourtVerdict
 from core.court.evidence_court_v2 import EvidenceCourtV2, TribunalRuling
-from core.burp_gateway.issue_exporter import BurpIssueExporter
 from core.causal.causal_graph import CausalSecurityGraph, CausalNodeType
 from core.twin.security_digital_twin import SecurityDigitalTwin, RoleTier
 from core.reasoning.competing_hypotheses import CompetingHypothesesEngine, HypothesisOption
@@ -1503,7 +1499,6 @@ class AutonomousBrain:
             from core.burp_gateway.traffic_normalizer import BurpTrafficNormalizer
 
             self.burp_event_stream = BurpLiveEventStream()
-            self.burp_event_stream.add_sync_listener(self._on_sensor_event)
             self.burp_experiment_queue = BurpExperimentQueue()
             self.burp_normalizer = BurpTrafficNormalizer
             self.burp_research_controller = BurpResearchController(
@@ -1544,300 +1539,6 @@ class AutonomousBrain:
             log.info("[BRAIN] V27.1 Causal Verification & BCSL Engines attached (AttackSurfaceGraph, EIGPlanner, NegativeLedger, ExperimentLedger, TriadVerifier, BCSL)")
         except Exception as e:
             log.warning(f"[BRAIN] V27.1 Causal Verification Engines could not be attached: {e}")
-
-        # Evidence Court, Hypothesis Engine, and Burp Issue Exporter
-        self.evidence_court = EvidenceCourt
-        self.hypothesis_engine = None
-        try:
-            from core.reasoning.hypothesis_engine import HypothesisEngine as ReasoningHypothesisEngine
-            self.hypothesis_engine = ReasoningHypothesisEngine()
-            log.info("[BRAIN] HypothesisEngine attached (core.reasoning)")
-        except Exception as e:
-            log.warning(f"[BRAIN] Reasoning HypothesisEngine could not be attached: {e}")
-            try:
-                from core.hypothesis_engine.engine import get_hypothesis_engine
-                self.hypothesis_engine = get_hypothesis_engine()
-                log.info("[BRAIN] HypothesisEngine attached (core.hypothesis_engine)")
-            except Exception as e2:
-                log.warning(f"[BRAIN] HypothesisEngine could not be attached: {e2}")
-
-        self.burp_issue_exporter = None
-        try:
-            self.burp_issue_exporter = BurpIssueExporter(output_dir="data/exports/burp_issues")
-            log.info("[BRAIN] BurpIssueExporter attached (data/exports/burp_issues)")
-        except Exception as e:
-            log.warning(f"[BRAIN] BurpIssueExporter could not be attached: {e}")
-
-    @staticmethod
-    def _is_confirmed_verdict(verdict: Any) -> bool:
-        """Compare enum or string verdicts safely against CourtVerdict.CONFIRMED."""
-        if verdict is None:
-            return False
-        raw_val = verdict.value if hasattr(verdict, "value") else verdict
-        return str(raw_val).strip().upper() == CourtVerdict.CONFIRMED.value
-
-    def _export_confirmed_to_burp(self, finding_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Export a confirmed finding via BurpIssueExporter if attached."""
-        if self.burp_issue_exporter is None:
-            return None
-        try:
-            return self.burp_issue_exporter.export_finding(finding_data)
-        except Exception as e:
-            log.warning(f"[BRAIN] BurpIssueExporter failed: {e}")
-            return None
-
-    @staticmethod
-    def _infer_api_vuln_class(endpoint_url: str, method: str, data: Dict[str, Any]) -> str:
-        """Infer a reasonable initial vulnerability class for an observed API endpoint."""
-        lower_url = endpoint_url.lower()
-        params = data.get("parameters", data.get("params", [])) or []
-        param_names = [str(p).lower() for p in params] if isinstance(params, (list, tuple, set)) else []
-        if "graphql" in lower_url:
-            return "GRAPHQL_ABUSE"
-        if any(seg in lower_url for seg in ("/admin", "/internal", "/manage", "/roles")):
-            return "BFLA"
-        if re.search(r"/(?:\d+|[a-f0-9-]{8,}|\{[^}]+\}|:[a-z_]+)", lower_url) or any(
-            p in ("id", "user_id", "account_id", "order_id") or p.endswith("_id") for p in param_names
-        ):
-            return "BOLA"
-        if method in ("POST", "PUT", "PATCH"):
-            return "MASS_ASSIGNMENT"
-        return "API_ABUSE"
-
-    def _add_discovered_endpoint_to_surface_graph(
-        self,
-        endpoint_url: str,
-        method: str,
-        data: Dict[str, Any],
-    ) -> Any:
-        """Register a sensor-discovered endpoint in AttackSurfaceGraph."""
-        if not endpoint_url or self.attack_surface_graph is None:
-            return None
-        if hasattr(self.attack_surface_graph, "add_node"):
-            from core.reasoning.attack_surface_graph import EpistemicStatus, SurfaceNode
-
-            nodes = getattr(self.attack_surface_graph, "nodes", None)
-            if isinstance(nodes, dict) and endpoint_url in nodes:
-                return nodes[endpoint_url]
-            attrs: Dict[str, Any] = {
-                "method": method,
-                "source": str(data.get("source") or "browser"),
-            }
-            for key in ("params", "parameters"):
-                if key in data:
-                    attrs[key] = data[key]
-            node = SurfaceNode(
-                node_id=endpoint_url,
-                node_type="ENDPOINT",
-                name=endpoint_url,
-                epistemic_status=EpistemicStatus.OBSERVED,
-                attributes=attrs,
-            )
-            return self.attack_surface_graph.add_node(node)
-        if hasattr(self.attack_surface_graph, "add_endpoint"):
-            return self.attack_surface_graph.add_endpoint(endpoint_url, method=method)
-        return None
-
-    def _adjudicate_secret_event(self, data: Dict[str, Any]) -> Any:
-        """Create an EvidenceOS Claim for a detected secret and adjudicate via EvidenceCourt."""
-        from core.evidence_os.unified_model import Claim
-
-        secret_type = str(data.get("secret_type") or data.get("type_name") or data.get("kind") or "secret_exposure")
-        source_url = str(
-            data.get("url")
-            or data.get("target_url")
-            or data.get("endpoint")
-            or data.get("source_file")
-            or data.get("source")
-            or "unknown"
-        )
-        redacted = str(data.get("redacted_preview") or data.get("preview") or "")
-        raw_conf = data.get("confidence", 0.85 if str(data.get("status", "")).upper() == "VALIDATED" else 0.70)
-        try:
-            confidence = float(raw_conf)
-        except (TypeError, ValueError):
-            confidence = 0.70
-
-        evidence_id = str(
-            data.get("evidence_id")
-            or data.get("secret_id")
-            or f"EVI-SEC-{abs(hash((source_url, secret_type, redacted))) % 100000:05d}"
-        )
-        rationale = str(
-            data.get("validation_notes")
-            or data.get("rationale")
-            or f"Secret detected ({secret_type}) in {source_url}"
-        )
-        claim = Claim(
-            evidence_id=evidence_id,
-            vulnerability_class=f"SECRET_EXPOSURE:{secret_type}",
-            confidence_score=confidence,
-            rationale=rationale,
-            provenance_hash_chain=str(data.get("provenance_hash_chain", "")),
-        )
-
-        court = self.evidence_court if self.evidence_court is not None else EvidenceCourt
-        adjudicate_fn = getattr(court, "adjudicate", None)
-        if not callable(adjudicate_fn):
-            return None
-
-        try:
-            sig = inspect.signature(adjudicate_fn)
-            pos_params = [
-                p for p in sig.parameters.values()
-                if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-            ]
-            has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-        except (TypeError, ValueError):
-            pos_params = []
-            has_var_kw = True
-
-        if len(pos_params) == 1 and not has_var_kw:
-            judgment = adjudicate_fn(claim)
-        else:
-            judgment = adjudicate_fn(
-                target_url=source_url,
-                parameter=secret_type,
-                vuln_class=claim.vulnerability_class,
-                finder_claim={
-                    **asdict(claim),
-                    "source": source_url,
-                    "secret_type": secret_type,
-                    "redacted_preview": redacted,
-                    "waf_blocked": bool(data.get("waf_blocked", False)),
-                },
-                verifier_result=data.get("verifier_result"),
-                causal_evidence=data.get("causal_evidence"),
-                proof_payload=data.get("proof_payload"),
-                allow_declared_proof=bool(data.get("allow_declared_proof", False)),
-            )
-
-        verdict = getattr(judgment, "verdict", None)
-        if self._is_confirmed_verdict(verdict):
-            self._export_confirmed_to_burp({
-                "id": getattr(judgment, "judgment_id", claim.claim_id),
-                "type": "secret_exposure",
-                "vuln_class": claim.vulnerability_class,
-                "param_name": secret_type,
-                "endpoint": source_url,
-                "target": source_url,
-                "title": f"Confirmed Secret Exposure ({secret_type})",
-                "severity": getattr(judgment, "calibrated_severity", "High"),
-                "evidence": getattr(judgment, "adjudication_rationale", rationale),
-                "confidence": getattr(judgment, "confidence_score", confidence),
-                "tool": "AutonomousBrain/SensorEvent",
-                "lifecycle_verdict": CourtVerdict.CONFIRMED.value,
-            })
-
-        verdict_str = str(getattr(verdict, "value", verdict or ""))
-        self._audit(
-            "sensor_secret_detected",
-            source=source_url,
-            secret_type=secret_type,
-            claim_id=claim.claim_id,
-            verdict=verdict_str,
-        )
-        return judgment
-
-    def _hypothesize_api_endpoint_event(self, data: Dict[str, Any]) -> Any:
-        """Formulate a security hypothesis when a sensor discovers an API endpoint."""
-        endpoint_url = str(data.get("url") or data.get("endpoint") or data.get("path") or "")
-        if not endpoint_url or self.hypothesis_engine is None:
-            return None
-
-        method = str(data.get("method") or "GET").upper()
-        vuln_class = str(data.get("vuln_class") or self._infer_api_vuln_class(endpoint_url, method, data))
-        observation = str(
-            data.get("observation")
-            or data.get("rationale")
-            or f"Discovered API endpoint {method} {endpoint_url}"
-        )
-        raw_prior = data.get("prior", 0.25)
-        try:
-            prior = float(raw_prior)
-        except (TypeError, ValueError):
-            prior = 0.25
-
-        engine = self.hypothesis_engine
-        result = None
-        if hasattr(engine, "formulate_hypothesis"):
-            result = engine.formulate_hypothesis(
-                endpoint=endpoint_url,
-                vuln_class=vuln_class,
-                initial_observation=observation,
-                prior=prior,
-            )
-        elif hasattr(engine, "create_hypothesis"):
-            result = engine.create_hypothesis(
-                description=f"[{vuln_class}] {observation}",
-                prior_probability=prior,
-            )
-        elif hasattr(engine, "generate_hypotheses"):
-            from agents.security_intelligence.schemas import ObservationType, SecurityObservation
-
-            obs = SecurityObservation(
-                project_id="sensor_stream",
-                target=endpoint_url,
-                source="event_stream",
-                obs_type=ObservationType.HTTP_RESPONSE,
-                data={
-                    "url": endpoint_url,
-                    "path": urlparse(endpoint_url).path or endpoint_url,
-                    "method": method,
-                    "parameters": data.get("parameters", data.get("params", [])),
-                    "endpoints": [endpoint_url],
-                },
-                operation_id=self.operation_id,
-            )
-            result = engine.generate_hypotheses(obs)
-        elif hasattr(engine, "add_hypothesis"):
-            result = engine.add_hypothesis(
-                vuln_type=vuln_class,
-                endpoint=endpoint_url,
-                rationale=observation,
-                required_evidence=data.get("required_evidence", []),
-            )
-
-        self._audit(
-            "sensor_api_endpoint_found",
-            url=endpoint_url,
-            method=method,
-            vuln_class=vuln_class,
-        )
-        return result
-
-    def _on_sensor_event(self, event: Any) -> Any:
-        """Handle live events from BurpLiveEventStream (StreamEvent dataclass or dict)."""
-        if event is None:
-            return None
-
-        if isinstance(event, dict):
-            event_type = str(event.get("event_type") or event.get("type") or "")
-            raw_data = event.get("data")
-            data: Dict[str, Any] = raw_data if isinstance(raw_data, dict) else event
-        else:
-            event_type = str(getattr(event, "event_type", "") or getattr(event, "type", "") or "")
-            raw_data = getattr(event, "data", None)
-            data = raw_data if isinstance(raw_data, dict) else {}
-
-        if (not event_type or event_type == "GENERIC_BURP_EVENT") and isinstance(data, dict):
-            event_type = str(data.get("type") or data.get("event_type") or event_type)
-
-        try:
-            if event_type == "browser_endpoint_discovered":
-                endpoint_url = str(data.get("url") or data.get("endpoint") or data.get("target_url") or "")
-                method = str(data.get("method") or "GET").upper()
-                node = self._add_discovered_endpoint_to_surface_graph(endpoint_url, method, data)
-                if endpoint_url:
-                    self._audit("sensor_browser_endpoint_discovered", url=endpoint_url, method=method)
-                return node
-            if event_type == "secret_detected":
-                return self._adjudicate_secret_event(data)
-            if event_type == "api_endpoint_found":
-                return self._hypothesize_api_endpoint_event(data)
-        except Exception as e:
-            log.warning(f"[BRAIN] Sensor event handler error ({event_type}): {e}")
-        return None
 
     def attach_burp_sensor(self, sensor: Any) -> None:
         """Attaches or updates the BurpSensor perceptual organ."""
@@ -2026,12 +1727,18 @@ class AutonomousBrain:
         """
         try:
             from urllib.parse import urlparse
+            raw_probe = (url or "").strip()
+            if not raw_probe:
+                return False
             parsed_target = urlparse(base_url)
-            parsed_probe = urlparse(url)
+            parsed_probe = urlparse(raw_probe)
+            probe_scheme = (parsed_probe.scheme or "").lower().strip()
+            if probe_scheme and probe_scheme not in ("http", "https"):
+                return False
             target_host = (parsed_target.hostname or "").lower().strip()
             probe_host = (parsed_probe.hostname or "").lower().strip()
             if not probe_host:
-                return True
+                return not bool(probe_scheme) and not raw_probe.startswith("//")
             if probe_host == target_host:
                 return True
             # Subdomains of target
@@ -2390,7 +2097,6 @@ class AutonomousBrain:
             headless=not use_browser,
             proxy=proxy,
             event_bus=self.browser_event_bus,
-            event_stream=self.burp_event_stream,
         )
         self.browser_explorer = HumanLikeExplorationEngine(
             session=self.browser_session,
@@ -2491,14 +2197,27 @@ class AutonomousBrain:
 
         # ── PHASE 0.3: CODE INTELLIGENCE (Client-side Page & JS Analysis) ────
         code_intel_res: Dict[str, Any] = {}
+        fetched_scripts: Dict[str, str] = {}
+        code_intel_hypotheses: List[Dict[str, Any]] = []
+        self._code_intel_hypotheses = code_intel_hypotheses
         spa_detected = False
         try:
             target_host_sanitized = (urlparse(target).hostname or "target").replace(":", "_").replace(".", "_")
             code_intel_agent = CodeIntelligenceAgent(output_dir=f"data/scans/{target_host_sanitized}")
+            fetched_scripts = await self._fetch_code_intel_scripts(js_urls, target, proxy=proxy)
+
+            async def _fetch_in_scope_source_map(map_url: str) -> Optional[str]:
+                if not self._is_safe_fetchable_url(map_url, target):
+                    return None
+                content = await self._fetch_js(map_url, proxy)
+                return content or None
+
             code_intel_res = await code_intel_agent.analyze_page(
                 target_url=target,
                 raw_html=html,
-                headers=headers
+                headers=headers,
+                fetched_scripts=fetched_scripts,
+                source_map_fetcher=_fetch_in_scope_source_map,
             )
             self._last_code_intel = code_intel_res
             fw = code_intel_res.get("framework", {})
@@ -2527,13 +2246,28 @@ class AutonomousBrain:
                                     attributes={"params": ep.get("parameters", [])}
                                 )
                             )
+
+            # Consume CodeIntelligence secrets & source_sink_flows as CANDIDATE hypotheses routed to EvidenceCourt
+            code_intel_hypotheses = self._ingest_code_intel_hypotheses(target, code_intel_res)
+            self._code_intel_hypotheses = code_intel_hypotheses
+            if code_intel_hypotheses:
+                js_findings.extend(code_intel_hypotheses)
+
             m = code_intel_res.get("manifest", {})
             await self._log(
-                f"[CODE_INTEL] Analyzed {m.get('js_analyzed', 0)} scripts | "
+                f"[CODE_INTEL] Analyzed {m.get('js_analyzed', 0)} scripts "
+                f"(fetched={len(fetched_scripts)}, sourcemaps={len(code_intel_res.get('source_maps_resolved', []))}) | "
                 f"Discovered {m.get('endpoints_discovered', 0)} API endpoints | "
-                f"Secrets validated: {m.get('secrets_discovered', 0)}"
+                f"Secrets validated: {m.get('secrets_discovered', 0)} | "
+                f"Candidate hypotheses routed to EvidenceCourt: {len(code_intel_hypotheses)}"
             )
-            self._audit("code_intelligence_done", manifest=m)
+            self._audit(
+                "code_intelligence_done",
+                manifest=m,
+                fetched_scripts_count=len(fetched_scripts),
+                source_maps_resolved=len(code_intel_res.get("source_maps_resolved", [])),
+                candidate_hypotheses_count=len(code_intel_hypotheses),
+            )
 
             # Bidirectional Sensor Feedback: direct active Browser Sensor to explore top newly discovered JS API routes
             if hasattr(self, "browser_explorer") and self.browser_explorer:
@@ -2950,12 +2684,6 @@ class AutonomousBrain:
                 }
                 findings.append(finding)
                 self._audit("finding_added", title=finding["title"], severity=finding["severity"], verdict=ruling.final_verdict)
-                if self._is_confirmed_verdict(ruling.final_verdict):
-                    self._export_confirmed_to_burp({
-                        **finding,
-                        "id": finding.get("id", case_id),
-                        "endpoint": finding.get("endpoint") or finding.get("url") or target,
-                    })
                 await self._emit("finding", **finding)
                 if self.attack_surface_graph is not None:
                     from core.reasoning.attack_surface_graph import EpistemicStatus
@@ -3030,7 +2758,7 @@ class AutonomousBrain:
             js_tasks = []
             for js_url in js_urls:
                 async def _analyze_js(u=js_url):
-                    content = await self._fetch_js(u, proxy)
+                    content = fetched_scripts.get(u) or await self._fetch_js(u, proxy)
                     if not content:
                         return None
                     result = await self.artifact.analyze_js_file(content, u)
@@ -3362,6 +3090,7 @@ class AutonomousBrain:
             "audit_log": self._audit_log,
             "objective_result": objective_result,   # Finding ≠ Completion tracking
             "code_intelligence": getattr(self, "_last_code_intel", code_intel_res),
+            "code_intel_hypotheses": getattr(self, "_code_intel_hypotheses", []),
             "browser_exploration": getattr(self, "_last_browser_exploration", {}),
             "exploration_coverage": getattr(self, "_last_browser_exploration", {}).get("coverage", {}),
             "exploration_memory": getattr(self, "_last_browser_exploration", {}).get("memory", {}),
@@ -3374,6 +3103,207 @@ class AutonomousBrain:
                 "global_risk_budget": self.eig_planner.global_risk_budget,
             } if self.eig_planner else None,
         }
+
+    def _is_safe_fetchable_url(self, url: str, base_url: str) -> bool:
+        """Require explicit http/https scheme, in-scope host, and non-overridable SSRF invariants."""
+        raw = (url or "").strip()
+        if not raw or not self._is_in_scope(raw, base_url):
+            return False
+        parsed = urlparse(raw)
+        if (parsed.scheme or "").lower() not in ("http", "https") or not parsed.hostname:
+            return False
+        from core.scope_engine import validate_http_url_target
+        target_host = (urlparse(base_url).hostname or "").lower().strip()
+        in_scope = [target_host, f"*.{target_host}"] if target_host else None
+        allow_loopback = target_host in {"127.0.0.1", "localhost", "::1"}
+        ok, _ = validate_http_url_target(
+            raw,
+            in_scope=in_scope,
+            allow_loopback=allow_loopback,
+            resolve_dns=False,
+            fail_closed=False,
+        )
+        return ok
+
+    async def _fetch_code_intel_scripts(
+        self,
+        js_urls: List[str],
+        target: str,
+        *,
+        proxy: Optional[str] = None,
+        max_scripts: int = 10,
+    ) -> Dict[str, str]:
+        """Concurrently fetch in-scope external JavaScript bundles for CodeIntelligenceAgent."""
+        in_scope_urls = [u for u in (js_urls or []) if self._is_safe_fetchable_url(u, target)][:max_scripts]
+        if not in_scope_urls:
+            return {}
+
+        async def _load_one(url: str) -> Tuple[str, str]:
+            try:
+                content = await self._fetch_js(url, proxy)
+                return url, content or ""
+            except Exception:
+                return url, ""
+
+        results = await asyncio.gather(*[_load_one(u) for u in in_scope_urls], return_exceptions=True)
+        fetched: Dict[str, str] = {}
+        for item in results:
+            if isinstance(item, tuple) and len(item) == 2 and item[1]:
+                fetched[item[0]] = item[1]
+        return fetched
+
+    def _ingest_code_intel_hypotheses(
+        self,
+        target: str,
+        code_intel_res: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Route CodeIntelligenceAgent secrets & source_sink_flows to EvidenceCourt as CANDIDATE hypotheses.
+
+        Never auto-confirms static JS findings; every signal is adjudicated by EvidenceCourt
+        with ``status="CANDIDATE"`` so Phase 3 epistemic boundaries remain strictly enforced.
+        """
+        hypotheses: List[Dict[str, Any]] = []
+        if not isinstance(code_intel_res, dict):
+            return hypotheses
+
+        # 1. Client-side secret candidates (excluding REJECTED placeholders)
+        for sec in code_intel_res.get("secrets", []) or []:
+            if not isinstance(sec, dict):
+                continue
+            if str(sec.get("status", "")).upper() == "REJECTED":
+                continue
+            secret_type = str(sec.get("secret_type") or "secret_exposure")
+            source_file = str(sec.get("source_file") or target)
+            line_no = int(sec.get("line_number") or 0)
+            redacted = str(sec.get("redacted_preview") or "***")
+            claim = {
+                "title": f"Client-side {secret_type} candidate in {source_file}:{line_no}",
+                "source_file": source_file,
+                "line_number": line_no,
+                "redacted_preview": redacted,
+                "secret_type": secret_type,
+                "entropy": sec.get("entropy", 0.0),
+                "validation_notes": sec.get("validation_notes", ""),
+                "provenance": "code_intelligence",
+            }
+            judgment = EvidenceCourt.adjudicate(
+                target_url=target,
+                parameter=f"{source_file}:{line_no}",
+                vuln_class="secret_exposure",
+                finder_claim=claim,
+                verifier_result={
+                    "reproduced": False,
+                    "status": "CANDIDATE",
+                    "source": "code_intelligence",
+                },
+                is_in_scope=True,
+            )
+            entry = {
+                "kind": "code_intel_secret",
+                "vuln_class": "secret_exposure",
+                "secret_type": secret_type,
+                "source_file": source_file,
+                "line_number": line_no,
+                "redacted_preview": redacted,
+                "verdict": judgment.verdict.value,
+                "epistemic_state": judgment.epistemic_state,
+                "reportable": judgment.reportable,
+                "judgment_id": judgment.judgment_id,
+                "rationale": judgment.adjudication_rationale,
+            }
+            hypotheses.append(entry)
+
+            if self.security_state is not None:
+                self.security_state.add_unknown(
+                    f"Is client-side secret candidate ({secret_type}) at {source_file}:{line_no} live and privileged?"
+                )
+            if self.attack_surface_graph is not None:
+                from core.reasoning.attack_surface_graph import EpistemicStatus, SurfaceEdge
+                edge_id = f"CI-SEC-{abs(hash((source_file, line_no, secret_type))) % 100000}"
+                if edge_id not in self.attack_surface_graph.edges:
+                    self.attack_surface_graph.add_edge(
+                        SurfaceEdge(
+                            edge_id=edge_id,
+                            source_node_id=target,
+                            target_node_id=f"SECRET:{secret_type}",
+                            relation_type="CANDIDATE_VIOLATION",
+                            epistemic_status=EpistemicStatus.CANDIDATE,
+                            conditions={"source_file": source_file, "line": line_no},
+                            evidence_refs=[judgment.judgment_id],
+                        )
+                    )
+
+        # 2. Client-side source -> sink flows (unsanitized / exploitable candidates)
+        for flow in code_intel_res.get("source_sink_flows", []) or []:
+            if not isinstance(flow, dict) or not flow.get("is_exploitable", False):
+                continue
+            source_name = str(flow.get("source") or "client_source")
+            sink_name = str(flow.get("sink") or "dom_sink")
+            sink_cat = str(flow.get("sink_category") or "DOM")
+            source_file = str(flow.get("source_file") or target)
+            line_no = int(flow.get("line_number") or 0)
+            vuln_class = "dom_xss" if sink_cat in ("DOM", "EXEC") else "client_sink_injection"
+            claim = {
+                "title": f"Source-to-Sink flow {source_name} -> {sink_name} in {source_file}:{line_no}",
+                "source": source_name,
+                "sink": sink_name,
+                "sink_category": sink_cat,
+                "source_file": source_file,
+                "line_number": line_no,
+                "data_path": list(flow.get("data_path") or []),
+                "evidence": str(flow.get("evidence") or ""),
+                "provenance": "code_intelligence",
+            }
+            judgment = EvidenceCourt.adjudicate(
+                target_url=target,
+                parameter=f"{source_name}->{sink_name}",
+                vuln_class=vuln_class,
+                finder_claim=claim,
+                verifier_result={
+                    "reproduced": False,
+                    "status": "CANDIDATE",
+                    "source": "code_intelligence",
+                },
+                is_in_scope=True,
+            )
+            entry = {
+                "kind": "code_intel_source_sink",
+                "vuln_class": vuln_class,
+                "source": source_name,
+                "sink": sink_name,
+                "sink_category": sink_cat,
+                "source_file": source_file,
+                "line_number": line_no,
+                "data_path": list(flow.get("data_path") or []),
+                "verdict": judgment.verdict.value,
+                "epistemic_state": judgment.epistemic_state,
+                "reportable": judgment.reportable,
+                "judgment_id": judgment.judgment_id,
+                "rationale": judgment.adjudication_rationale,
+            }
+            hypotheses.append(entry)
+
+            if self.security_state is not None:
+                self.security_state.add_unknown(
+                    f"Is client-side flow {source_name} -> {sink_name} at {source_file}:{line_no} exploitable in live DOM?"
+                )
+            if self.attack_surface_graph is not None:
+                from core.reasoning.attack_surface_graph import EpistemicStatus, SurfaceEdge
+                edge_id = f"CI-FLOW-{abs(hash((source_file, line_no, source_name, sink_name))) % 100000}"
+                if edge_id not in self.attack_surface_graph.edges:
+                    self.attack_surface_graph.add_edge(
+                        SurfaceEdge(
+                            edge_id=edge_id,
+                            source_node_id=target,
+                            target_node_id=f"{vuln_class.upper()}:{sink_name}",
+                            relation_type="CANDIDATE_VIOLATION",
+                            epistemic_status=EpistemicStatus.CANDIDATE,
+                            conditions={"source": source_name, "sink": sink_name, "file": source_file, "line": line_no},
+                            evidence_refs=[judgment.judgment_id],
+                        )
+                    )
+
+        return hypotheses
 
     async def explore_discovered_endpoint(self, endpoint_url_or_path: str) -> Dict[str, Any]:
         """Bidirectional sensor feedback: directs the active browser to visit and inspect a new route"""

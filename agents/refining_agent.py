@@ -29,11 +29,8 @@ class SelfRefiningAgent:
 
     def __init__(self, resource_manager=None, progress_cb: Optional[Callable] = None):
         if resource_manager is None:
-            try:
-                from orchestrator.resource_manager import ResourceManager
-                self.rm = ResourceManager()
-            except Exception:
-                self.rm = None
+            from orchestrator.resource_manager import ResourceManager
+            self.rm = ResourceManager()
         else:
             self.rm = resource_manager
         self.cb = progress_cb

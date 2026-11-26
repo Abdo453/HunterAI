@@ -85,8 +85,8 @@ go_tools=(
   "github.com/Emoe/kxss@latest"
   "github.com/OJ/gobuster/v3@latest"
   "github.com/jaeles-project/gospider@latest"
-  "github.com/tomnomnom/dnsx/cmd/dnsx@latest"
-  "github.com/penetration-testing-tools/naabu@latest"
+  "github.com/projectdiscovery/dnsx/cmd/dnsx@latest"
+  "github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"
 )
 for pkg in "${go_tools[@]}"; do
   tool="$(basename "$pkg" | cut -d'@' -f1)"
@@ -183,7 +183,7 @@ fi
 echo -e "\n${GREEN}===== FINAL REPORT =====${NC}"
 if [ "${#FAILED_TOOLS[@]}" -eq 0 ]; then
   echo -e "${GREEN}[✓] All tools verified and ready.${NC}"
-  echo -e "Run: python main.py -t https://target.com --mode full"
+  echo -e "Run: python3 pentest.py artex target.com"
   exit 0
 else
   echo -e "${RED}[✗] The following tools failed verification:${NC}"

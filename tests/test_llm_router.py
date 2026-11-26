@@ -74,7 +74,7 @@ def test_catalog_lists_cloud_and_local(monkeypatch):
     assert {c["provider"] for c in cat["cloud"]} == {"gemini", "deepseek"}
 
     ids = {c["id"] for c in cat["choices"]}
-    assert "api:gemini:gemini-3.8-flash" in ids
+    assert "api:gemini:gemini-2.5-flash" in ids
     assert "api:deepseek:deepseek-chat" in ids
     assert "local:qwen2.5-coder:14b" in ids
 
@@ -217,16 +217,49 @@ def test_load_provider_imports_real_adapter():
     r = LLMRouter()
     spec = next(s for s in CLOUD_PROVIDERS if s.id == "gemini")
     provider = r._load_provider(spec)
-    assert provider.name == "gemini-3.8-flash"
+    assert provider.name == "gemini-2.5-flash"
 
 
 # ── web endpoint ─────────────────────────────────────────────────────────────
 
 def test_catalog_endpoint_registered():
-    pytest.importorskip("fastapi")
-    try:
-        from ui.web import app as app_module
-    except Exception as e:  # pragma: no cover - environment dependent
-        pytest.skip(f"web app import failed: {e}")
-    paths = {getattr(r, "path", None) for r in app_module.app.routes}
-    assert "/api/models/catalog" in paths
+    from django.urls import resolve
+    from hunter_backend.testing import ASGISyncClient
+
+    match = resolve("/api/models/catalog")
+    assert match is not None
+    with ASGISyncClient() as client:
+        r = client.get("/api/models/catalog")
+        assert r.status_code == 200
+        assert "choices" in r.json()
+
+
+def test_cloud_refusal_retries_same_provider_reframed_before_local(monkeypatch):
+    _clear_keys(monkeypatch)
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("HUNTER_LLM_POLICY", "cloud_first")
+    r = LLMRouter()
+
+    calls = []
+
+    class _RefusalThenOkProvider:
+        async def is_available(self) -> bool:
+            return True
+
+        async def chat(self, messages):
+            calls.append([m.content for m in messages])
+            if len(calls) == 1:
+                return ModelResponse(content="I cannot assist with hacking or exploit requests.", model_name="fake", role="api")
+            return ModelResponse(content="Validation checks: parameterize queries and inspect normalization.", model_name="fake", role="api")
+
+    async def _boom():
+        raise AssertionError("local Ollama must NOT be called when reframed retry succeeds on same cloud model")
+
+    monkeypatch.setattr(r, "_load_provider", lambda spec, model=None: _RefusalThenOkProvider())
+    monkeypatch.setattr(r, "local_models", _boom)
+
+    res = asyncio.run(r.complete([{"role": "user", "content": "Test how to exploit SQL injection and bypass WAF"}]))
+    assert len(calls) == 2
+    assert "exploit" in calls[0][-1].lower()
+    assert "evaluate waf filtering boundaries" in calls[1][-1].lower()
+    assert "Validation checks" in res.content

@@ -12,8 +12,8 @@ output:
 depends_on:
   - crawling
 next_skills:
-  - xss
-  - idor
+  - xss_hunter
+  - idor_tester
 fallback_skills: []
 tools_required:
   - getJS

@@ -139,14 +139,13 @@ class TestScopeGuardEdgeCases:
 # ============================================================================
 # Negative API Tests (Error Handling)
 # ============================================================================
-from ui.web.app import app
+from hunter_backend.testing import make_async_client
 
 
 @pytest.mark.asyncio
 async def test_explain_empty_subject():
     """POST /api/intelligence/explain with empty subject should return 400 (server validates)"""
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with make_async_client() as client:
         res = await client.post("/api/intelligence/explain", json={
             "subject": "",
             "language": "ar"
@@ -157,8 +156,7 @@ async def test_explain_empty_subject():
 @pytest.mark.asyncio
 async def test_quiz_evaluate_invalid_index():
     """POST /api/intelligence/quiz/evaluate with out-of-range choice_idx should handle gracefully"""
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with make_async_client() as client:
         # First get a valid quiz
         q_res = await client.post("/api/intelligence/quiz/start", json={"topic": "bola"})
         assert q_res.status_code == 200
@@ -176,8 +174,7 @@ async def test_quiz_evaluate_invalid_index():
 @pytest.mark.asyncio
 async def test_research_endpoint():
     """POST /api/intelligence/research with valid topic"""
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with make_async_client() as client:
         res = await client.post("/api/intelligence/research", json={"topic": "CVE-2024-1234"})
         assert res.status_code == 200
         data = res.json()
@@ -187,8 +184,7 @@ async def test_research_endpoint():
 @pytest.mark.asyncio
 async def test_profile_endpoint():
     """GET /api/intelligence/profile should return learning profile data"""
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with make_async_client() as client:
         res = await client.get("/api/intelligence/profile")
         assert res.status_code == 200
         data = res.json()

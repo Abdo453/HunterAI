@@ -94,36 +94,43 @@ def test_dynamic_tool_agent_generation():
 
 
 def test_dynamic_tool_agent_execution_fallback():
-    """Verify safe hermetic fallback execution across tool categories."""
+    """Verify missing-binary / force_fallback returns truthful UNAVAILABLE (Phase 3 anti-stub)."""
     adapter = RealToolAdapter(force_fallback=True)
     factory = ToolAgentFactory(adapter=adapter)
 
-    # 1. Recon tool fallback
+    # 1. Recon tool unavailable (no synthetic subdomains)
     subfinder_agent = factory.get_agent("subfinder")
     res_recon = subfinder_agent.execute(target="example.com")
-    assert res_recon.success
-    assert res_recon.used_fallback
-    assert "subdomains" in res_recon.structured_data
-    assert len(res_recon.structured_data["subdomains"]) > 0
+    assert res_recon.success is False
+    assert res_recon.used_fallback is False
+    assert res_recon.exit_code == 127
+    assert res_recon.status == "UNAVAILABLE"
+    assert res_recon.structured_data.get("status") == "UNAVAILABLE"
 
-    # 2. Port scan tool fallback
+    # 2. Port scan tool unavailable (no synthetic open_ports)
     nmap_agent = factory.get_agent("nmap")
     res_port = nmap_agent.execute(target="example.com")
-    assert res_port.success
-    assert res_port.used_fallback
-    assert "open_ports" in res_port.structured_data
+    assert res_port.success is False
+    assert res_port.used_fallback is False
+    assert res_port.exit_code == 127
+    assert res_port.status == "UNAVAILABLE"
+    assert res_port.structured_data.get("status") == "UNAVAILABLE"
 
-    # 3. Web crawl fallback
+    # 3. Web crawl unavailable
     crawl_agent = factory.get_agent("katana")
     res_crawl = crawl_agent.execute(target="example.com")
-    assert res_crawl.success
-    assert "crawled_urls" in res_crawl.structured_data
+    assert res_crawl.success is False
+    assert res_crawl.used_fallback is False
+    assert res_crawl.status == "UNAVAILABLE"
+    assert res_crawl.structured_data.get("status") == "UNAVAILABLE"
 
-    # 4. Fuzzing fallback
+    # 4. Fuzzing unavailable
     fuzz_agent = factory.get_agent("ffuf")
     res_fuzz = fuzz_agent.execute(target="example.com")
-    assert res_fuzz.success
-    assert "endpoints" in res_fuzz.structured_data
+    assert res_fuzz.success is False
+    assert res_fuzz.used_fallback is False
+    assert res_fuzz.status == "UNAVAILABLE"
+    assert res_fuzz.structured_data.get("status") == "UNAVAILABLE"
 
 
 def test_factory_list_arsenal_status():
@@ -168,20 +175,23 @@ def test_mcp_bridge_tool_call_execution():
     factory = ToolAgentFactory(adapter=adapter)
     bridge = UniversalMCPBridge(factory=factory)
 
-    # 1. Direct tool call with kali_ prefix
+    # 1. Direct tool call with kali_ prefix (truthful UNAVAILABLE when binary unavailable)
     res1 = bridge.handle_tool_call("kali_subfinder", {"target": "test.target.com"})
-    assert res1["success"]
+    assert res1["success"] is False
     assert res1["tool"] == "subfinder"
-    assert res1["used_fallback"]
+    assert res1["used_fallback"] is False
+    assert res1["exit_code"] == 127
+    assert res1["structured_data"]["status"] == "UNAVAILABLE"
 
-    # 2. Universal dispatcher tool call
+    # 2. Universal dispatcher tool call (inviolable private IP blocked OR unavailable binary propagated)
     res2 = bridge.handle_tool_call(
         "kali_dispatch_tool",
-        {"tool_name": "nmap", "target": "192.168.1.1"}
+        {"tool_name": "nmap", "target": "test.target.com"}
     )
-    assert res2["success"]
+    assert res2["success"] is False
     assert res2["tool"] == "nmap"
     assert res2["category"] == "port_scan"
+    assert res2["structured_data"]["status"] == "UNAVAILABLE"
 
     # 3. Invalid tool call error handling
     res3 = bridge.handle_tool_call("kali_nonexistent_tool_xyz", {"target": "test.com"})
@@ -217,7 +227,7 @@ def test_mcp_server_json_rpc_runner():
     l_data = json.loads(list_resp)
     assert len(l_data["result"]["tools"]) >= 50
 
-    # 4. Tool Call
+    # 4. Tool Call (truthful propagation: success=False -> isError=True when binary unavailable)
     call_resp = runner.process_rpc_request(json.dumps({
         "jsonrpc": "2.0",
         "id": 4,
@@ -229,6 +239,7 @@ def test_mcp_server_json_rpc_runner():
     }))
     c_data = json.loads(call_resp)
     assert c_data["id"] == 4
-    assert not c_data["result"].get("isError", True)
+    assert c_data["result"].get("isError") is True
     content_text = c_data["result"]["content"][0]["text"]
     assert "nuclei" in content_text
+    assert "UNAVAILABLE" in content_text

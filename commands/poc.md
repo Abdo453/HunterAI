@@ -7,7 +7,7 @@ description: Capture reproducible PoC evidence for a finding — raw request/res
 Turn a finding into a **reproducible evidence bundle** — the exact request, the
 exact response, a copy-paste `curl`, a HAR you can import into Burp, an optional
 screenshot, and a `evidence.md` section ready to paste into `/report`. This is
-the proof layer the report pipeline expects (`skills/report-writing`,
+the proof layer the report pipeline expects (`skills/hunterai-redteam/references/tooling-evidence.md`,
 `commands/report.md`).
 
 ## Usage

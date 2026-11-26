@@ -5,14 +5,17 @@ Patterns are stored in a JSONL file, one entry per line.
 Matching supports partial tech stack overlap for cross-target learning.
 """
 
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
 import json
 import os
 import sys
 from pathlib import Path
 
-from memory.rotation import DEFAULT_KEEP, DEFAULT_MAX_BYTES, rotate_if_needed
-from memory.schemas import validate_pattern_entry, SchemaError
+from bughunter.memory.rotation import DEFAULT_KEEP, DEFAULT_MAX_BYTES, rotate_if_needed
+from bughunter.memory.schemas import validate_pattern_entry, SchemaError
 
 
 class PatternDB:
@@ -87,13 +90,13 @@ class PatternDB:
 
         fd = os.open(str(self.path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_EX)
             try:
                 written = os.write(fd, encoded)
                 if written != len(encoded):
                     raise OSError(f"Partial write: {written}/{len(encoded)} bytes")
             finally:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_UN)
         finally:
             os.close(fd)
 

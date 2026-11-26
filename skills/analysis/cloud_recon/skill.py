@@ -89,7 +89,7 @@ class CloudReconSkill(BaseSkill):
                 recommendation="قم بتقييد الوصول إلى الحاوية واستخدم سياسات IAM صارمة.",
                 url=c["url"],
             )
-            result.next_skills.append("validation_gate")
+            result.next_skills.append("triage_gate")
 
         self.logger.info(f"[CloudRecon] tested {len(urls)} URLs, {len(candidates)} exposed buckets")
         return result
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     class FakeWS:
         def write_file(self, *a, **k):
             from pathlib import Path
-            return Path("/tmp/x")
+            return Path(__import__("tempfile").gettempdir()) / "x"
 
     class FakeCtx:
         target = "example.com"

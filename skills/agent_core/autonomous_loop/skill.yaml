@@ -11,7 +11,7 @@ input:
 output:
   - autonomous_hunt.json
 depends_on:
-  - validation_gate
+  - triage_gate
   - report_generator
 next_skills:
   - report_generator

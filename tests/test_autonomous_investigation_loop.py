@@ -12,7 +12,7 @@ from pathlib import Path
 from core.orchestration.investigation_loop import AutonomousInvestigationEngine, InvestigationReport
 from core.learning.skill_graph import SkillGraph
 from core.learning.experience_store import ExperienceStore
-from ui.web.app import app
+from hunter_backend.testing import make_async_client
 
 
 class TestAutonomousInvestigationLoop:
@@ -60,10 +60,10 @@ class TestAutonomousInvestigationLoop:
 
     @pytest.mark.asyncio
     async def test_rest_api_run_investigation_endpoint(self):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with make_async_client() as client:
             payload = {
                 "target_url": "https://teststore.lab.local/items",
+                "scope": ["teststore.lab.local"],
                 "hypothesis": "SQL_INJECTION",
                 "skill": "sqli_boolean_differential"
             }

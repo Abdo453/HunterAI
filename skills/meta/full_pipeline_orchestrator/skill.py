@@ -194,7 +194,7 @@ class FullPipelineOrchestratorSkill(BaseSkill):
                 "## Exploit Chains (A -> B -> C)",
             ])
             for ch in chains:
-                md_lines.append(f"### Chain: {ch.get('chain_name', 'Exploit Chain')}")
+                md_lines.append(f"### Chain: {ch.get('name') or ch.get('chain_name', 'Exploit Chain')}")
                 md_lines.append(f"**Impact:** {ch.get('impact', 'Escalated Attack Path')}")
 
         p_md = ctx.workspace.write_file(ctx.target, "orchestration", "pipeline_report.md", "\n".join(md_lines), ctx.session_id)

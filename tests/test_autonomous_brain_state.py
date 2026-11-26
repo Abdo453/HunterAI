@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 
 from core.brain.autonomous_brain import AutonomousBrain
-from ui.web.app import app
+from hunter_backend.testing import make_async_client
 
 
 @pytest.mark.asyncio
@@ -54,8 +54,7 @@ async def test_autonomous_brain_initializes_and_populates_security_state():
 @pytest.mark.asyncio
 async def test_web_intelligence_state_api_endpoint():
     """Test GET /api/intelligence/state endpoint"""
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with make_async_client() as client:
         res = await client.get("/api/intelligence/state")
         assert res.status_code == 200
         data = res.json()

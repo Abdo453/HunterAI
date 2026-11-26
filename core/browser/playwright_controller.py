@@ -21,6 +21,7 @@ import asyncio
 import json
 import logging
 import os
+import stat
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -29,6 +30,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from core.control_plane.policy_gate import ActionCategory, ActionRequest, PolicyGate
+from core.secret_sanitizer import SecretSanitizer
 
 logger = logging.getLogger("hunter_ai.browser")
 
@@ -75,12 +77,14 @@ class PlaywrightBrowserController:
         proxy: Optional[str] = None,
         headless: bool = True,
         on_network_event: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        ephemeral_memory_only: bool = False,
     ):
         self.output_dir = Path(output_dir).resolve()
         self.policy_gate = policy_gate
         self.proxy = proxy
         self.headless = headless
         self.on_network_event = on_network_event
+        self.ephemeral_memory_only = ephemeral_memory_only
 
         # Subdirectories for evidence
         self.screenshots_dir = self.output_dir / "screenshots"
@@ -99,8 +103,62 @@ class PlaywrightBrowserController:
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
         self._is_running = False
+        self._allowed_origin: Optional[Tuple[str, str, int]] = None
 
         self.discovered_pages: List[Dict[str, Any]] = []
+
+    @staticmethod
+    def _origin_of(url: str) -> Optional[Tuple[str, str, int]]:
+        parsed = urlparse((url or "").strip())
+        scheme = (parsed.scheme or "").lower()
+        host = (parsed.hostname or "").lower()
+        if scheme not in ("http", "https") or not host:
+            return None
+        port = parsed.port or (443 if scheme == "https" else 80)
+        return (scheme, host, port)
+
+    def _authorize_page_interaction(self, action_name: str, detail: str = "") -> Tuple[bool, str]:
+        """Gate browser DOM interactions/JS execution with same-origin + PolicyGate scope checks."""
+        page_url = str(getattr(self._page, "url", "") or "").strip()
+        if not page_url:
+            return False, f"DENIED_BY_POLICY_GATE: no active page URL for {action_name}"
+
+        # Enforce same-origin against the authorized navigation origin when set
+        current_origin = self._origin_of(page_url)
+        if self._allowed_origin is not None:
+            if current_origin is None or current_origin != self._allowed_origin:
+                reason = (
+                    f"CROSS_ORIGIN_BLOCKED: {action_name} blocked on '{page_url}' "
+                    f"(authorized origin={self._allowed_origin})"
+                )
+                logger.warning(reason)
+                return False, reason
+
+        req = ActionRequest(
+            category=ActionCategory.BROWSER_INTERACTION,
+            target=page_url,
+            url=page_url,
+            reason=f"Browser {action_name}: {detail[:120]}",
+        )
+        decision = self.policy_gate.evaluate(req)
+        if not decision.allowed:
+            logger.warning("Playwright %s denied by PolicyGate on %s: %s", action_name, page_url, decision.reason)
+            return False, f"DENIED_BY_POLICY_GATE: {decision.reason}"
+        return True, decision.reason
+
+    @staticmethod
+    def _write_secure_json(path: Path, payload: Any) -> None:
+        serialized = json.dumps(payload, indent=2)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(fd, serialized.encode("utf-8"))
+            finally:
+                os.close(fd)
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        else:
+            path.write_text(serialized, encoding="utf-8")
 
     def _ensure_dirs(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -227,16 +285,16 @@ class PlaywrightBrowserController:
                     "resource_type": req.resource_type,
                     "timestamp": time.time(),
                 }
-                # Log request
+                # Log scrubbed request to disk while keeping raw record for live in-memory callbacks
                 with open(self.requests_log, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(rec) + "\n")
+                    f.write(json.dumps(SecretSanitizer.sanitize_data(rec)) + "\n")
 
                 if self.on_network_event:
                     cb_res = self.on_network_event({"type": "request", "data": rec})
                     if asyncio.iscoroutine(cb_res):
                         await cb_res
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Request listener error: %s", exc)
 
         async def _on_response(resp: PlaywrightResponse):
             try:
@@ -247,14 +305,14 @@ class PlaywrightBrowserController:
                     "timestamp": time.time(),
                 }
                 with open(self.responses_log, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(rec) + "\n")
+                    f.write(json.dumps(SecretSanitizer.sanitize_data(rec)) + "\n")
 
                 if self.on_network_event:
                     cb_res = self.on_network_event({"type": "response", "data": rec})
                     if asyncio.iscoroutine(cb_res):
                         await cb_res
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Response listener error: %s", exc)
 
         def _on_console(msg):
             try:
@@ -292,6 +350,7 @@ class PlaywrightBrowserController:
 
         # 2. Perform Navigation
         try:
+            self._allowed_origin = self._origin_of(url)
             resp = await self._page.goto(url, wait_until=wait_until, timeout=timeout)
             status_code = resp.status if resp else 0
             title = await self._page.title()
@@ -311,8 +370,11 @@ class PlaywrightBrowserController:
             return False, f"Navigation error: {e}"
 
     async def click(self, selector: str, timeout: int = 5000) -> bool:
-        """Click element by CSS or XPath selector"""
+        """Click element by CSS or XPath selector (gated by PolicyGate + same-origin check)."""
         if not self._page:
+            return False
+        ok, _ = self._authorize_page_interaction("click", selector)
+        if not ok:
             return False
         try:
             await self._page.click(selector, timeout=timeout)
@@ -322,8 +384,11 @@ class PlaywrightBrowserController:
             return False
 
     async def fill(self, selector: str, value: str, timeout: int = 5000) -> bool:
-        """Fill input field with value"""
+        """Fill input field with value (gated by PolicyGate + same-origin check)."""
         if not self._page:
+            return False
+        ok, _ = self._authorize_page_interaction("fill", selector)
+        if not ok:
             return False
         try:
             await self._page.fill(selector, value, timeout=timeout)
@@ -336,7 +401,10 @@ class PlaywrightBrowserController:
         """Capture screenshot and save to screenshots/ evidence dir"""
         if not self._page:
             return None
-        out_path = self.screenshots_dir / name
+        out_path = (self.screenshots_dir / Path(name).name).resolve()
+        if not out_path.is_relative_to(self.screenshots_dir.resolve()):
+            logger.warning("Blocked screenshot path traversal: %s", name)
+            return None
         try:
             await self._page.screenshot(path=str(out_path), full_page=True)
             return str(out_path)
@@ -345,8 +413,11 @@ class PlaywrightBrowserController:
             return None
 
     async def evaluate_js(self, expression: str) -> Any:
-        """Execute arbitrary JavaScript in the page DOM context"""
+        """Execute JavaScript in the page DOM context (gated by PolicyGate + same-origin check)."""
         if not self._page:
+            return None
+        ok, _ = self._authorize_page_interaction("evaluate_js", expression[:80])
+        if not ok:
             return None
         try:
             return await self._page.evaluate(expression)
@@ -382,18 +453,38 @@ class PlaywrightBrowserController:
         result = await self.evaluate_js(js)
         return result or []
 
-    async def save_storage_state(self) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-        """Extract and persist cookies, localStorage, and sessionStorage"""
+    async def save_storage_state(
+        self,
+        *,
+        ephemeral_memory_only: Optional[bool] = None,
+    ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        """Extract cookies/storage; scrub persisted files unless explicit ephemeral memory mode."""
         if not self._context or not self._page:
             return {}, []
 
-        # 1. Cookies
+        ephemeral = self.ephemeral_memory_only if ephemeral_memory_only is None else ephemeral_memory_only
+
+        # 1. Cookies (keep live values intact in memory; scrub before persisting to disk)
         try:
             cookies = await self._context.cookies()
-            with open(self.cookies_json, "w", encoding="utf-8") as f:
-                json.dump(cookies, f, indent=2)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Failed reading browser cookies: %s", exc)
             cookies = []
+
+        if not ephemeral:
+            scrubbed_cookies = []
+            for c in cookies:
+                if isinstance(c, dict):
+                    copy_c = dict(c)
+                    if copy_c.get("value"):
+                        copy_c["value"] = SecretSanitizer.MASK_BULLET
+                    scrubbed_cookies.append(SecretSanitizer.sanitize_data(copy_c))
+                else:
+                    scrubbed_cookies.append(SecretSanitizer.sanitize_data(c))
+            try:
+                self._write_secure_json(self.cookies_json, scrubbed_cookies)
+            except Exception as exc:
+                logger.warning("Failed persisting scrubbed cookies.json: %s", exc)
 
         # 2. Local & Session Storage
         js_storage = """
@@ -412,11 +503,11 @@ class PlaywrightBrowserController:
         }
         """
         storage = await self.evaluate_js(js_storage) or {}
-        try:
-            with open(self.storage_json, "w", encoding="utf-8") as f:
-                json.dump(storage, f, indent=2)
-        except Exception:
-            pass
+        if not ephemeral:
+            try:
+                self._write_secure_json(self.storage_json, SecretSanitizer.sanitize_data(storage))
+            except Exception as exc:
+                logger.warning("Failed persisting scrubbed storage.json: %s", exc)
 
         return storage, cookies
 

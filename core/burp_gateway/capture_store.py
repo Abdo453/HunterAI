@@ -22,15 +22,34 @@ import hashlib
 import json
 import logging
 import os
+import stat
 import tempfile
 import time
-import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set
 from urllib.parse import parse_qs, urlparse
 
+from core.secret_sanitizer import SecretSanitizer
+
 logger = logging.getLogger("hunter_ai.capture_store")
+
+
+def _write_scrubbed_json(path: Path, payload: Any) -> None:
+    """Persist a SecretSanitizer-scrubbed JSON payload with 0o600 permissions on POSIX."""
+    scrubbed = SecretSanitizer.sanitize_data(payload)
+    serialized = json.dumps(scrubbed, indent=2)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, serialized.encode("utf-8"))
+        finally:
+            os.close(fd)
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    else:
+        path.write_text(serialized, encoding="utf-8")
 
 
 @dataclass
@@ -104,27 +123,21 @@ class CapturedTransaction:
 class CaptureStore:
     """Persistent engagement filesystem manager"""
 
-    def __init__(
-        self,
-        target: str,
-        base_dir: Optional[Union[str, Path]] = "data/engagements/default",
-    ):
+    def __init__(self, target: str, base_dir: Optional[Path] = None):
         parsed = urlparse(target if "://" in target else f"http://{target}")
         self.target_host = (parsed.hostname or target).lower().replace(":", "_").replace(".", "_")
-        if isinstance(base_dir, str) and not base_dir.strip():
-            base_dir = "data/engagements/default"
-        # Persist by default under data/engagements/default; passing base_dir=None
-        # explicitly opts into an isolated temporary session-only directory.
+        # Use a fresh temporary engagement by default.  Persisting a target's
+        # traffic is opt-in through an explicit base_dir.
         self._session_only = base_dir is None
         storage_root = Path(base_dir) if base_dir is not None else Path(tempfile.mkdtemp(prefix="hunterai-engagement-"))
-        self.base_dir = storage_root
         self.root_dir = storage_root / self.target_host
 
-        # Explicitly create base, root, and engagement subdirectories
-        os.makedirs(self.base_dir, exist_ok=True)
-        os.makedirs(self.root_dir, exist_ok=True)
-        for subdir in ("requests", "responses", "evidence", "findings", "cases"):
-            os.makedirs(self.root_dir / subdir, exist_ok=True)
+        # Create subdirectories
+        (self.root_dir / "requests").mkdir(parents=True, exist_ok=True)
+        (self.root_dir / "responses").mkdir(parents=True, exist_ok=True)
+        (self.root_dir / "evidence").mkdir(parents=True, exist_ok=True)
+        (self.root_dir / "findings").mkdir(parents=True, exist_ok=True)
+        (self.root_dir / "cases").mkdir(parents=True, exist_ok=True)
 
         self.scope_file = self.root_dir / "scope.json"
         self.endpoints_file = self.root_dir / "endpoints.json"
@@ -149,118 +162,27 @@ class CaptureStore:
         self._browser_action_index: Dict[str, List[str]] = {}  # browser_action_id -> [tx_id, ...]
 
         if not self._session_only:
-            self.load_previous_session()
+            self._load_existing()
 
-    def _load_json_file(self, path: Path) -> Any:
-        """Safely read and decode a JSON file, returning None on missing or corrupt data."""
-        if not path.exists():
-            return None
+    def _load_existing(self):
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+            if self.endpoints_file.exists():
+                with open(self.endpoints_file, "r", encoding="utf-8") as f:
+                    self.endpoints = set(json.load(f))
+            if self.parameters_file.exists():
+                with open(self.parameters_file, "r", encoding="utf-8") as f:
+                    self.parameters = set(json.load(f))
+            if self.identities_file.exists():
+                with open(self.identities_file, "r", encoding="utf-8") as f:
+                    self.identities = json.load(f)
+            if self.hypotheses_file.exists():
+                with open(self.hypotheses_file, "r", encoding="utf-8") as f:
+                    self.hypotheses = json.load(f)
+            if self.timeline_file.exists():
+                with open(self.timeline_file, "r", encoding="utf-8") as f:
+                    self.timeline = json.load(f)
         except Exception as e:
-            logger.debug(f"Non-critical load error in CaptureStore ({path}): {e}")
-            return None
-
-    @staticmethod
-    def _merge_unique_dicts(target_list: List[Dict[str, Any]], items: Any) -> None:
-        """Merge list-of-dict records into target_list without inserting duplicates."""
-        if not isinstance(items, list):
-            return
-        seen = {
-            json.dumps(item, sort_keys=True, default=str)
-            for item in target_list
-            if isinstance(item, dict)
-        }
-        for item in items:
-            if isinstance(item, dict):
-                key = json.dumps(item, sort_keys=True, default=str)
-                if key not in seen:
-                    seen.add(key)
-                    target_list.append(item)
-
-    def load_previous_session(self) -> None:
-        """Reload persisted engagement indices, findings, and transactions from disk."""
-        endpoints_data = self._load_json_file(self.endpoints_file)
-        if isinstance(endpoints_data, list):
-            self.endpoints.update(str(item) for item in endpoints_data)
-
-        parameters_data = self._load_json_file(self.parameters_file)
-        if isinstance(parameters_data, list):
-            self.parameters.update(str(item) for item in parameters_data)
-
-        technologies_data = self._load_json_file(self.technologies_file)
-        if isinstance(technologies_data, list):
-            self.technologies.update(str(item) for item in technologies_data)
-
-        identities_data = self._load_json_file(self.identities_file)
-        if isinstance(identities_data, dict):
-            self.identities.update(identities_data)
-
-        self._merge_unique_dicts(self.hypotheses, self._load_json_file(self.hypotheses_file))
-        self._merge_unique_dicts(self.tests, self._load_json_file(self.tests_file))
-        self._merge_unique_dicts(self.timeline, self._load_json_file(self.timeline_file))
-
-        # Reload persisted findings from findings/*.json without duplicating existing IDs
-        findings_dir = self.root_dir / "findings"
-        if findings_dir.exists():
-            seen_finding_ids = {
-                f.get("id")
-                for f in self.findings
-                if isinstance(f, dict) and f.get("id")
-            }
-            seen_findings_raw = {
-                json.dumps(f, sort_keys=True, default=str)
-                for f in self.findings
-                if isinstance(f, dict)
-            }
-            finding_files = sorted(
-                findings_dir.glob("*.json"),
-                key=lambda p: (p.stat().st_mtime, p.name),
-            )
-            for f_path in finding_files:
-                finding_data = self._load_json_file(f_path)
-                if not isinstance(finding_data, dict):
-                    continue
-                finding_id = finding_data.get("id")
-                if finding_id:
-                    if finding_id in seen_finding_ids:
-                        continue
-                    seen_finding_ids.add(finding_id)
-                else:
-                    serialized = json.dumps(finding_data, sort_keys=True, default=str)
-                    if serialized in seen_findings_raw:
-                        continue
-                    seen_findings_raw.add(serialized)
-                self.findings.append(finding_data)
-
-        # Reload persisted HTTP transactions and lineage/trace indices
-        requests_dir = self.root_dir / "requests"
-        if requests_dir.exists():
-            loaded_txs: List[CapturedTransaction] = []
-            for req_path in sorted(requests_dir.glob("*.json")):
-                stem = req_path.stem
-                tx = self.transactions.get(stem) or self._load_transaction_from_disk(stem)
-                if tx is not None:
-                    loaded_txs.append(tx)
-            loaded_txs.sort(key=lambda t: t.timestamp)
-            for tx in loaded_txs:
-                if tx.tx_id and tx.tx_id not in self.transactions:
-                    self.transactions[tx.tx_id] = tx
-                if tx.request_id and tx.request_id not in self.transactions:
-                    self.transactions[tx.request_id] = tx
-                if tx.trace_id:
-                    trace_bucket = self._trace_index.setdefault(tx.trace_id, [])
-                    if tx.tx_id not in trace_bucket:
-                        trace_bucket.append(tx.tx_id)
-                if tx.browser_action_id:
-                    action_bucket = self._browser_action_index.setdefault(tx.browser_action_id, [])
-                    if tx.tx_id not in action_bucket:
-                        action_bucket.append(tx.tx_id)
-
-    def _load_existing(self) -> None:
-        """Backwards-compatible alias for load_previous_session()."""
-        self.load_previous_session()
+            logger.debug(f"Non-critical load error in CaptureStore: {e}")
 
     def save_scope(self, in_scope: List[str], out_of_scope: List[str]):
         with open(self.scope_file, "w", encoding="utf-8") as f:
@@ -298,51 +220,50 @@ class CaptureStore:
         self.parameters.update(extracted_params)
         tx.parameter_ids = list(set(tx.parameter_ids + list(extracted_params)))
 
-        # Write request and response streams
+        # Write scrubbed request and response streams to disk (in-memory `tx` remains intact for replay)
         req_path = self.root_dir / "requests" / f"{tx.tx_id}.json"
-        with open(req_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "request_id": tx.request_id,
-                "tx_id": tx.tx_id,
-                "timestamp": tx.timestamp,
-                "method": tx.method,
-                "url": tx.url,
-                "headers": tx.req_headers,
-                "body": tx.req_body,
-                "tool": tx.tool_source,
-                "source": tx.source,
-                "parent_request": tx.parent_request,
-                "endpoint_id": tx.endpoint_id,
-                "parameter_ids": tx.parameter_ids,
-                "cookies": tx.cookies,
-                "auth_context": tx.auth_context,
-                "trace_id": tx.trace_id,
-                "browser_action_id": tx.browser_action_id
-            }, f, indent=2)
+        _write_scrubbed_json(req_path, {
+            "request_id": tx.request_id,
+            "tx_id": tx.tx_id,
+            "timestamp": tx.timestamp,
+            "method": tx.method,
+            "url": tx.url,
+            "headers": tx.req_headers,
+            "body": tx.req_body,
+            "tool": tx.tool_source,
+            "source": tx.source,
+            "parent_request": tx.parent_request,
+            "endpoint_id": tx.endpoint_id,
+            "parameter_ids": tx.parameter_ids,
+            "cookies": tx.cookies,
+            "auth_context": tx.auth_context,
+            "trace_id": tx.trace_id,
+            "browser_action_id": tx.browser_action_id,
+        })
 
         resp_path = self.root_dir / "responses" / f"{tx.tx_id}.json"
-        with open(resp_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "request_id": tx.request_id,
-                "tx_id": tx.tx_id,
-                "status_code": tx.status_code,
-                "content_type": tx.content_type,
-                "headers": tx.resp_headers,
-                "body": tx.resp_body[:10000]  # Store preview
-            }, f, indent=2)
+        _write_scrubbed_json(resp_path, {
+            "request_id": tx.request_id,
+            "tx_id": tx.tx_id,
+            "status_code": tx.status_code,
+            "content_type": tx.content_type,
+            "headers": tx.resp_headers,
+            "body": tx.resp_body[:10000],  # Store preview
+        })
 
-        # Detect identity context (Auth headers or cookies)
+        # Detect identity context (Auth headers or cookies) — never persist raw token snippets
         auth_hdr = tx.req_headers.get("authorization", "") or tx.req_headers.get("Authorization", "")
         if auth_hdr.startswith("Bearer "):
-            token_snippet = auth_hdr[7:20]
-            identity_name = f"BEARER_{hashlib.sha256(auth_hdr.encode()).hexdigest()[:6]}"
+            identity_hash = hashlib.sha256(auth_hdr.encode()).hexdigest()
+            identity_name = f"BEARER_{identity_hash[:6]}"
             tx.identity = identity_name
             tx.auth_context = identity_name
             self.identities[identity_name] = {
                 "type": "bearer",
-                "token_prefix": token_snippet,
+                "token_fingerprint": identity_hash[:12],
+                "token_prefix": SecretSanitizer.MASK_BULLET,
                 "last_seen": tx.timestamp,
-                "associated_urls": list(set(self.identities.get(identity_name, {}).get("associated_urls", []) + [endpoint_clean]))[:20]
+                "associated_urls": list(set(self.identities.get(identity_name, {}).get("associated_urls", []) + [endpoint_clean]))[:20],
             }
 
         # Cache in memory
@@ -370,8 +291,11 @@ class CaptureStore:
         self._flush_indices()
         return tx.tx_id
 
-    def _load_transaction_from_disk(self, request_id: str) -> Optional[CapturedTransaction]:
-        """Reads a single transaction's request/response files from disk."""
+    def get_transaction(self, request_id: str) -> Optional[CapturedTransaction]:
+        """Retrieves a transaction from cache or disk"""
+        if request_id in self.transactions:
+            return self.transactions[request_id]
+
         req_path = self.root_dir / "requests" / f"{request_id}.json"
         resp_path = self.root_dir / "responses" / f"{request_id}.json"
         if not req_path.exists():
@@ -385,7 +309,7 @@ class CaptureStore:
                 with open(resp_path, "r", encoding="utf-8") as f:
                     resp_data = json.load(f)
 
-            return CapturedTransaction(
+            tx = CapturedTransaction(
                 tx_id=r_data.get("tx_id", request_id),
                 request_id=r_data.get("request_id", request_id),
                 target_host=self.target_host,
@@ -407,35 +331,152 @@ class CaptureStore:
                 endpoint_id=r_data.get("endpoint_id", ""),
                 parameter_ids=r_data.get("parameter_ids", []),
                 trace_id=r_data.get("trace_id", ""),
-                browser_action_id=r_data.get("browser_action_id", ""),
+                browser_action_id=r_data.get("browser_action_id", "")
             )
+            self.transactions[request_id] = tx
+            return tx
         except Exception as e:
             logger.debug(f"Failed to load transaction {request_id}: {e}")
             return None
-
-    def get_transaction(self, request_id: str) -> Optional[CapturedTransaction]:
-        """Retrieves a transaction from cache or disk"""
-        if request_id in self.transactions:
-            return self.transactions[request_id]
-
-        tx = self._load_transaction_from_disk(request_id)
-        if tx is None:
-            return None
-
-        self.transactions[request_id] = tx
-        if tx.tx_id:
-            self.transactions[tx.tx_id] = tx
-        if tx.request_id:
-            self.transactions[tx.request_id] = tx
-        return tx
 
     def list_transactions(self, limit: Optional[int] = None) -> List[CapturedTransaction]:
         """Returns captured transactions in insertion order without duplicate aliases."""
         unique: Dict[str, CapturedTransaction] = {}
         for transaction in self.transactions.values():
             unique[transaction.tx_id] = transaction
+        if not self._session_only:
+            req_dir = self.root_dir / "requests"
+            if req_dir.is_dir():
+                for req_file in sorted(req_dir.glob("*.json"), key=lambda p: p.stat().st_mtime):
+                    tid = req_file.stem
+                    if tid not in unique:
+                        loaded = self.get_transaction(tid)
+                        if loaded is not None:
+                            unique[loaded.tx_id] = loaded
         transactions = list(unique.values())
         return transactions[-limit:] if limit is not None else transactions
+
+    @staticmethod
+    def format_transaction_row(
+        tx: CapturedTransaction,
+        *,
+        redact: bool = True,
+        include_bodies: bool = False,
+    ) -> Dict[str, Any]:
+        """Convert a CapturedTransaction into a structured HTTP table row.
+
+        Always includes the canonical keys:
+        ``id, time, method, host, path, status, length, request_headers, response_status``
+        while preserving SecretSanitizer redaction.
+        """
+        parsed = urlparse(tx.url or "")
+        host = tx.target_host or (parsed.hostname or "")
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        ts_val = float(tx.timestamp or 0.0)
+        iso_time = datetime.fromtimestamp(ts_val, tz=timezone.utc).isoformat() if ts_val > 0 else ""
+
+        req_headers = dict(tx.req_headers or {})
+        resp_headers = dict(tx.resp_headers or {})
+        if redact:
+            req_headers = SecretSanitizer.sanitize_data(req_headers)
+            resp_headers = SecretSanitizer.sanitize_data(resp_headers)
+
+        status_int = int(tx.status_code or 0)
+        row: Dict[str, Any] = {
+            "id": tx.tx_id,
+            "tx_id": tx.tx_id,
+            "time": iso_time,
+            "timestamp": ts_val,
+            "method": (tx.method or "GET").upper(),
+            "host": host,
+            "target_host": host,
+            "path": path,
+            "url": tx.url or "",
+            "status": status_int,
+            "response_status": status_int,
+            "status_code": status_int,
+            "length": len(tx.resp_body or ""),
+            "request_headers": req_headers,
+            "response_headers": resp_headers,
+            "tool_source": tx.tool_source,
+            "content_type": tx.content_type,
+        }
+        if include_bodies:
+            req_body = str(tx.req_body or "")
+            resp_body = str(tx.resp_body or "")
+            if redact:
+                req_body = SecretSanitizer.sanitize_text(req_body)
+                resp_body = SecretSanitizer.sanitize_text(resp_body)
+            row["req_headers"] = req_headers
+            row["resp_headers"] = resp_headers
+            row["req_body"] = req_body
+            row["resp_body"] = resp_body
+        return row
+
+    def query_structured_transactions(
+        self,
+        *,
+        limit: int = 100,
+        host: Optional[str] = None,
+        method: Optional[str] = None,
+        redact: bool = True,
+        include_bodies: bool = False,
+        newest_first: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Query structured HTTP transaction rows for `/api/burp/traffic` and live inspection."""
+        all_tx = self.list_transactions(limit=None)
+        host_filter = (host or "").strip().lower()
+        if host_filter and "://" in host_filter:
+            host_filter = (urlparse(host_filter).hostname or host_filter).lower()
+        method_filter = (method or "").strip().upper()
+
+        rows: List[Dict[str, Any]] = []
+        for tx in all_tx:
+            row = self.format_transaction_row(tx, redact=redact, include_bodies=include_bodies)
+            if host_filter:
+                row_host = str(row.get("host") or "").lower()
+                row_url = str(row.get("url") or "").lower()
+                if host_filter not in row_host and host_filter not in row_url:
+                    continue
+            if method_filter and row.get("method") != method_filter:
+                continue
+            rows.append(row)
+
+        if newest_first:
+            rows.reverse()
+            return rows[: max(1, int(limit))]
+        return rows[-max(1, int(limit)) :]
+
+    def get_structured_transaction(
+        self,
+        request_id: str,
+        *,
+        redact: bool = True,
+        include_bodies: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieve a single transaction formatted as a structured row."""
+        tx = self.get_transaction(request_id)
+        if tx is None:
+            return None
+        return self.format_transaction_row(tx, redact=redact, include_bodies=include_bodies)
+
+    def query_live_inspection_rows(
+        self,
+        *,
+        target: Optional[str] = None,
+        limit: int = 100,
+        redact: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Return structured rows with request/response bodies for `enhanced_burp_inspect_view(source='live')`."""
+        return self.query_structured_transactions(
+            limit=limit,
+            host=target,
+            redact=redact,
+            include_bodies=True,
+            newest_first=True,
+        )
 
     def get_by_trace_id(self, trace_id: str) -> List[CapturedTransaction]:
         """Returns all transactions associated with a trace_id"""
@@ -463,17 +504,16 @@ class CaptureStore:
         if not child:
             return False
         child.parent_request = parent_id
-        # Re-save updated child request file
+        # Re-save updated child request file (scrubbed)
         req_path = self.root_dir / "requests" / f"{child.tx_id}.json"
         if req_path.exists():
             try:
                 with open(req_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 data["parent_request"] = parent_id
-                with open(req_path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2)
-            except Exception:
-                pass
+                _write_scrubbed_json(req_path, data)
+            except Exception as exc:
+                logger.warning("Failed updating correlated request %s: %s", child.tx_id, exc)
         self.record_timeline_event("REQUEST_CORRELATED", {
             "parent_id": parent_id,
             "child_id": child_id
@@ -513,17 +553,9 @@ class CaptureStore:
     def record_finding(self, finding_dict: Dict[str, Any]):
         finding_id = finding_dict.get("id") or f"fnd_{uuid_snippet()}"
         finding_dict["id"] = finding_id
-        existing_idx = next(
-            (i for i, existing in enumerate(self.findings) if isinstance(existing, dict) and existing.get("id") == finding_id),
-            None,
-        )
-        if existing_idx is not None:
-            self.findings[existing_idx] = finding_dict
-        else:
-            self.findings.append(finding_dict)
+        self.findings.append(finding_dict)
         f_path = self.root_dir / "findings" / f"{finding_id}.json"
-        with open(f_path, "w", encoding="utf-8") as f:
-            json.dump(finding_dict, f, indent=2)
+        _write_scrubbed_json(f_path, finding_dict)
 
         self.record_timeline_event("FINDING_CONFIRMED", {
             "id": finding_id,
@@ -537,19 +569,15 @@ class CaptureStore:
             "event_type": event_type,
             "details": details
         })
-        with open(self.timeline_file, "w", encoding="utf-8") as f:
-            json.dump(self.timeline[-200:], f, indent=2)
+        _write_scrubbed_json(self.timeline_file, self.timeline[-200:])
 
     def _flush_indices(self):
         try:
-            with open(self.endpoints_file, "w", encoding="utf-8") as f:
-                json.dump(sorted(list(self.endpoints)), f, indent=2)
-            with open(self.parameters_file, "w", encoding="utf-8") as f:
-                json.dump(sorted(list(self.parameters)), f, indent=2)
-            with open(self.identities_file, "w", encoding="utf-8") as f:
-                json.dump(self.identities, f, indent=2)
-        except Exception:
-            pass
+            _write_scrubbed_json(self.endpoints_file, sorted(list(self.endpoints)))
+            _write_scrubbed_json(self.parameters_file, sorted(list(self.parameters)))
+            _write_scrubbed_json(self.identities_file, self.identities)
+        except Exception as exc:
+            logger.warning("Failed flushing CaptureStore indices: %s", exc)
 
     def get_summary(self) -> Dict[str, Any]:
         return {
@@ -566,4 +594,4 @@ class CaptureStore:
 
 
 def uuid_snippet():
-    return uuid.uuid4().hex[:8]
+    return hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]

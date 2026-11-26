@@ -117,7 +117,7 @@ class TripleMemory:
     async def _persist_async(self, entry: MemoryEntry) -> None:
         """حفظ إدخال بشكل غير متزامن."""
         file_path = self.storage_path / f"{entry.memory_type.value}_{entry.target}.jsonl"
-        loop = asyncio.get_running_loop()
+        loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._append_jsonl, file_path, entry.to_dict())
 
     def _append_jsonl(self, file_path: Path, data: Dict[str, Any]) -> None:

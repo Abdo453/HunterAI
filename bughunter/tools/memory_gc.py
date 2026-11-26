@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bughunter.tools.banner import print_banner  # noqa: E402
-from memory.rotation import (  # noqa: E402
+from bughunter.memory.rotation import (  # noqa: E402
     DEFAULT_KEEP,
     DEFAULT_MAX_BYTES,
     list_backups,

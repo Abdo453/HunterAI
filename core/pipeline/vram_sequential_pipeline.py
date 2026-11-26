@@ -157,14 +157,21 @@ class PipelineResult:
 class VRAMManager:
     """
     Guarantees strict single-model VRAM memory discipline for local GPUs.
-    Executes inference with `keep_alive: 0` so Ollama immediately unloads
+    Delegates process-wide GPU lock serialization to ``core.llm.gpu_scheduler.GPUScheduler``
+    and executes inference with ``keep_alive: 0`` so Ollama immediately unloads
     the active model from GPU VRAM after inference completes.
     """
 
-    def __init__(self, ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")):
-        self.ollama_host = ollama_host.rstrip("/")
+    def __init__(self, ollama_host: Optional[str] = None):
+        from core.llm.gpu_scheduler import get_gpu_scheduler
+        from core.llm.hardware_monitor import register_vram_manager
+        from models.ollama_manager import normalize_ollama_host
+
+        self.ollama_host = normalize_ollama_host(ollama_host or os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
         self.currently_loaded_model: Optional[str] = None
         self.cascade_failover = AICascadeFailover(ollama_url=self.ollama_host)
+        self._scheduler = get_gpu_scheduler()
+        register_vram_manager(self)
 
     async def unload_model(self, model_name: str) -> bool:
         """
@@ -179,6 +186,8 @@ class VRAMManager:
                 if r.status_code in (200, 404):
                     logger.info(f"[VRAM] Successfully signaled VRAM eviction for model: {model_name}")
                     self.currently_loaded_model = None
+                    if self._scheduler.currently_loaded_model == model_name:
+                        self._scheduler.set_loaded_model(None)
                     return True
         except Exception as e:
             logger.warning(f"[VRAM] Failed to send unload signal for {model_name}: {e}")
@@ -192,10 +201,11 @@ class VRAMManager:
         temperature: float = 0.2
     ) -> Dict[str, Any]:
         """
-        Sends prompt to local Ollama with JSON formatting & keep_alive: 0.
-        Falls back to Cloud AI if Ollama is unreachable.
+        Sends prompt to local Ollama with JSON formatting & keep_alive: 0 under
+        the process-wide GPUScheduler lock. Falls back to Cloud AI if unreachable.
         """
-        self.currently_loaded_model = model_name
+        from core.llm.gpu_scheduler import PRIORITY_BACKGROUND
+
         payload = {
             "model": model_name,
             "prompt": prompt,
@@ -208,18 +218,27 @@ class VRAMManager:
             }
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(f"{self.ollama_host}/api/generate", json=payload)
-                if resp.status_code == 200:
-                    raw_text = resp.json().get("response", "{}")
-                    parsed = JSONSelfRepairEngine.repair(raw_text)
-                    await self.unload_model(model_name)
-                    return parsed or {}
-                else:
-                    logger.warning(f"[VRAM] Ollama returned status {resp.status_code}: {resp.text}")
-        except Exception as ex:
-            logger.warning(f"[VRAM] Local Ollama call for {model_name} failed: {ex}. Falling back to Cloud Cascade.")
+        async with self._scheduler.acquire(
+            model_name,
+            priority=PRIORITY_BACKGROUND,
+            keep_alive=0,
+            unload_on_release=False,
+        ):
+            self.currently_loaded_model = model_name
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(f"{self.ollama_host}/api/generate", json=payload)
+                    if resp.status_code == 200:
+                        raw_text = resp.json().get("response", "{}")
+                        parsed = JSONSelfRepairEngine.repair(raw_text)
+                        await self.unload_model(model_name)
+                        return parsed or {}
+                    else:
+                        logger.warning(f"[VRAM] Ollama returned status {resp.status_code}: {resp.text}")
+            except Exception as ex:
+                logger.warning(f"[VRAM] Local Ollama call for {model_name} failed: {ex}. Falling back to Cloud Cascade.")
+            finally:
+                self.currently_loaded_model = None
 
         cascade_res = await self.cascade_failover.execute_cascade(
             system_prompt=system_prompt,
@@ -726,9 +745,12 @@ class VRAMSequentialPipeline:
 
     def __init__(
         self,
-        ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"),
+        ollama_host: Optional[str] = None,
         workspace_dir: str = "artifacts/pipeline_runs"
     ):
+        from models.ollama_manager import normalize_ollama_host
+
+        ollama_host = normalize_ollama_host(ollama_host or os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
         self.workspace = Path(workspace_dir)
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.db_path = self.workspace / "recon_state.db"

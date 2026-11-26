@@ -28,6 +28,10 @@ hit()  { echo -e "${MAG}[SECRET]${NC} $1"; }
 err()  { echo -e "${RED}[-]${NC} $1" >&2; }
 
 MODE=""; TARGET=""; OUT_DIR="${SECRETS_OUT_DIR:-$(pwd)/findings/secrets/$(date +%Y%m%d_%H%M%S)}"
+CURL_TLS_ARGS=()
+if [ "${HUNTER_LAB_INSECURE_TLS:-0}" = "1" ]; then
+  CURL_TLS_ARGS=(-k)
+fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --filesystem)  MODE="fs";   shift; TARGET="${1:-}" ;;
@@ -35,6 +39,7 @@ while [ "$#" -gt 0 ]; do
     --js-bundle)   MODE="js";   shift; TARGET="${1:-}" ;;
     --github-org)  MODE="ghorg";shift; TARGET="${1:-}" ;;
     --out)         shift; OUT_DIR="${1:-}" ;;
+    --insecure)    CURL_TLS_ARGS=(-k) ;;
     -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) err "unknown arg: $1"; exit 2 ;;
   esac
@@ -108,7 +113,7 @@ case "$MODE" in
     head -100 "$JS_LIST" | while IFS= read -r url; do
       [ -z "$url" ] && continue
       fname=$(echo "$url" | tr '/?:&=#' '_' | head -c 200)
-      curl -sk --max-time 10 "$url" -o "$JS_DIR/$fname.js" 2>/dev/null || true
+      curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 10 "$url" -o "$JS_DIR/$fname.js" 2>/dev/null || true
     done
     _have trufflehog  && _run_trufflehog  "$JS_DIR" filesystem
     _have noseyparker && _run_noseyparker "$JS_DIR"

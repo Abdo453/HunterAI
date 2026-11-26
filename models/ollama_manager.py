@@ -11,14 +11,26 @@ from typing import Optional
 log = logging.getLogger("ollama_manager")
 
 def normalize_ollama_host(h: str) -> str:
-    if not h:
+    """Normalize OLLAMA_HOST (including bind addresses like 0.0.0.0) into a connectable base URL."""
+    from urllib.parse import urlparse, urlunparse
+
+    if not h or not str(h).strip():
         return "http://127.0.0.1:11434"
-    h = str(h).strip().rstrip("/")
-    if not h.startswith("http://") and not h.startswith("https://"):
-        h = f"http://{h}"
-    # 0.0.0.0 is for binding, clients must connect to 127.0.0.1
-    h = h.replace("://0.0.0.0:", "://127.0.0.1:")
-    return h
+    raw = str(h).strip().rstrip("/")
+    if not raw.startswith(("http://", "https://")):
+        raw = f"http://{raw}"
+    try:
+        parsed = urlparse(raw)
+        hostname = parsed.hostname or "127.0.0.1"
+        if hostname in ("0.0.0.0", "::", "[::]"):
+            hostname = "127.0.0.1"
+        port = parsed.port
+        if port is None and parsed.scheme == "http":
+            port = 11434
+        netloc = f"{hostname}:{port}" if port else hostname
+        return urlunparse(parsed._replace(netloc=netloc)).rstrip("/")
+    except Exception:
+        return "http://127.0.0.1:11434"
 
 
 def _wsl_gateway_host() -> Optional[str]:
@@ -122,16 +134,22 @@ class OllamaManager:
             await self.unload_model(m.get("name", ""))
         self._current_loaded = None
 
-    async def preload_model(self, model_name: str) -> bool:
+    async def preload_model(self, model_name: str, keep_alive: Optional[int] = None) -> bool:
         """
-        تحميل موديل مسبقاً في الذاكرة بدون توليد
-        keep_alive=-1 يخليه في الذاكرة indefinitely
+        تحميل موديل مسبقاً في الذاكرة بمدة keep_alive قابلة للتهيئة (بدون تجميد دائم keep_alive=-1)
         """
-        log.info(f"[PRELOAD] {model_name}")
+        from core.llm.gpu_scheduler import get_gpu_scheduler
+
+        eff_keep_alive = (
+            max(0, int(keep_alive))
+            if keep_alive is not None
+            else max(60, get_gpu_scheduler().default_keep_alive)
+        )
+        log.info(f"[PRELOAD] {model_name} (keep_alive={eff_keep_alive}s)")
         payload = {
             "model": model_name,
             "prompt": "",
-            "keep_alive": -1,
+            "keep_alive": eff_keep_alive,
             "stream": False
         }
         host = await self.get_active_host()
@@ -146,19 +164,24 @@ class OllamaManager:
             log.warning(f"[PRELOAD] Failed {model_name}: {e}")
         return False
 
-    async def chat(self, model_name: str, messages: list, keep_alive: int = 0,
-                   temperature: float = 0.3, num_ctx: int = 4096) -> str:
+    async def chat(self, model_name: str, messages: list, keep_alive: Optional[int] = None,
+                   temperature: float = 0.3, num_ctx: Optional[int] = None) -> str:
         """
-        استدعاء موديل + تفريغه بعد الانتهاء (keep_alive=0)
+        استدعاء موديل عبر Ollama مع نافذة سياق ومدة keep_alive من ModelManifest / GPUScheduler
         """
+        from core.llm.gpu_scheduler import get_gpu_scheduler
+        from core.llm.manifest import get_model_manifest
+
+        eff_keep_alive = get_gpu_scheduler().default_keep_alive if keep_alive is None else max(0, int(keep_alive))
+        eff_ctx = int(num_ctx) if (num_ctx and num_ctx > 0) else get_model_manifest().context_window_for(model_name, default=8192)
         payload = {
             "model": model_name,
             "messages": messages,
             "stream": False,
-            "keep_alive": keep_alive,  # 0 = unload after this call
+            "keep_alive": eff_keep_alive,
             "options": {
                 "temperature": temperature,
-                "num_ctx": num_ctx
+                "num_ctx": eff_ctx
             }
         }
         host = await self.get_active_host()
@@ -167,7 +190,7 @@ class OllamaManager:
                 r = await c.post(f"{host}/api/chat", json=payload)
                 r.raise_for_status()
                 content = r.json().get("message", {}).get("content", "")
-                if keep_alive == 0:
+                if eff_keep_alive == 0:
                     self._current_loaded = None
                 else:
                     self._current_loaded = model_name
@@ -176,21 +199,26 @@ class OllamaManager:
             log.error(f"[CHAT] {model_name} error: {e}")
             return ""
 
-    async def chat_stream(self, model_name: str, messages: list, keep_alive: int = 0,
-                          temperature: float = 0.3, num_ctx: int = 4096,
+    async def chat_stream(self, model_name: str, messages: list, keep_alive: Optional[int] = None,
+                          temperature: float = 0.3, num_ctx: Optional[int] = None,
                           token_cb = None) -> str:
         """
         استدعاء موديل مع دفق الرموز (Streaming Tokens) بشكل فوري لحظي
         """
         import json
+        from core.llm.gpu_scheduler import get_gpu_scheduler
+        from core.llm.manifest import get_model_manifest
+
+        eff_keep_alive = get_gpu_scheduler().default_keep_alive if keep_alive is None else max(0, int(keep_alive))
+        eff_ctx = int(num_ctx) if (num_ctx and num_ctx > 0) else get_model_manifest().context_window_for(model_name, default=8192)
         payload = {
             "model": model_name,
             "messages": messages,
             "stream": True,
-            "keep_alive": keep_alive,
+            "keep_alive": eff_keep_alive,
             "options": {
                 "temperature": temperature,
-                "num_ctx": num_ctx
+                "num_ctx": eff_ctx
             }
         }
         full_content = []
@@ -216,7 +244,7 @@ class OllamaManager:
                         except Exception:
                             continue
             result = "".join(full_content)
-            if keep_alive == 0:
+            if eff_keep_alive == 0:
                 self._current_loaded = None
             else:
                 self._current_loaded = model_name

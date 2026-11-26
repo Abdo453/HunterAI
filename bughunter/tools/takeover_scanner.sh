@@ -23,9 +23,14 @@ hit()  { echo -e "${MAG}[TAKEOVER]${NC} $1"; }
 err()  { echo -e "${RED}[-]${NC} $1" >&2; }
 
 INPUT=""
+CURL_TLS_ARGS=()
+if [ "${HUNTER_LAB_INSECURE_TLS:-0}" = "1" ]; then
+  CURL_TLS_ARGS=(-k)
+fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --recon) shift; INPUT="${1:-}/subdomains/all.txt" ;;
+    --insecure) CURL_TLS_ARGS=(-k) ;;
     -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) INPUT="$1" ;;
   esac
@@ -71,7 +76,7 @@ if ! _have dnsreaper && ! _have subjack; then
   # Just a handful of the most common fingerprints — extend as needed.
   while IFS= read -r host; do
     [ -z "$host" ] && continue
-    body=$(curl -sk --max-time 5 "https://$host" 2>/dev/null || true)
+    body=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 5 "https://$host" 2>/dev/null || true)
     case "$body" in
       *"There isn't a GitHub Pages site here"*)        echo "$host  github" >> "$OUT_DIR/fingerprint_grep.txt" ;;
       *"NoSuchBucket"*)                                 echo "$host  s3"     >> "$OUT_DIR/fingerprint_grep.txt" ;;

@@ -183,7 +183,28 @@ class TestSelfCritiqueValidator:
 class TestAgentRuntime:
     @pytest.mark.asyncio
     async def test_agent_runtime_mission_flow(self, tmp_path):
-        mock_registry = ToolRegistry()
+        from core.control_plane.policy_gate import PolicyGate
+        from core.scope_engine import ScopePolicy, StrictScopeEngine
+
+        # Default ToolRegistry fails closed on empty scope (Phase 5 security invariant).
+        unscoped_registry = ToolRegistry()
+        async def _probe_denied(url: str):
+            return {"status_code": 200}
+        unscoped_registry.register(
+            name="http_probe",
+            description="Unscoped probe",
+            input_schema={"type": "object", "required": ["url"]},
+            handler=_probe_denied,
+        )
+        denied = await unscoped_registry.execute("http_probe", {"url": "http://test.local/products"})
+        assert denied["success"] is False
+
+        # Explicitly scoped & authorized registry succeeds for in-scope target.
+        scope_policy = ScopePolicy(allowed_targets=["test.local"], fail_closed=True)
+        mock_registry = ToolRegistry(
+            scope_engine=StrictScopeEngine(scope_policy),
+            policy_gate=PolicyGate(scope_policy=scope_policy, authorized=True),
+        )
 
         # Mock independent_verify to simulate discovering a confirmed boolean SQLi
         async def _mock_verify(target_url: str, param_name: str, vuln_type: str):

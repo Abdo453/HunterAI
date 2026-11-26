@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import quote
 
 import httpx
 
@@ -18,7 +21,7 @@ from skills.base_skill import BaseSkill, SkillContext, SkillResult
 class ParamDiscoverSkill(BaseSkill):
     name = "param_discover"
     category = "recon"
-    description = "اكتشاف معاملات HTTP مخفية باستخدام arjun/paramspider أوowayback fallback"
+    description = "اكتشاف معاملات HTTP مخفية باستخدام arjun/paramspider أو wayback fallback"
     tools_required: List[str] = []
     fallback_tools: List[str] = ["arjun", "paramspider"]
     timeout_seconds = 90.0
@@ -29,11 +32,25 @@ class ParamDiscoverSkill(BaseSkill):
         target = ctx.target
         discovered: List[str] = []
         tool = self._pick_tool(ctx.tool_manager)
+        target_url = target if target.startswith(("http://", "https://")) else f"https://{target}"
+        clean_domain = target.replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
 
         if tool:
             try:
-                res = await ctx.tool_manager.execute(f"{tool} {target}", timeout=90)
-                for line in res.stdout.splitlines():
+                if tool == "arjun":
+                    tmp_out = Path(tempfile.gettempdir()) / f"arjun_{int(time.time()*1000)}.txt"
+                    try:
+                        res = await ctx.tool_manager.execute(
+                            ["arjun", "-u", target_url, "-oT", str(tmp_out), "--stable", "-q"],
+                            timeout=90,
+                        )
+                        raw_out = tmp_out.read_text(encoding="utf-8", errors="ignore") if tmp_out.is_file() else (res.stdout or "")
+                    finally:
+                        tmp_out.unlink(missing_ok=True)
+                else:
+                    res = await ctx.tool_manager.execute(["paramspider", "-d", clean_domain, "--quiet"], timeout=90)
+                    raw_out = res.stdout or ""
+                for line in raw_out.splitlines():
                     line = line.strip()
                     if line and ("?" in line or "=" in line):
                         discovered.append(line)
@@ -41,7 +58,7 @@ class ParamDiscoverSkill(BaseSkill):
                 self.logger.warning(f"{tool} failed: {exc}")
 
         if not discovered:
-            discovered = await self._wayback_params(target)
+            discovered = await self._wayback_params(clean_domain)
 
         payload = {
             "target": target,
@@ -82,7 +99,7 @@ class ParamDiscoverSkill(BaseSkill):
         try:
             async with httpx.AsyncClient(timeout=20, verify=False, trust_env=False) as client:
                 resp = await client.get(
-                    f"https://web.archive.org/cdx/search/cdx?url={target}/*&output=text&fl=original&collapse=urlkey&limit=200"
+                    f"https://web.archive.org/cdx/search/cdx?url={quote(target, safe='')}/*&output=text&fl=original&collapse=urlkey&limit=200"
                 )
                 if resp.status_code == 200:
                     for line in resp.text.splitlines():
@@ -102,8 +119,7 @@ if __name__ == "__main__":
 
     class FakeWS:
         def write_file(self, *a, **k):
-            from pathlib import Path
-            return Path("/tmp/x")
+            return Path(tempfile.gettempdir()) / "params_discovered.json"
 
     class FakeCtx:
         target = "example.com"

@@ -28,8 +28,6 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Callable, Any
 
-from core.constants import CourtVerdict
-
 log = logging.getLogger("confidence_checker")
 
 # OpenRouter models for parallel verification
@@ -193,7 +191,7 @@ class ConfidenceChecker:
         t0 = time.time()
 
         system_prompt = f"""You are a {model['role']} performing vulnerability verification.
-Your job: determine if the following security claim is {CourtVerdict.CONFIRMED.value}, {CourtVerdict.FALSE_POSITIVE.value}, or UNCERTAIN.
+Your job: determine if the following security claim is CONFIRMED, FALSE_POSITIVE, or UNCERTAIN.
 
 Analyze carefully:
 - Technical plausibility
@@ -202,7 +200,7 @@ Analyze carefully:
 
 Respond in JSON format:
 {{
-  "verdict": "{CourtVerdict.CONFIRMED.value}|{CourtVerdict.FALSE_POSITIVE.value}|UNCERTAIN",
+  "verdict": "CONFIRMED|FALSE_POSITIVE|UNCERTAIN",
   "confidence": 0.0-1.0,
   "evidence": "technical evidence",
   "reasoning": "brief explanation"
@@ -252,15 +250,15 @@ Provide your verdict as JSON."""
                 try:
                     parsed = json.loads(content)
                     verdict_str = parsed.get("verdict", "UNCERTAIN").upper()
-                    if verdict_str not in (CourtVerdict.CONFIRMED.value, CourtVerdict.FALSE_POSITIVE.value, "UNCERTAIN"):
+                    if verdict_str not in ("CONFIRMED", "FALSE_POSITIVE", "UNCERTAIN"):
                         verdict_str = "UNCERTAIN"
                     confidence = float(parsed.get("confidence", 0.5))
                     evidence = parsed.get("evidence", "")
                     reasoning = parsed.get("reasoning", "")
                 except json.JSONDecodeError:
                     # Extract from text if JSON fails
-                    verdict_str = CourtVerdict.CONFIRMED.value if "confirmed" in content.lower() else \
-                                  CourtVerdict.FALSE_POSITIVE.value if "false positive" in content.lower() else "UNCERTAIN"
+                    verdict_str = "CONFIRMED" if "confirmed" in content.lower() else \
+                                  "FALSE_POSITIVE" if "false positive" in content.lower() else "UNCERTAIN"
                     confidence = 0.6
                     evidence = content[:200]
                     reasoning = content[:200]
@@ -497,16 +495,12 @@ Provide your verdict as JSON."""
             )
 
         # تصويت الموديلات
-        votes = {
-            CourtVerdict.CONFIRMED.value: [],
-            CourtVerdict.FALSE_POSITIVE.value: [],
-            "UNCERTAIN": [],
-        }
+        votes = {"CONFIRMED": [], "FALSE_POSITIVE": [], "UNCERTAIN": []}
         for v in verdicts:
             votes[v.verdict].append(v.confidence)
 
-        confirmed_score = sum(votes[CourtVerdict.CONFIRMED.value]) / max(len(verdicts), 1)
-        fp_score = sum(votes[CourtVerdict.FALSE_POSITIVE.value]) / max(len(verdicts), 1)
+        confirmed_score = sum(votes["CONFIRMED"]) / max(len(verdicts), 1)
+        fp_score = sum(votes["FALSE_POSITIVE"]) / max(len(verdicts), 1)
         uncertain_ratio = len(votes["UNCERTAIN"]) / max(len(verdicts), 1)
 
         # Browser boost
@@ -532,19 +526,19 @@ Provide your verdict as JSON."""
         if raw_score >= 0.65:
             verdict = "CORROBORATED"
         elif fp_score >= 0.5 or raw_score < 0.3:
-            verdict = CourtVerdict.FALSE_POSITIVE.value
+            verdict = "FALSE_POSITIVE"
         else:
             verdict = "UNCERTAIN"
 
         # Reasoning
         reasoning_parts = []
-        if votes[CourtVerdict.CONFIRMED.value]:
+        if votes["CONFIRMED"]:
             reasoning_parts.append(
-                f"{len(votes[CourtVerdict.CONFIRMED.value])}/{len(verdicts)} models confirmed"
+                f"{len(votes['CONFIRMED'])}/{len(verdicts)} models confirmed"
             )
-        if votes[CourtVerdict.FALSE_POSITIVE.value]:
+        if votes["FALSE_POSITIVE"]:
             reasoning_parts.append(
-                f"{len(votes[CourtVerdict.FALSE_POSITIVE.value])}/{len(verdicts)} flagged as false positive"
+                f"{len(votes['FALSE_POSITIVE'])}/{len(verdicts)} flagged as false positive"
             )
         if browser_boost > 0:
             reasoning_parts.append("Browser verification found indicators")
@@ -561,8 +555,8 @@ Provide your verdict as JSON."""
             burpsuite_findings=burpsuite_findings,
             consensus_reasoning=" | ".join(reasoning_parts),
             duration=duration,
-            models_agreed=len(votes[CourtVerdict.CONFIRMED.value]),
-            models_disagreed=len(votes[CourtVerdict.FALSE_POSITIVE.value]),
+            models_agreed=len(votes["CONFIRMED"]),
+            models_disagreed=len(votes["FALSE_POSITIVE"]),
         )
 
     def format_report(self, result: ConfidenceResult) -> str:
@@ -570,7 +564,7 @@ Provide your verdict as JSON."""
         bars = "#" * int(result.confidence_score * 10) + "." * (10 - int(result.confidence_score * 10))
         verdict_icon = {
             "CORROBORATED": "[CORROBORATED/ADVISORY]",
-            CourtVerdict.FALSE_POSITIVE.value: "[FALSE_POSITIVE]",
+            "FALSE_POSITIVE": "[FALSE_POSITIVE]",
             "UNCERTAIN": "[UNCERTAIN]"
         }.get(result.final_verdict, "[?]")
 
@@ -595,11 +589,7 @@ Provide your verdict as JSON."""
 
         lines += ["", "  MODEL VERDICTS:"]
         for v in result.verdicts:
-            icon = {
-                CourtVerdict.CONFIRMED.value: "+",
-                CourtVerdict.FALSE_POSITIVE.value: "-",
-                "UNCERTAIN": "?",
-            }.get(v.verdict, "?")
+            icon = {"CONFIRMED": "+", "FALSE_POSITIVE": "-", "UNCERTAIN": "?"}.get(v.verdict, "?")
             lines.append(
                 f"    [{icon}] {v.model_name:20} {v.verdict:15} ({v.confidence:.0%}) {v.response_time:.1f}s"
             )

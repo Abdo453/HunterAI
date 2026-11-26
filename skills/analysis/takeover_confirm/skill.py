@@ -114,7 +114,7 @@ class TakeoverConfirmSkill(BaseSkill):
                 recommendation=f"Reclaim the CNAME or delete the dangling DNS record for {c['subdomain']}.",
                 url=c["proof_url"],
             )
-            result.next_skills.append("validation_gate")
+            result.next_skills.append("triage_gate")
 
         self.logger.info(f"[Takeover] {len(subdomains)} checked, {len(candidates)} claimable candidates")
         return result
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     class FakeWS:
         def write_file(self, *a, **k):
             from pathlib import Path
-            return Path("/tmp/x")
+            return Path(__import__("tempfile").gettempdir()) / "x"
 
     class FakeCtx:
         target = "example.com"

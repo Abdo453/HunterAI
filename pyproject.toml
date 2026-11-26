@@ -23,7 +23,6 @@ classifiers = [
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
-    "websockets>=12.0",
     "pydantic>=2.5",
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
@@ -71,11 +70,12 @@ include = [
     "cli*",
     "skills*",
 ]
-exclude = ["tests*", "data*", "artifacts*", "reports*", "logs*", "benchmarks*", "evaluation*"]
+exclude = ["tests*", "data*", "artifacts*", "reports*", "logs*", "benchmarks*", "evaluation*", "external*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+norecursedirs = ["external", "skills_library", "node_modules", ".next", ".git"]
 markers = [
     "slow: اختبارات بطيئة أو تتطلب شبكة",
     "integration: اختبارات تكامل حقيقية",

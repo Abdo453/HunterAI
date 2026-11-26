@@ -90,7 +90,7 @@ class WebDashboard:
             target = payload.get("target", "")
             mission = payload.get("mission", "full")
             session = {
-                "session_id": f"sess_{int(asyncio.get_running_loop().time())}",
+                "session_id": f"sess_{int(asyncio.get_event_loop().time())}",
                 "target": target,
                 "mission": mission,
                 "status": "running",
@@ -284,19 +284,29 @@ class WebDashboard:
             document.getElementById('verifiedCount').textContent = verified;
 
             const tbody = document.getElementById('findingsTable');
-            tbody.innerHTML = '';
+            tbody.textContent = '';
+            const allowedSeverities = new Set(['critical', 'high', 'medium', 'low', 'info']);
             findings.forEach(f => {
                 const tr = document.createElement('tr');
-                const severityClass = `severity-${(f.severity || 'info').toLowerCase()}`;
-                tr.innerHTML = `
-                    <td>${f.record_id || f.id || '—'}</td>
-                    <td>${f.template_id || f.type || '—'}</td>
-                    <td>${f.matched_at || f.url || f.target || '—'}</td>
-                    <td class="${severityClass}">${f.severity || 'Info'}</td>
-                    <td>${f.status || 'pending'}</td>
-                    <td>${(f.confidence * 100).toFixed(0)}%</td>
-                    <td>${new Date().toLocaleDateString()}</td>
-                `;
+                const rawSev = String(f.severity || 'info').toLowerCase();
+                const severityClass = allowedSeverities.has(rawSev) ? `severity-${rawSev}` : 'severity-info';
+                const confNum = Number(f.confidence);
+                const confText = Number.isFinite(confNum) ? `${(confNum * 100).toFixed(0)}%` : '0%';
+                const cells = [
+                    { text: f.record_id || f.id || '—' },
+                    { text: f.template_id || f.type || '—' },
+                    { text: f.matched_at || f.url || f.target || '—' },
+                    { text: f.severity || 'Info', cls: severityClass },
+                    { text: f.status || 'pending' },
+                    { text: confText },
+                    { text: new Date().toLocaleDateString() },
+                ];
+                cells.forEach(c => {
+                    const td = document.createElement('td');
+                    if (c.cls) td.className = c.cls;
+                    td.textContent = String(c.text);
+                    tr.appendChild(td);
+                });
                 tbody.appendChild(tr);
             });
         }

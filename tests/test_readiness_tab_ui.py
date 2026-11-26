@@ -6,35 +6,26 @@
 """
 from pathlib import Path
 
-from starlette.testclient import TestClient
-
 from core.readiness import checker as checker_module
 from core.readiness.checker import ComponentResult, ComponentStatus, ReadinessReport
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 
 class TestReadinessTabUI:
     def test_index_html_has_readiness_tab_button(self):
-        client = TestClient(app)
-        r = client.get("/")
-        assert r.status_code == 200
-        assert "switchTab('readiness'" in r.text
-        assert "جاهزية البيئة" in r.text
+        sys_tsx = (Path(__file__).parent.parent / "frontend" / "app" / "system" / "page.tsx").read_text(encoding="utf-8")
+        assert "/api/diagnostics/readiness" in sys_tsx
+        assert "runDiagnostics" in sys_tsx
 
     def test_index_html_has_readiness_panel(self):
-        client = TestClient(app)
-        r = client.get("/")
-        assert 'id="tab-readiness"' in r.text
-        assert 'id="readiness-list"' in r.text
-        assert 'id="readiness-state-badge"' in r.text
+        sys_tsx = (Path(__file__).parent.parent / "frontend" / "app" / "system" / "page.tsx").read_text(encoding="utf-8")
+        assert "readinessJson" in sys_tsx
+        assert "diagReport" in sys_tsx
 
     def test_app_js_has_readiness_handler(self):
-        js_path = Path(__file__).parent.parent / "ui" / "web" / "static" / "app.js"
-        js = js_path.read_text(encoding="utf-8")
-        assert "function runReadinessScan()" in js
-        assert "function maybeRunReadiness()" in js
-        assert "renderReadiness(d)" in js
-        assert "fetch('/api/diagnostics/readiness')" in js
+        sys_tsx = (Path(__file__).parent.parent / "frontend" / "app" / "system" / "page.tsx").read_text(encoding="utf-8")
+        assert '"/api/diagnostics/readiness"' in sys_tsx
+        assert '"/api/control/diagnostics/run"' in sys_tsx
 
 
 # ── مُفحص مزيف: نتيجة ثابتة، صفر اتصال حقيقي ─────────────────────────
@@ -80,8 +71,8 @@ class TestReadinessEndpoint:
 
     def test_endpoint_uses_injected_fake_all_ready(self, monkeypatch):
         self._inject(monkeypatch, _FakeChecker())
-        client = TestClient(app)
-        r = client.get("/api/diagnostics/readiness")
+        with ASGISyncClient() as client:
+            r = client.get("/api/diagnostics/readiness")
         assert r.status_code == 200
         d = r.json()
         assert d["strict_ready"] is True
@@ -98,8 +89,8 @@ class TestReadinessEndpoint:
             {"name": "ffuf", "status": "MISSING"},
             {"name": "ollama_server", "status": "READY", "required": False},
         ]))
-        client = TestClient(app)
-        r = client.get("/api/diagnostics/readiness")
+        with ASGISyncClient() as client:
+            r = client.get("/api/diagnostics/readiness")
         assert r.status_code == 200
         d = r.json()
         assert d["strict_ready"] is False
@@ -117,7 +108,7 @@ class TestReadinessEndpoint:
         import core.readiness as readiness_pkg
         monkeypatch.setattr(checker_module, "ReadinessChecker", _Bomb)
         monkeypatch.setattr(readiness_pkg, "ReadinessChecker", _Bomb)
-        client = TestClient(app)
-        r = client.get("/api/diagnostics/readiness")
+        with ASGISyncClient() as client:
+            r = client.get("/api/diagnostics/readiness")
         assert r.status_code == 500
         assert "probe exploded" in r.json()["error"]

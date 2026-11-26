@@ -130,13 +130,31 @@ class ApplicationStateGraph:
             logger.info(f"STATE GRAPH: Discovered new application state {state_id} ({url})")
         else:
             state = self.states[state_id]
+            state.forms_count = max(state.forms_count, forms_count)
+            state.inputs_count = max(state.inputs_count, inputs_count)
+            if interactive_affordances:
+                for aff in interactive_affordances:
+                    if aff not in state.interactive_affordances:
+                        state.interactive_affordances.append(aff)
             # Merge endpoints if new ones discovered
             if discovered_endpoints:
                 for ep in discovered_endpoints:
                     if ep not in state.discovered_endpoints:
                         state.discovered_endpoints.append(ep)
 
+        self.current_state_id = state.state_id
         return state
+
+    def has_state(self, state_id: str) -> bool:
+        return state_id in self.states
+
+    @property
+    def state_count(self) -> int:
+        return len(self.states)
+
+    @property
+    def transition_count(self) -> int:
+        return len(self.transitions)
 
     def record_transition(
         self,

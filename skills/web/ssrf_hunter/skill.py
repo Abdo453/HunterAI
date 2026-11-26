@@ -101,7 +101,7 @@ class SSRFHunterSkill(BaseSkill):
                 recommendation="Validate and whitelist URL schemes/hosts; disable internal network access from the fetching service. Apply 7-Question Gate.",
                 url=c["url"],
             )
-            result.next_skills.append("validation_gate")
+            result.next_skills.append("triage_gate")
 
         self.logger.info(f"[SSRF] tested {len(candidate_urls)} URLs, {len(candidates)} candidates")
         return result
@@ -174,10 +174,10 @@ if __name__ == "__main__":
     class FakeWS:
         def get_workspace_path(self, t, s):
             from pathlib import Path
-            return Path("/tmp")
+            return Path(__import__("tempfile").gettempdir())
         def write_file(self, *a, **k):
             from pathlib import Path
-            return Path("/tmp/x")
+            return Path(__import__("tempfile").gettempdir()) / "x"
 
     class FakeCtx:
         target = "example.com"

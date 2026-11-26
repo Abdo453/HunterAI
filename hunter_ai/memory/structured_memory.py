@@ -15,13 +15,20 @@ HunterAI Structured Memory
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from enum import Enum
+
+logger = logging.getLogger("hunter_ai.structured_memory")
+
+_SAFE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
 
 class MemoryType(str, Enum):  # type: ignore[misc, valid-type]
@@ -60,7 +67,7 @@ class StructuredMemory:
     """
 
     def __init__(self, root_dir: str = "memory/structured"):
-        self.root_dir = Path(root_dir)
+        self.root_dir = Path(root_dir).resolve()
         self.working_dir = self.root_dir / "working"
         self.semantic_dir = self.root_dir / "semantic"
         self.failure_dir = self.root_dir / "failure_episodic"
@@ -80,15 +87,15 @@ class StructuredMemory:
             try:
                 with open(self._index_path, "r", encoding="utf-8") as f:
                     self._index = json.load(f)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to load structured memory index: %s", exc)
 
     def _save_index(self) -> None:
         try:
             with open(self._index_path, "w", encoding="utf-8") as f:
                 json.dump(self._index, f, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to save structured memory index: %s", exc)
 
     def _dir_for(self, mem_type: MemoryType) -> Path:
         return {
@@ -97,12 +104,43 @@ class StructuredMemory:
             MemoryType.FAILURE_EPISODIC: self.failure_dir,
         }[mem_type]
 
+    def _sanitize_target(self, target: str) -> str:
+        """Sanitize target directory name strictly against Windows ..\\ and POSIX ../ traversal."""
+        raw = str(target or "").strip()
+        if not raw or "\x00" in raw:
+            raise ValueError(f"Invalid structured memory target: {target!r}")
+        if _WINDOWS_DRIVE_RE.match(raw) or raw.startswith(("/", "\\")):
+            raise ValueError(f"Path traversal or absolute path blocked for target: {target!r}")
+        # Reject any explicit traversal segment across both Windows (\) and POSIX (/) separators
+        segments = re.split(r"[/\\]", raw)
+        if any(seg == ".." for seg in segments) or ".." in raw:
+            raise ValueError(f"Path traversal blocked for target: {target!r}")
+        normalized = raw.replace("://", "_")
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", normalized).strip(".")
+        if not safe or safe in {".", ".."} or not _SAFE_SEGMENT_RE.fullmatch(safe):
+            raise ValueError(f"Invalid target identifier after sanitization: {target!r}")
+        return safe
+
+    def _target_dir(self, mem_dir: Path, target: str) -> Path:
+        safe_target = self._sanitize_target(target)
+        resolved_base = mem_dir.resolve()
+        candidate = (resolved_base / safe_target).resolve()
+        if not candidate.is_relative_to(resolved_base) or candidate == resolved_base:
+            raise ValueError(f"Resolved target path escapes memory root: {target!r}")
+        return candidate
+
     def _sanitize_key(self, key: str) -> str:
-        """تنظيف المفتاح ليكون صالحاً كاسم ملف على جميع الأنظمة."""
-        invalid_chars = '<>:"/\\|?*'
-        for ch in invalid_chars:
-            key = key.replace(ch, "_")
-        return key
+        """تنظيف المفتاح ليكون صالحاً كاسم ملف آمن ضد path traversal على جميع الأنظمة."""
+        raw = str(key or "").strip()
+        if not raw or "\x00" in raw:
+            raise ValueError(f"Invalid structured memory key: {key!r}")
+        segments = re.split(r"[/\\]", raw)
+        if any(seg == ".." for seg in segments) or ".." in raw:
+            raise ValueError(f"Path traversal blocked for key: {key!r}")
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", raw).strip(".")
+        if not safe or safe in {".", ".."} or not _SAFE_SEGMENT_RE.fullmatch(safe):
+            raise ValueError(f"Invalid key identifier after sanitization: {key!r}")
+        return safe
 
     def write(
         self,
@@ -113,6 +151,13 @@ class StructuredMemory:
         ttl_seconds: Optional[int] = None,
     ) -> str:
         """كتابة إدخال ذاكرة جديد أو تحديث إدخال موجود."""
+        mem_dir = self._dir_for(memory_type)
+        target_dir = self._target_dir(mem_dir, target)
+        safe_key = self._sanitize_key(key)
+        entry_path = (target_dir / f"{safe_key}.json").resolve()
+        if not entry_path.is_relative_to(target_dir):
+            raise ValueError(f"Resolved entry path escapes target directory: {key!r}")
+
         entry_id = str(uuid.uuid4())[:8]
         entry = MemoryEntry(
             entry_id=entry_id,
@@ -122,11 +167,7 @@ class StructuredMemory:
             value=value,
             ttl_seconds=ttl_seconds,
         )
-        mem_dir = self._dir_for(memory_type)
-        target_dir = mem_dir / target.replace("://", "_").replace("/", "_")
         target_dir.mkdir(parents=True, exist_ok=True)
-        safe_key = self._sanitize_key(key)
-        entry_path = target_dir / f"{safe_key}.json"
         with open(entry_path, "w", encoding="utf-8") as f:
             json.dump(entry.to_dict(), f, indent=2, ensure_ascii=False)
 
@@ -144,7 +185,10 @@ class StructuredMemory:
         path_str = self._index[memory_type.value].get(f"{target}:{key}")
         if not path_str:
             return None
-        path = Path(path_str)
+        path = Path(path_str).resolve()
+        if not path.is_relative_to(self.root_dir):
+            logger.warning("Blocked structured memory read outside root_dir: %s", path)
+            return None
         if not path.exists():
             return None
         try:
@@ -166,7 +210,8 @@ class StructuredMemory:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             return entry
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed reading structured memory entry %s: %s", path, exc)
             return None
 
     def list_keys(
@@ -228,7 +273,7 @@ class StructuredMemory:
         count = 0
         mem_dir = self.working_dir
         if target:
-            target_dir = mem_dir / target.replace("://", "_").replace("/", "_")
+            target_dir = self._target_dir(mem_dir, target)
             if target_dir.exists():
                 for f in target_dir.glob("*.json"):
                     f.unlink()
@@ -342,7 +387,7 @@ class StructuredMemory:
         count = 0
         mem_dir = self.semantic_dir
         if target:
-            target_dir = mem_dir / target.replace("://", "_").replace("/", "_")
+            target_dir = self._target_dir(mem_dir, target)
             if target_dir.exists():
                 for f in target_dir.glob("*.json"):
                     f.unlink()

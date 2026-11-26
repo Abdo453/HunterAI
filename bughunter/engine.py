@@ -185,7 +185,7 @@ def _import_brain():
     """Import Brain and LLMClient from brain.py."""
     sys.path.insert(0, str(HERE))
     try:
-        from brain import Brain, LLMClient  # noqa: PLC0415
+        from bughunter.brain import Brain, LLMClient  # noqa: PLC0415
         return Brain, LLMClient
     except ImportError as e:
         err(f"Could not import brain.py: {e}")
@@ -470,7 +470,7 @@ def cmd_models(args):
 
 def cmd_recon(args):
     """Run recon pipeline then AI surface analysis."""
-    from tools.target_normalize import safe_target_dirname
+    from bughunter.tools.target_normalize import safe_target_dirname
 
     target = args.target
     # The scanners need a bare host; the output dir must match what
@@ -507,7 +507,7 @@ def cmd_recon(args):
 
 def cmd_hunt(args):
     """Full hunt pipeline: recon + vuln scan + AI analysis."""
-    from tools.target_normalize import safe_target_dirname
+    from bughunter.tools.target_normalize import safe_target_dirname
 
     target = args.target
     host = safe_target_dirname(target)
@@ -631,7 +631,7 @@ def cmd_chain(args):
         err("No AI provider available. Run: ./engine.py setup")
         sys.exit(1)
     sys.path.insert(0, str(HERE))
-    from brain import BRAIN_SYSTEM  # noqa: PLC0415
+    from bughunter.brain import BRAIN_SYSTEM  # noqa: PLC0415
     result = client.chat(None, system or BRAIN_SYSTEM,
                          f"Build an exploit chain starting from this bug:\n\n{finding}")
     if result:
@@ -647,7 +647,7 @@ def cmd_chat(args):
         sys.exit(1)
 
     sys.path.insert(0, str(HERE))
-    from brain import BRAIN_SYSTEM  # noqa: PLC0415
+    from bughunter.brain import BRAIN_SYSTEM  # noqa: PLC0415
 
     ok(f"Connected: {client.description}")
     print(f"{DIM}Type 'exit' or Ctrl+C to quit{NC}\n")

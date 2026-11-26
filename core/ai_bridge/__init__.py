@@ -1,6 +1,6 @@
 """
 AI-Agent Bridge Package
-Provides defensive prompt framing, refusal detection, structured parsing,
+Provides mode-preserving prompt framing, refusal detection, structured parsing,
 and hybrid local/online AI routing with automated fallbacks.
 """
 from core.ai_bridge.defensive_prompt_framer import DefensivePromptFramer

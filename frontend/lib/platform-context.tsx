@@ -1,0 +1,2360 @@
+"use client";
+
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
+import {
+  ApprovalExecutionResult,
+  ApprovalItem,
+  AssetRecord,
+  AuditRecord,
+  AuthStatus,
+  CopilotRef,
+  EngagementRecord,
+  FindingRecord,
+  GoCoreHealth,
+  HubServicesSnapshot,
+  HunterHubHealth,
+  MissionRun,
+  NotificationItem,
+  OverviewCounts,
+  ServiceConnectivity,
+  StatsSummary,
+  StreamConnectionState,
+  TaskRecord,
+} from "@/lib/api-types";
+import { processTerminalLog } from "@/lib/terminal-sanitizer";
+
+export type {
+  ApprovalExecutionResult,
+  ApprovalItem,
+  AssetRecord,
+  AuditRecord,
+  AuthStatus,
+  CopilotRef,
+  EngagementRecord,
+  FindingRecord,
+  GoCoreHealth,
+  HubServicesSnapshot,
+  HunterHubHealth,
+  MissionRun,
+  NotificationItem,
+  OverviewCounts,
+  ServiceConnectivity,
+  StatsSummary,
+  StreamConnectionState,
+  TaskRecord,
+};
+export type RunRecord = MissionRun;
+export type ApprovalRecord = ApprovalItem;
+
+export const HUNTER_API_BASE = (
+  process.env.NEXT_PUBLIC_HUNTER_API_BASE || "http://127.0.0.1:8000"
+).replace(/\/+$/, "");
+
+const OPERATOR_TOKEN_STORAGE_KEY = "hunterai_operator_token";
+
+export function getDjangoApiBase(): string {
+  const configured = process.env.NEXT_PUBLIC_HUNTER_API_BASE?.trim();
+  if (configured) {
+    return configured.replace(/\/+$/, "");
+  }
+  if (typeof window !== "undefined") {
+    if (window.location.port === "8000") {
+      return window.location.origin;
+    }
+    // Same-origin Next.js rewrite handles REST and allows Playwright route interception cleanly
+    return "";
+  }
+  return HUNTER_API_BASE;
+}
+
+export function getDjangoStreamUrl(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  const configured = process.env.NEXT_PUBLIC_HUNTER_API_BASE?.trim();
+  if (configured) {
+    return `${configured.replace(/\/+$/, "")}${normalized}`;
+  }
+  if (typeof window !== "undefined") {
+    if (window.location.port === "8000") {
+      return `${window.location.origin}${normalized}`;
+    }
+    // Use same-origin path when NEXT_PUBLIC_HUNTER_STREAM_SAME_ORIGIN is set or default direct Django host
+    if (process.env.NEXT_PUBLIC_HUNTER_STREAM_SAME_ORIGIN === "1") {
+      return normalized;
+    }
+    const host = window.location.hostname || "127.0.0.1";
+    return `${window.location.protocol}//${host}:8000${normalized}`;
+  }
+  return `${HUNTER_API_BASE}${normalized}`;
+}
+
+export function readCsrfToken(): string {
+  if (typeof document === "undefined") return "";
+  const pairs = document.cookie ? document.cookie.split(";") : [];
+  for (const raw of pairs) {
+    const idx = raw.indexOf("=");
+    if (idx === -1) continue;
+    const name = raw.slice(0, idx).trim();
+    if (name === "csrftoken") {
+      try {
+        return decodeURIComponent(raw.slice(idx + 1).trim());
+      } catch {
+        return raw.slice(idx + 1).trim();
+      }
+    }
+  }
+  return "";
+}
+
+export function readStoredBearerToken(): string {
+  const envToken = (process.env.NEXT_PUBLIC_HUNTER_API_TOKEN || "").trim();
+  if (envToken) return envToken;
+  if (typeof window === "undefined") return "";
+  try {
+    return (window.sessionStorage.getItem(OPERATOR_TOKEN_STORAGE_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Monotonic prefix guard (`keepLongerPrefix`): when reconnecting or replaying stream
+ * text, never replace an already-longer buffer with a shorter stale prefix.
+ */
+export function keepLongerPrefix(existing: string, incoming: string): string {
+  if (!existing) return incoming;
+  if (!incoming) return existing;
+  if (incoming.length < existing.length && existing.startsWith(incoming)) {
+    return existing;
+  }
+  return incoming;
+}
+
+const STREAM_DIRECT_PREFIXES = ["/api/copilot/chat/stream", "/api/platform/stream"];
+
+export type ConsoleLevel = "INFO" | "SUCCESS" | "WARN" | "ERROR" | "AUDIT";
+
+export interface ConsoleEntry {
+  id: string;
+  seq?: number;
+  timestamp: string;
+  level: ConsoleLevel;
+  source: string;
+  message: string;
+  taskId?: string;
+}
+
+export interface RepeaterDraft {
+  rawRequest: string;
+  targetUrl?: string;
+  useProxy?: boolean;
+}
+
+export interface MissionLaunchInput {
+  kind: "omni" | "pipeline" | "mission" | "engine" | "go_core";
+  target: string;
+  engagement_id?: string | null;
+  scope?: string[];
+  out_of_scope?: string[];
+  mode?: string;
+  prompt?: string;
+  engine?: string;
+  model?: string;
+  coverage?: number;
+  max_cycles?: number;
+  force_fallback?: boolean;
+  self_operate?: boolean;
+  proxy?: string | null;
+}
+
+export interface EngagementCreateInput {
+  name?: string;
+  target: string;
+  in_scope?: string[];
+  out_of_scope?: string[];
+  set_active?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type TargetValidationReason = "empty" | "invalid_format";
+
+export interface TargetValidationResult {
+  valid: boolean;
+  normalizedTarget: string;
+  hostname: string;
+  reason?: TargetValidationReason;
+}
+
+function prepareUrlCandidate(trimmed: string): string {
+  if (trimmed.includes("://")) {
+    return trimmed;
+  }
+  if (!trimmed.startsWith("[")) {
+    const slashIdx = trimmed.indexOf("/");
+    const authority = slashIdx === -1 ? trimmed : trimmed.slice(0, slashIdx);
+    const colonCount = (authority.match(/:/g) || []).length;
+    if (colonCount >= 2 && /^[0-9a-f:%.]+$/i.test(authority)) {
+      const rest = slashIdx === -1 ? "" : trimmed.slice(slashIdx);
+      return `https://[${authority}]${rest}`;
+    }
+  }
+  return `https://${trimmed}`;
+}
+
+export function validateScanTarget(rawInput: string): TargetValidationResult {
+  const trimmed = rawInput.trim();
+  if (!trimmed) {
+    return { valid: false, normalizedTarget: "", hostname: "", reason: "empty" };
+  }
+  if (/[\s"'`<>|;&$()]/.test(trimmed)) {
+    return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
+  }
+  if (
+    !trimmed.includes("://") &&
+    !trimmed.startsWith("[") &&
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d+(?:[/?#]|$))/.test(trimmed)
+  ) {
+    return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(prepareUrlCandidate(trimmed));
+  } catch {
+    return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
+  }
+
+  const rawHostname = parsed.hostname.toLowerCase();
+  const hostname = rawHostname.replace(/^\[|\]$/g, "");
+  if (!hostname) {
+    return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
+  }
+
+  const hasExplicitScheme = trimmed.includes("://");
+  const hasExplicitPathOrQuery =
+    (parsed.pathname && parsed.pathname !== "/") || Boolean(parsed.search);
+  const pathSuffix = hasExplicitPathOrQuery
+    ? `${parsed.pathname}${parsed.search}`
+    : trimmed.endsWith("/")
+      ? "/"
+      : "";
+  const normalizedTarget = hasExplicitScheme
+    ? `${parsed.protocol}//${parsed.host}${pathSuffix}`
+    : parsed.port || hasExplicitPathOrQuery
+      ? `${parsed.host}${pathSuffix}`
+      : rawHostname;
+
+  return { valid: true, normalizedTarget, hostname };
+}
+
+function normalizeTargetForCompare(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
+function fingerprintData(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(Date.now());
+  }
+}
+
+function formatTimeHHMMSS(ts?: string | number | null): string {
+  if (!ts) return new Date().toLocaleTimeString("en-GB", { hour12: false });
+  const d = typeof ts === "number" ? new Date(ts * 1000) : new Date(ts);
+  if (Number.isNaN(d.getTime())) {
+    return new Date().toLocaleTimeString("en-GB", { hour12: false });
+  }
+  return d.toLocaleTimeString("en-GB", { hour12: false });
+}
+
+function unwrapArtexPayload(raw: unknown): { online?: boolean; payload: unknown } {
+  if (raw && typeof raw === "object" && !Array.isArray(raw) && "data" in raw) {
+    const obj = raw as { online?: boolean; data?: unknown };
+    return { online: obj.online, payload: obj.data };
+  }
+  return { payload: raw };
+}
+
+function normalizePlatformEventType(rawType: unknown, fallbackEventName = "message"): string {
+  const raw = String(rawType || fallbackEventName || "message").trim();
+  if (!raw) return "MESSAGE";
+  const normalized = raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || "MESSAGE";
+}
+
+export function extractApiError(payload: unknown, statusCode: number): string {
+  if (payload && typeof payload === "object") {
+    const rec = payload as Record<string, unknown>;
+    if (typeof rec.detail === "string" && rec.detail) return rec.detail;
+    if (rec.detail && typeof rec.detail === "object") {
+      const det = rec.detail as Record<string, unknown>;
+      if (typeof det.reason === "string" && det.reason) return det.reason;
+    }
+    if (typeof rec.error === "string" && rec.error) return rec.error;
+    if (typeof rec.message === "string" && rec.message) return rec.message;
+  }
+  return statusCode ? `HTTP ${statusCode}` : "Network error";
+}
+
+function sectionToRoute(section?: string): string {
+  switch ((section || "").toLowerCase()) {
+    case "assets":
+    case "telemetry":
+    case "radar":
+      return "/surface";
+    case "findings":
+    case "results":
+    case "evidence":
+      return "/findings";
+    case "targets":
+    case "redteam":
+      return "/operations";
+    case "editor":
+    case "opencode":
+    case "file":
+      return "/studio";
+    case "burp":
+    case "browser":
+      return "/intercept";
+    case "agents":
+    case "skills":
+    case "tools":
+    case "mcp":
+      return "/arsenal";
+    case "models":
+    case "diagnostics":
+    case "settings":
+      return "/system";
+    default:
+      return "/";
+  }
+}
+
+interface PlatformContextValue {
+  engagements: EngagementRecord[];
+  selectedEngagementId: string;
+  selectedEngagement: EngagementRecord | null;
+  engagementSelectionSeq: number;
+  selectEngagement: (id: string) => Promise<void>;
+  createEngagement: (
+    input: EngagementCreateInput
+  ) => Promise<{ ok: boolean; engagement?: Record<string, unknown>; error?: string }>;
+  targetDomain: string;
+  setTargetDomain: (target: string) => void;
+  stats: StatsSummary;
+  overviewCounts: OverviewCounts | null;
+  assets: AssetRecord[];
+  findings: FindingRecord[];
+  tasks: TaskRecord[];
+  auditLogs: AuditRecord[];
+  runs: RunRecord[];
+  activeRunId: string | null;
+  setActiveRunId: (id: string | null) => void;
+  approvals: ApprovalRecord[];
+  pendingApprovalsCount: number;
+  notifications: NotificationItem[];
+  unreadNotificationsCount: number;
+  refreshNotifications: () => Promise<void>;
+  markNotificationRead: (notificationId: string) => Promise<boolean>;
+  goCoreHealth: GoCoreHealth;
+  hunterHubHealth: HunterHubHealth;
+  connectionState: StreamConnectionState;
+  reconnectAttempt: number;
+  reconnectStream: () => void;
+  authStatus: AuthStatus;
+  authError: string;
+  exchangeSessionToken: (token: string) => Promise<{ ok: boolean; error?: string }>;
+  clearOperatorAuth: () => void;
+  isLoading: boolean;
+  isScanning: boolean;
+  streamPaused: boolean;
+  setStreamPaused: React.Dispatch<React.SetStateAction<boolean>>;
+  consoleLogs: ConsoleEntry[];
+  addConsoleLog: (
+    level: ConsoleLevel,
+    source: string,
+    message: string,
+    id?: string,
+    ts?: string,
+    taskId?: string,
+    seq?: number
+  ) => void;
+  clearConsoleLogs: () => void;
+  refreshNow: () => Promise<void>;
+  launchScan: (target: string) => Promise<{ ok: boolean; error?: string; via?: string }>;
+  launchMission: (
+    input: MissionLaunchInput
+  ) => Promise<{ ok: boolean; run?: RunRecord; error?: string }>;
+  decideApproval: (
+    approvalId: string,
+    decision: "approved" | "rejected",
+    note?: string
+  ) => Promise<{
+    ok: boolean;
+    approval?: ApprovalRecord | null;
+    execution?: ApprovalExecutionResult | null;
+    error?: string;
+  }>;
+  controlRun: (
+    runId: string,
+    action: "pause" | "resume" | "stop"
+  ) => Promise<{ ok: boolean; status?: string; error?: string }>;
+  recoverRun: (runId: string) => Promise<{ ok: boolean; run?: RunRecord; error?: string }>;
+  inspectedAsset: AssetRecord | null;
+  setInspectedAsset: (asset: AssetRecord | null) => void;
+  inspectedFinding: FindingRecord | null;
+  setInspectedFinding: (finding: FindingRecord | null) => void;
+  inspectedEvidenceId: string | null;
+  setInspectedEvidenceId: (id: string | null) => void;
+  activeTaskFilter: string;
+  setActiveTaskFilter: (taskId: string) => void;
+  studioOpenPath: string | null;
+  setStudioOpenPath: (path: string | null) => void;
+  copilotOpen: boolean;
+  setCopilotOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  commandPaletteOpen: boolean;
+  setCommandPaletteOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  repeaterDraft: RepeaterDraft | null;
+  setRepeaterDraft: (draft: RepeaterDraft | null) => void;
+  sendToRepeater: (draft: RepeaterDraft) => void;
+  navigateToRef: (ref: CopilotRef) => boolean;
+  hunterFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  apiJson: <T = Record<string, unknown>>(
+    path: string,
+    options?: { method?: string; body?: unknown; signal?: AbortSignal }
+  ) => Promise<{ ok: boolean; status: number; data: T | null; error?: string }>;
+}
+
+const PlatformContext = createContext<PlatformContextValue | null>(null);
+
+export function PlatformProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+
+  const [engagements, setEngagements] = useState<EngagementRecord[]>([]);
+  const [selectedEngagementId, setSelectedEngagementId] = useState<string>("");
+  const [engagementSelectionSeq, setEngagementSelectionSeq] = useState<number>(0);
+  const [targetDomain, setTargetDomain] = useState<string>("example.com");
+
+  const [stats, setStats] = useState<StatsSummary>({
+    total_assets: 0,
+    total_findings: 0,
+    total_engagements: 0,
+    status: "CHECKING",
+  });
+  const [overviewCounts, setOverviewCounts] = useState<OverviewCounts | null>(null);
+  const [assets, setAssets] = useState<AssetRecord[]>([]);
+  const [findings, setFindings] = useState<FindingRecord[]>([]);
+  const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([]);
+  const [runs, setRuns] = useState<RunRecord[]>([]);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  const [goCoreHealth, setGoCoreHealth] = useState<GoCoreHealth>({
+    status: "checking",
+    database: "unknown",
+    lastSyncedAt: null,
+  });
+  const [hunterHubHealth, setHunterHubHealth] = useState<HunterHubHealth>({
+    status: "checking",
+    lastSyncedAt: null,
+    latestSeq: 0,
+  });
+  const [connectionState, setConnectionState] = useState<StreamConnectionState>("connecting");
+  const [reconnectAttempt, setReconnectAttempt] = useState<number>(0);
+  const [streamGeneration, setStreamGeneration] = useState<number>(0);
+
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
+  const [authError, setAuthError] = useState<string>("");
+
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [streamPaused, setStreamPaused] = useState<boolean>(false);
+  const [consoleLogs, setConsoleLogs] = useState<ConsoleEntry[]>([]);
+
+  const [inspectedAsset, setInspectedAsset] = useState<AssetRecord | null>(null);
+  const [inspectedFinding, setInspectedFinding] = useState<FindingRecord | null>(null);
+  const [inspectedEvidenceId, setInspectedEvidenceId] = useState<string | null>(null);
+  const [activeTaskFilter, setActiveTaskFilter] = useState<string>("ALL");
+  const [studioOpenPath, setStudioOpenPath] = useState<string | null>(null);
+  const [copilotOpen, setCopilotOpen] = useState<boolean>(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState<boolean>(false);
+  const [repeaterDraft, setRepeaterDraft] = useState<RepeaterDraft | null>(null);
+
+  const pollAbortRef = useRef<AbortController | null>(null);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const refreshPendingRef = useRef<boolean>(false);
+  const sseRefreshTimerRef = useRef<number | null>(null);
+  const isUnmountedRef = useRef<boolean>(false);
+  const lastSeqRef = useRef<number>(0);
+  const lastEventIdRef = useRef<string>("");
+  const streamPausedRef = useRef<boolean>(false);
+  const selectedEngRef = useRef<string>("");
+  const initialCtxSyncedRef = useRef<boolean>(false);
+  const userClearedEngRef = useRef<boolean>(false);
+  const csrfTokenRef = useRef<string>("");
+  const csrfBootstrappedRef = useRef<boolean>(false);
+  const connectionStateRef = useRef<StreamConnectionState>("connecting");
+
+  useEffect(() => {
+    isUnmountedRef.current = false;
+    return () => {
+      isUnmountedRef.current = true;
+    };
+  }, []);
+
+  const fpRef = useRef<Record<string, string>>({});
+  const seenAuditIdsRef = useRef<Set<string>>(new Set());
+  const seenSseSeqRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    streamPausedRef.current = streamPaused;
+  }, [streamPaused]);
+
+  useEffect(() => {
+    selectedEngRef.current = selectedEngagementId;
+  }, [selectedEngagementId]);
+
+  useEffect(() => {
+    connectionStateRef.current = connectionState;
+  }, [connectionState]);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("copilot") === "open") {
+        setCopilotOpen(true);
+      }
+    } catch {
+      // Ignore query parsing failure
+    }
+  }, []);
+
+  const addConsoleLog = useCallback(
+    (
+      level: ConsoleLevel,
+      source: string,
+      message: string,
+      customId?: string,
+      ts?: string,
+      taskId?: string,
+      seq?: number
+    ) => {
+      const sanitizedMsg = processTerminalLog(message, { preserveSgr: true });
+      setConsoleLogs((prev) => {
+        if (customId) {
+          const existingIdx = prev.findIndex((item) => item.id === customId);
+          if (existingIdx !== -1) {
+            const existing = prev[existingIdx];
+            const kept = keepLongerPrefix(existing.message, sanitizedMsg);
+            if (kept === existing.message) return prev;
+            const copy = [...prev];
+            copy[existingIdx] = { ...existing, message: kept };
+            return copy;
+          }
+        }
+        const nextEntry: ConsoleEntry = {
+          id: customId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          seq,
+          timestamp: ts || new Date().toLocaleTimeString("en-GB", { hour12: false }),
+          level,
+          source,
+          message: sanitizedMsg,
+          taskId,
+        };
+        return [...prev.slice(-1999), nextEntry];
+      });
+    },
+    []
+  );
+
+  const clearConsoleLogs = useCallback(() => {
+    setConsoleLogs([]);
+  }, []);
+
+  const bootstrapCsrf = useCallback(async (force = false): Promise<string> => {
+    if (!force) {
+      const existing = readCsrfToken() || csrfTokenRef.current;
+      if (existing) {
+        csrfTokenRef.current = existing;
+        return existing;
+      }
+      if (csrfBootstrappedRef.current) {
+        return csrfTokenRef.current;
+      }
+    }
+    csrfBootstrappedRef.current = true;
+    try {
+      const res = await fetch("/api/csrf", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = (await res.json().catch(() => null)) as { csrfToken?: string } | null;
+        const tok = data?.csrfToken || readCsrfToken();
+        if (tok) {
+          csrfTokenRef.current = tok;
+          return tok;
+        }
+      }
+    } catch {
+      // Backend offline; caller handles network failure gracefully
+    }
+    return readCsrfToken() || csrfTokenRef.current;
+  }, []);
+
+  useEffect(() => {
+    void bootstrapCsrf(false);
+  }, [bootstrapCsrf]);
+
+  /**
+   * Unified Django fetch:
+   * - REST `/api/*` uses same-origin relative path (Next.js rewrite -> Django `:8000`)
+   * - Streaming SSE uses `getDjangoStreamUrl` (or same-origin when proxied in tests)
+   * - Includes `credentials: "include"`, attaches `Authorization: Bearer` from configured
+   *   or session-stored operator token (never in URLs), and injects `X-CSRFToken` on mutations.
+   */
+  const hunterFetch = useCallback(
+    async (path: string, init?: RequestInit): Promise<Response> => {
+      const normalized = path.startsWith("/") ? path : `/${path}`;
+      const isDirectStream = STREAM_DIRECT_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+      const url = isDirectStream ? getDjangoStreamUrl(normalized) : normalized;
+
+      const method = (init?.method || "GET").toUpperCase();
+      const headers = new Headers(init?.headers || undefined);
+
+      const bearer = readStoredBearerToken();
+      if (bearer && !headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${bearer}`);
+      }
+
+      const isMutation = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+      if (isMutation && !headers.has("X-CSRFToken")) {
+        let token = readCsrfToken() || csrfTokenRef.current;
+        if (!token) {
+          token = await bootstrapCsrf(false);
+        }
+        if (token) {
+          headers.set("X-CSRFToken", token);
+        }
+      }
+
+      const response = await fetch(url, {
+        ...init,
+        method,
+        headers,
+        credentials: init?.credentials || "include",
+      });
+
+      // Retry once if CSRF cookie rotated/missing
+      if (isMutation && response.status === 403 && !headers.has("X-CSRF-Retry")) {
+        const freshToken = await bootstrapCsrf(true);
+        if (freshToken && freshToken !== headers.get("X-CSRFToken")) {
+          const retryHeaders = new Headers(headers);
+          retryHeaders.set("X-CSRFToken", freshToken);
+          retryHeaders.set("X-CSRF-Retry", "1");
+          return fetch(url, {
+            ...init,
+            method,
+            headers: retryHeaders,
+            credentials: init?.credentials || "include",
+          });
+        }
+      }
+
+      return response;
+    },
+    [bootstrapCsrf]
+  );
+
+  const apiJson = useCallback(
+    async <T = Record<string, unknown>>(
+      path: string,
+      options?: { method?: string; body?: unknown; signal?: AbortSignal }
+    ): Promise<{ ok: boolean; status: number; data: T | null; error?: string }> => {
+      const method = (options?.method || "GET").toUpperCase();
+      const headers: Record<string, string> = {};
+      let serialized: BodyInit | undefined;
+      if (options?.body !== undefined) {
+        if (options.body instanceof FormData) {
+          serialized = options.body;
+        } else {
+          headers["Content-Type"] = "application/json";
+          serialized = JSON.stringify(options.body);
+        }
+      }
+      try {
+        const res = await hunterFetch(path, {
+          method,
+          headers,
+          body: serialized,
+          signal: options?.signal,
+          cache: "no-store",
+        });
+        const text = await res.text();
+        let data: T | null = null;
+        if (text) {
+          try {
+            data = JSON.parse(text) as T;
+          } catch {
+            data = { raw: text } as unknown as T;
+          }
+        }
+        const errMsg = res.ok ? undefined : extractApiError(data, res.status);
+        if (res.status === 401) {
+          setAuthStatus("auth_required");
+          setAuthError(errMsg || "Authentication required");
+        } else if (res.status === 403) {
+          const rec = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+          if (rec?.error === "operator_tier_required") {
+            setAuthStatus("forbidden");
+            setAuthError(errMsg || "Operator tier authentication required");
+          }
+        } else if (
+          res.ok &&
+          path.startsWith("/api/platform/") &&
+          path !== "/api/platform/artex/health"
+        ) {
+          setAuthStatus("authenticated");
+          setAuthError("");
+        }
+        return {
+          ok: res.ok,
+          status: res.status,
+          data,
+          error: errMsg,
+        };
+      } catch (err) {
+        if (options?.signal?.aborted) {
+          return { ok: false, status: 0, data: null };
+        }
+        return {
+          ok: false,
+          status: 0,
+          data: null,
+          error: err instanceof Error ? err.message : "Network error",
+        };
+      }
+    },
+    [hunterFetch]
+  );
+
+  const refreshNotifications = useCallback(async () => {
+    const res = await apiJson<{ notifications?: NotificationItem[] }>(
+      "/api/platform/notifications?limit=50"
+    );
+    if (res.ok && Array.isArray(res.data?.notifications)) {
+      const fp = fingerprintData(res.data.notifications);
+      if (fpRef.current.notifications !== fp) {
+        fpRef.current.notifications = fp;
+        setNotifications(res.data.notifications);
+      }
+    }
+  }, [apiJson]);
+
+  const markNotificationRead = useCallback(
+    async (notificationId: string): Promise<boolean> => {
+      if (!notificationId) return false;
+      const res = await apiJson<{ ok?: boolean }>(
+        `/api/platform/notifications/${encodeURIComponent(notificationId)}/read`,
+        { method: "POST" }
+      );
+      if (res.ok) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.notification_id === notificationId ? { ...n, read: true } : n))
+        );
+        return true;
+      }
+      return false;
+    },
+    [apiJson]
+  );
+
+  const runRefreshPass = useCallback(
+    async (signal: AbortSignal) => {
+      const currentEngId = selectedEngRef.current;
+      const isGoUuid = UUID_RE.test(currentEngId);
+      const goFilter = isGoUuid ? `?engagement_id=${encodeURIComponent(currentEngId)}` : "";
+
+      const applyRunsList = (rawRuns: unknown[]) => {
+        const normalizedRuns = rawRuns.filter(
+          (r): r is RunRecord => Boolean(r && typeof r === "object" && "run_id" in r)
+        );
+        const fp = fingerprintData(normalizedRuns);
+        if (fpRef.current.runs !== fp) {
+          fpRef.current.runs = fp;
+          setRuns(normalizedRuns);
+        }
+      };
+
+      const applyApprovalsList = (rawApprovals: unknown[]) => {
+        const normalizedApprovals = rawApprovals.filter(
+          (a): a is ApprovalRecord => Boolean(a && typeof a === "object" && "approval_id" in a)
+        );
+        setApprovals((prev) => {
+          const execMap = new Map<string, ApprovalExecutionResult | null | undefined>();
+          for (const item of prev) {
+            if (item.execution) execMap.set(item.approval_id, item.execution);
+          }
+          const merged = normalizedApprovals.map((ap) =>
+            execMap.has(ap.approval_id) && !ap.execution
+              ? { ...ap, execution: execMap.get(ap.approval_id) }
+              : ap
+          );
+          const fp = fingerprintData(merged);
+          if (fpRef.current.approvals === fp) return prev;
+          fpRef.current.approvals = fp;
+          return merged;
+        });
+      };
+
+      try {
+        const [hubOverviewRes, hubApprovalsRes, hubRunsRes, artexHealthRes, notifsRes] =
+          await Promise.all([
+            apiJson<Record<string, unknown>>("/api/platform/overview", { signal }),
+            apiJson<Record<string, unknown>>("/api/platform/approvals", { signal }).then((res) => {
+              if (!signal.aborted && res.ok) {
+                const payload = res.data as { approvals?: unknown[] } | null;
+                if (payload && Array.isArray(payload.approvals)) {
+                  applyApprovalsList(payload.approvals);
+                }
+              }
+              return res;
+            }),
+            apiJson<Record<string, unknown>>("/api/platform/runs?limit=100", { signal }).then((res) => {
+              if (!signal.aborted && res.ok) {
+                const payload = res.data as { runs?: unknown[] } | null;
+                if (payload && Array.isArray(payload.runs)) {
+                  applyRunsList(payload.runs);
+                }
+              }
+              return res;
+            }),
+            apiJson<Record<string, unknown>>("/api/platform/artex/health", { signal }),
+            apiJson<{ notifications?: NotificationItem[] }>("/api/platform/notifications?limit=50", {
+              signal,
+            }),
+          ]);
+
+        if (signal.aborted) return;
+
+        if (notifsRes.ok && Array.isArray(notifsRes.data?.notifications)) {
+          const nfp = fingerprintData(notifsRes.data.notifications);
+          if (fpRef.current.notifications !== nfp) {
+            fpRef.current.notifications = nfp;
+            setNotifications(notifsRes.data.notifications);
+          }
+        }
+
+        const isArtexOnline = Boolean(
+          artexHealthRes.ok &&
+            artexHealthRes.data &&
+            typeof artexHealthRes.data === "object" &&
+            artexHealthRes.data.online === true
+        );
+
+        type ApiJsonResponse = { ok: boolean; status: number; data: unknown; error?: string };
+        const skippedArtex: ApiJsonResponse = { ok: false, status: 0, data: null };
+
+        const [
+          artexStatsRes,
+          artexEngsRes,
+          artexAssetsRes,
+          artexFindingsRes,
+          artexTasksRes,
+          artexAuditRes,
+        ] = isArtexOnline
+          ? await Promise.all([
+              apiJson<unknown>("/api/platform/artex/stats", { signal }),
+              apiJson<unknown>("/api/platform/artex/engagements", { signal }),
+              apiJson<unknown>(`/api/platform/artex/assets${goFilter}`, { signal }),
+              apiJson<unknown>(`/api/platform/artex/findings${goFilter}`, { signal }),
+              apiJson<unknown>(`/api/platform/artex/tasks${goFilter}`, { signal }),
+              apiJson<unknown>(`/api/platform/artex/audit${goFilter}`, { signal }),
+            ])
+          : [
+              skippedArtex,
+              skippedArtex,
+              skippedArtex,
+              skippedArtex,
+              skippedArtex,
+              skippedArtex,
+            ];
+
+        if (signal.aborted) return;
+
+        const nowTs = Date.now();
+
+        // 1. Evaluate Django Hub Health
+        const hubOv =
+          hubOverviewRes.data && typeof hubOverviewRes.data === "object"
+            ? hubOverviewRes.data
+            : null;
+        const hubHealthy = Boolean(
+          hubOverviewRes.ok &&
+            hubOv &&
+            (hubOv.status === "ok" ||
+              (!("status" in hubOv) && typeof hubOv.context === "object" && hubOv.context !== null))
+        );
+
+        if (hubHealthy && hubOv) {
+          const statsObj =
+            hubOv.stats && typeof hubOv.stats === "object"
+              ? (hubOv.stats as Record<string, unknown>)
+              : null;
+          const latestSeq = Number(hubOv.latest_seq ?? statsObj?.latest_seq ?? 0);
+          if (latestSeq > lastSeqRef.current) {
+            lastSeqRef.current = latestSeq;
+            lastEventIdRef.current = String(latestSeq);
+          }
+          const ctxObj =
+            hubOv.context && typeof hubOv.context === "object"
+              ? (hubOv.context as Record<string, unknown>)
+              : null;
+          if (ctxObj) {
+            const nextRunId =
+              typeof ctxObj.active_run_id === "string" && ctxObj.active_run_id
+                ? ctxObj.active_run_id
+                : null;
+            if (fpRef.current.activeRunId !== (nextRunId || "")) {
+              fpRef.current.activeRunId = nextRunId || "";
+              setActiveRunId(nextRunId);
+            }
+            if (!initialCtxSyncedRef.current) {
+              initialCtxSyncedRef.current = true;
+              if (
+                !userClearedEngRef.current &&
+                !selectedEngRef.current &&
+                typeof ctxObj.active_engagement_id === "string" &&
+                ctxObj.active_engagement_id
+              ) {
+                selectedEngRef.current = ctxObj.active_engagement_id;
+                setSelectedEngagementId(ctxObj.active_engagement_id);
+              }
+            }
+          }
+
+          const rawCounts =
+            hubOv.counts && typeof hubOv.counts === "object"
+              ? (hubOv.counts as OverviewCounts)
+              : statsObj
+                ? ({
+                    engagements: Number(statsObj.engagement_count || 0),
+                    runs: Number(statsObj.run_count || 0),
+                    active_runs: Number(statsObj.active_run_count || 0),
+                    pending_approvals: Number(statsObj.pending_approval_count || 0),
+                    findings: 0,
+                    assets: 0,
+                    leads: 0,
+                    conversations: 0,
+                    unread_notifications: Number(statsObj.unread_notification_count || 0),
+                    tools_installed: 0,
+                    agents: 0,
+                  } satisfies OverviewCounts)
+                : null;
+
+          if (rawCounts) {
+            const cntFp = fingerprintData(rawCounts);
+            if (fpRef.current.counts !== cntFp) {
+              fpRef.current.counts = cntFp;
+              setOverviewCounts(rawCounts);
+            }
+          }
+
+          const services = (
+            hubOv.services ||
+            (hubOv.artex && typeof hubOv.artex === "object"
+              ? { artex_go_core: hubOv.artex as Record<string, unknown> }
+              : {})
+          ) as HubServicesSnapshot;
+          const nextHub: HunterHubHealth = {
+            status: "connected",
+            lastSyncedAt: nowTs,
+            latestSeq,
+            services,
+          };
+          const fp = fingerprintData({ s: nextHub.status, services });
+          if (fpRef.current.hubHealth !== fp) {
+            fpRef.current.hubHealth = fp;
+            setHunterHubHealth(nextHub);
+          } else {
+            setHunterHubHealth((prev) => ({ ...prev, lastSyncedAt: nowTs, latestSeq }));
+          }
+        } else if (hubOverviewRes.status === 401 || hubOverviewRes.status === 403) {
+          // Django Hub responded over HTTP and is reachable, awaiting operator authentication.
+          const errMsg = hubOverviewRes.error || "Authentication required";
+          const nextHub: HunterHubHealth = {
+            status: "checking",
+            error: errMsg,
+            lastSyncedAt: nowTs,
+            latestSeq: lastSeqRef.current,
+          };
+          const fp = fingerprintData({ s: "checking", errMsg });
+          if (fpRef.current.hubHealth !== fp) {
+            fpRef.current.hubHealth = fp;
+            setHunterHubHealth(nextHub);
+          }
+        } else {
+          const errMsg = hubOverviewRes.error || "Django Platform Hub unreachable";
+          const nextHub: HunterHubHealth = {
+            status: "offline",
+            error: errMsg,
+            lastSyncedAt: nowTs,
+            latestSeq: lastSeqRef.current,
+          };
+          const fp = fingerprintData({ s: "offline", errMsg });
+          if (fpRef.current.hubHealth !== fp) {
+            fpRef.current.hubHealth = fp;
+            setHunterHubHealth(nextHub);
+          }
+        }
+
+        // 2. Evaluate Truthful Go Core Health via Django /api/platform/artex/health
+        const bridgeData =
+          (artexHealthRes.data && typeof artexHealthRes.data === "object"
+            ? artexHealthRes.data
+            : null) ||
+          (hubOv?.services &&
+          typeof (hubOv.services as Record<string, unknown>).artex_go_core === "object"
+            ? ((hubOv.services as Record<string, unknown>).artex_go_core as Record<string, unknown>)
+            : null) ||
+          (hubOv?.artex && typeof hubOv.artex === "object"
+            ? (hubOv.artex as Record<string, unknown>)
+            : null);
+
+        const upstreamObj =
+          (bridgeData?.upstream && typeof bridgeData.upstream === "object"
+            ? (bridgeData.upstream as Record<string, unknown>)
+            : null) ||
+          (bridgeData?.health && typeof bridgeData.health === "object"
+            ? (bridgeData.health as Record<string, unknown>)
+            : null);
+
+        const rawDbState = String(
+          upstreamObj?.database ?? bridgeData?.database ?? ""
+        ).toLowerCase();
+        const dbState: "connected" | "disconnected" | "unknown" =
+          rawDbState === "connected" || rawDbState === "ok" || rawDbState === "healthy"
+            ? "connected"
+            : rawDbState === "disconnected" || rawDbState === "degraded" || rawDbState === "error"
+              ? "disconnected"
+              : "unknown";
+
+        const rawStatus = String(bridgeData?.status || upstreamObj?.status || "").toLowerCase();
+        let nextGoHealth: GoCoreHealth;
+        if (bridgeData && (rawStatus === "degraded" || (bridgeData.online === true && dbState === "disconnected"))) {
+          nextGoHealth = {
+            status: "degraded",
+            database: dbState === "unknown" ? "disconnected" : dbState,
+            engine:
+              typeof upstreamObj?.engine === "string" ? upstreamObj.engine : "ARTEX-Pro Go Core",
+            error:
+              typeof bridgeData.error === "string"
+                ? bridgeData.error
+                : typeof upstreamObj?.error === "string"
+                  ? upstreamObj.error
+                  : "Database degraded",
+            lastSyncedAt: nowTs,
+            viaBridge: true,
+          };
+        } else if (bridgeData && bridgeData.online === true) {
+          nextGoHealth = {
+            status: "connected",
+            database: dbState,
+            engine:
+              typeof upstreamObj?.engine === "string" ? upstreamObj.engine : "ARTEX-Pro Go Core",
+            lastSyncedAt: nowTs,
+            viaBridge: true,
+          };
+        } else {
+          nextGoHealth = {
+            status: "offline",
+            database: "unknown",
+            error:
+              (bridgeData && typeof bridgeData.error === "string" ? bridgeData.error : "") ||
+              "Go Core API unreachable via Django bridge",
+            lastSyncedAt: nowTs,
+            viaBridge: true,
+          };
+        }
+
+        const goHealthFp = fingerprintData({
+          status: nextGoHealth.status,
+          database: nextGoHealth.database,
+          error: nextGoHealth.error,
+        });
+        if (fpRef.current.goHealth !== goHealthFp) {
+          fpRef.current.goHealth = goHealthFp;
+          setGoCoreHealth(nextGoHealth);
+        } else {
+          setGoCoreHealth((prev) => ({ ...prev, lastSyncedAt: nowTs }));
+        }
+
+        // 3. Engagements (Merge Go Core proxy + Django Hub overview)
+        const mergedEngs: EngagementRecord[] = [];
+        const seenEngIds = new Set<string>();
+        const engsWrap = unwrapArtexPayload(artexEngsRes.data);
+        const rawGoEngs = engsWrap.payload;
+
+        if (artexEngsRes.ok && engsWrap.online !== false && Array.isArray(rawGoEngs)) {
+          for (const item of rawGoEngs) {
+            if (!item || typeof item !== "object") continue;
+            const ge = item as Record<string, unknown>;
+            const id = String(ge.id || ge.code || "");
+            if (!id || seenEngIds.has(id)) continue;
+            seenEngIds.add(id);
+            const rawScope = String(ge.authorized_scope || "");
+            mergedEngs.push({
+              id,
+              name: String(ge.code || ge.target_url || id),
+              target: String(ge.target_url || "").replace(/^https?:\/\//, ""),
+              code: typeof ge.code === "string" ? ge.code : undefined,
+              in_scope: rawScope
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
+              out_of_scope: [],
+              status: String(ge.status || "ACTIVE").toLowerCase(),
+              source: "artex_go",
+              isGoUuid: UUID_RE.test(id),
+              created_at: typeof ge.created_at === "string" ? ge.created_at : null,
+            });
+          }
+        }
+
+        if (hubOverviewRes.ok && hubOv && Array.isArray(hubOv.engagements)) {
+          for (const item of hubOv.engagements) {
+            if (!item || typeof item !== "object") continue;
+            const he = item as Record<string, unknown>;
+            const id = String(he.engagement_id || he.id || "");
+            if (!id || seenEngIds.has(id)) continue;
+            seenEngIds.add(id);
+            mergedEngs.push({
+              id,
+              name: String(he.name || he.target || id),
+              target: String(he.target || "").replace(/^https?:\/\//, ""),
+              in_scope: Array.isArray(he.in_scope) ? he.in_scope.map(String) : [],
+              out_of_scope: Array.isArray(he.out_of_scope) ? he.out_of_scope.map(String) : [],
+              status: String(he.status || "authorized").toLowerCase(),
+              source: String(he.source || "local"),
+              isGoUuid: UUID_RE.test(id),
+              created_at: he.created_at ? String(he.created_at) : null,
+            });
+          }
+        }
+
+        const engFp = fingerprintData(mergedEngs);
+        if (fpRef.current.engagements !== engFp) {
+          fpRef.current.engagements = engFp;
+          setEngagements(mergedEngs);
+        }
+
+        // 4. Assets (Always reconcile — including empty arrays when switching to an empty engagement)
+        const mergedAssets: AssetRecord[] = [];
+        const seenAssetKeys = new Set<string>();
+        const pushNormalizedAsset = (a: Record<string, unknown>) => {
+          const kind = String(a.kind || "ASSET");
+          const value = String(a.value || "");
+          if (!value) return;
+          const key = `${kind.toUpperCase()}|${value.toLowerCase()}`;
+          if (seenAssetKeys.has(key)) return;
+          seenAssetKeys.add(key);
+          mergedAssets.push({
+            id: String(a.id || key),
+            target_id: typeof a.target_id === "string" ? a.target_id : undefined,
+            engagement_id: typeof a.engagement_id === "string" ? a.engagement_id : undefined,
+            kind,
+            value,
+            attributes:
+              a.attributes && typeof a.attributes === "object"
+                ? (a.attributes as Record<string, unknown>)
+                : {},
+            first_seen: typeof a.first_seen === "string" ? a.first_seen : null,
+            created_at: typeof a.created_at === "string" ? a.created_at : null,
+          });
+        };
+
+        const activeEngFilterObj = currentEngId
+          ? mergedEngs.find((e) => e.id === currentEngId) || null
+          : null;
+        const hubMatchesFilter = (item: Record<string, unknown>): boolean => {
+          if (!currentEngId) return true;
+          const itemEid = typeof item.engagement_id === "string" ? item.engagement_id : "";
+          if (itemEid && itemEid === currentEngId) return true;
+          const filterHost = activeEngFilterObj?.target
+            ? normalizeTargetForCompare(activeEngFilterObj.target)
+            : "";
+          if (!filterHost) return false;
+          const candidateStr = String(
+            item.target || item.value || item.endpoint || ""
+          ).toLowerCase();
+          return candidateStr.includes(filterHost.replace(/:\d+$/, ""));
+        };
+
+        const rawAssets = unwrapArtexPayload(artexAssetsRes.data).payload;
+        if (artexAssetsRes.ok && Array.isArray(rawAssets)) {
+          for (const a of rawAssets) {
+            if (a && typeof a === "object") {
+              pushNormalizedAsset(a as Record<string, unknown>);
+            }
+          }
+        }
+        if (hubOverviewRes.ok && hubOv && Array.isArray(hubOv.assets)) {
+          for (const a of hubOv.assets) {
+            if (a && typeof a === "object" && hubMatchesFilter(a as Record<string, unknown>)) {
+              pushNormalizedAsset(a as Record<string, unknown>);
+            }
+          }
+        }
+        if (hubOverviewRes.ok || artexAssetsRes.ok) {
+          const fp = fingerprintData(mergedAssets);
+          if (fpRef.current.assets !== fp) {
+            fpRef.current.assets = fp;
+            setAssets(mergedAssets);
+          }
+        }
+
+        // 5. Findings (Always reconcile — including empty arrays when switching engagements)
+        const mergedFindings: FindingRecord[] = [];
+        const seenFindingKeys = new Set<string>();
+        const pushNormalizedFinding = (f: Record<string, unknown>) => {
+          const vulnClass = String(f.vuln_class || "unknown");
+          const endpoint = String(f.endpoint || "");
+          const title = String(f.title || "Untitled Finding");
+          const key = `${vulnClass.toLowerCase()}|${endpoint.toLowerCase()}|${title.toLowerCase()}`;
+          if (seenFindingKeys.has(key)) return;
+          seenFindingKeys.add(key);
+          mergedFindings.push({
+            id: String(f.id || key),
+            engagement_id: typeof f.engagement_id === "string" ? f.engagement_id : undefined,
+            target_id: typeof f.target_id === "string" ? f.target_id : undefined,
+            run_id: typeof f.run_id === "string" ? f.run_id : undefined,
+            title,
+            vuln_class: vulnClass,
+            severity: String(f.severity || "info").toUpperCase(),
+            cvss_score: Number(f.cvss_score || 0),
+            confidence: Number(f.confidence || 0),
+            endpoint,
+            evidence: String(f.evidence || ""),
+            poc_details:
+              f.poc_details && typeof f.poc_details === "object"
+                ? (f.poc_details as Record<string, unknown>)
+                : undefined,
+            poc_script: typeof f.poc_script === "string" ? f.poc_script : undefined,
+            status: String(f.status || "CANDIDATE"),
+            created_at: typeof f.created_at === "string" ? f.created_at : null,
+          });
+        };
+
+        const rawFindings = unwrapArtexPayload(artexFindingsRes.data).payload;
+        if (artexFindingsRes.ok && Array.isArray(rawFindings)) {
+          for (const f of rawFindings) {
+            if (f && typeof f === "object") {
+              pushNormalizedFinding(f as Record<string, unknown>);
+            }
+          }
+        }
+        if (hubOverviewRes.ok && hubOv && Array.isArray(hubOv.findings)) {
+          for (const f of hubOv.findings) {
+            if (f && typeof f === "object" && hubMatchesFilter(f as Record<string, unknown>)) {
+              pushNormalizedFinding(f as Record<string, unknown>);
+            }
+          }
+        }
+        if (hubOverviewRes.ok || artexFindingsRes.ok) {
+          const fp = fingerprintData(mergedFindings);
+          if (fpRef.current.findings !== fp) {
+            fpRef.current.findings = fp;
+            setFindings(mergedFindings);
+          }
+        }
+
+        // 6. Stats reconciliation (truthful counts, zero fabrication)
+        const statsWrap = unwrapArtexPayload(artexStatsRes.data);
+        const unwrappedStats = statsWrap.payload;
+        if (
+          artexStatsRes.ok &&
+          statsWrap.online !== false &&
+          unwrappedStats &&
+          typeof unwrappedStats === "object" &&
+          !Array.isArray(unwrappedStats)
+        ) {
+          const s = unwrappedStats as Record<string, unknown>;
+          const nextStats: StatsSummary = {
+            total_assets: currentEngId
+              ? mergedAssets.length
+              : Math.max(Number(s.total_assets || 0), mergedAssets.length),
+            total_findings: currentEngId
+              ? mergedFindings.length
+              : Math.max(Number(s.total_findings || 0), mergedFindings.length),
+            total_engagements: Math.max(Number(s.total_engagements || 0), mergedEngs.length),
+            status: String(s.status || "ONLINE"),
+            error: typeof s.error === "string" ? s.error : undefined,
+          };
+          const fp = fingerprintData(nextStats);
+          if (fpRef.current.stats !== fp) {
+            fpRef.current.stats = fp;
+            setStats(nextStats);
+          }
+        } else if (nextGoHealth.status === "offline" || statsWrap.online === false) {
+          const cnts =
+            hubOv?.counts && typeof hubOv.counts === "object"
+              ? (hubOv.counts as Record<string, unknown>)
+              : null;
+          const hubStatsObj =
+            hubOv?.stats && typeof hubOv.stats === "object"
+              ? (hubOv.stats as Record<string, unknown>)
+              : null;
+          const offlineStats: StatsSummary = {
+            total_assets: currentEngId
+              ? mergedAssets.length
+              : Math.max(Number(cnts?.assets || 0), mergedAssets.length),
+            total_findings: currentEngId
+              ? mergedFindings.length
+              : Math.max(Number(cnts?.findings || 0), mergedFindings.length),
+            total_engagements: Number(
+              cnts?.engagements ?? hubStatsObj?.engagement_count ?? mergedEngs.length
+            ),
+            status: "OFFLINE",
+          };
+          const fp = fingerprintData(offlineStats);
+          if (fpRef.current.stats !== fp) {
+            fpRef.current.stats = fp;
+            setStats(offlineStats);
+          }
+        }
+
+        // 7. Go Tasks
+        const rawTasks = unwrapArtexPayload(artexTasksRes.data).payload;
+        if (artexTasksRes.ok && Array.isArray(rawTasks)) {
+          const normalizedTasks: TaskRecord[] = rawTasks
+            .filter((t): t is Record<string, unknown> => Boolean(t && typeof t === "object"))
+            .map((t) => ({
+              id: String(t.id || ""),
+              engagement_id: typeof t.engagement_id === "string" ? t.engagement_id : undefined,
+              run_id: typeof t.run_id === "string" ? t.run_id : undefined,
+              agent_role: String(t.agent_role || "WORKER"),
+              title: String(t.title || ""),
+              status: String(t.status || "PENDING"),
+              priority: Number(t.priority || 5),
+              input_context:
+                t.input_context && typeof t.input_context === "object"
+                  ? (t.input_context as Record<string, unknown>)
+                  : {},
+              output_summary:
+                t.output_summary && typeof t.output_summary === "object"
+                  ? (t.output_summary as Record<string, unknown>)
+                  : {},
+              created_at: typeof t.created_at === "string" ? t.created_at : null,
+              updated_at: typeof t.updated_at === "string" ? t.updated_at : null,
+            }));
+          const fp = fingerprintData(normalizedTasks);
+          if (fpRef.current.tasks !== fp) {
+            fpRef.current.tasks = fp;
+            setTasks(normalizedTasks);
+          }
+        }
+
+        // 8. Go Audit Logs
+        const rawAudit = unwrapArtexPayload(artexAuditRes.data).payload;
+        if (artexAuditRes.ok && Array.isArray(rawAudit)) {
+          const normalizedAudit: AuditRecord[] = rawAudit
+            .filter((a): a is Record<string, unknown> => Boolean(a && typeof a === "object"))
+            .map((a) => ({
+              id: String(a.id || ""),
+              engagement_id: typeof a.engagement_id === "string" ? a.engagement_id : undefined,
+              actor: String(a.actor || "system"),
+              action: String(a.action || ""),
+              details:
+                a.details && typeof a.details === "object"
+                  ? (a.details as Record<string, unknown>)
+                  : {},
+              created_at: typeof a.created_at === "string" ? a.created_at : null,
+            }));
+          const fp = fingerprintData(normalizedAudit);
+          if (fpRef.current.audit !== fp) {
+            fpRef.current.audit = fp;
+            setAuditLogs(normalizedAudit);
+            if (!streamPausedRef.current) {
+              const reversed = [...normalizedAudit].reverse();
+              for (const entry of reversed) {
+                if (!entry.id || seenAuditIdsRef.current.has(entry.id)) continue;
+                seenAuditIdsRef.current.add(entry.id);
+                const detailText =
+                  Object.keys(entry.details).length > 0 ? ` ${JSON.stringify(entry.details)}` : "";
+                addConsoleLog(
+                  "AUDIT",
+                  entry.actor,
+                  `${entry.action}${detailText}`,
+                  `audit:${entry.id}`,
+                  formatTimeHHMMSS(entry.created_at)
+                );
+              }
+            }
+          }
+        }
+
+        // 9. Django Hub Runs & Approvals
+        const runsPayload = hubRunsRes.data as { runs?: unknown[] } | null;
+        const rawRuns =
+          hubRunsRes.ok && runsPayload && Array.isArray(runsPayload.runs)
+            ? runsPayload.runs
+            : hubOverviewRes.ok && hubOv && Array.isArray(hubOv.runs)
+              ? hubOv.runs
+              : null;
+        if (rawRuns) {
+          applyRunsList(rawRuns);
+        }
+
+        const approvalsPayload = hubApprovalsRes.data as { approvals?: unknown[] } | null;
+        const rawApprovals =
+          hubApprovalsRes.ok && approvalsPayload && Array.isArray(approvalsPayload.approvals)
+            ? approvalsPayload.approvals
+            : null;
+        if (rawApprovals) {
+          applyApprovalsList(rawApprovals);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [addConsoleLog, apiJson]
+  );
+
+  const refreshData = useCallback(async () => {
+    if (typeof document !== "undefined" && document.hidden) {
+      return;
+    }
+    if (refreshInFlightRef.current) {
+      refreshPendingRef.current = true;
+      await refreshInFlightRef.current;
+      return;
+    }
+
+    const executeLoop = async () => {
+      let shouldRun = true;
+      while (shouldRun) {
+        shouldRun = false;
+        refreshPendingRef.current = false;
+        const controller = new AbortController();
+        pollAbortRef.current = controller;
+        await runRefreshPass(controller.signal);
+        if (
+          refreshPendingRef.current &&
+          !isUnmountedRef.current &&
+          !controller.signal.aborted &&
+          (typeof document === "undefined" || !document.hidden)
+        ) {
+          shouldRun = true;
+        }
+      }
+    };
+
+    const promise = executeLoop();
+    refreshInFlightRef.current = promise;
+    try {
+      await promise;
+    } finally {
+      if (refreshInFlightRef.current === promise) {
+        refreshInFlightRef.current = null;
+      }
+      pollAbortRef.current = null;
+    }
+  }, [runRefreshPass]);
+
+  const scheduleDebouncedRefresh = useCallback(() => {
+    if (sseRefreshTimerRef.current !== null) return;
+    sseRefreshTimerRef.current = window.setTimeout(() => {
+      sseRefreshTimerRef.current = null;
+      void refreshData();
+    }, 350);
+  }, [refreshData]);
+
+  // Initial load + gentle 30s fallback ONLY when SSE is not live (no 4s polling storm!)
+  useEffect(() => {
+    void refreshData();
+
+    const fallbackTimer = window.setInterval(() => {
+      if (!document.hidden && connectionStateRef.current !== "live") {
+        void refreshData();
+      }
+    }, 30000);
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        if (pollAbortRef.current) {
+          pollAbortRef.current.abort();
+        }
+      } else {
+        void refreshData();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(fallbackTimer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (sseRefreshTimerRef.current !== null) {
+        window.clearTimeout(sseRefreshTimerRef.current);
+        sseRefreshTimerRef.current = null;
+      }
+      if (pollAbortRef.current) {
+        pollAbortRef.current.abort();
+      }
+    };
+  }, [refreshData]);
+
+  // Canonical SSE /api/platform/stream subscription with Last-Event-ID + exponential backoff
+  useEffect(() => {
+    if (
+      hunterHubHealth.status === "offline" ||
+      authStatus === "auth_required" ||
+      authStatus === "forbidden"
+    ) {
+      setConnectionState("offline");
+      return;
+    }
+    if (hunterHubHealth.status !== "connected") {
+      setConnectionState("connecting");
+      return;
+    }
+
+    let cancelled = false;
+    let activeController: AbortController | null = null;
+    let reconnectTimer: number | null = null;
+    let attempt = 0;
+
+    const connectSse = async () => {
+      if (cancelled || (typeof document !== "undefined" && document.hidden)) {
+        return;
+      }
+      setConnectionState(attempt === 0 ? "connecting" : "reconnecting");
+      setReconnectAttempt(attempt);
+
+      activeController = new AbortController();
+      const currentSeq = lastSeqRef.current;
+      const since = currentSeq > 0 ? `?since_seq=${encodeURIComponent(currentSeq)}` : "";
+      const lastEventIdHeader = currentSeq > 0 ? String(currentSeq) : lastEventIdRef.current;
+      const headers: Record<string, string> = {
+        Accept: "text/event-stream",
+      };
+      if (lastEventIdHeader) {
+        headers["Last-Event-ID"] = lastEventIdHeader;
+      }
+
+      try {
+        const resp = await hunterFetch(`/api/platform/stream${since}`, {
+          headers,
+          signal: activeController.signal,
+        });
+        if (!resp.ok || !resp.body) {
+          throw new Error(`SSE HTTP ${resp.status}`);
+        }
+        attempt = 0;
+        setReconnectAttempt(0);
+        setConnectionState("live");
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        const dispatchBlock = (block: string) => {
+          const lines = block.split(/\r?\n/);
+          let eventName = "message";
+          let eventId = "";
+          const dataLines: string[] = [];
+          for (const line of lines) {
+            if (!line || line.startsWith(":")) continue;
+            if (line.startsWith("event:")) {
+              eventName = line.slice(6).trim() || "message";
+            } else if (line.startsWith("id:")) {
+              eventId = line.slice(3).trim();
+            } else if (line.startsWith("data:")) {
+              dataLines.push(line.slice(5).trimStart());
+            }
+          }
+
+          let parsedId = 0;
+          if (eventId && !eventId.includes("\0")) {
+            lastEventIdRef.current = eventId;
+            if (/^\d+$/.test(eventId)) {
+              parsedId = Number.parseInt(eventId, 10);
+              if (parsedId > lastSeqRef.current) {
+                lastSeqRef.current = parsedId;
+                setHunterHubHealth((prev) =>
+                  parsedId > prev.latestSeq ? { ...prev, latestSeq: parsedId } : prev
+                );
+              }
+            }
+          }
+
+          if (dataLines.length === 0) return;
+          try {
+            const ev = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+            const rawEventName =
+              ev.event_type ??
+              ev.type ??
+              (eventName && eventName !== "message" && eventName !== "platform.event"
+                ? eventName
+                : "");
+            const evType = normalizePlatformEventType(rawEventName, eventName);
+
+            if (evType === "PING" || evType === "PLATFORM_READY") {
+              setConnectionState("live");
+              return;
+            }
+
+            const rawSeq = Number(ev.seq ?? parsedId ?? 0);
+            const seq = Number.isFinite(rawSeq) && rawSeq > 0 ? rawSeq : 0;
+            if (seq > lastSeqRef.current) {
+              lastSeqRef.current = seq;
+              lastEventIdRef.current = String(seq);
+              setHunterHubHealth((prev) =>
+                seq > prev.latestSeq ? { ...prev, latestSeq: seq } : prev
+              );
+            }
+            if (seq && seenSseSeqRef.current.has(seq)) {
+              return;
+            }
+            if (seq) {
+              seenSseSeqRef.current.add(seq);
+            }
+
+            if (!streamPausedRef.current) {
+              const source = String(ev.source || "platform_hub");
+              const payloadObj =
+                ev.payload && typeof ev.payload === "object"
+                  ? (ev.payload as Record<string, unknown>)
+                  : null;
+              const payload = ev.payload ? JSON.stringify(ev.payload) : "";
+              const payloadStatus = String(payloadObj?.status || "").toLowerCase();
+              const level: ConsoleLevel =
+                evType.includes("FAIL") || evType.includes("ERROR")
+                  ? "ERROR"
+                  : evType.includes("COMPLETED") ||
+                      evType.includes("APPROVED") ||
+                      evType.includes("STARTED") ||
+                      evType.includes("RESUMED") ||
+                      evType.includes("EXECUTED") ||
+                      (evType === "APPROVAL_DECIDED" && payloadStatus === "approved")
+                    ? "SUCCESS"
+                    : evType.includes("STOP") ||
+                        evType.includes("PAUSED") ||
+                        evType.includes("REJECT") ||
+                        evType.includes("BLOCK") ||
+                        evType.includes("INTERRUPTED") ||
+                        (evType === "APPROVAL_DECIDED" && payloadStatus === "rejected")
+                      ? "WARN"
+                      : "INFO";
+              const tsValue =
+                typeof ev.created_at === "number"
+                  ? ev.created_at
+                  : typeof ev.ts === "number"
+                    ? ev.ts
+                    : null;
+              const taskId =
+                typeof ev.task_id === "string"
+                  ? ev.task_id
+                  : typeof payloadObj?.task_id === "string"
+                    ? payloadObj.task_id
+                    : undefined;
+              addConsoleLog(
+                level,
+                source,
+                `${evType}${payload && payload !== "{}" ? ` ${payload}` : ""}`,
+                seq ? `sse:${seq}` : undefined,
+                formatTimeHHMMSS(tsValue),
+                taskId,
+                seq || undefined
+              );
+            }
+
+            if (
+              evType.startsWith("RUN_") ||
+              evType.startsWith("APPROVAL_") ||
+              evType.startsWith("PIPELINE_") ||
+              evType.startsWith("ENGAGEMENT_") ||
+              evType.startsWith("TASK_") ||
+              evType.startsWith("NOTIFICATION_") ||
+              evType === "CONTEXT_UPDATED"
+            ) {
+              scheduleDebouncedRefresh();
+            }
+          } catch {
+            // Ignore malformed SSE payload
+          }
+        };
+
+        const flushCompleteBlocks = () => {
+          let idx: number;
+          while ((idx = buffer.search(/\r?\n\r?\n/)) !== -1) {
+            const sepLen = buffer.slice(idx).startsWith("\r\n\r\n") ? 4 : 2;
+            const block = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + sepLen);
+            dispatchBlock(block);
+          }
+        };
+
+        while (!cancelled) {
+          const { value, done } = await reader.read();
+          if (done) {
+            buffer += decoder.decode();
+            break;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          flushCompleteBlocks();
+        }
+        if (!cancelled) {
+          flushCompleteBlocks();
+          if (buffer.trim()) {
+            dispatchBlock(buffer);
+            buffer = "";
+          }
+        }
+      } catch {
+        // Ignore aborts; schedule backoff reconnect below
+      }
+
+      if (!cancelled && (typeof document === "undefined" || !document.hidden)) {
+        attempt += 1;
+        setReconnectAttempt(attempt);
+        setConnectionState("reconnecting");
+        const delayMs = Math.min(1000 * Math.pow(2, Math.min(attempt - 1, 4)), 15000);
+        reconnectTimer = window.setTimeout(() => {
+          void connectSse();
+        }, delayMs);
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (activeController) activeController.abort();
+        if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      } else {
+        attempt = 0;
+        void connectSse();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    void connectSse();
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (activeController) activeController.abort();
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+    };
+  }, [
+    hunterHubHealth.status,
+    authStatus,
+    streamGeneration,
+    hunterFetch,
+    addConsoleLog,
+    scheduleDebouncedRefresh,
+  ]);
+
+  const reconnectStream = useCallback(() => {
+    setReconnectAttempt(0);
+    setConnectionState("connecting");
+    setStreamGeneration((n) => n + 1);
+    void refreshData();
+  }, [refreshData]);
+
+  const exchangeSessionToken = useCallback(
+    async (rawToken: string): Promise<{ ok: boolean; error?: string }> => {
+      const token = rawToken.trim();
+      if (!token) {
+        return { ok: false, error: "Token is required" };
+      }
+      try {
+        window.sessionStorage.setItem(OPERATOR_TOKEN_STORAGE_KEY, token);
+      } catch {
+        // Ignore sessionStorage restrictions
+      }
+      const res = await apiJson<{ ok?: boolean; csrfToken?: string }>("/api/auth/session", {
+        method: "POST",
+        body: { token },
+      });
+      if (!res.ok) {
+        try {
+          window.sessionStorage.removeItem(OPERATOR_TOKEN_STORAGE_KEY);
+        } catch {
+          // Ignore
+        }
+        return { ok: false, error: res.error || "Authentication failed" };
+      }
+      if (res.data?.csrfToken) {
+        csrfTokenRef.current = res.data.csrfToken;
+      }
+      setAuthStatus("authenticated");
+      setAuthError("");
+      await refreshData();
+      setStreamGeneration((n) => n + 1);
+      return { ok: true };
+    },
+    [apiJson, refreshData]
+  );
+
+  const clearOperatorAuth = useCallback(() => {
+    try {
+      window.sessionStorage.removeItem(OPERATOR_TOKEN_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
+    setAuthStatus("auth_required");
+  }, []);
+
+  const selectedEngagement = useMemo(
+    () => engagements.find((e) => e.id === selectedEngagementId) || null,
+    [engagements, selectedEngagementId]
+  );
+
+  const selectEngagement = useCallback(
+    async (id: string) => {
+      const changed = id !== selectedEngRef.current;
+      setSelectedEngagementId(id);
+      selectedEngRef.current = id;
+      userClearedEngRef.current = !id;
+      if (id) {
+        setEngagementSelectionSeq((n) => n + 1);
+      }
+      if (changed) {
+        // Immediately clear stale scoped telemetry before fetching new workspace data
+        fpRef.current.assets = "";
+        fpRef.current.findings = "";
+        fpRef.current.tasks = "";
+        fpRef.current.audit = "";
+        setAssets([]);
+        setFindings([]);
+        setTasks([]);
+        setAuditLogs([]);
+        setInspectedAsset(null);
+        setInspectedFinding(null);
+      }
+      const found = engagements.find((e) => e.id === id);
+      if (found && found.target) {
+        setTargetDomain(found.target);
+      }
+      if (hunterHubHealth.status === "connected") {
+        await apiJson("/api/platform/context", {
+          method: "PUT",
+          body: { active_engagement_id: id || null },
+        });
+      }
+      await refreshData();
+    },
+    [engagements, hunterHubHealth.status, apiJson, refreshData]
+  );
+
+  const createEngagement = useCallback(
+    async (input: EngagementCreateInput) => {
+      const res = await apiJson<Record<string, unknown>>("/api/platform/engagements", {
+        method: "POST",
+        body: input,
+      });
+      if (!res.ok) {
+        return { ok: false, error: res.error || "Failed to create engagement" };
+      }
+      const eng =
+        res.data && typeof res.data.engagement === "object"
+          ? (res.data.engagement as Record<string, unknown>)
+          : undefined;
+      if (eng && typeof eng.engagement_id === "string") {
+        setSelectedEngagementId(eng.engagement_id);
+        selectedEngRef.current = eng.engagement_id;
+        userClearedEngRef.current = false;
+      }
+      await refreshData();
+      return { ok: true, engagement: eng };
+    },
+    [apiJson, refreshData]
+  );
+
+  const launchMission = useCallback(
+    async (input: MissionLaunchInput): Promise<{ ok: boolean; run?: RunRecord; error?: string }> => {
+      if (input.kind !== "engine" || input.target.trim()) {
+        const check = validateScanTarget(input.target);
+        if (!check.valid) {
+          return { ok: false, error: check.reason || "invalid_format" };
+        }
+      }
+
+      setIsScanning(true);
+      const normTarget = input.target.trim();
+      if (normTarget) {
+        setTargetDomain(normTarget.replace(/^https?:\/\//, "").split("/")[0]);
+      }
+
+      const targetMatchesSelected =
+        Boolean(selectedEngagement?.target) &&
+        Boolean(normTarget) &&
+        normalizeTargetForCompare(normTarget) ===
+          normalizeTargetForCompare(selectedEngagement?.target || "");
+
+      try {
+        if (input.kind === "go_core") {
+          addConsoleLog("INFO", "dispatcher", `Dispatching Go Core scan via Django proxy: ${normTarget}`);
+          const res = await apiJson<unknown>("/api/platform/artex/scan", {
+            method: "POST",
+            body: { target: normTarget },
+          });
+          if (!res.ok) {
+            addConsoleLog("ERROR", "go-core", `Go Core scan rejected: ${res.error}`);
+            return { ok: false, error: res.error || `HTTP ${res.status}` };
+          }
+          if (selectedEngagementId && !targetMatchesSelected) {
+            setSelectedEngagementId("");
+            selectedEngRef.current = "";
+            userClearedEngRef.current = true;
+            if (hunterHubHealth.status === "connected") {
+              await apiJson("/api/platform/context", {
+                method: "PUT",
+                body: { active_engagement_id: null },
+              });
+            }
+          }
+          addConsoleLog("SUCCESS", "go-core", `Go Core scan dispatched for ${normTarget}`);
+          void refreshData();
+          window.setTimeout(() => void refreshData(), 1500);
+          return { ok: true };
+        }
+
+        const resolvedScope =
+          input.scope ??
+          (normTarget
+            ? [normTarget]
+            : selectedEngagement?.in_scope?.length
+              ? selectedEngagement.in_scope
+              : undefined);
+        const resolvedOutOfScope =
+          input.out_of_scope ??
+          (normTarget
+            ? undefined
+            : selectedEngagement?.out_of_scope?.length
+              ? selectedEngagement.out_of_scope
+              : undefined);
+        const resolvedEngagementId =
+          input.engagement_id !== undefined
+            ? input.engagement_id
+            : !normTarget || targetMatchesSelected
+              ? selectedEngagementId || null
+              : null;
+
+        addConsoleLog(
+          "INFO",
+          "dispatcher",
+          `Starting ${input.kind} mission for ${normTarget || input.engine}`
+        );
+        const res = await apiJson<{ status?: string; run?: RunRecord }>("/api/platform/runs/start", {
+          method: "POST",
+          body: {
+            kind: input.kind,
+            target: normTarget,
+            engagement_id: resolvedEngagementId,
+            scope: resolvedScope,
+            out_of_scope: resolvedOutOfScope,
+            mode: input.mode || "full",
+            prompt: input.prompt || "",
+            engine: input.engine || "claude",
+            model: input.model || "",
+            coverage: input.coverage ?? 0.85,
+            max_cycles: input.max_cycles ?? 10,
+            force_fallback: Boolean(input.force_fallback),
+            self_operate: Boolean(input.self_operate),
+            proxy: input.proxy || null,
+          },
+        });
+        if (!res.ok) {
+          addConsoleLog("ERROR", "runs", `Mission launch rejected: ${res.error}`);
+          return { ok: false, error: res.error || `HTTP ${res.status}` };
+        }
+        const run = res.data?.run;
+        if (run?.run_id) {
+          setActiveRunId(run.run_id);
+        }
+        addConsoleLog("SUCCESS", "runs", `Started ${input.kind} run ${run?.run_id || ""}`);
+        void refreshData();
+        return { ok: true, run };
+      } finally {
+        window.setTimeout(() => setIsScanning(false), 1000);
+      }
+    },
+    [
+      selectedEngagement,
+      selectedEngagementId,
+      hunterHubHealth.status,
+      addConsoleLog,
+      apiJson,
+      refreshData,
+    ]
+  );
+
+  const launchScan = useCallback(
+    async (rawTarget: string): Promise<{ ok: boolean; error?: string; via?: string }> => {
+      const check = validateScanTarget(rawTarget);
+      if (!check.valid) {
+        return { ok: false, error: check.reason || "invalid_format" };
+      }
+
+      if (goCoreHealth.status === "connected") {
+        const res = await launchMission({ kind: "go_core", target: check.normalizedTarget });
+        return { ok: res.ok, error: res.error, via: "go_core" };
+      }
+
+      const res = await launchMission({
+        kind: "pipeline",
+        target: check.normalizedTarget,
+        scope: [check.normalizedTarget],
+      });
+      return { ok: res.ok, error: res.error, via: "django_pipeline" };
+    },
+    [goCoreHealth.status, launchMission]
+  );
+
+  const decideApproval = useCallback(
+    async (
+      approvalId: string,
+      decision: "approved" | "rejected",
+      note = ""
+    ): Promise<{
+      ok: boolean;
+      approval?: ApprovalRecord | null;
+      execution?: ApprovalExecutionResult | null;
+      error?: string;
+    }> => {
+      const res = await apiJson<{
+        approval?: ApprovalRecord;
+        execution?: ApprovalExecutionResult | null;
+      }>(`/api/platform/approvals/${encodeURIComponent(approvalId)}/decide`, {
+        method: "POST",
+        body: { decision, note },
+      });
+      if (!res.ok) {
+        addConsoleLog(
+          "ERROR",
+          "approvals",
+          `Approval decision failed (${approvalId}): ${res.error}`
+        );
+        return { ok: false, error: res.error };
+      }
+      const updated = res.data?.approval || null;
+      const execution = res.data?.execution || null;
+      if (updated) {
+        setApprovals((prev) =>
+          prev.map((a) =>
+            a.approval_id === approvalId ? { ...a, ...updated, execution } : a
+          )
+        );
+      }
+      addConsoleLog(
+        decision === "approved" ? "SUCCESS" : "WARN",
+        "approvals",
+        `Approval ${approvalId} marked ${decision}`
+      );
+      await refreshData();
+      return { ok: true, approval: updated, execution };
+    },
+    [apiJson, addConsoleLog, refreshData]
+  );
+
+  const controlRun = useCallback(
+    async (
+      runId: string,
+      action: "pause" | "resume" | "stop"
+    ): Promise<{ ok: boolean; status?: string; error?: string }> => {
+      const res = await apiJson<{ ok?: boolean; status?: string; state?: string }>(
+        `/api/platform/runs/${encodeURIComponent(runId)}/${action}`,
+        { method: "POST" }
+      );
+      if (!res.ok || res.data?.ok === false) {
+        const errText = res.error || `Unable to ${action} run ${runId}`;
+        addConsoleLog("ERROR", "runs", `Run control failed (${runId} -> ${action}): ${errText}`);
+        return { ok: false, status: res.data?.status, error: errText };
+      }
+      addConsoleLog("INFO", "runs", `Run ${runId} -> ${action}`);
+      await refreshData();
+      return { ok: true, status: res.data?.status || res.data?.state };
+    },
+    [apiJson, addConsoleLog, refreshData]
+  );
+
+  const recoverRun = useCallback(
+    async (runId: string): Promise<{ ok: boolean; run?: RunRecord; error?: string }> => {
+      const res = await apiJson<{ ok?: boolean; run?: RunRecord }>(
+        `/api/platform/runs/${encodeURIComponent(runId)}/recover`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        addConsoleLog("ERROR", "runs", `Run recovery failed (${runId}): ${res.error}`);
+        return { ok: false, error: res.error || `HTTP ${res.status}` };
+      }
+      addConsoleLog("SUCCESS", "runs", `Recovered run ${runId} from checkpoint`);
+      await refreshData();
+      return { ok: true, run: res.data?.run };
+    },
+    [apiJson, addConsoleLog, refreshData]
+  );
+
+  const sendToRepeater = useCallback(
+    (draft: RepeaterDraft) => {
+      setRepeaterDraft(draft);
+      router.push("/studio?tab=repeater");
+    },
+    [router]
+  );
+
+  const navigateToRef = useCallback(
+    (ref: CopilotRef): boolean => {
+      const kind = (ref.kind || "").toLowerCase();
+      if (kind === "file") {
+        const targetPath = ref.path || ref.id || ref.label || "";
+        if (targetPath) {
+          setStudioOpenPath(targetPath);
+          router.push(`/studio?file=${encodeURIComponent(targetPath)}`);
+        } else {
+          router.push("/studio");
+        }
+        return true;
+      }
+      if (kind === "evidence") {
+        if (ref.id) {
+          setInspectedEvidenceId(ref.id);
+        }
+        router.push(ref.id ? `/findings?evidence=${encodeURIComponent(ref.id)}` : "/findings");
+        return true;
+      }
+      if (kind === "asset") {
+        const match =
+          assets.find((a) => a.id === ref.id) ||
+          assets.find((a) => ref.label && a.value && a.value.includes(ref.label));
+        if (match) {
+          setInspectedAsset(match);
+        }
+        router.push("/surface");
+        return true;
+      }
+      if (kind === "finding") {
+        const match =
+          findings.find((f) => f.id === ref.id) ||
+          findings.find((f) => ref.label && f.title && f.title.includes(ref.label));
+        if (match) {
+          setInspectedFinding(match);
+        }
+        router.push(ref.id ? `/findings?finding=${encodeURIComponent(ref.id)}` : "/findings");
+        return true;
+      }
+      if (kind === "run") {
+        if (ref.id) {
+          setActiveRunId(ref.id);
+        }
+        router.push(ref.id ? `/?run=${encodeURIComponent(ref.id)}` : "/");
+        return true;
+      }
+      if (kind === "approval") {
+        router.push("/");
+        window.setTimeout(() => {
+          document
+            .getElementById("approvals-panel")
+            ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 150);
+        return true;
+      }
+      if (kind === "engagement" && ref.id) {
+        void selectEngagement(ref.id);
+        router.push("/operations");
+        return true;
+      }
+      if (kind === "lead") {
+        router.push("/operations");
+        return true;
+      }
+      if (kind === "skill" || kind === "tool") {
+        router.push("/arsenal");
+        return true;
+      }
+      if (kind === "conversation") {
+        setCopilotOpen(true);
+        return true;
+      }
+      if (ref.section) {
+        router.push(sectionToRoute(ref.section));
+        return true;
+      }
+      return false;
+    },
+    [assets, findings, router, selectEngagement]
+  );
+
+  const pendingApprovalsCount = useMemo(
+    () => approvals.filter((a) => a.status === "pending").length,
+    [approvals]
+  );
+
+  const unreadNotificationsCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
+
+  const value = useMemo<PlatformContextValue>(
+    () => ({
+      engagements,
+      selectedEngagementId,
+      selectedEngagement,
+      engagementSelectionSeq,
+      selectEngagement,
+      createEngagement,
+      targetDomain,
+      setTargetDomain,
+      stats,
+      overviewCounts,
+      assets,
+      findings,
+      tasks,
+      auditLogs,
+      runs,
+      activeRunId,
+      setActiveRunId,
+      approvals,
+      pendingApprovalsCount,
+      notifications,
+      unreadNotificationsCount,
+      refreshNotifications,
+      markNotificationRead,
+      goCoreHealth,
+      hunterHubHealth,
+      connectionState,
+      reconnectAttempt,
+      reconnectStream,
+      authStatus,
+      authError,
+      exchangeSessionToken,
+      clearOperatorAuth,
+      isLoading,
+      isScanning,
+      streamPaused,
+      setStreamPaused,
+      consoleLogs,
+      addConsoleLog,
+      clearConsoleLogs,
+      refreshNow: refreshData,
+      launchScan,
+      launchMission,
+      decideApproval,
+      controlRun,
+      recoverRun,
+      inspectedAsset,
+      setInspectedAsset,
+      inspectedFinding,
+      setInspectedFinding,
+      inspectedEvidenceId,
+      setInspectedEvidenceId,
+      activeTaskFilter,
+      setActiveTaskFilter,
+      studioOpenPath,
+      setStudioOpenPath,
+      copilotOpen,
+      setCopilotOpen,
+      commandPaletteOpen,
+      setCommandPaletteOpen,
+      repeaterDraft,
+      setRepeaterDraft,
+      sendToRepeater,
+      navigateToRef,
+      hunterFetch,
+      apiJson,
+    }),
+    [
+      engagements,
+      selectedEngagementId,
+      selectedEngagement,
+      engagementSelectionSeq,
+      selectEngagement,
+      createEngagement,
+      targetDomain,
+      stats,
+      overviewCounts,
+      assets,
+      findings,
+      tasks,
+      auditLogs,
+      runs,
+      activeRunId,
+      approvals,
+      pendingApprovalsCount,
+      notifications,
+      unreadNotificationsCount,
+      refreshNotifications,
+      markNotificationRead,
+      goCoreHealth,
+      hunterHubHealth,
+      connectionState,
+      reconnectAttempt,
+      reconnectStream,
+      authStatus,
+      authError,
+      exchangeSessionToken,
+      clearOperatorAuth,
+      isLoading,
+      isScanning,
+      streamPaused,
+      consoleLogs,
+      addConsoleLog,
+      clearConsoleLogs,
+      refreshData,
+      launchScan,
+      launchMission,
+      decideApproval,
+      controlRun,
+      recoverRun,
+      inspectedAsset,
+      inspectedFinding,
+      inspectedEvidenceId,
+      activeTaskFilter,
+      studioOpenPath,
+      copilotOpen,
+      commandPaletteOpen,
+      repeaterDraft,
+      sendToRepeater,
+      navigateToRef,
+      hunterFetch,
+      apiJson,
+    ]
+  );
+
+  return <PlatformContext.Provider value={value}>{children}</PlatformContext.Provider>;
+}
+
+export function usePlatform(): PlatformContextValue {
+  const ctx = useContext(PlatformContext);
+  if (!ctx) {
+    throw new Error("usePlatform must be used within PlatformProvider");
+  }
+  return ctx;
+}

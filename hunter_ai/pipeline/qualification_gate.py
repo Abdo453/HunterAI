@@ -25,7 +25,12 @@ from hunter_ai.pipeline.schemas import (
     VerificationEvidence,
     ReproductionArtifact,
 )
-from core.evidence_court import EvidenceCourt, CourtVerdict, CourtJudgment
+from core.evidence_court import (
+    CourtJudgment,
+    CourtVerdict,
+    EvidenceCourt,
+    ProofStrength,
+)
 
 logger = logging.getLogger("hunter_ai.qualification_gate")
 
@@ -126,8 +131,16 @@ class FindingQualificationGate:
             allow_declared_proof=allow_declared_proof,
         )
 
-        if judgment.verdict != CourtVerdict.CONFIRMED:
-            return False, None, f"REJECT by Evidence Court: {judgment.adjudication_rationale} (Verdict: {judgment.verdict.value})"
+        if judgment.verdict != CourtVerdict.CONFIRMED or (
+            not allow_declared_proof and judgment.proof_strength != ProofStrength.DERIVED.value
+        ):
+            return (
+                False,
+                None,
+                f"REJECT by Evidence Court: {judgment.adjudication_rationale} "
+                f"(Verdict: {judgment.verdict.value}, Canonical: {judgment.canonical_verdict.value}, "
+                f"ProofStrength: {judgment.proof_strength})",
+            )
 
         # 4. Construct Verified Finding with complete Evidence Chain
         chain_steps = evidence_chain or []
@@ -142,7 +155,7 @@ class FindingQualificationGate:
                 type="controlled_execution",
                 description=judgment.adjudication_rationale,
                 proof_snippet=raw_evidence[:300],
-                verified=True
+                verified=True,
             )
         ]
 
@@ -166,10 +179,64 @@ class FindingQualificationGate:
             cvss_score=calibrated_cvss,
             evidence=evidence_items,
             reproduction=reproduction,
-            remediation=cls._get_remediation(vuln_type)
+            false_positive_checks={
+                "court_judgment_id": judgment.judgment_id,
+                "proof_strength": judgment.proof_strength,
+                "proof_kind": judgment.proof_kind,
+                "canonical_verdict": judgment.canonical_verdict.value,
+            },
+            remediation=cls._get_remediation(vuln_type),
         )
 
         return True, finding, "CONFIRMED by Evidence Court with complete Evidence Chain."
+
+    @classmethod
+    def adjudicate_to_canonical_status(
+        cls,
+        *,
+        title: str,
+        asset: str,
+        endpoint: str,
+        vuln_type: str,
+        raw_evidence: str,
+        source_tool: str,
+        parameter: Optional[str] = None,
+        verifier_result: Optional[Dict[str, Any]] = None,
+        is_in_scope: bool = True,
+        proof_payload: Optional[Any] = None,
+        causal_evidence: Optional[Any] = None,
+    ) -> Tuple[FindingStatus, Optional[CourtJudgment], str]:
+        """Route a candidate through FindingQualificationGate + canonical EvidenceCourt
+        and return its honest 7-state FindingStatus without fabricating CONFIRMED.
+        """
+        ep_lower = (endpoint or "").lower()
+        if "robots.txt" in ep_lower or "sitemap.xml" in ep_lower:
+            return FindingStatus.REJECTED, None, "Standard expected web file is not a vulnerability."
+        if vuln_type.lower() in ("openports", "exposedservice") and "riskymanagement" not in vuln_type.lower():
+            return FindingStatus.REJECTED, None, "Open port inventory observation is not a vulnerability."
+
+        finder_claim = {
+            "title": title,
+            "tool": source_tool,
+            "vuln_type": vuln_type,
+            "raw_evidence": raw_evidence,
+            "is_reflection": bool(verifier_result.get("is_reflection", False)) if verifier_result else False,
+        }
+        judgment = EvidenceCourt.adjudicate(
+            target_url=endpoint,
+            parameter=parameter or "",
+            vuln_class=vuln_type,
+            finder_claim=finder_claim,
+            verifier_result=verifier_result,
+            is_in_scope=is_in_scope,
+            proof_payload=proof_payload,
+            causal_evidence=causal_evidence,
+            allow_declared_proof=False,
+        )
+        canon_status = FindingStatus(judgment.canonical_verdict.value)
+        if canon_status == FindingStatus.CONFIRMED and judgment.proof_strength != ProofStrength.DERIVED.value:
+            canon_status = FindingStatus.UNVERIFIED
+        return canon_status, judgment, judgment.adjudication_rationale
 
     @staticmethod
     def _get_remediation(vuln_type: str) -> str:

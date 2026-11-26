@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from memory.schemas import SchemaError, VALID_CONTRIBUTION_TYPES
+from bughunter.memory.schemas import SchemaError, VALID_CONTRIBUTION_TYPES
 
 CASE_REQUIRED = {
     "schema_version", "case_id", "vulnerability_type", "candidate",

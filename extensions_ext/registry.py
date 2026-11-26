@@ -1,6 +1,7 @@
 """سجل الإضافات المثبّتة + تفعيل/تعطيل + فحص ثقة قبل التحميل."""
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import time
@@ -15,7 +16,7 @@ from extensions_ext.loader import (
 from extensions_ext.manifest import (
     ExtensionManifest, ManifestError, load_manifest,
 )
-from extensions_ext.trust import TrustLevel, TrustReport, assess_trust
+from extensions_ext.trust import TrustLevel, TrustReport, _hash_dir, assess_trust
 
 logger = logging.getLogger(__name__)
 
@@ -89,10 +90,35 @@ class ExtensionRegistry:
             raise ExtensionError(f"إضافة غير مثبّتة: {name}")
         if rec.trust is None or not rec.trust.allowed:
             raise ExtensionError(f"الإضافة {name} غير موثوقة")
+
+        # Re-verify directory content integrity hash before loading (TOCTOU defense)
+        expected_sha = rec.trust.sha256
+        if not expected_sha:
+            rec.enabled = False
+            rec.last_error = "missing_integrity_hash"
+            raise ExtensionError(f"الإضافة {name} تفتقد بصمة التحقق SHA-256")
+        try:
+            current_sha = _hash_dir(Path(rec.path))
+        except OSError as exc:
+            rec.enabled = False
+            rec.last_error = f"hash_read_error: {exc}"
+            raise ExtensionError(f"تعذّرت قراءة ملفات الإضافة {name}: {exc}") from exc
+        if not hmac.compare_digest(current_sha, expected_sha):
+            rec.enabled = False
+            rec.last_error = "integrity_hash_mismatch"
+            raise ExtensionError(
+                f"فشل التحقق من سلامة الإضافة {name}: تم تعديل الملفات بعد التثبيت "
+                f"(expected {expected_sha[:12]}, got {current_sha[:12]})"
+            )
+
+        workspace_dir = (self.root.resolve() / name / "workspace").resolve()
+        if not workspace_dir.is_relative_to(self.root.resolve()):
+            raise ExtensionError(f"مسار workspace غير آمن للإضافة {name}")
+
         try:
             module = activate_extension(
                 rec.manifest, rec.path,
-                workspace=str(self.root / name / "workspace"),
+                workspace=str(workspace_dir),
                 tool_runner=self.tool_runner,
                 llm_caller=self.llm_caller)
         except ExtensionError as exc:

@@ -144,22 +144,42 @@ class ToolRouter:
                 "result":  None,
             }
 
-        # Policy gate (scope enforcement)
+        # Policy gate (scope enforcement — fail-closed)
         if spec.requires_scope and self._policy_gate:
             try:
                 from core.control_plane.policy_gate import ActionRequest, ActionCategory
+
+                if spec.category in (ToolCategory.FUZZING, ToolCategory.EXPLOIT):
+                    category = ActionCategory.ACTIVE_FUZZING
+                elif spec.category == ToolCategory.BROWSER:
+                    category = ActionCategory.BROWSER_NAVIGATE
+                elif spec.category in (ToolCategory.SCAN, ToolCategory.RECON, ToolCategory.ANALYSIS, ToolCategory.REPORTING):
+                    category = ActionCategory.TERMINAL_COMMAND
+                else:
+                    category = ActionCategory.HTTP_REQUEST
+
                 req = ActionRequest(
-                    action_type=(ActionCategory.NETWORK_SCAN
-                                 if spec.category in (ToolCategory.SCAN, ToolCategory.RECON)
-                                 else ActionCategory.HTTP_REQUEST),
+                    category=category,
                     target=target,
-                    params=params,
+                    reason=f"ToolRouter:{tool_name}",
+                    requested_by_model="tool_router",
+                    metadata={"tool": tool_name, "phase": phase, "params": dict(params)},
                 )
                 decision = self._policy_gate.evaluate(req)
                 if not decision.allowed:
-                    return {"allowed": False, "reason": f"PolicyGate: {decision.reason}", "tool": spec, "result": None}
-            except Exception:
-                pass  # policy gate is optional
+                    return {
+                        "allowed": False,
+                        "reason": f"PolicyGate: {decision.reason}",
+                        "tool": spec,
+                        "result": None,
+                    }
+            except Exception as exc:
+                return {
+                    "allowed": False,
+                    "reason": f"PolicyGate error (fail-closed): {exc}",
+                    "tool": spec,
+                    "result": None,
+                }
 
         # Execute handler if registered
         result = None

@@ -137,7 +137,7 @@ class TestAdapterHistory:
     async def test_retrieve_history_scope_denied(self):
         fake = FakeHttpClient(responses={
             "/health": FakeHttpResponse(200, {"status": "online"}),
-            "/captures": FakeHttpResponse(200, {"transactions": [
+            "/api/traffic": FakeHttpResponse(200, {"transactions": [
                 {"tx_id": "t1", "target_host": "evil.com", "method": "GET",
                  "url": "https://evil.com/x", "status_code": 200,
                  "req_headers": {}, "req_body": "", "resp_headers": {},
@@ -145,7 +145,7 @@ class TestAdapterHistory:
             ]}),
         })
         adapter = _adapter(fake, scope_in_scope=["example.com"])
-        # evil.com خارج范围 ⇒ قائمة فارغة
+        # evil.com خارج النطاق ⇒ قائمة فارغة
         result = await adapter.retrieve_authorized_http_history(target="example.com")
         assert result == []
 
@@ -153,7 +153,7 @@ class TestAdapterHistory:
     async def test_retrieve_history_in_scope(self):
         fake = FakeHttpClient(responses={
             "/health": FakeHttpResponse(200, {"status": "online"}),
-            "/captures": FakeHttpResponse(200, {"transactions": [
+            "/api/traffic": FakeHttpResponse(200, {"transactions": [
                 {"tx_id": "t1", "target_host": "example.com", "method": "GET",
                  "url": "https://example.com/page",
                  "status_code": 200, "req_headers": {"Authorization": "Bearer secret"},
@@ -175,7 +175,7 @@ class TestAdapterHistory:
     async def test_retrieve_request_not_found(self):
         fake = FakeHttpClient(responses={
             "/health": FakeHttpResponse(200, {"status": "online"}),
-            "/captures/": FakeHttpResponse(404, {"error": "not found"}),
+            "/api/traffic/": FakeHttpResponse(404, {"error": "not found"}),
         })
         adapter = _adapter(fake)
         result = await adapter.retrieve_request("tx-missing")
@@ -187,7 +187,7 @@ class TestAdapterFindings:
     async def test_import_findings(self):
         fake = FakeHttpClient(responses={
             "/health": FakeHttpResponse(200, {"status": "online"}),
-            "/findings": FakeHttpResponse(200, {"findings": [
+            "/api/issues/burp": FakeHttpResponse(200, {"findings": [
                 {"finding_id": "f1", "target": "example.com",
                  "issue_name": "Reflected XSS", "severity": "High",
                  "confidence": "Certain", "evidence": "payload <script>",
@@ -230,11 +230,11 @@ class TestAdapterAnalysis:
     async def test_submit_and_retrieve_job(self):
         fake = FakeHttpClient(responses={
             "/health": FakeHttpResponse(200, {"status": "online"}),
-            "/analysis/jobs/job-1": FakeHttpResponse(200, {
-                "job_id": "job-1", "status": "finished",
+            "/api/tasks/job-1": FakeHttpResponse(200, {
+                "task_id": "job-1", "status": "finished",
                 "results": {"vulns_found": 2}
             }),
-            "/analysis/jobs": FakeHttpResponse(200, {"job_id": "job-1", "status": "submitted"}),
+            "/api/tasks": FakeHttpResponse(200, {"task_id": "job-1", "status": "submitted"}),
         })
         adapter = _adapter(fake, scope_in_scope=["example.com"])
         submitted = await adapter.submit_supported_analysis_job(

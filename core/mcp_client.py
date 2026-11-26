@@ -1,44 +1,188 @@
 """
-عميل MCP (Model Context Protocol) — مرحلة E.
+عميل MCP (Model Context Protocol) — مرحلة E + Phase 4 Hardening.
+==================================================================
+Adapted security primitives from PentesterFlow (commit ``0759d87``, Apache-2.0 License):
+- ``mcpServerFingerprint`` / ``mcp_server_fingerprint`` (from ``src/tools/mcpServers.ts``):
+  stable SHA-256 over spawn-relevant config fields (``command``, ``args``, ``env``)
+  to detect silently-edited server definitions and re-trigger launch consent.
+- ``boundContent`` / ``bound_content`` (from ``src/tools/mcp.ts``):
+  recursive size/block/depth cap applied BEFORE JSON serialization so a hostile
+  or compromised MCP server cannot cause memory exhaustion or stack overflow.
 
-يُنفّز عميل MCP حقيقي باستخدام مكتبة Python 표준 فقط (بدون تبعات خارجية):
-- النقل stdio عبر asyncio.create_subprocess_exec (عملية محلية)
-- بروتوكول JSON-RPC 2.0
--手shake: initialize → initialized notification
-- اكتشاف الأدوات: tools/list
-- استدعاء الأدوات: tools/call (مع مخطط الدخل من الخادم)
-- الإلغاء، مهلة الاستدعاء، إعادة الاتصال bounded retry
-- أسماء الأدوات تُnesbn باسم الخادم (server_id::tool_name) لتجنب التصادم
-- كل استدعاء يُسجل في سجل تدقيق (بدون أسرار خام)
-
-ملاحظات أمنية:
-- مخرجات خوادم MCP تُعامل كبيانات غير موثوقة (لا تُقيّم ككود، لا تُدخل في أوامر shell).
-- الأدوات عالية المخاطرة تتطلب موافقة بشرية عبر PolicyGate/ToolRegistry قبل الاستدعاء.
-- الخوادم الشبكية تخضع لسياسة النطاق (ScopeEnforcer) قبل أي استدعاء.
+ضوابط أمنية:
+- مخرجات خوادم MCP تُعامل كبيانات غير موثوقة وتُقيَّد حجماً وعمقاً وتُنقَّى بـ ``SecretSanitizer``.
+- كل استدعاء أداة يمر بـ ``PolicyGate`` و ``StrictScopeEngine`` عند إرفاقهما (fail-closed).
+- تشغيل خادم MCP عبر stdio يتحقق من بصمة الموافقة (SHA-256 launch consent) عند التفعيل.
+- إشعار التهيئة القياسي ``notifications/initialized`` وفق MCP 2024-11-05.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
-import shlex
 import shutil
 import time
-import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
+from urllib.parse import urlparse
 
 from core.mcp_config import MCPServerConfig, MCPServerStatus, MCPTransport
+from core.secret_sanitizer import SecretSanitizer
 
 logger = logging.getLogger(__name__)
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
+MCP_RESULT_CHAR_CAP = 128 * 1024
+MCP_MAX_CONTENT_BLOCKS = 200
+MCP_MAX_DEPTH = 32
+
+
+# ---------------------------------------------------------------------------
+# PentesterFlow (Apache-2.0, commit 0759d87) adapted MCP hardening primitives
+# ---------------------------------------------------------------------------
+
+def mcp_server_fingerprint(server: MCPServerConfig | Mapping[str, Any]) -> str:
+    """Stable SHA-256 fingerprint of spawn-relevant MCP server config fields
+    (``command``, ``args``, ``env`` — everything stdio transport executes).
+
+    Detects when a server definition has changed since the operator last
+    approved it so silently-edited commands/args re-trigger launch consent.
+    """
+    if isinstance(server, Mapping):
+        command = server.get("command") or ""
+        args = list(server.get("args") or [])
+        env = dict(server.get("env") or {})
+    else:
+        command = server.command or ""
+        args = list(server.args or [])
+        env = dict(server.env or {})
+
+    material = json.dumps(
+        {"command": command, "args": args, "env": env},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+# CamelCase alias matching PentesterFlow's exported helper name
+mcpServerFingerprint = mcp_server_fingerprint
+
+
+def bound_content(
+    content: Any,
+    cap: int = MCP_RESULT_CHAR_CAP,
+    *,
+    max_blocks: int = MCP_MAX_CONTENT_BLOCKS,
+    max_depth: int = MCP_MAX_DEPTH,
+    _depth: int = 0,
+) -> Any:
+    """Recursively bound string lengths, sequence lengths, and nesting depth of
+    untrusted MCP content BEFORE serialization."""
+    if _depth >= max_depth:
+        if isinstance(content, str):
+            return content[:cap] if len(content) > cap else content
+        if isinstance(content, (dict, list, tuple)):
+            return "[... max depth exceeded ...]"
+        return content
+
+    if isinstance(content, str):
+        return content[:cap] if len(content) > cap else content
+
+    if isinstance(content, (list, tuple)):
+        head = [
+            bound_content(item, cap, max_blocks=max_blocks, max_depth=max_depth, _depth=_depth + 1)
+            for item in content[:max_blocks]
+        ]
+        if len(content) > max_blocks:
+            head.append(
+                {
+                    "type": "text",
+                    "text": f"[... {len(content) - max_blocks} more content blocks truncated ...]",
+                }
+            )
+        return head
+
+    if isinstance(content, dict):
+        items = list(content.items())
+        out_dict = {
+            str(k): bound_content(
+                v, cap, max_blocks=max_blocks, max_depth=max_depth, _depth=_depth + 1
+            )
+            for k, v in items[:max_blocks]
+        }
+        if len(items) > max_blocks:
+            out_dict["__truncated_keys__"] = len(items) - max_blocks
+        return out_dict
+
+    return content
+
+
+# CamelCase alias matching PentesterFlow's exported helper name
+boundContent = bound_content
+
+
+def truncate_mcp_string(text: str, cap: int = MCP_RESULT_CHAR_CAP) -> str:
+    if len(text) <= cap:
+        return text
+    return f"{text[:cap]}\n[... truncated {len(text) - cap} chars ...]"
+
+
+class MCPConsentStore:
+    """Tracks operator-approved SHA-256 MCP server fingerprints (in-memory or JSON file)."""
+
+    def __init__(self, store_path: Optional[Path] = None) -> None:
+        self._store_path = Path(store_path) if store_path else None
+        self._approved: Dict[str, str] = {}
+        if self._store_path and self._store_path.is_file():
+            try:
+                data = json.loads(self._store_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    self._approved = {str(k): str(v) for k, v in data.items()}
+            except Exception as exc:
+                logger.warning("Failed to load MCP consent store %s: %s", self._store_path, exc)
+
+    def approve(self, server_id: str, fingerprint: str) -> None:
+        self._approved[server_id] = fingerprint
+        self._persist()
+
+    def approve_config(self, config: MCPServerConfig | Mapping[str, Any]) -> str:
+        sid = config["server_id"] if isinstance(config, Mapping) else config.server_id
+        fp = mcp_server_fingerprint(config)
+        self.approve(str(sid), fp)
+        return fp
+
+    def revoke(self, server_id: str) -> None:
+        self._approved.pop(server_id, None)
+        self._persist()
+
+    def is_approved(self, server_id: str, fingerprint: str) -> bool:
+        return self._approved.get(server_id) == fingerprint
+
+    def _persist(self) -> None:
+        if not self._store_path:
+            return
+        self._store_path.parent.mkdir(parents=True, exist_ok=True)
+        self._store_path.write_text(
+            json.dumps(self._approved, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+
+def _extract_target_from_args(arguments: Mapping[str, Any]) -> str:
+    for key in ("target", "url", "uri", "host", "domain", "endpoint", "base_url"):
+        val = arguments.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
 
 
 @dataclass
-# kept for backwards-compat; prefer MCPToolInfo below
 class _LegacyToolInfo:
     pass
 
@@ -81,13 +225,22 @@ class MCPClientError(Exception):
 
 class MCPClient:
     """
-    عميل MCP لخادم واحد.
-
-    يدعم النقل stdio (عملية محلية). النقل الشبكي (HTTP) موثق في الإعداد ولكن
-    تنفيذه يترك للإنتاج عند توفر SDK oficiales؛ هنا يُraise خطأ توضيحي.
+    عميل MCP لخادم واحد مع ضوابط الموافقة (SHA-256 launch fingerprint)،
+    وبوابة السياسة (PolicyGate)، ومحرك النطاق (StrictScopeEngine)،
+    وتقييد/تنقية المخرجات (boundContent + SecretSanitizer).
     """
 
-    def __init__(self, config: MCPServerConfig):
+    def __init__(
+        self,
+        config: MCPServerConfig,
+        *,
+        policy_gate: Optional[Any] = None,
+        scope_engine: Optional[Any] = None,
+        consent_store: Optional[MCPConsentStore] = None,
+        consent_callback: Optional[Callable[[str, str, MCPServerConfig], bool]] = None,
+        require_launch_consent: bool = False,
+        result_char_cap: int = MCP_RESULT_CHAR_CAP,
+    ):
         self.config = config
         self.status = MCPServerStatus.DISCONNECTED
         self._proc: Optional[asyncio.subprocess.Process] = None
@@ -103,11 +256,123 @@ class MCPClient:
         self._retry_count = 0
         self._audit: List[Dict[str, Any]] = []
         self._connected_event = asyncio.Event()
+        self.policy_gate = policy_gate
+        self.scope_engine = scope_engine
+        self.consent_store = consent_store
+        self.consent_callback = consent_callback
+        self.require_launch_consent = bool(require_launch_consent or consent_store is not None or consent_callback is not None)
+        self.result_char_cap = max(1024, int(result_char_cap))
+        self.fingerprint: str = mcp_server_fingerprint(config)
+
+    def verify_launch_consent(self) -> str:
+        """Verify SHA-256 fingerprint launch consent before spawning a stdio server."""
+        current_fp = mcp_server_fingerprint(self.config)
+        self.fingerprint = current_fp
+        if not self.require_launch_consent:
+            return current_fp
+
+        if self.consent_store and self.consent_store.is_approved(self.config.server_id, current_fp):
+            return current_fp
+
+        if self.consent_callback is not None:
+            approved = bool(self.consent_callback(self.config.server_id, current_fp, self.config))
+            if approved:
+                if self.consent_store:
+                    self.consent_store.approve(self.config.server_id, current_fp)
+                return current_fp
+
+        self._audit.append(
+            {
+                "event": "mcp_launch_consent_denied",
+                "server_id": self.config.server_id,
+                "fingerprint": current_fp,
+                "timestamp": time.time(),
+            }
+        )
+        raise MCPClientError(
+            f"MCP server '{self.config.server_id}' launch consent required or config fingerprint changed ({current_fp[:12]})",
+            category="CONSENT_REQUIRED",
+            server_id=self.config.server_id,
+        )
+
+    def _enforce_call_policy(
+        self, server_id: str, tool_name: str, arguments: Dict[str, Any]
+    ) -> Optional[Tuple[str, str]]:
+        """Evaluate ``PolicyGate`` and ``StrictScopeEngine`` (fail closed).
+
+        Returns ``(error_category, reason)`` if denied, or ``None`` if allowed.
+        """
+        target = _extract_target_from_args(arguments)
+
+        if self.policy_gate is not None:
+            try:
+                from core.control_plane.policy_gate import ActionCategory, ActionRequest
+
+                req = ActionRequest(
+                    category=ActionCategory.TERMINAL_COMMAND if not target else ActionCategory.HTTP_REQUEST,
+                    target=target or "local_terminal",
+                    url=target if target.startswith(("http://", "https://")) else None,
+                    command=f"mcp:{server_id}::{tool_name}",
+                    reason=f"MCPClient.call_tool:{server_id}::{tool_name}",
+                    requested_by_model="mcp_client",
+                    metadata={"server_id": server_id, "tool": tool_name},
+                )
+                decision = self.policy_gate.evaluate(req)
+                if not decision.allowed:
+                    return ("POLICY_DENIED", f"PolicyGate denied MCP call: {decision.reason}")
+            except Exception as exc:
+                return ("POLICY_ERROR", f"PolicyGate error (fail-closed): {exc}")
+
+        if target:
+            try:
+                from core.scope_engine import ScopePolicy, StrictScopeEngine, validate_http_url_target
+
+                in_scope = list(self.scope_engine.in_scope) if self.scope_engine is not None else None
+                out_of_scope = list(self.scope_engine.out_of_scope) if self.scope_engine is not None else None
+                allow_loopback = bool(
+                    self.scope_engine is not None
+                    and getattr(self.scope_engine.policy, "allow_private_ips_override", False)
+                )
+                fail_closed = bool(
+                    self.scope_engine is not None
+                    and getattr(self.scope_engine.policy, "fail_closed", False)
+                )
+                ok_url, url_reason = validate_http_url_target(
+                    target,
+                    in_scope=in_scope,
+                    out_of_scope=out_of_scope,
+                    allow_loopback=allow_loopback,
+                    resolve_dns=False,
+                    fail_closed=fail_closed,
+                )
+                if not ok_url:
+                    return ("SCOPE_VIOLATION", f"SSRF/scheme invariant denied target '{target}': {url_reason}")
+
+                parsed = urlparse(target if "://" in target else f"http://{target}")
+                host = parsed.hostname or target
+                if self.scope_engine is not None:
+                    allowed, reason = self.scope_engine.is_allowed(
+                        target=host,
+                        path=parsed.path or "",
+                        port=parsed.port,
+                    )
+                    if not allowed:
+                        return ("SCOPE_VIOLATION", f"StrictScopeEngine denied target '{target}': {reason}")
+                else:
+                    # Always enforce inviolable checks (IMDS / loopback / reserved)
+                    inv_engine = StrictScopeEngine(ScopePolicy(allowed_domains=[host]))
+                    inv_ok, inv_reason = inv_engine.check_inviolable(host)
+                    if not inv_ok:
+                        return ("SCOPE_VIOLATION", f"Inviolable scope denied target '{target}': {inv_reason}")
+            except Exception as exc:
+                return ("SCOPE_ERROR", f"Scope validation error (fail-closed): {exc}")
+
+        return None
 
     # ── الاتصال واليد쉐يك ──────────────────────────────────────────────
 
     async def connect(self) -> None:
-        """اتصال بالخادم وإجراء手shake initialize."""
+        """اتصال بالخادم وإجراء handshake initialize + notifications/initialized."""
         async with self._lock:
             if self.status == MCPServerStatus.CONNECTED:
                 return
@@ -115,6 +380,7 @@ class MCPClient:
             self._retry_count = 0
 
         try:
+            self.verify_launch_consent()
             if self.config.transport == MCPTransport.STDIO:
                 await self._connect_stdio()
             elif self.config.transport == MCPTransport.HTTP:
@@ -148,7 +414,6 @@ class MCPClient:
                 category="CONFIGURATION",
                 server_id=self.config.server_id)
 
-        # Validation الملف التنفيذي (allowlist ضمنية: يجب أن يكون موجوداً)
         resolved = shutil.which(self.config.command)
         if not resolved and not os.path.isabs(self.config.command):
             raise MCPClientError(
@@ -185,7 +450,7 @@ class MCPClient:
             except Exception:
                 break
             if not line:
-                break  # EOF — الخادم أغلق الاتصال
+                break
             line = line.strip()
             if not line:
                 continue
@@ -208,7 +473,6 @@ class MCPClient:
             else:
                 future.set_result(msg.get("result", {}))
         else:
-            # إشعار (notification) بدون id — تُسجل وتُBroadcast
             method = msg.get("method", "")
             params = msg.get("params", {})
             logger.debug("إشعار MCP: %s %s", method, params)
@@ -291,25 +555,24 @@ class MCPClient:
     # ── handshake ─────────────────────────────────────────────────────
 
     async def _initialize(self) -> None:
-        """إجراء手shake initialize مع الخادم."""
+        """إجراء handshake initialize ثم إشعار notifications/initialized."""
         params = {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {},
-            "clientInfo": {"name": "hunterai", "version": "1.0.0"},
+            "clientInfo": {"name": "hunterai", "version": "2.0.0"},
         }
         result = await self._send_request("initialize", params)
         self._capabilities = result.get("capabilities", {}) if isinstance(result, dict) else {}
         self._server_info = result.get("serverInfo", {}) if isinstance(result, dict) else {}
 
-        # إشعار initialized (لا يتوقع رد)
-        await self._send_notification("initialized")
+        # Standard MCP 2024-11-05 initialized notification
+        await self._send_notification("notifications/initialized")
 
-        # اكتشاف الأدوات إذا أعلن الخادم عن دعمها
         if "tools" in (self._capabilities or {}):
             await self._list_tools()
 
     async def _list_tools(self) -> None:
-        """استدعاء tools/list وتخزين الأدوات باكساء namespace."""
+        """استدعاء tools/list وتخزين الأدوات بـ namespace."""
         result = await self._send_request("tools/list")
         tools = result.get("tools", []) if isinstance(result, dict) else []
         for t in tools:
@@ -329,16 +592,11 @@ class MCPClient:
     # ── الواجهة العامة ────────────────────────────────────────────────
 
     async def health_check(self) -> bool:
-        """فصلhether الخادم متصل ويستجيب."""
+        """فحص ما إذا كان الخادم متصلاً ويستجيب."""
         try:
             if self.status != MCPServerStatus.CONNECTED:
                 await self.connect()
-            # استدعاء initialize خفيف كheartbeat (أو tools/list إن كانت متوفرة)
-            await self._send_request("initialize", {
-                "protocolVersion": MCP_PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": {"name": "hunterai-health", "version": "1.0.0"},
-            }, timeout_s=5.0)
+            await self._send_request("ping", {}, timeout_s=5.0)
             return True
         except Exception as exc:  # noqa: BLE001
             self.status = MCPServerStatus.ERROR
@@ -347,7 +605,6 @@ class MCPClient:
             return False
 
     def list_tools(self) -> List[MCPToolInfo]:
-        """إرجاع الأدوات المكتشفة من هذا الخادم."""
         return list(self._tools.values())
 
     def get_tool(self, namespaced_name: str) -> Optional[MCPToolInfo]:
@@ -356,12 +613,7 @@ class MCPClient:
     async def call_tool(self, namespaced_name: str,
                         arguments: Dict[str, Any],
                         timeout_s: Optional[float] = None) -> MCPCallResult:
-        """
-        استدعاء أداة MCP عبر tools/call.
-
-        يُتحقق من وجود الأداة ومخطط دخلها قبل الإرسال؛ النتيجة تُعاد كما هي
-        (تُعالج من قبل caller للتنقية والتدقيق).
-        """
+        """استدعاء أداة MCP عبر tools/call مع فرض PolicyGate + StrictScopeEngine + boundContent + SecretSanitizer."""
         start = time.time()
         info = self.get_tool(namespaced_name)
         if info is None:
@@ -373,7 +625,30 @@ class MCPClient:
                 duration_s=time.time() - start)
 
         server_id, tool_name = namespaced_name.split("::", 1)
-        params = {"name": tool_name, "arguments": arguments or {}}
+        safe_args = dict(arguments or {})
+
+        denial = self._enforce_call_policy(server_id, tool_name, safe_args)
+        if denial is not None:
+            err_cat, err_msg = denial
+            self._audit.append({
+                "event": "mcp_tool_denied",
+                "server_id": server_id,
+                "tool": tool_name,
+                "category": err_cat,
+                "reason": err_msg,
+                "timestamp": time.time(),
+            })
+            return MCPCallResult(
+                ok=False,
+                server_id=server_id,
+                tool_name=tool_name,
+                is_error=True,
+                error=err_msg,
+                error_category=err_cat,
+                duration_s=time.time() - start,
+            )
+
+        params = {"name": tool_name, "arguments": safe_args}
 
         self._audit.append({
             "event": "mcp_tool_call",
@@ -389,29 +664,40 @@ class MCPClient:
             dur = time.time() - start
             return MCPCallResult(
                 ok=False, server_id=server_id, tool_name=tool_name,
-                error=str(exc), error_category=exc.category,
+                error=SecretSanitizer.sanitize_text(str(exc)),
+                error_category=exc.category,
                 duration_s=dur)
         except Exception as exc:  # noqa: BLE001
             dur = time.time() - start
             return MCPCallResult(
                 ok=False, server_id=server_id, tool_name=tool_name,
-                error=str(exc), error_category="EXECUTION_ERROR",
+                error=SecretSanitizer.sanitize_text(str(exc)),
+                error_category="EXECUTION_ERROR",
                 duration_s=dur)
 
         dur = time.time() - start
-        content = result.get("content", []) if isinstance(result, dict) else []
-        is_error = result.get("isError", False) if isinstance(result, dict) else False
-        structured = result.get("structuredContent") if isinstance(result, dict) else None
+        raw_content = result.get("content", []) if isinstance(result, dict) else []
+        is_error = bool(result.get("isError", False)) if isinstance(result, dict) else False
+        raw_structured = result.get("structuredContent") if isinstance(result, dict) else None
+
+        # Bound BEFORE serialization/sanitization to defeat oversized or deeply nested payloads
+        bounded_content = bound_content(raw_content, self.result_char_cap)
+        sanitized_content = SecretSanitizer.sanitize_data(bounded_content)
+        bounded_structured = (
+            SecretSanitizer.sanitize_data(bound_content(raw_structured, self.result_char_cap))
+            if raw_structured is not None
+            else None
+        )
 
         return MCPCallResult(
             ok=not is_error,
             server_id=server_id,
             tool_name=tool_name,
-            content=content,
-            structured=structured,
+            content=sanitized_content if isinstance(sanitized_content, list) else [sanitized_content],
+            structured=bounded_structured,
             is_error=is_error,
             duration_s=dur,
-            metadata={"request_id": namespaced_name},
+            metadata={"request_id": namespaced_name, "fingerprint": self.fingerprint},
         )
 
     async def cancel(self) -> bool:
@@ -448,6 +734,7 @@ class MCPClient:
             "transport": self.config.transport,
             "status": self.status.value,
             "tools_count": len(self._tools),
+            "fingerprint": self.fingerprint,
             "server_info": dict(self._server_info),
             "capabilities": dict(self._capabilities),
         }
@@ -459,20 +746,32 @@ class MCPClient:
 
 class MCPClientManager:
     """
-    يدير عدة عملاء MCP مع اسماء مساحات منفصلة (namespaces) لكل خادم.
-    يتصل بخوادم مفعلة فقط، ويُعيد الاتصال bounded retry عند الانقطاع.
+    يدير عدة عملاء MCP مع مساحات أسماء منفصلة (namespaces) لكل خادم.
     """
 
-    def __init__(self, configs: List[MCPServerConfig]):
+    def __init__(
+        self,
+        configs: List[MCPServerConfig],
+        *,
+        policy_gate: Optional[Any] = None,
+        scope_engine: Optional[Any] = None,
+        consent_store: Optional[MCPConsentStore] = None,
+        require_launch_consent: bool = False,
+    ):
         self._clients: Dict[str, MCPClient] = {}
         self._configs: Dict[str, MCPServerConfig] = {}
         for cfg in configs:
             if cfg.enabled:
                 self._configs[cfg.server_id] = cfg
-                self._clients[cfg.server_id] = MCPClient(cfg)
+                self._clients[cfg.server_id] = MCPClient(
+                    cfg,
+                    policy_gate=policy_gate,
+                    scope_engine=scope_engine,
+                    consent_store=consent_store,
+                    require_launch_consent=require_launch_consent,
+                )
 
     async def connect_all(self) -> Dict[str, bool]:
-        """اتصال بكل الخوادم المفعلة؛ يعيد حالة كل خادم."""
         results: Dict[str, bool] = {}
         for sid, client in self._clients.items():
             try:
@@ -498,14 +797,12 @@ class MCPClientManager:
         return self._clients.get(server_id)
 
     def list_tools_all(self) -> Dict[str, List[MCPToolInfo]]:
-        """كل الأدوات من كل خادم، معnamespaces."""
         out: Dict[str, List[MCPToolInfo]] = {}
         for sid, client in self._clients.items():
             out[sid] = client.list_tools()
         return out
 
     def get_tool(self, namespaced_name: str) -> Optional[tuple]:
-        """(E^{-1}) يحصل على (client, tool_info) من اسم أداة باسمnamespace."""
         if "::" not in namespaced_name:
             return None
         sid, tname = namespaced_name.split("::", 1)

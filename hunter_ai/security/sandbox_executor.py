@@ -8,12 +8,20 @@ Sandbox Executor — المنفذ المعزول
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Union
+
+from core.control_plane.computer_control import _kill_popen_tree_sync, _parse_command_argv
+from core.process_utils import kill_process_tree
+
+logger = logging.getLogger("hunter_ai.sandbox_executor")
 
 
 @dataclass
@@ -58,66 +66,86 @@ class SandboxExecutor:
     # ------------------------------------------------------------------ #
     # التحقق من الأمر
     # ------------------------------------------------------------------ #
-    def _command_allowed(self, cmd: str) -> bool:
-        base = cmd.split()[0] if cmd.split() else ""
-        if base in self.denied_commands:
+    @staticmethod
+    def _normalize_binary_name(exe: str) -> str:
+        name = Path(exe).name.lower()
+        if name.endswith(".exe"):
+            name = name[:-4]
+        return name
+
+    def _parse_and_validate(self, cmd: Union[str, Sequence[str]]) -> List[str]:
+        argv = _parse_command_argv(cmd)
+        base = self._normalize_binary_name(argv[0])
+        if not base or base in self.denied_commands:
+            raise PermissionError(f"الأمر '{base or argv[0]}' غير مسموح في البيئة المعزولة")
+        if self.allowed_commands and base not in {self._normalize_binary_name(c) for c in self.allowed_commands}:
+            raise PermissionError(f"الأمر '{base}' خارج قائمة الأوامر المسموحة في البيئة المعزولة")
+        return argv
+
+    def _command_allowed(self, cmd: Union[str, Sequence[str]]) -> bool:
+        try:
+            self._parse_and_validate(cmd)
+            return True
+        except (ValueError, PermissionError):
             return False
-        if self.allowed_commands and base not in self.allowed_commands:
-            return False
-        return True
 
     # ------------------------------------------------------------------ #
     # التنفيذ
     # ------------------------------------------------------------------ #
     def run(
         self,
-        command: str,
+        command: Union[str, Sequence[str]],
         timeout: Optional[int] = None,
         env: Optional[Dict[str, str]] = None,
         capture_output: bool = True,
     ) -> SandboxResult:
         """
-        ينفذ 명령 في البيئة المعزولة.
+        ينفذ الأمر كمصفوفة argv بدون shell=True مع إنهاء شجرة العمليات عند انتهاء المهلة.
         """
-        if not self._command_allowed(command):
+        cmd_display = " ".join(str(x) for x in command) if isinstance(command, (list, tuple)) else str(command)
+        try:
+            argv = self._parse_and_validate(command)
+        except (ValueError, PermissionError) as err:
             return SandboxResult(
                 success=False,
-                command=command,
+                command=cmd_display,
                 stdout="",
                 stderr="",
                 returncode=-1,
                 duration_ms=0.0,
                 sandbox_dir=self.workdir,
-                error=f"الأمر '{command.split()[0] if command.split() else command}' غير مسموح في البيئة المعزولة",
+                error=str(err),
             )
 
         timeout = timeout or self.default_timeout
         start = time.time()
 
+        proc: Optional[subprocess.Popen] = None
         try:
-            proc = subprocess.run(
-                command,
-                shell=True,
+            proc = subprocess.Popen(
+                argv,
+                shell=False,
                 cwd=self.workdir,
                 env=env or os.environ.copy(),
-                capture_output=capture_output,
+                stdout=subprocess.PIPE if capture_output else None,
+                stderr=subprocess.PIPE if capture_output else None,
                 text=True,
-                timeout=timeout,
             )
+            stdout_raw, stderr_raw = proc.communicate(timeout=timeout)
             duration_ms = (time.time() - start) * 1000
 
-            stdout = proc.stdout or ""
-            stderr = proc.stderr or ""
+            stdout = stdout_raw or ""
+            stderr = stderr_raw or ""
 
             # تقييد حجم المخرجات
             if len(stdout) > self.max_output_size:
-                stdout = stdout[: self.max_output_size] + "\n... (تم裁اق المخرجات)"
+                stdout = stdout[: self.max_output_size] + "\n... (truncated)"
             if len(stderr) > self.max_output_size:
-                stderr = stderr[: self.max_output_size] + "\n... (تم裁اق المخرجات)"
+                stderr = stderr[: self.max_output_size] + "\n... (truncated)"
 
             return SandboxResult(
                 success=proc.returncode == 0,
-                command=command,
+                command=cmd_display,
                 stdout=stdout,
                 stderr=stderr,
                 returncode=proc.returncode,
@@ -126,22 +154,24 @@ class SandboxExecutor:
             )
 
         except subprocess.TimeoutExpired:
+            if proc is not None:
+                _kill_popen_tree_sync(proc)
             duration_ms = (time.time() - start) * 1000
             return SandboxResult(
                 success=False,
-                command=command,
+                command=cmd_display,
                 stdout="",
                 stderr="",
                 returncode=-1,
                 duration_ms=duration_ms,
                 sandbox_dir=self.workdir,
-                error=f"انتهت المهلة ({timeout} ثانية) للأمر: {command}",
+                error=f"انتهت المهلة ({timeout} ثانية) للأمر: {cmd_display}",
             )
         except Exception as exc:
             duration_ms = (time.time() - start) * 1000
             return SandboxResult(
                 success=False,
-                command=command,
+                command=cmd_display,
                 stdout="",
                 stderr="",
                 returncode=-1,
@@ -152,27 +182,88 @@ class SandboxExecutor:
 
     async def run_async(
         self,
-        command: str,
+        command: Union[str, Sequence[str]],
         timeout: Optional[int] = None,
         env: Optional[Dict[str, str]] = None,
     ) -> SandboxResult:
-        """نسخة غير متزامنة من run."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.run, command, timeout, env, True)
+        """نسخة غير متزامنة عبر create_subprocess_exec + kill_process_tree."""
+        cmd_display = " ".join(str(x) for x in command) if isinstance(command, (list, tuple)) else str(command)
+        try:
+            argv = self._parse_and_validate(command)
+        except (ValueError, PermissionError) as err:
+            return SandboxResult(
+                success=False,
+                command=cmd_display,
+                stdout="",
+                stderr="",
+                returncode=-1,
+                duration_ms=0.0,
+                sandbox_dir=self.workdir,
+                error=str(err),
+            )
+
+        timeout_s = float(timeout or self.default_timeout)
+        start = time.time()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                cwd=self.workdir,
+                env=env or os.environ.copy(),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+            except asyncio.TimeoutError:
+                await kill_process_tree(proc)
+                return SandboxResult(
+                    success=False,
+                    command=cmd_display,
+                    stdout="",
+                    stderr="",
+                    returncode=-1,
+                    duration_ms=(time.time() - start) * 1000,
+                    sandbox_dir=self.workdir,
+                    error=f"انتهت المهلة ({timeout_s} ثانية) للأمر: {cmd_display}",
+                )
+
+            stdout = out_b.decode("utf-8", errors="replace")
+            stderr = err_b.decode("utf-8", errors="replace")
+            if len(stdout) > self.max_output_size:
+                stdout = stdout[: self.max_output_size] + "\n... (truncated)"
+            if len(stderr) > self.max_output_size:
+                stderr = stderr[: self.max_output_size] + "\n... (truncated)"
+            return SandboxResult(
+                success=proc.returncode == 0,
+                command=cmd_display,
+                stdout=stdout,
+                stderr=stderr,
+                returncode=proc.returncode or 0,
+                duration_ms=(time.time() - start) * 1000,
+                sandbox_dir=self.workdir,
+            )
+        except Exception as exc:
+            return SandboxResult(
+                success=False,
+                command=cmd_display,
+                stdout="",
+                stderr="",
+                returncode=-1,
+                duration_ms=(time.time() - start) * 1000,
+                sandbox_dir=self.workdir,
+                error=str(exc),
+            )
 
     # ------------------------------------------------------------------ #
     # تنظيف
     # ------------------------------------------------------------------ #
     def cleanup(self) -> None:
         """يحذف مجلد البيئة المعزولة إذا كان مؤقتاً."""
-        import shutil
         try:
             if os.path.exists(self.workdir):
                 shutil.rmtree(self.workdir, ignore_errors=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Sandbox cleanup failed for %s: %s", self.workdir, exc)
 
-
-import time  # noqa: E402  (placed after class to avoid circular style warning)
 
 __all__ = ["SandboxExecutor", "SandboxResult"]

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Signatures indicative of an AI safety refusal rather than a genuine technical response
 REFUSAL_SIGNATURES = [
-    re.compile(r"i cannot (?:assist|help|fulfill|provide|generate|comply)", re.IGNORECASE),
+    re.compile(r"i (?:cannot|can't|won't|will not) (?:assist|help|fulfill|provide|generate|comply)", re.IGNORECASE),
     re.compile(r"i am unable to (?:assist|help|fulfill|provide|generate)", re.IGNORECASE),
     re.compile(r"against (?:my|our) (?:safety|ethical|content) (?:guidelines|policies)", re.IGNORECASE),
     re.compile(r"(?:violate|violates) (?:safety|usage) policies", re.IGNORECASE),
@@ -22,7 +22,8 @@ REFUSAL_SIGNATURES = [
     re.compile(r"cannot assist with (?:hacking|cyberattacks|exploits|penetration)", re.IGNORECASE),
     re.compile(r"i'm sorry, but i can't assist with that", re.IGNORECASE),
     re.compile(r"cannot provide instructions for (?:attacking|compromising|bypassing)", re.IGNORECASE),
-    re.compile(r"sorry, but i cannot", re.IGNORECASE),
+    re.compile(r"sorry, but i (?:cannot|can't)", re.IGNORECASE),
+    re.compile(r"(?:أعتذر|آسف).{0,25}(?:لا يمكنني|لا أستطيع)", re.IGNORECASE),
 ]
 
 

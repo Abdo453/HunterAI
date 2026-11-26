@@ -86,19 +86,21 @@ class DOMXSSHunterSkill(BaseSkill):
 
         all_findings: List[Dict[str, Any]] = []
         all_sink_hits: List[Dict[str, Any]] = []
+        any_live_scan_ok = False
 
         for url in urls:
             logger.info("[dom_xss_hunter] Scanning URL: %s", url)
             # 1. Try AI browser session
-            browser_hits = await self._browser_scan(url)
+            browser_hits, browser_ok = await self._browser_scan(url)
             # 2. Static JS analysis
-            js_hits = await self._static_js_scan(url)
+            js_hits, static_ok = await self._static_js_scan(url)
+            if browser_ok or static_ok:
+                any_live_scan_ok = True
             all_sink_hits.extend(browser_hits)
             all_sink_hits.extend(js_hits)
 
-        # If real (non-fallback) hits exist or fallback is disabled, strip synthetic fallback hits
-        if any(h.get("source") != "fallback" for h in all_sink_hits) or ctx.extra.get("disable_fallback"):
-            all_sink_hits = [h for h in all_sink_hits if h.get("source") != "fallback"]
+        # Never emit synthetic fallback hits
+        all_sink_hits = [h for h in all_sink_hits if h.get("source") != "fallback"]
 
         # Deduplicate by sink+snippet
         seen = set()
@@ -137,37 +139,41 @@ class DOMXSSHunterSkill(BaseSkill):
         # Write findings JSON
         findings_json = json.dumps(all_findings, indent=2)
         findings_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id,
-            "dom_xss_findings.json", findings_json
+            ctx.target, "browser",
+            "dom_xss_findings.json", findings_json,
+            ctx.session_id,
         )
-        result.output_files["dom_xss_findings.json"] = findings_path
+        result.output_files["dom_xss_findings.json"] = str(findings_path)
 
         # Write markdown report
         report_md = self._build_report_md(ctx.target, all_findings)
         report_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id,
-            "dom_xss_report.md", report_md
+            ctx.target, "browser",
+            "dom_xss_report.md", report_md,
+            ctx.session_id,
         )
-        result.output_files["dom_xss_report.md"] = report_path
+        result.output_files["dom_xss_report.md"] = str(report_path)
 
         result.findings = result.findings or []
         result.metadata = {
             "total_sinks_found": len(unique_hits),
             "urls_scanned": len(urls),
+            "status": "OK" if any_live_scan_ok else "UNAVAILABLE",
+            "verified": False,
             "duration": round(time.time() - t0, 2),
         }
-        result.success = True
+        result.success = any_live_scan_ok
         logger.info(
-            "[dom_xss_hunter] Done. Sinks found: %d, URLs scanned: %d",
-            len(unique_hits), len(urls)
+            "[dom_xss_hunter] Done. status=%s, Sinks found: %d, URLs scanned: %d",
+            result.metadata["status"], len(unique_hits), len(urls)
         )
         return result
 
     # ------------------------------------------------------------------
     # AI Browser scan
     # ------------------------------------------------------------------
-    async def _browser_scan(self, url: str) -> List[Dict[str, Any]]:
-        """Try to use run_ai_browser_session_sync; fall back gracefully."""
+    async def _browser_scan(self, url: str) -> tuple[List[Dict[str, Any]], bool]:
+        """Try to use run_ai_browser_session_sync; fail closed without synthetic findings."""
         try:
             from core.browser.ai_browser_operator import run_ai_browser_session_sync
             loop = asyncio.get_event_loop()
@@ -177,18 +183,18 @@ class DOMXSSHunterSkill(BaseSkill):
                     url,
                     objective=(
                         "Hunt DOM XSS sinks: test innerHTML, eval, postMessage handlers. "
-                        "Inject payload: pentestdomxss_<img src=x onerror=console.log('DOMXSS_FIRED')> "
-                        "into URL parameters, hash fragments, and form fields. "
                         "Report any JS sinks that handle unsanitised input."
                     ),
                     headless=True,
                     timeout_secs=25.0,
                 ),
             )
-            return self._parse_browser_report(report, url)
+            if report is None or not getattr(report, "success", True) or "Synthetic Fallback" in str(getattr(report, "title", "")):
+                return [], False
+            return self._parse_browser_report(report, url), True
         except Exception as exc:
-            logger.warning("[dom_xss_hunter] Browser scan skipped (%s), using fallback", exc)
-            return self._fallback_scan(url)
+            logger.warning("[dom_xss_hunter] Browser scan unavailable (%s)", exc)
+            return [], False
 
     def _parse_browser_report(self, report: Any, url: str) -> List[Dict[str, Any]]:
         """Extract sink hits from browser session report."""
@@ -224,11 +230,11 @@ class DOMXSSHunterSkill(BaseSkill):
     # ------------------------------------------------------------------
     # Static JS analysis via httpx
     # ------------------------------------------------------------------
-    async def _static_js_scan(self, url: str) -> List[Dict[str, Any]]:
+    async def _static_js_scan(self, url: str) -> tuple[List[Dict[str, Any]], bool]:
         """Download page + JS files and scan for DOM sinks."""
         if not _HTTPX_OK:
-            logger.warning("[dom_xss_hunter] httpx unavailable, using fallback")
-            return self._fallback_scan(url)
+            logger.warning("[dom_xss_hunter] httpx unavailable")
+            return [], False
         try:
             async with httpx.AsyncClient(
                 trust_env=False, verify=False, follow_redirects=True, timeout=20.0
@@ -250,10 +256,10 @@ class DOMXSSHunterSkill(BaseSkill):
                         )
                     except Exception:
                         pass
-                return hits
+                return hits, True
         except Exception as exc:
-            logger.warning("[dom_xss_hunter] Static scan error (%s), using fallback", exc)
-            return self._fallback_scan(url)
+            logger.warning("[dom_xss_hunter] Static scan unavailable (%s)", exc)
+            return [], False
 
     def _scan_js_for_sinks(
         self, js_content: str, url: str = "", source: str = "static"
@@ -316,30 +322,8 @@ class DOMXSSHunterSkill(BaseSkill):
     # Fallback / offline synthetic results
     # ------------------------------------------------------------------
     def _fallback_scan(self, url: str) -> List[Dict[str, Any]]:
-        """Return synthetic DOM XSS candidates for offline/hermetic testing."""
-        return [
-            {
-                "url": url,
-                "sink": "innerHTML",
-                "line": 42,
-                "snippet": "element.innerHTML = location.hash.slice(1);  // FALLBACK SYNTHETIC",
-                "source": "fallback",
-            },
-            {
-                "url": url,
-                "sink": "eval(",
-                "line": 87,
-                "snippet": "eval(atob(params.get('data')));  // FALLBACK SYNTHETIC",
-                "source": "fallback",
-            },
-            {
-                "url": url,
-                "sink": "document.write",
-                "line": 115,
-                "snippet": "document.write('<script src=' + src + '><\\/script>');  // FALLBACK SYNTHETIC",
-                "source": "fallback",
-            },
-        ]
+        """Disabled: never return fabricated synthetic DOM XSS hits when offline."""
+        return []
 
     # ------------------------------------------------------------------
     # Report builder

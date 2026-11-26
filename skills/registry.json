@@ -1,0 +1,65 @@
+{
+  "schema": "hunterai-project-skills/1",
+  "primary": "hunterai-redteam",
+  "skills": [
+    {
+      "name": "hunterai-redteam",
+      "source": "skills/hunterai-redteam",
+      "targets": [
+        ".opencode/skills/hunterai-redteam",
+        ".agents/skills/hunterai-redteam"
+      ],
+      "routes": [
+        {
+          "path": "references/ai-jailbreak-redteam.md",
+          "keywords": [
+            "ai", "llm", "model", "prompt", "prompt injection", "jailbreak",
+            "guardrail", "guardrails", "rag", "system prompt", "refusal",
+            "chatbot", "evasion", "جلبريك", "حقن", "نماذج"
+          ]
+        },
+        {
+          "path": "references/agent-mcp.md",
+          "keywords": [
+            "agent", "agentic", "mcp", "tool", "memory", "plugin",
+            "skill", "delegation", "hook", "supply chain"
+          ]
+        },
+        {
+          "path": "references/web-api-browser.md",
+          "keywords": [
+            "web", "api", "browser", "cookie", "cookies", "token", "waf",
+            "session", "scrape", "graphql", "oauth", "ssrf", "xss", "sqli",
+            "idor", "bola", "bfla", "csrf", "xxe", "ssti", "lfi", "rce",
+            "smuggling", "websocket", "cors", "crlf", "nosql", "jwt",
+            "redirect", "403", "burp", "recon", "subdomain", "domain", "http",
+            "supabase", "takeover", "deserialize", "deserialization", "race", "toctou"
+          ]
+        },
+        {
+          "path": "references/mobile-reverse-engineering.md",
+          "keywords": [
+            "android", "ios", "apk", "xapk", "aab", "ipa", "mobile", "frida",
+            "reverse", "binary", "decompile", "device", "pinning", "jadx"
+          ]
+        },
+        {
+          "path": "references/cloud-network-identity.md",
+          "keywords": [
+            "aws", "azure", "gcp", "cloud", "active directory", "network",
+            "identity", "iam", "container", "kubernetes", "host", "cicd",
+            "kerberos", "adcs", "smb", "nmap", "ssh", "dns"
+          ]
+        },
+        {
+          "path": "references/tooling-evidence.md",
+          "keywords": [
+            "scanner", "fuzz", "cve", "variant", "exploit", "evidence",
+            "report", "triage", "poc", "automation", "web3", "solidity",
+            "smart contract", "nuclei", "sqlmap", "ffuf"
+          ]
+        }
+      ]
+    }
+  ]
+}

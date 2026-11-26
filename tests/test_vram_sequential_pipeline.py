@@ -417,11 +417,10 @@ def test_vram_sequential_pipeline_e2e(tmp_path):
 
 def test_fastapi_vram_pipeline_status_endpoint():
     async def _run():
-        from ui.web.app import app
+        from hunter_backend.testing import make_async_client
         from httpx import ASGITransport, AsyncClient
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        async with make_async_client() as ac:
             r = await ac.get("/api/pipeline/vram/status")
             assert r.status_code == 200
             data = r.json()
@@ -434,7 +433,7 @@ def test_fastapi_vram_pipeline_status_endpoint():
 
 def test_fastapi_vram_pipeline_execute_endpoint():
     async def _run():
-        from ui.web.app import app
+        from hunter_backend.testing import make_async_client
         from httpx import ASGITransport, AsyncClient
 
         mock_res = PipelineResult(
@@ -473,9 +472,11 @@ def test_fastapi_vram_pipeline_execute_endpoint():
 
         with patch("core.pipeline.vram_sequential_pipeline.vram_pipeline.execute_pipeline", new_callable=AsyncMock) as mock_exec:
             mock_exec.return_value = mock_res
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                r = await ac.post("/api/pipeline/vram/execute", json={"target_url": "https://target.local"})
+            async with make_async_client() as ac:
+                r = await ac.post(
+                    "/api/pipeline/vram/execute",
+                    json={"target_url": "https://target.local", "scope": ["target.local"]},
+                )
                 assert r.status_code == 200
                 data = r.json()
                 assert data["status"] == "completed"

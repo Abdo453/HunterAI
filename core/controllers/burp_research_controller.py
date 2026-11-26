@@ -137,6 +137,10 @@ class BurpResearchController:
         experiment_queue: Optional[Any] = None,
         event_stream: Optional[Any] = None,
         http_transport_fn: Optional[Callable[[CanonicalRequest], CanonicalResponse]] = None,
+        transport_fn: Optional[Callable[[CanonicalRequest], CanonicalResponse]] = None,
+        proxy_url: Optional[str] = None,
+        timeout: float = 10.0,
+        allow_insecure_tls: bool = False,
     ):
         self.scope_guard = scope_guard or ScopeGuard(
             in_scope=["*"],
@@ -147,7 +151,12 @@ class BurpResearchController:
         self.evidence_graph = evidence_graph
         self.experiment_queue = experiment_queue
         self.event_stream = event_stream
-        self._http_transport_fn = http_transport_fn or self._default_mock_transport
+        self.proxy_url = proxy_url
+        self.timeout = timeout
+        self.allow_insecure_tls = allow_insecure_tls
+        # Production uses real HTTP transport. Mock/custom transport is used ONLY
+        # when caller explicitly injects http_transport_fn=... or transport_fn=...
+        self._http_transport_fn = http_transport_fn or transport_fn or self._real_http_transport
 
         self._transactions: Dict[str, CanonicalTransaction] = {}
         self._repeater_tabs: Dict[str, CanonicalRequest] = {}
@@ -316,9 +325,18 @@ class BurpResearchController:
         for hk, hv in correlation.to_headers().items():
             target_req.headers[hk] = hv
 
-        # Execute HTTP transport
+        # Execute HTTP transport (fail closed with UNAVAILABLE on transport errors)
         t0 = time.time()
-        resp = self._http_transport_fn(target_req)
+        try:
+            resp = self._http_transport_fn(target_req)
+        except Exception as exc:
+            receipt = self._create_receipt(
+                "REPLAY_REQUEST",
+                target_req.url,
+                ActionStatus.FAILED,
+                f"UNAVAILABLE: transport failed ({exc})",
+            )
+            return ExecutionResult(receipt=receipt, transaction=None, diff_summary=f"UNAVAILABLE: {exc}")
         resp.round_trip_ms = round((time.time() - t0) * 1000, 2)
 
         # Build canonical transaction
@@ -537,35 +555,28 @@ class BurpResearchController:
         self._receipts.append(receipt)
         return receipt
 
-    def _default_mock_transport(self, req: CanonicalRequest) -> CanonicalResponse:
-        """High-fidelity local mock transport simulating target server reflections."""
-        parsed = urlparse(req.url)
-        path = parsed.path
+    def _real_http_transport(self, req: CanonicalRequest) -> CanonicalResponse:
+        """Production live HTTP transport using httpx (never fabricates mock responses)."""
+        import httpx
 
-        # Simulating BOLA or Admin behavior based on inputs
-        if "user_id" in req.url or "id=" in req.url:
-            qp = parse_qs(parsed.query)
-            uid = qp.get("user_id", [""])[0] or qp.get("id", [""])[0]
-            if uid in ("102", "admin", "0"):
-                return CanonicalResponse(
-                    status_code=200,
-                    headers={"Content-Type": "application/json"},
-                    body=json.dumps({"id": uid, "name": "Target Account", "balance": 9999.0}),
-                )
-            return CanonicalResponse(
-                status_code=403,
-                headers={"Content-Type": "application/json"},
-                body=json.dumps({"error": "Forbidden: Tenant Access Denied"}),
+        client_kwargs: Dict[str, Any] = {
+            "timeout": self.timeout,
+            "verify": not self.allow_insecure_tls,
+            "trust_env": False,
+            "follow_redirects": False,
+        }
+        if self.proxy_url:
+            client_kwargs["proxy"] = self.proxy_url
+
+        with httpx.Client(**client_kwargs) as client:
+            resp = client.request(
+                method=req.method or "GET",
+                url=req.url,
+                headers=dict(req.headers or {}),
+                content=(req.body.encode("utf-8") if isinstance(req.body, str) and req.body else None),
             )
-
-        if "admin" in path:
-            auth_hdr = req.headers.get("authorization") or req.headers.get("Authorization") or ""
-            if "admin" in auth_hdr.lower():
-                return CanonicalResponse(status_code=200, body="Admin Dashboard Authorized")
-            return CanonicalResponse(status_code=403, body="Forbidden: Administrator privilege required")
-
-        return CanonicalResponse(
-            status_code=200,
-            headers={"Content-Type": "text/html; charset=utf-8"},
-            body=f"<html><body>Target Response for {req.method} {req.path}</body></html>",
-        )
+            return CanonicalResponse(
+                status_code=resp.status_code,
+                headers=dict(resp.headers),
+                body=resp.text,
+            )

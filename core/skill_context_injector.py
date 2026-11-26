@@ -2,14 +2,14 @@
 """
 Skill Context Injector (Internal Semantic RAG)
 ==============================================
-يقوم بالبحث الذكي في ترسانة المهارات (600 مهارة في .opencode/skills)
-واستخراج التكتيكات والأوامر الأكثر صلة بالمهمة وحقنها مباشرة في سياق النموذج المناسب.
+يوجّه المهام عبر مهارة HunterAI المركزية ويحمّل المراجع المطابقة (multi-route top-K)
+دون قصّ عشوائي بحد 24 سطراً أو 150 حرفاً للسطر.
 """
 
 import json
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SKILLS_DIR = BASE_DIR / ".opencode" / "skills"
@@ -17,45 +17,15 @@ AGENTS_SKILLS_DIR = BASE_DIR / ".agents" / "skills"
 MANIFEST_PATH = SKILLS_DIR / "MANIFEST.json"
 
 ROLE_KEYWORDS = {
-    "dialogue": [
-        "agent-browser", "browser", "recon", "osint", "crawl", "subdomain", "endpoint",
-        "url", "mapping", "passive", "dns", "discovery", "intelligence", "teach"
-    ],
-    "coder": [
-        "skill-creator", "tdd", "teach", "script", "code", "forge", "exploit", "python",
-        "automation", "sast", "semgrep", "review", "fuzzing", "ci/cd", "development"
-    ],
-    "redteam": [
-        "web-api-graphql-pentest", "modern-web-exploit-chains", "hack", "api-fuzzing-bug-bounty", "security-fuzzing", "security-payloads",
-        "security-patterns", "security-passwords", "security-webshells", "burp",
-        "waf", "bypass", "idor", "ssrf", "injection", "gate", "triage", "token",
-        "jwt", "race", "tampering", "xss"
-    ],
-    "deep_thinker": [
-        "abh-network-killchain", "network-segmentation", "vlan", "firewall", "wireshark",
-        "scapy", "packet", "grill-me", "llm-testing", "threat", "modeling", "apt",
-        "killchain", "analysis", "logic", "strategy", "risk", "mitre", "decision", "attack-path"
-    ],
-    "cve_hunter": [
-        "network-services-pentest", "metasploit-automation", "linux-privesc-arsenal",
-        "abh-network-killchain", "network", "port", "nmap", "naabu", "smb", "rpc", "nfs",
-        "telnet", "ftp", "vnc", "snmp", "service", "active-directory", "adcs", "kerberos",
-        "security-webshells", "security-patterns", "cve", "vulnerability", "scan", "audit", "c2"
-    ],
-    "adversary_chainer": [
-        "container-cloud-escape", "active-directory-attacks", "infrastructure-pivoting", "linux-privesc-arsenal", "metasploit-automation",
-        "abh-network-killchain", "lateral", "pivot", "tunnel", "socks5", "chisel",
-        "impacket", "netexec", "smbexec", "psexec", "privesc", "chain", "escape",
-        "escalation", "kerberoasting", "persistence", "dcsync", "pass-the-ticket",
-        "security-payloads", "security-passwords", "security-usernames"
-    ],
-    "network_analyst": [
-        "network-services-pentest", "infrastructure-pivoting", "metasploit-automation", "linux-privesc-arsenal",
-        "abh-network-killchain", "network", "port", "nmap", "naabu", "netexec", "impacket",
-        "smb", "rpc", "nfs", "telnet", "ftp", "ssh", "vnc", "snmp", "active-directory",
-        "kerberos", "ldap", "wireshark", "scapy", "lateral", "pivot", "cve", "audit"
-    ]
+    "dialogue": ["browser", "recon", "osint", "mapping", "discovery"],
+    "coder": ["code", "script", "automation", "fuzz", "build", "patch"],
+    "redteam": ["red team", "pentest", "exploit", "bypass", "jailbreak", "injection"],
+    "deep_thinker": ["analysis", "threat", "logic", "strategy", "attack path"],
+    "cve_hunter": ["cve", "vulnerability", "variant", "exploit", "scan"],
+    "adversary_chainer": ["chain", "pivot", "escalation", "identity", "cloud"],
+    "network_analyst": ["network", "protocol", "packet", "service", "identity"],
 }
+
 
 class SkillContextInjector:
     _instance = None
@@ -87,7 +57,7 @@ class SkillContextInjector:
                     self.skills = raw_skills
                 else:
                     self.skills = []
-        except Exception as e:
+        except Exception:
             self._load_from_disk()
 
     def _load_from_disk(self):
@@ -100,13 +70,10 @@ class SkillContextInjector:
                     self.skills.append({
                         "name": d.name,
                         "description": f"Cybersecurity skill {d.name}",
-                        "source": str(d / "SKILL.md")
+                        "source": str(d / "SKILL.md"),
                     })
 
     def get_relevant_skills(self, role: str, query: str = "", limit: int = 5) -> List[Dict[str, Any]]:
-        """
-        البحث الذكي عن المهارات المطابقة لدور النموذج وسياق المهمة
-        """
         if not self.skills:
             return []
 
@@ -119,7 +86,6 @@ class SkillContextInjector:
             name = s.get("name", "").lower()
             desc = s.get("description", "").lower()
 
-            # High weight for specific query keywords (target vuln class / objective)
             for q_term in query_words:
                 if len(q_term) < 2:
                     continue
@@ -128,7 +94,6 @@ class SkillContextInjector:
                 if q_term in desc:
                     score += 12
 
-            # Background weight for agent role specialization
             for r_term in role_keys:
                 if len(r_term) < 3:
                     continue
@@ -141,63 +106,159 @@ class SkillContextInjector:
                 scored_skills.append((score, s))
 
         scored_skills.sort(key=lambda x: x[0], reverse=True)
-        return [item[1] for item in scored_skills[:limit]]
+        selected = [item[1] for item in scored_skills[:limit]]
+        if not selected:
+            primary = next((item for item in self.skills if item.get("name") == "hunterai-redteam"), None)
+            if primary:
+                selected = [primary]
+        return selected
 
-    def extract_skill_summary(self, skill_name: str, max_chars: int = 600) -> str:
-        """
-        قراءة التعليمات الأساسية من ملف SKILL.md للمهارة
-        """
-        skill_file = SKILLS_DIR / skill_name / "SKILL.md"
+    @staticmethod
+    def _keyword_matches(keyword: str, query_lower: str) -> bool:
+        kw = keyword.lower().strip()
+        if not kw:
+            return False
+        if re.fullmatch(r"[a-z0-9_ -]+", kw):
+            pattern = r"(?<![a-z0-9_])" + re.escape(kw) + r"(?![a-z0-9_])"
+            return re.search(pattern, query_lower) is not None
+        return kw in query_lower
+
+    @classmethod
+    def _routes_for_query(
+        cls,
+        skill: Dict[str, Any],
+        query: str,
+        *,
+        top_k: int = 3,
+        min_score: int = 2,
+    ) -> List[str]:
+        """Multi-route top-K selector: returns up to ``top_k`` distinct reference paths
+        achieving ``score >= min_score`` (falling back to the single best match if max score == 1)."""
+        if not query:
+            return []
+        query_lower = query.lower()
+        ranked: List[tuple[int, str]] = []
+        for route in skill.get("routes", []):
+            path = str(route.get("path") or "").strip()
+            if not path:
+                continue
+            score = sum(
+                1 for keyword in route.get("keywords", []) if cls._keyword_matches(keyword, query_lower)
+            )
+            if score > 0:
+                ranked.append((score, path))
+
+        if not ranked:
+            return []
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        strong = [path for score, path in ranked if score >= min_score]
+        if strong:
+            # Deduplicate preserving rank order
+            dedup: List[str] = []
+            for p in strong:
+                if p not in dedup:
+                    dedup.append(p)
+            return dedup[: max(1, top_k)]
+        # Single-keyword query fallback: still route the single highest-scoring reference
+        return [ranked[0][1]]
+
+    @classmethod
+    def _route_for_query(cls, skill: Dict[str, Any], query: str) -> Optional[str]:
+        """Backwards-compatible single-route helper returning the top route."""
+        routes = cls._routes_for_query(skill, query, top_k=1, min_score=1)
+        return routes[0] if routes else None
+
+    def extract_skill_summary(
+        self,
+        skill: Dict[str, Any],
+        query: str = "",
+        max_chars: int = 12000,
+        *,
+        top_k_routes: int = 3,
+        min_route_score: int = 2,
+    ) -> str:
+        """Read full SKILL.md instructions (without 24-line / 150-char truncation)
+        and append all multi-route top-K matched references."""
+        skill_name = skill.get("name", "")
+        skill_dir = SKILLS_DIR / skill_name
+        skill_file = skill_dir / "SKILL.md"
         if not skill_file.exists():
-            skill_file = AGENTS_SKILLS_DIR / skill_name / "SKILL.md"
+            skill_dir = AGENTS_SKILLS_DIR / skill_name
+            skill_file = skill_dir / "SKILL.md"
         if not skill_file.exists():
             return ""
 
         try:
             content = skill_file.read_text(encoding="utf-8", errors="ignore")
-            # إزالة frontmatter
             if content.startswith("---"):
                 parts = content.split("---", 2)
                 if len(parts) >= 3:
                     content = parts[2].strip()
 
-            lines = [line.strip() for line in content.splitlines() if line.strip()]
-            summary_lines = []
-            char_count = 0
-            for line in lines:
-                if line.startswith("#"):
-                    summary_lines.append(line)
-                elif line.startswith("-") or line.startswith("*") or line.startswith("["):
-                    summary_lines.append(line)
-                elif len(line) < 150:
-                    summary_lines.append(line)
-                char_count += len(line)
-                if char_count >= max_chars:
-                    break
+            routes = self._routes_for_query(
+                skill, query, top_k=top_k_routes, min_score=min_route_score
+            )
+            routed_set = {r.strip().replace("\\", "/") for r in routes}
 
-            return "\n".join(summary_lines[:15])
+            # Preserve complete structured instructions (no 24-line or 150-char line dropping),
+            # while omitting unrouted `references/*.md` routing-table entries when a query
+            # selected specific route(s) so unrouted reference paths never pollute context.
+            ref_link_pat = re.compile(r"\((references/[^)\s]+\.md)\)")
+            lines: List[str] = []
+            for raw_line in content.splitlines():
+                stripped = raw_line.rstrip()
+                if not stripped.strip():
+                    continue
+                if routed_set:
+                    linked_refs = [m.replace("\\", "/") for m in ref_link_pat.findall(stripped)]
+                    if linked_refs and not any(ref in routed_set for ref in linked_refs):
+                        continue
+                lines.append(stripped)
+
+            body = "\n".join(lines)
+            if max_chars > 0 and len(body) > max_chars:
+                body = body[:max_chars]
+
+            routed_sections: List[str] = []
+            skill_dir_resolved = skill_dir.resolve()
+            for route in routes:
+                reference = (skill_dir / route).resolve(strict=False)
+                if reference.is_relative_to(skill_dir_resolved) and reference.is_file():
+                    routed_text = reference.read_text(encoding="utf-8", errors="ignore").strip()
+                    if max_chars > 0 and len(routed_text) > max_chars:
+                        routed_text = routed_text[:max_chars]
+                    routed_sections.append(f"[Routed reference: {route}]\n{routed_text}")
+
+            if routed_sections:
+                return f"{body}\n\n" + "\n\n".join(routed_sections)
+            return body
         except Exception:
             return ""
 
-    def build_injected_context(self, role: str, query: str = "", max_skills: int = 4) -> str:
-        """
-        بناء قالب السياق التكتيكي المحقون في الـ System Prompt
-        """
+    def build_injected_context(
+        self,
+        role: str,
+        query: str = "",
+        max_skills: int = 4,
+        max_chars: int = 12000,
+    ) -> str:
         relevant = self.get_relevant_skills(role, query, limit=max_skills)
         if not relevant:
             return ""
 
-        context_blocks = []
-        context_blocks.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        context_blocks.append(f"🎯 الترسانة المعرفية التكتيكية المحقونة ({len(relevant)} مهارات تخصصية):")
-        context_blocks.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        context_blocks = [
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"🎯 الترسانة المعرفية التكتيكية المحقونة ({len(relevant)} مهارات تخصصية):",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        ]
 
         for skill in relevant:
             name = skill.get("name", "")
             title = skill.get("title", name)
-            summary = self.extract_skill_summary(name, max_chars=400)
+            summary = self.extract_skill_summary(skill, query=query, max_chars=max_chars)
             if not summary:
-                summary = skill.get("description", "")[:250]
+                summary = skill.get("description", "")
 
             block = f"■ [SKILL: {title}]\n{summary}"
             context_blocks.append(block)
@@ -205,7 +266,7 @@ class SkillContextInjector:
         context_blocks.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         return "\n".join(context_blocks)
 
-# كائن عام جاهز للاستدعاء الفوري
+
 skill_injector = SkillContextInjector()
 
 if __name__ == "__main__":

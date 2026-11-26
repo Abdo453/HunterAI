@@ -231,48 +231,45 @@ class LocalTriadAgent:
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.2,
-        timeout: int = 15
+        timeout: int = 15,
     ) -> str:
-        """Direct, reliable HTTP query to local Ollama instance with timeout protection."""
+        """Delegate local Triad inference to the canonical ``core.llm_router.LLMRouter``."""
         if self._ollama_online is False:
             return ""
 
+        from core.llm_router import LLMRouter
+
+        router = LLMRouter(ollama_host=self.ollama_host, policy="local_only")
+        if self._cached_tags is None:
+            try:
+                self._cached_tags = await asyncio.wait_for(router.local_models(), timeout=min(3.0, float(timeout)))
+            except Exception:
+                self._cached_tags = []
+
         resolved_model = self._resolve_model(
             model,
-            [MODEL_COORDINATOR, MODEL_CODE, "qwen3:8b", "qwen2.5-coder:14b-tools", "qwen2.5-coder:14b", "whiterabbitneo", "xploiter"]
+            [MODEL_COORDINATOR, MODEL_CODE, "qwen3:8b", "qwen2.5-coder:14b-tools", "qwen2.5-coder:14b", "whiterabbitneo", "xploiter"],
         )
-
-        url = f"{self.ollama_host}/api/chat"
-        payload = {
-            "model": resolved_model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "stream": False,
-            "keep_alive": "5m",
-            "options": {
-                "temperature": temperature,
-                "num_ctx": 4096
-            }
-        }
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-
-        loop = asyncio.get_running_loop()
-
-        def _do_request():
-            try:
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    res = json.loads(resp.read().decode("utf-8"))
-                    self._ollama_online = True
-                    return res.get("message", {}).get("content", "").strip()
-            except Exception as e:
-                if self._ollama_online is None:
-                    logger.debug(f"[AI] Local Ollama offline at {self.ollama_host} ({e})")
-                return ""
-
-        return await loop.run_in_executor(None, _do_request)
+        try:
+            res = await asyncio.wait_for(
+                router.complete(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    prefer=f"local:{resolved_model}",
+                    role="deep_analyst",
+                ),
+                timeout=float(timeout),
+            )
+            if res and res.content:
+                self._ollama_online = True
+                return res.content.strip()
+            return ""
+        except Exception as e:
+            if self._ollama_online is None:
+                logger.debug("[AI] Local Ollama offline at %s (%s)", self.ollama_host, e)
+            return ""
 
     # ── 1. RECON SCOUT & TRIAGE (xploiter/pentester) ──────────────────────────
     async def triage_recon_assets(

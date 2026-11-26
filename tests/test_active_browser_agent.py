@@ -4,7 +4,6 @@ Verifies active DOM exploration, form canary probing, network API interception,
 and integration with OmniHunter assessment loop and Web UI.
 """
 import pytest
-from fastapi.testclient import TestClient
 
 from core.browser.active_browser_agent import (
     ActiveBrowserAgent,
@@ -12,7 +11,7 @@ from core.browser.active_browser_agent import (
     run_browser_exploration_sync,
 )
 from core.engine.omni_hunter_engine import AssessmentConfig, OmniHunterEngine
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 
 # ── 1. Active Browser Agent Unit Tests ────────────────────────────────────────
@@ -66,9 +65,14 @@ def test_omni_hunter_web_phase_with_browser_enabled():
 
 # ── 3. Web UI /api/browser/browse API Endpoint Test ──────────────────────────
 
-def test_api_browser_browse_endpoint():
-    """Verify FastAPI /api/browser/browse triggers active exploration."""
-    with TestClient(app) as client:
+def test_api_browser_browse_endpoint(monkeypatch):
+    """Verify Django/ASGI /api/browser/browse allows explicit URLs by default and enforces ScopeGuard when opted in."""
+    with ASGISyncClient() as client:
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
+        unscoped = client.post("/api/browser/browse", json={"url": "https://api.test.local"})
+        assert unscoped.status_code == 403
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
+
         payload = {
             "url": "https://api.test.local",
             "visible": False,

@@ -67,7 +67,7 @@ class TestForensicEvidenceLevels:
         assert r1.code == "E1"
         assert not r1.is_confirmed_eligible
 
-        # E2: Reproducible Behavior (N >= 2)
+        # E2: Reproducible Behavior (N >= 2) — below E3 minimum confirmation bar
         r2 = EvidenceLevelEvaluator.evaluate(
             finding_data={"proof": "Status diverged deterministically"},
             evidence_items=[{"diff": "reflection"}],
@@ -75,7 +75,7 @@ class TestForensicEvidenceLevels:
         )
         assert r2.level == EvidenceLevel.E2_REPRODUCIBLE_BEHAVIOR
         assert r2.code == "E2"
-        assert r2.is_confirmed_eligible  # E2 is minimum threshold
+        assert not r2.is_confirmed_eligible  # E3 is now the minimum confirmed threshold
 
         # E3: Security Invariant Violation
         r3 = EvidenceLevelEvaluator.evaluate(

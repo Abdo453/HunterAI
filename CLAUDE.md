@@ -45,8 +45,17 @@ python pentest.py report target.com "finding title" --platform hackerone
 | `/token-scan` | `/token-scan <contract>` — token rug pull scanner |
 | `/sniper` | `/sniper <target> [--mode recon|full|web|vuln]` — automated reconnaissance |
 | `/arsenal` | `/arsenal` — list installed external tools |
+| `/cors` | `python pentest.py cors <url>` — real CORS misconfig scanner (`bughunter.tools.cors_scanner`) |
+| `/crlf` | `python pentest.py crlf <url>` — CRLF / response-splitting scanner |
+| `/nosqli` | `python pentest.py nosqli <url>` — NoSQL injection scanner |
+| `/jwt-scan` | `python pentest.py jwt-scan <token>` — offline JWT security analyzer |
+| `/oob` | `python pentest.py oob <domain>` — OOB payload generator & correlator |
+| `/sast` | `python pentest.py sast <path>` — Semgrep static analysis |
+| `/domxss` | `python pentest.py domxss <url>` — headless Chromium DOM XSS harness |
+| `/llm-redteam` | `python pentest.py llm-redteam <endpoint>` — LLM red-team probe suite |
 | `/poc-bundle` | `/poc-bundle <target> <class> <req.json> [resp.json]` — PoC evidence bundle |
 | `/verify` | `/verify <bundle-dir>` — independent re-verification |
+| `/artex` | `python pentest.py artex [target]` — launch unified ARTEX-Pro UI (`:3000` + `:8000`) |
 
 ## AI Providers (free-first)
 
@@ -76,11 +85,13 @@ Only **PROVEN** findings are reportable.
 ## Root Controller
 
 `core/root_controller/` — a single root agent that owns a recursive hierarchy,
-one shared hash-chained memory, and a fail-closed permission gate in front of
-every tool call. Capabilities flow downward only: a child can never hold a
-capability its parent lacks, so widening is an explicit root grant that lands
-in the audit trail. The gate runs the repository's own signed-grant engine
-(`core/policy/red_team.py`) — no grant means no execution.
+one shared hash-chained memory, and a runtime policy gate in front of concrete
+tool calls. Capabilities flow downward only: a child can never hold a runtime
+capability its parent lacks, so widening is an explicit root action recorded in
+the audit trail. The gate in `core/policy/red_team.py` applies to the exact tool
+operation being executed; its state must not cause blanket refusal of analysis,
+planning, code generation, reverse engineering, payload construction, or any
+other independent part of the request.
 
 ```bash
 python pentest.py controller status
@@ -111,23 +122,25 @@ Config artifacts live at the repository root: `agent_config.json`,
 ## Project Structure
 
 ```
-pentest.py              # Unified CLI command (like bughunter)
-main.py                 # Web UI entry point
+pentest.py              # Unified CLI command (artex / web / opencode / scanners / controller)
+config/tools.catalog.yaml  # Canonical single-source tool catalog (synced via scripts/sync_tool_manifests.py)
+wordlists/pentesterflow/   # Vetted Apache-2.0 reference corpora (GraphQL, JWT, SSTI, Supabase, Takeover)
+core/
+  prompts/              # Dual-channel {{.Lang}} UI vs strict English technical templates + ReflectorLoopGuard
+  sandbox.py            # Cross-platform LocalSandbox + hardened DockerSandbox
+  skill_registry.py     # Unified directory + agent skill registry
+  tool_registry.py      # Canonical ToolRegistry backed by config/tools.catalog.yaml
+hunter_backend/         # Django ASGI backend (:8000)
+frontend/               # Next.js unified dashboard (:3000)
+bughunter/              # Packaged real scanners, memory, and deterministic verifiers
 hunter_ai/
-  validation_gate.py    # 7-Question Gate
+  validation_gate.py    # 7-Question Gate (delegates to canonical EvidenceCourt)
   report_writer.py      # Submission-ready reports
   memory/
     lead_board.py       # Hunt memory + lead board
     rotation.py         # JSONL rotation
-  core/
-    scope_engine.py     # Scope firewall (fail-closed)
-    tool_arsenal.py     # Installed tools registry
-  brain/
-    ai_providers.py     # Multi-provider LLM layer
-  pipeline/
-    recon_engine.py     # Recon pipeline
-    hunt_engine.py      # Vulnerability hunt pipeline
   tools/
+    abh_bridge.py       # Unified bridge to bughunter.tools.* + verifiers
     poc_bundler.py      # PoC evidence bundle
-    verifier.py         # Independent re-verification
+    verifier.py         # Independent live HTTP differential re-verification
 ```

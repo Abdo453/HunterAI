@@ -22,6 +22,13 @@ venv.bak/
 .env.local
 .env.*.local
 
+# Local runtime secrets & settings (never commit)
+data/root_controller/.django_secret
+data/root_controller/.api_token
+data/root_controller/.session_gen
+data/root_controller/.policy_secret
+data/control_settings.json
+
 # Testing & Coverage
 .pytest_cache/
 .coverage
@@ -67,6 +74,7 @@ artifacts/secrets/*/*.md
 artifacts/threat_intel/*
 !artifacts/threat_intel/.gitkeep
 artifacts/reports/*
+artifacts/skill-audit.json
 !artifacts/reports/.gitkeep
 
 # Test-run artifacts (must not pollute tracked files — P2-37)
@@ -88,6 +96,9 @@ Thumbs.db
 skills_library/
 tmp_skills_install.log
 
+# External upstream reference codebases (local intake/audit only — never commit)
+/external/
+
 # Local scratch artifacts
 .tmp_*
 
@@ -99,6 +110,7 @@ snapshots/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+*.tsbuildinfo
 
 # Go binaries
 backend/bin/

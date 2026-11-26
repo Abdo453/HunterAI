@@ -6,6 +6,6 @@ a second, weaker rule set.
 
 from __future__ import annotations
 
-from memory.redaction import redact_obj, redact_text
+from bughunter.memory.redaction import redact_obj, redact_text
 
 __all__ = ["redact_obj", "redact_text"]

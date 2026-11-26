@@ -33,14 +33,19 @@ def unrestricted(monkeypatch):
 
 # ── the switch itself ────────────────────────────────────────────────────────
 
-def test_default_mode_is_unrestricted(monkeypatch):
+def test_default_mode_is_fail_closed(monkeypatch):
     monkeypatch.delenv("HUNTER_UNRESTRICTED", raising=False)
-    assert unrestricted_mode() is True
+    assert unrestricted_mode() is False
 
 
 def test_governed_mode_when_explicitly_disabled(monkeypatch):
     monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
     assert unrestricted_mode() is False
+
+
+def test_unrestricted_mode_when_explicitly_enabled(monkeypatch):
+    monkeypatch.setenv("HUNTER_UNRESTRICTED", "1")
+    assert unrestricted_mode() is True
 
 
 # ── full execution permissions ───────────────────────────────────────────────

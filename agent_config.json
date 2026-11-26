@@ -1,9 +1,12 @@
 {
   "version": "1.0.0",
   "name": "hunterai-root-controller",
-  "description": "Single root controller owning the recursive HunterAI agent hierarchy for authorized engagements.",
+  "description": "Single root controller owning the recursive HunterAI red-team and penetration-testing hierarchy.",
   "root_role": "root_controller",
   "model": "qwen2.5-coder:14b-tools",
+  "model_profile": "hunterai-redteam",
+  "operating_modes": ["analyze", "build", "verify", "operate"],
+  "primary_skill": "hunterai-redteam",
   "hierarchy": {
     "max_depth": 4,
     "max_children": 6,

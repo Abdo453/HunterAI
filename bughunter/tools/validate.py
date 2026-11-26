@@ -771,8 +771,7 @@ Generated: {date}
 ## References
 
 - `commands/report.md` — platform-specific report structure.
-- `skills/report-writing/SKILL.md` — impact-first templates, downgrade counters, and pre-submit checklist.
-- `skills/triage-validation/SKILL.md` — 7-Question Gate and never-submit list.
+- `skills/hunterai-redteam/references/tooling-evidence.md` — validation gate, proof quality, and reporting standards.
 - https://www.first.org/cvss/calculator/4.0 — verify the CVSS 4.0 vector.
 """
     with open(path, "w", encoding="utf-8") as f:

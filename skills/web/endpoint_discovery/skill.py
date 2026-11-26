@@ -7,7 +7,13 @@ from pathlib import Path
 
 from skills.base_skill import BaseSkill, SkillContext, SkillResult
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
 WORDLISTS = [
+    str(_REPO_ROOT / "wordlists" / "common.txt"),
+    str(_REPO_ROOT / "wordlists" / "endpoints.txt"),
+    str(_REPO_ROOT / "bughunter" / "wordlists" / "common.txt"),
+    str(Path.home() / "wordlist" / "SecLists" / "Discovery" / "Web-Content" / "common.txt"),
     "/usr/share/wordlists/dirb/common.txt",
     "/usr/share/seclists/Discovery/Web-Content/common.txt",
     "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt",
@@ -30,41 +36,53 @@ class EndpointDiscoverySkill(BaseSkill):
     async def execute(self, ctx: SkillContext) -> SkillResult:
         result = SkillResult(skill_name=self.name, success=True, tool_used="ffuf")
 
-        target = ctx.target if ctx.target.startswith("http") else f"http://{ctx.target}"
+        target = ctx.target if ctx.target.startswith(("http://", "https://")) else f"http://{ctx.target}"
 
-        # Find available wordlist
-        wordlist = next((w for w in WORDLISTS if Path(w).exists()), None)
+        custom_wl = ctx.extra.get("wordlist")
+        candidates = ([str(custom_wl)] if custom_wl else []) + list(WORDLISTS)
+        wordlist = next((w for w in candidates if w and Path(w).is_file()), None)
         if not wordlist:
-            result.errors.append("No wordlist found — install seclists or dirb")
+            result.add_error("wordlist_missing", "No wordlist found — configure wordlists/ or install seclists/dirb")
             result.success = False
+            result.metadata = {"status": "UNAVAILABLE", "reason": "wordlist_missing"}
             return result
 
         raw_output = ""
+        tool_invoked = False
 
-        if ctx.tool_manager.is_available("ffuf"):
+        if ctx.tool_manager and ctx.tool_manager.is_available("ffuf"):
+            tool_invoked = True
             res = await ctx.tool_manager.execute(
-                f"ffuf -u {target}/FUZZ -w {wordlist} -mc 200,201,204,301,302,307,401,403 "
-                f"-t 40 -timeout 10 -silent",
-                timeout=300
+                ["ffuf", "-u", f"{target.rstrip('/')}/FUZZ", "-w", wordlist,
+                 "-mc", "200,201,204,301,302,307,401,403", "-t", "40", "-timeout", "10", "-silent"],
+                timeout=300,
             )
-            raw_output = res.stdout
+            raw_output = res.stdout or ""
             result.tool_used = "ffuf"
 
-        elif ctx.tool_manager.is_available("gobuster"):
+        elif ctx.tool_manager and ctx.tool_manager.is_available("gobuster"):
+            tool_invoked = True
             res = await ctx.tool_manager.execute(
-                f"gobuster dir -u {target} -w {wordlist} -q -t 30 --no-error",
-                timeout=300
+                ["gobuster", "dir", "-u", target, "-w", wordlist, "-q", "-t", "30", "--no-error"],
+                timeout=300,
             )
-            raw_output = res.stdout
+            raw_output = res.stdout or ""
             result.tool_used = "gobuster"
 
-        elif ctx.tool_manager.is_available("dirsearch"):
+        elif ctx.tool_manager and ctx.tool_manager.is_available("dirsearch"):
+            tool_invoked = True
             res = await ctx.tool_manager.execute(
-                f"dirsearch -u {target} -w {wordlist} -q --format plain",
-                timeout=300
+                ["dirsearch", "-u", target, "-w", wordlist, "-q", "--format", "plain"],
+                timeout=300,
             )
-            raw_output = res.stdout
+            raw_output = res.stdout or ""
             result.tool_used = "dirsearch"
+
+        if not tool_invoked:
+            result.add_error("tool_missing", "No endpoint discovery tool available (ffuf/gobuster/dirsearch)")
+            result.success = False
+            result.metadata = {"status": "UNAVAILABLE", "reason": "tool_missing"}
+            return result
 
         if not raw_output.strip():
             result.errors.append("No endpoints found")

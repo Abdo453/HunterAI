@@ -14,7 +14,7 @@ from pathlib import Path
 from core.learning.scenario_loader import DynamicScenarioLoader
 from core.learning.sqli_evaluator import SQLiGraduationEvaluator, SQLiKnowledgeScorecard
 from core.learning.knowledge_store import KnowledgeStore
-from ui.web.app import app
+from hunter_backend.testing import make_async_client
 
 
 class TestSQLiCurriculumAndCVESync:
@@ -104,8 +104,7 @@ class TestSQLiCurriculumAndCVESync:
 
     @pytest.mark.asyncio
     async def test_rest_api_sync_and_sqli_curriculum_endpoints(self):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with make_async_client() as client:
             # Test /api/learning/sync
             res_sync = await client.get("/api/learning/sync")
             assert res_sync.status_code == 200

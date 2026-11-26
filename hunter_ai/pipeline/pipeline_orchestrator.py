@@ -316,6 +316,12 @@ class HunterPipelineOrchestrator:
         self.burp_repeater_experiments: List[Dict[str, Any]] = []
         self._triad_instance: Optional[Any] = None
 
+        # Vulnerability Intelligence (core/vuln_intel/) offline triage & tool plan state
+        self.vuln_intel_db_path: str = (os.environ.get("HUNTER_VULN_INTEL_DB") or "").strip() or "data/vuln_intel/vuln_intel.sqlite3"
+        self.vuln_intel_triage: List[Dict[str, Any]] = []
+        self.vuln_intel_tool_plan: List[Dict[str, Any]] = []
+        self.vuln_intel_summary: Dict[str, Any] = {}
+
     async def _init_burp_agent_subsystem(self):
         """
         Auto-detects active Burp Suite proxy (127.0.0.1:8080) and initializes
@@ -1902,6 +1908,184 @@ class HunterPipelineOrchestrator:
         await self._emit("surface_done", endpoints=len(self.endpoints), parameters=len(self.parameters), secrets=len(self.secrets))
         return self.endpoints, self.parameters
 
+    def run_vuln_intel_triage(
+        self,
+        *,
+        db_path: Optional[str | Path] = None,
+        technologies: Optional[List[Any]] = None,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Hermetic offline ``core/vuln_intel/`` applicability triage & deterministic tool selection.
+
+        Reads only from the local SQLite ``VulnerabilityStore`` (zero network calls),
+        ranks tools via ``select_tools()`` under the orchestrator's authorization envelope,
+        and emits ``CANDIDATE`` hypotheses without ever auto-confirming findings.
+        """
+        from core.vuln_intel.db import VulnerabilityStore
+        from core.vuln_intel.models import (
+            Applicability,
+            Ecosystem,
+            ProjectPackage,
+            ProjectProfile,
+            record_from_stored,
+        )
+        from core.vuln_intel.tool_capabilities import DEFAULT_CAPABILITIES, ToolAvailability
+        from core.vuln_intel.tool_selection import SelectionScope, select_tools
+        from core.vuln_intel.triage import triage_project
+
+        resolved_db = Path(db_path) if db_path is not None else Path(self.vuln_intel_db_path)
+        store = VulnerabilityStore(resolved_db)
+        db_total = store.count()
+
+        raw_techs: List[Any] = list(technologies or [])
+        for la in self.live_assets:
+            for t in (getattr(la, "technologies", None) or []):
+                if t and t not in raw_techs:
+                    raw_techs.append(t)
+
+        tech_ver_re = re.compile(r"^\s*([A-Za-z0-9_.\-@/]+?)(?:[:/\s@]+v?(\d+(?:\.\d+){0,3}[A-Za-z0-9._\-]*))?\s*$")
+        packages: List[ProjectPackage] = []
+        frameworks: Dict[str, str] = {}
+        php_version: Optional[str] = None
+        seen_pkgs: Set[Tuple[str, str]] = set()
+
+        for item in raw_techs:
+            if isinstance(item, dict):
+                name = str(item.get("name") or item.get("package") or item.get("product") or "").strip()
+                ver = str(item.get("version")).strip() if item.get("version") else None
+                raw_eco = str(item.get("ecosystem") or "").strip().lower()
+            else:
+                text = str(item or "").strip()
+                m = tech_ver_re.match(text)
+                name = m.group(1).strip() if m else text
+                ver = m.group(2).strip() if (m and m.group(2)) else None
+                raw_eco = ""
+            if not name:
+                continue
+            low = name.lower()
+            if low == "php" and ver and not php_version:
+                php_version = ver
+            try:
+                eco = Ecosystem(raw_eco) if raw_eco else (
+                    Ecosystem.PHP if low == "php"
+                    else Ecosystem.WORDPRESS if "wordpress" in low
+                    else Ecosystem.COMPOSER if "/" in low
+                    else Ecosystem.CPE
+                )
+            except ValueError:
+                eco = Ecosystem.CPE
+            if low in {"laravel", "symfony", "wordpress", "drupal", "magento"}:
+                frameworks[low] = ver or "unknown"
+            key = (low, ver or "")
+            if key not in seen_pkgs:
+                seen_pkgs.add(key)
+                packages.append(ProjectPackage(name=name, version=ver, ecosystem=eco, source="pipeline_recon"))
+
+        project = ProjectProfile(
+            project_id=self.domain,
+            name=self.domain,
+            ecosystem=packages[0].ecosystem if packages else Ecosystem.CPE,
+            packages=packages,
+            php_version=php_version,
+            frameworks=frameworks,
+            inventory_complete=False,
+        )
+
+        if db_total == 0:
+            summary = {
+                "status": "UNAVAILABLE",
+                "reason": "Local vuln_intel SQLite store has 0 records.",
+                "db_path": str(store.db_path),
+                "db_records_total": 0,
+                "technologies": [f"{p.name}@{p.version}" if p.version else p.name for p in packages],
+                "matched_advisories": 0,
+                "triage_results": [],
+                "tool_plans": [],
+                "candidate_hypotheses": [],
+            }
+            self.vuln_intel_triage = []
+            self.vuln_intel_tool_plan = []
+            self.vuln_intel_summary = summary
+            return summary
+
+        matched_by_id: Dict[str, Dict[str, Any]] = {}
+        for pkg in packages:
+            basename = pkg.name.split("/")[-1]
+            for batch in (
+                store.search(package=pkg.name, limit=limit),
+                store.search(product=basename, limit=limit),
+                store.search(text=basename, limit=limit),
+            ):
+                for row in batch:
+                    rid = str(row.get("record_id") or "")
+                    if rid and rid not in matched_by_id:
+                        matched_by_id[rid] = row
+        if php_version:
+            for row in store.search(product="php", limit=limit):
+                rid = str(row.get("record_id") or "")
+                if rid and rid not in matched_by_id:
+                    matched_by_id[rid] = row
+
+        max_risk = "high" if (self.authorized and not self.no_destructive_tests) else ("medium" if self.authorized else "low")
+        scope = SelectionScope(
+            authorized=bool(self.authorized),
+            max_risk=max_risk,
+            require_installed=False,
+        )
+        capabilities = []
+        for cap in DEFAULT_CAPABILITIES:
+            bin_name = cap.tool_id.split(".")[0]
+            avail = ToolAvailability.INSTALLED if shutil.which(bin_name) else ToolAvailability.NOT_INSTALLED
+            capabilities.append(cap.model_copy(update={"availability": avail}))
+
+        triage_dicts: List[Dict[str, Any]] = []
+        tool_plans: List[Dict[str, Any]] = []
+        candidate_hypotheses: List[Dict[str, Any]] = []
+
+        for row in list(matched_by_id.values())[:limit]:
+            record = record_from_stored(row)
+            triage_res = triage_project(project, record)
+            triage_dicts.append(triage_res.to_dict())
+
+            if triage_res.classification != Applicability.NOT_APPLICABLE:
+                plan = select_tools(record, project, scope, capabilities)
+                tool_plans.append(plan.to_dict())
+                if triage_res.classification in {
+                    Applicability.CONFIRMED_APPLICABLE,
+                    Applicability.LIKELY_APPLICABLE,
+                    Applicability.POSSIBLY_APPLICABLE,
+                }:
+                    vuln_label = plan.vuln_classes[0] if plan.vuln_classes else record.canonical_id
+                    candidate_hypotheses.append({
+                        "target_url": self.base_url,
+                        "param": "",
+                        "vuln_type": vuln_label,
+                        "vuln_id": record.record_id,
+                        "source": "vuln_intel",
+                        "status": "CANDIDATE",
+                        "applicability": triage_res.classification.value,
+                        "recommended_tools": [s.tool_id for s in plan.selected],
+                        "rationale": (
+                            f"vuln_intel {record.canonical_id} ({triage_res.classification.value}): "
+                            + "; ".join(triage_res.reasons[:2])
+                        ),
+                    })
+
+        summary = {
+            "status": "OK" if matched_by_id else "NO_MATCHES",
+            "db_path": str(store.db_path),
+            "db_records_total": db_total,
+            "technologies": [f"{p.name}@{p.version}" if p.version else p.name for p in packages],
+            "matched_advisories": len(matched_by_id),
+            "triage_results": triage_dicts,
+            "tool_plans": tool_plans,
+            "candidate_hypotheses": candidate_hypotheses,
+        }
+        self.vuln_intel_triage = triage_dicts
+        self.vuln_intel_tool_plan = tool_plans
+        self.vuln_intel_summary = summary
+        return summary
+
     # ── STAGE 14 - 18: TESTING, MULTI-LAYER VERIFICATION & CORRELATION ─────────
     async def stage_testing_and_verification(self) -> List[HunterFinding]:
         self.engagement_mgr.start_stage("12_vulnerabilities")
@@ -1927,6 +2111,15 @@ class HunterPipelineOrchestrator:
                     "vuln_type": p_class,
                     "rationale": f"Parameter '{p.parameter}' ({ctx.get('role', 'input')}) maps to {p_class} vulnerability pattern"
                 })
+
+        # ── Vulnerability Intelligence (core/vuln_intel/) Triage & Tool Selection ──
+        try:
+            vi_summary = self.run_vuln_intel_triage()
+            if vi_summary.get("candidate_hypotheses"):
+                hypotheses.extend(vi_summary["candidate_hypotheses"])
+            self._save_stage_artifact("12_vulnerabilities", "vuln_intel_triage.json", vi_summary)
+        except Exception as vi_exc:
+            logger.debug(f"[VulnIntel] Triage stage notice: {vi_exc}")
 
         self._save_stage_artifact("12_vulnerabilities", "vulnerability_hypotheses.json", hypotheses)
 

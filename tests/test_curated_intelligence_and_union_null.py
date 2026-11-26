@@ -13,7 +13,7 @@ from core.learning.scenario_loader import DynamicScenarioLoader
 from core.learning.knowledge_store import KnowledgeStore
 from core.learning.retrieval import LearningRetrievalEngine
 from core.learning.sqli_evaluator import SQLiGraduationEvaluator
-from ui.web.app import app
+from hunter_backend.testing import make_async_client
 
 
 class TestCuratedIntelligenceAndUnionNull:
@@ -79,8 +79,7 @@ class TestCuratedIntelligenceAndUnionNull:
 
     @pytest.mark.asyncio
     async def test_rest_api_sync_reflects_new_curated_intelligence(self):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with make_async_client() as client:
             res_sync = await client.get("/api/learning/sync")
             assert res_sync.status_code == 200
             data = res_sync.json()

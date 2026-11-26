@@ -1,10 +1,33 @@
 import type { Metadata } from "next";
+import "@fontsource/cairo/400.css";
+import "@fontsource/cairo/500.css";
+import "@fontsource/cairo/600.css";
+import "@fontsource/cairo/700.css";
+import "@fontsource/cairo/800.css";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/inter/800.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+import "@fontsource/jetbrains-mono/600.css";
+import "@fontsource/jetbrains-mono/700.css";
+import "@xyflow/react/dist/style.css";
 import "./globals.css";
+import { ThemeProvider } from "@/lib/theme";
+import { I18nProvider } from "@/lib/i18n";
+import { PlatformProvider } from "@/lib/platform-context";
+import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "ARTEX-Pro | Autonomous Cyber Recon & Exploit Control Center",
-  description: "Enterprise Autonomous Multi-Agent Security Platform (Go Core + Next.js + PostgreSQL)",
+  title: "ARTEX-Pro | Unified Cyber Command Center",
+  description:
+    "Autonomous Multi-Agent Security Platform (Go Core + PostgreSQL + Django ASGI Hub + Next.js 15)",
 };
+
+// Static blocking bootstrap executed before first paint to eliminate Dark/LTR FOUC.
+const PREHYDRATION_SCRIPT = `(function(){try{var p=new URLSearchParams(window.location.search);var qT=(p.get('theme')||'').trim().toLowerCase();var sT=(window.localStorage.getItem('hunterai_theme')||window.localStorage.getItem('theme')||'').trim().toLowerCase();var t=(qT==='light'||qT==='dark')?qT:((sT==='light'||sT==='dark')?sT:'dark');var qL=(p.get('lang')||'').trim().toLowerCase();var sL=(window.localStorage.getItem('hunterai_lang')||window.localStorage.getItem('lang')||'').trim().toLowerCase();var l=(qL==='ar'||qL==='en')?qL:((sL==='ar'||sL==='en')?sL:'en');var el=document.documentElement;el.setAttribute('data-theme',t);el.setAttribute('lang',l);el.setAttribute('dir',l==='ar'?'rtl':'ltr');}catch(e){}})();`;
 
 export default function RootLayout({
   children,
@@ -12,9 +35,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-[#0b0f19] text-gray-100 antialiased">
-        {children}
+    <html lang="en" dir="ltr" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script id="sentinel-prehydrate">{PREHYDRATION_SCRIPT}</script>
+      </head>
+      <body className="min-h-screen bg-canvas text-ink-primary antialiased">
+        <ThemeProvider>
+          <I18nProvider>
+            <PlatformProvider>
+              <AppShell>{children}</AppShell>
+            </PlatformProvider>
+          </I18nProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

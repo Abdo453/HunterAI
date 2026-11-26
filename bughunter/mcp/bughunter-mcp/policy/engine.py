@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 from typing import Any
 from urllib.parse import urlparse
@@ -66,7 +67,10 @@ class PolicyEngine:
 
     def set_scope(self, domains: list[str], excluded_domains: list[str] | None = None) -> None:
         _ensure_path()
-        from tools.scope_checker import ScopeChecker, ScopeError
+        try:
+            from bughunter.tools.scope_checker import ScopeChecker, ScopeError
+        except ModuleNotFoundError:
+            from bughunter.tools.scope_checker import ScopeChecker, ScopeError
 
         self._domains = [d.lower() for d in domains]
         try:
@@ -104,19 +108,15 @@ class PolicyEngine:
     def _approval_ok(self, args: dict[str, Any]) -> bool:
         if self.auto_approve:
             return True
-        if args.get("approve") is True:
-            return True
         token = str(args.get("approval_token") or "").strip()
         expected = os.environ.get("BBHUNT_MCP_APPROVAL_TOKEN", "").strip()
-        return bool(expected and token and token == expected)
+        if not expected or not token:
+            return False
+        return hmac.compare_digest(token.encode("utf-8"), expected.encode("utf-8"))
 
     def authorize_tool(self, tool: str, args: dict[str, Any]) -> Decision:
         meta = get_tool_meta(tool)
         target = str(args.get("target") or args.get("host") or "").strip()
-
-        scope_domains = args.get("scope_domains") or args.get("domains")
-        if scope_domains and isinstance(scope_domains, list) and scope_domains:
-            self.set_scope([str(d) for d in scope_domains])
 
         if meta.requires_scope:
             if not self._domains or not self._checker:
@@ -153,7 +153,7 @@ class PolicyEngine:
                 return Decision(
                     DecisionKind.REQUIRE_APPROVAL,
                     "Active testing requires approval "
-                    "(pass approve=true or set BBHUNT_MCP_APPROVE=1)",
+                    "(provide valid approval_token or configure server-side BBHUNT_MCP_APPROVE=1)",
                     ACTIVE_TEST_APPROVAL_REQUIRED,
                     {"tool": tool, "target": target, "level": meta.approval_level.value},
                 )
@@ -166,7 +166,10 @@ class PolicyEngine:
         if not self._checker.is_in_scope(url):
             return Decision(DecisionKind.BLOCK, f"URL out of scope: {url}", OUT_OF_SCOPE)
         try:
-            from memory.audit_log import AutopilotGuard
+            try:
+                from bughunter.memory.audit_log import AutopilotGuard
+            except ModuleNotFoundError:
+                from bughunter.memory.audit_log import AutopilotGuard
 
             # scope_checker is a keyword arg (first positional is circuit_threshold);
             # check_request returns a dict whose "decision" key holds the verdict.
@@ -197,10 +200,10 @@ def denied_payload(decision: Decision) -> dict[str, Any]:
         "reason": decision.reason,
         "details": decision.details,
         "next_action": {
-            SCOPE_REQUIRED: "Pass scope_domains or configure scope first",
+            SCOPE_REQUIRED: "Configure scope domains on the server before active research",
             OUT_OF_SCOPE: "Choose an in-scope target",
             TARGET_REQUIRED: "Provide target",
-            ACTIVE_TEST_APPROVAL_REQUIRED: "Pass approve=true after researcher confirmation",
+            ACTIVE_TEST_APPROVAL_REQUIRED: "Provide a valid operator-issued approval_token",
             REPORT_APPROVAL_REQUIRED: "Preview then approve submission separately",
             AUTHORIZATION_REQUIRED: "Promote discovered host only if scope allows",
         }.get(decision.error_code or "", "Fix the error and retry"),

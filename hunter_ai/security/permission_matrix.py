@@ -142,16 +142,6 @@ class PermissionMatrix:
             description="تخزين نجاح/فشل محاولات التجاوز",
         ))
 
-        # وكيل RAG لـ WAF — قراءة وكتابة محلية فقط (حالة المصادر محلياً)
-        self.add_rule(ToolRule(
-            tool="waf_rag_agent",
-            allowed_ops={ToolOp.READ, ToolOp.WRITE},
-            allowed_envs={EnvScope.LOCAL},
-            allowed_users={UserRole.AUTHORIZED_RESEARCHER, UserRole.ADMIN},
-            requires_approval_for=set(),
-            description="حالة وإدارة مصادر威胁 WAF عبر RAG",
-        ))
-
         # محسن RL — قراءة وكتابة محلية فقط
         self.add_rule(ToolRule(
             tool="rl_policy_optimizer",

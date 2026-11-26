@@ -24,7 +24,7 @@ def _build_checker(domains: list[str] | None, excluded: list[str] | None = None)
     if not domains:
         return None
     _sys_path()
-    from tools.scope_checker import ScopeChecker, ScopeError
+    from bughunter.tools.scope_checker import ScopeChecker, ScopeError
 
     try:
         return ScopeChecker(domains=domains, excluded_domains=excluded)
@@ -87,7 +87,7 @@ def _safe_under(base: Path, *parts: str) -> Path:
 
 def scope_check(target: str, domains: list[str], excluded: list[str] | None = None) -> dict[str, Any]:
     _sys_path()
-    from tools.scope_checker import ScopeChecker
+    from bughunter.tools.scope_checker import ScopeChecker
 
     checker = ScopeChecker(domains=domains, excluded_domains=excluded)
     ok = checker.is_in_scope(target)
@@ -149,7 +149,7 @@ def run_recon(target: str, *, timeout: int = 600, scope_checker=None) -> dict[st
     if recon_dir.is_dir():
         try:
             _sys_path()
-            from tools.lead_board import ingest
+            from bughunter.tools.lead_board import ingest
             ingest(target, str(recon_dir))
             summary["memory_updates"] = ["lead_board.ingest"]
         except Exception as exc:  # noqa: BLE001
@@ -227,7 +227,7 @@ def run_hunt(target: str, *, quick: bool = False, timeout: int = 900, scope_chec
             }
         _filter_recon_to_scope(target, scope_checker)
     try:
-        from tools import hunt as hunt_mod
+        from bughunter.tools import hunt as hunt_mod
     except Exception:
         hunt_mod = None
     if hunt_mod and hasattr(hunt_mod, "hunt_target"):
@@ -362,7 +362,7 @@ def memory_patterns(target: str | None = None, tech: list[str] | None = None) ->
     path = mem / "patterns.jsonl"
     if not path.exists():
         return {"status": "completed", "patterns": [], "summary": "No patterns.jsonl yet"}
-    from memory.pattern_db import PatternDB
+    from bughunter.memory.pattern_db import PatternDB
 
     db = PatternDB(path)
     if tech:
@@ -387,7 +387,7 @@ def memory_search(query: str, target: str | None = None, limit: int = 30) -> dic
     hits = []
     q = query.lower()
     if journal.exists():
-        from memory.hunt_journal import HuntJournal
+        from bughunter.memory.hunt_journal import HuntJournal
         for row in HuntJournal(journal).read_all():
             if target and row.get("target") != target:
                 continue
@@ -407,7 +407,7 @@ def memory_search(query: str, target: str | None = None, limit: int = 30) -> dic
 
 def leads_show(target: str) -> dict[str, Any]:
     _sys_path()
-    from tools.lead_board import load_ledger
+    from bughunter.tools.lead_board import load_ledger
     leads = load_ledger(target)
     return {
         "status": "completed",
@@ -420,7 +420,7 @@ def leads_show(target: str) -> dict[str, Any]:
 
 def leads_next(target: str) -> dict[str, Any]:
     _sys_path()
-    from tools.lead_board import load_ledger, rank_key
+    from bughunter.tools.lead_board import load_ledger, rank_key
     leads = [l for l in load_ledger(target) if l.get("status") == "new"]
     if not leads:
         return {"status": "completed", "target": target, "lead": None, "summary": "No untouched leads"}
@@ -437,7 +437,7 @@ def leads_next(target: str) -> dict[str, Any]:
 def leads_update(target: str, lead_id: str, status: str, note: str | None = None,
                  finding_id: str | None = None) -> dict[str, Any]:
     _sys_path()
-    from tools.lead_board import touch
+    from bughunter.tools.lead_board import touch
     touch(target, lead_id, status, note, finding_id=finding_id)
     return {
         "status": "completed",
@@ -451,7 +451,7 @@ def leads_update(target: str, lead_id: str, status: str, note: str | None = None
 def program_stats(handle: str) -> dict[str, Any]:
     _sys_path()
     try:
-        from mcp.hackerone_mcp_server import get_program_stats  # type: ignore
+        from bughunter.mcp.hackerone_mcp_server import get_program_stats  # type: ignore
     except Exception:
         try:
             import importlib.util

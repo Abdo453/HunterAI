@@ -48,36 +48,63 @@ class LiveHostDetectionSkill(BaseSkill):
 
         live_hosts = []
 
-        if ctx.tool_manager.is_available("httpx"):
+        if ctx.tool_manager and ctx.tool_manager.is_available("httpx"):
             httpx_bin = ctx.tool_manager.resolve_binary("httpx")
             res = await ctx.tool_manager.execute(
-                f"{httpx_bin} -l {tmp_file} -silent -status-code -title -tech-detect -timeout 10",
-                timeout=180
+                [httpx_bin, "-l", str(tmp_file), "-silent", "-status-code", "-title", "-tech-detect", "-timeout", "10"],
+                timeout=180,
             )
-            if res.stdout.strip():
+            if (res.stdout or "").strip():
                 live_hosts = [l.strip() for l in res.stdout.splitlines() if l.strip()]
                 result.raw_output["httpx"] = res.stdout[:5000]
                 result.tool_used = "httpx"
 
-        elif ctx.tool_manager.is_available("httprobe"):
-            res = await ctx.tool_manager.execute(
-                f"cat {tmp_file} | httprobe", timeout=120
-            )
-            live_hosts = [l.strip() for l in res.stdout.splitlines() if l.strip()]
+        elif ctx.tool_manager and ctx.tool_manager.is_available("httprobe"):
+            import asyncio
+            httprobe_bin = ctx.tool_manager.resolve_binary("httprobe")
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    httprobe_bin,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                out, _ = await asyncio.wait_for(
+                    proc.communicate("\n".join(hosts_to_probe).encode("utf-8")),
+                    timeout=120,
+                )
+                live_hosts = [l.strip() for l in out.decode("utf-8", errors="replace").splitlines() if l.strip()]
+            except Exception as exc:
+                self.logger.warning(f"httprobe failed: {exc}")
             result.tool_used = "httprobe"
 
         else:
-            # curl fallback — check each host
-            import asyncio
-            live_hosts = []
-            for h in hosts_to_probe[:30]:  # limit for curl
-                r = await ctx.tool_manager.execute(
-                    f"curl -s -o /dev/null -w '%{{http_code}}' --connect-timeout 5 http://{h}",
-                    timeout=10
-                )
-                if r.stdout.strip() not in ("", "000"):
-                    live_hosts.append(f"http://{h} [{r.stdout.strip()}]")
-            result.tool_used = "curl"
+            # Cross-platform Python httpx fallback (works identically on Windows & Linux)
+            import httpx as py_httpx
+            from core.scope_engine import validate_http_url_target
+
+            allow_loopback = bool(ctx.extra.get("allow_loopback", False))
+            in_scope = ctx.extra.get("in_scope")
+            async with py_httpx.AsyncClient(timeout=5.0, verify=False, follow_redirects=False, trust_env=False) as client:
+                for h in hosts_to_probe[:30]:
+                    probe_url = h if h.startswith(("http://", "https://")) else f"https://{h}"
+                    ok_url, _ = validate_http_url_target(
+                        probe_url,
+                        in_scope=in_scope,
+                        allow_loopback=allow_loopback,
+                        resolve_dns=False,
+                        fail_closed=False,
+                    )
+                    if not ok_url:
+                        continue
+                    for scheme_url in (probe_url, probe_url.replace("https://", "http://", 1) if probe_url.startswith("https://") else probe_url):
+                        try:
+                            resp = await client.head(scheme_url)
+                            live_hosts.append(f"{scheme_url} [{resp.status_code}]")
+                            break
+                        except Exception:
+                            continue
+            result.tool_used = "python-httpx"
 
         if not live_hosts:
             result.errors.append("No live hosts found")

@@ -21,7 +21,7 @@ from agents.burp_agent.collectors.cookie_collector import CookieCollector
 from agents.burp_agent.evidence.evidence_model import UnifiedEvidenceStore, UnifiedEvidence, BurpEvidenceType
 from agents.burp_agent.streaming.sensory_event_bus import SensoryEventBus, SensoryEvent, SensoryMessage
 from agents.burp_agent.extension.burp_extension_bridge import BurpExtensionBridge
-from ui.web.app import app
+from hunter_backend.testing import make_async_client
 
 
 class TestBurpSensorySystem:
@@ -198,8 +198,7 @@ class TestBurpSensorySystem:
 
     @pytest.mark.asyncio
     async def test_rest_api_burp_sensory_endpoints(self):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with make_async_client() as client:
             # 1. Ingest via REST
             payload = {
                 "method": "GET",

@@ -198,10 +198,10 @@ DEFAULT_LLM_CONFIG = LLMConfig(
         "gemini": ProviderConfig(
             name="gemini",
             base_url="https://generativelanguage.googleapis.com/v1beta/models",
-            default_model="gemini-1.5-pro",
+            default_model="gemini-2.5-flash",
             default_embedding_model="text-embedding-004",
             default_model_config=ModelConfig(
-                model="gemini-1.5-pro",
+                model="gemini-2.5-flash",
                 context_size=1048576,
                 max_retries=3,
                 stream_usage=True,

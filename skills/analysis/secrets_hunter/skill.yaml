@@ -11,7 +11,7 @@ output:
   - secrets_candidates.json
 depends_on: []
 next_skills:
-  - validation_gate
+  - triage_gate
 fallback_skills: []
 tools_required: []
 fallback_tools:

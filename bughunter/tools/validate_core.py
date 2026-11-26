@@ -168,7 +168,7 @@ def verify_finding_programmatic(
     evidence_linked = False
     if session_dir and (technically_confirmed or finding.get("always_capture")):
         try:
-            from memory.evidence import EvidenceStore, new_finding_id
+            from bughunter.memory.evidence import EvidenceStore, new_finding_id
 
             store = EvidenceStore(session_dir)
             finding_id = new_finding_id()

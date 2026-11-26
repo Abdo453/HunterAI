@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS asset_nodes (
     value TEXT NOT NULL,
     attributes JSONB DEFAULT '{}'::jsonb,
     first_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(target_id, kind, value)
 );
 
@@ -55,13 +56,17 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS findings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     engagement_id UUID REFERENCES engagements(id) ON DELETE CASCADE,
-    vuln_class VARCHAR(64) NOT NULL,
+    target_id UUID REFERENCES targets(id) ON DELETE CASCADE,
+    vuln_class VARCHAR(128) NOT NULL,
     severity VARCHAR(24) NOT NULL, -- CRITICAL, HIGH, MEDIUM, LOW, INFO
     confidence NUMERIC(4, 2) DEFAULT 0.0,
+    cvss_score NUMERIC(4, 2) DEFAULT 0.0,
     title TEXT NOT NULL,
+    endpoint TEXT DEFAULT '',
     evidence TEXT,
     poc_script TEXT,
-    status VARCHAR(24) DEFAULT 'CONFIRMED',
+    poc_details JSONB DEFAULT '{}'::jsonb,
+    status VARCHAR(24) DEFAULT 'CANDIDATE',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -73,3 +78,27 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     details JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Safe additive column migrations for pre-existing databases
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE targets ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE targets ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE asset_nodes ADD COLUMN IF NOT EXISTS first_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE asset_nodes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS target_id UUID REFERENCES targets(id) ON DELETE CASCADE;
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS confidence NUMERIC(4, 2) DEFAULT 0.0;
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS cvss_score NUMERIC(4, 2) DEFAULT 0.0;
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS endpoint TEXT DEFAULT '';
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS evidence TEXT;
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS poc_script TEXT;
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS poc_details JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS status VARCHAR(24) DEFAULT 'CANDIDATE';
+ALTER TABLE findings ALTER COLUMN status SET DEFAULT 'CANDIDATE';
+ALTER TABLE findings ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_targets_engagement_id ON targets(engagement_id);
+CREATE INDEX IF NOT EXISTS idx_asset_nodes_target_id ON asset_nodes(target_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_engagement_created ON tasks(engagement_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_findings_engagement_cvss ON findings(engagement_id, cvss_score DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_engagement_created ON audit_logs(engagement_id, created_at DESC);

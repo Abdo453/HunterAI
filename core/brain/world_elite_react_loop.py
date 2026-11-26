@@ -139,7 +139,7 @@ class OllamaProvider:
 
         try:
             client = self._get_client()
-            loop = asyncio.get_running_loop()
+            loop = asyncio.get_event_loop()
 
             if tools:
                 response = await loop.run_in_executor(
@@ -199,7 +199,7 @@ CONTEXT:
 """
         try:
             client = self._get_client()
-            loop = asyncio.get_running_loop()
+            loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: client.chat(
@@ -242,7 +242,7 @@ CONTEXT:
 """
         try:
             client = self._get_client()
-            loop = asyncio.get_running_loop()
+            loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: client.chat(
@@ -435,7 +435,7 @@ class WorldEliteReActLoop:
             if asyncio.iscoroutinefunction(tool_fn):
                 result = await tool_fn(**action.parameters)
             else:
-                loop = asyncio.get_running_loop()
+                loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(None, lambda: tool_fn(**action.parameters))
             
             exec_ms = (time.perf_counter() - t0) * 1000

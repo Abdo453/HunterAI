@@ -159,26 +159,30 @@ def test_structured_task_result_5_questions():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_ai_model_router_intents():
-    router = AIModelRouter()
+    from core.llm.manifest import canonical_gemini_model
 
-    # Code Analysis -> Qwen 2.5 Coder
+    router = AIModelRouter()
+    profile = router.manifest.resolve_hardware_profile()
+
+    # Code Analysis -> ModelManifest fixer role (hardware-profile aware)
     r_code = router.route_task("Decompile javascript bundle and parse AST")
-    assert r_code.model_name == "qwen2.5-coder:14b"
+    assert r_code.model_name == router.manifest.get_role_config("fixer", profile=profile).local_model
     assert r_code.tier == ModelTierPreference.LOCAL_CODE
 
-    # Offensive Vectors -> WhiteRabbitNeo
+    # Offensive Vectors -> ModelManifest deep_analyst role
     r_off = router.route_task("Craft WAF bypass payload for SQL Injection filter breakout")
-    assert r_off.model_name == "WhiteRabbitNeo"
+    assert r_off.model_name == router.manifest.get_role_config("deep_analyst", profile=profile).local_model
     assert r_off.tier == ModelTierPreference.LOCAL_OFFENSIVE
 
-    # Massive Recon -> Gemini Flash
+    # Massive Recon -> unified canonical Gemini model (Phase 6)
     r_recon = router.route_task("Parse massive 1M tokens sitemap and DOM graph")
-    assert r_recon.model_name == "gemini-2.0-flash"
+    assert r_recon.model_name == canonical_gemini_model()
     assert r_recon.tier == ModelTierPreference.CLOUD_FAST
 
-    # Deep Threat Logic -> Llama 70B
+    # Deep Threat Logic -> canonical OpenRouter cloud deep model
     r_logic = router.route_task("Evaluate multi-tenant business logic and complex RBAC matrix")
-    assert "llama-3.3-70b" in r_logic.model_name
+    expected_deep = router.manifest.get_default_model("openrouter") or "anthropic/claude-3.5-sonnet"
+    assert r_logic.model_name == expected_deep
     assert r_logic.tier == ModelTierPreference.CLOUD_DEEP
 
 
@@ -280,19 +284,21 @@ def test_hunter_agent_manager_e2e_mission(tmp_path):
 
 def test_fastapi_hunter_endpoints():
     async def _run():
-        from ui.web.app import app
+        from hunter_backend.testing import make_async_client
         from httpx import ASGITransport, AsyncClient
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        async with make_async_client() as ac:
             # 1. List contracts
             r_contracts = await ac.get("/api/hunter/contracts")
             assert r_contracts.status_code == 200
             data_contracts = r_contracts.json()
             assert data_contracts["registered_agents_count"] == 3
 
-            # 2. Execute mission
-            r_mission = await ac.post("/api/hunter/mission/execute", json={"target_url": "api.testtarget.local"})
+            # 2. Execute mission (explicit scope required under Django governance)
+            r_mission = await ac.post(
+                "/api/hunter/mission/execute",
+                json={"target_url": "api.testtarget.local", "scope": ["api.testtarget.local"]},
+            )
             assert r_mission.status_code == 200
             data_mission = r_mission.json()
             assert data_mission["status"] == "completed"

@@ -15,9 +15,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _default_ollama_host() -> str:
+    from models.ollama_manager import normalize_ollama_host
+
+    return normalize_ollama_host(os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
+
+
 @dataclass
 class OllamaConfig:
-    host: str = field(default_factory=lambda: os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"))
+    host: str = field(default_factory=_default_ollama_host)
     default_model: str = field(default_factory=lambda: os.getenv("HUNTER_AI_MODEL", "qwen2.5-coder:14b"))
     timeout: int = 30
     max_retries: int = 3

@@ -5,15 +5,18 @@ Append-only JSONL file at hunt-memory/audit.jsonl.
 Used for post-session review and scope compliance verification.
 """
 
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
 import json
 import os
 import sys
 import time
 from pathlib import Path
 
-from memory.rotation import DEFAULT_KEEP, DEFAULT_MAX_BYTES, rotate_if_needed
-from memory.schemas import validate_audit_entry, make_audit_entry, SchemaError
+from bughunter.memory.rotation import DEFAULT_KEEP, DEFAULT_MAX_BYTES, rotate_if_needed
+from bughunter.memory.schemas import validate_audit_entry, make_audit_entry, SchemaError
 
 
 class AuditLog:
@@ -46,13 +49,13 @@ class AuditLog:
         # the query string — keep it owner-only, not world-readable.
         fd = os.open(str(self.path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_EX)
             try:
                 written = os.write(fd, encoded)
                 if written != len(encoded):
                     raise OSError(f"Partial write: {written}/{len(encoded)} bytes")
             finally:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_UN)
         finally:
             os.close(fd)
 
@@ -302,7 +305,7 @@ class AutopilotGuard:
         only if the canonical parser can't be imported or returns nothing.
         """
         try:
-            from tools.scope_checker import extract_host_port
+            from bughunter.tools.scope_checker import extract_host_port
         except Exception:
             # Fallback ONLY if the canonical parser can't be imported.
             if "://" in url:

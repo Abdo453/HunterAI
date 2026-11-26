@@ -13,7 +13,7 @@ pure test-suite stays browser-free.
 from __future__ import annotations
 
 from bughunter.tools.verifiers.base import VerifyResult, confirmed, rejected, skipped, finding_url
-from tools import dom_xss_harness
+from bughunter.tools import dom_xss_harness
 
 VULN_CLASS = "xss"
 

@@ -6,11 +6,18 @@ Bug Bounty & Professional Multi-Format Reporter
 - Executive HTML & Print-Ready PDF Report
 - CVSS v3.1 Calculator
 """
+import html as _html
 import os
 import json
+import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
+
+from core.secret_sanitizer import SecretSanitizer
+
+_SAFE_REPORT_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_VALID_SEV_CLASSES = {"critical", "high", "medium", "low", "info"}
 
 
 class BugBountyReporter:
@@ -19,8 +26,17 @@ class BugBountyReporter:
     """
 
     def __init__(self, output_dir: str = "data/reports"):
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir).resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _safe_report_path(self, sid: Any, suffix: str) -> Path:
+        sid_str = str(sid if sid is not None else "session").strip()
+        if not sid_str or sid_str in {".", ".."} or ".." in sid_str or not _SAFE_REPORT_ID_RE.fullmatch(sid_str):
+            raise ValueError(f"Invalid report ID '{sid}': must match ^[A-Za-z0-9._-]+$ without traversal")
+        out_file = (self.output_dir / f"{sid_str}{suffix}").resolve()
+        if not out_file.is_relative_to(self.output_dir):
+            raise ValueError(f"Report path escapes output directory for ID '{sid}'")
+        return out_file
 
     def generate_hackerone_report(self, session_data: dict) -> str:
         """توليد تقرير احترافي مطابق لـ HackerOne Report Template"""
@@ -99,17 +115,17 @@ class BugBountyReporter:
                 ""
             ])
 
-        report_content = "\n".join(lines)
+        report_content = SecretSanitizer.sanitize_text("\n".join(lines))
         sid = session_data.get("id", "session")
-        out_file = self.output_dir / f"{sid}_hackerone.md"
+        out_file = self._safe_report_path(sid, "_hackerone.md")
         out_file.write_text(report_content, encoding="utf-8")
         return str(out_file)
 
     def generate_executive_html(self, session_data: dict) -> str:
         """توليد تقرير HTML تنفيذي حديث قابل للطباعة PDF"""
-        target = session_data.get("target", "Target")
+        target = _html.escape(str(session_data.get("target", "Target")), quote=True)
         findings = session_data.get("findings", [])
-        date_str = datetime.now().strftime("%B %d, %Y")
+        date_str = _html.escape(datetime.now().strftime("%B %d, %Y"), quote=True)
 
         counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
         for f in findings:
@@ -118,27 +134,35 @@ class BugBountyReporter:
 
         findings_html = ""
         for i, f in enumerate(findings, 1):
-            sev = f.get("severity", "Medium").lower()
+            sev_raw = str(f.get("severity", "Medium"))
+            sev_slug = sev_raw.lower() if sev_raw.lower() in _VALID_SEV_CLASSES else "medium"
+            title_esc = _html.escape(str(f.get("title", "Vulnerability")), quote=True)
+            sev_esc = _html.escape(sev_raw, quote=True)
+            cvss_esc = _html.escape(str(f.get("cvss_score", "5.0")), quote=True)
+            tool_esc = _html.escape(str(f.get("tool", "Unknown")), quote=True)
+            desc_esc = _html.escape(SecretSanitizer.sanitize_text(str(f.get("description", f.get("title", "")))), quote=True)
+            ev_esc = _html.escape(SecretSanitizer.sanitize_text(str(f.get("evidence", "N/A"))), quote=True)
+            rem_esc = _html.escape(str(f.get("recommendation", "Review and patch.")), quote=True)
             findings_html += f"""
-            <div class="vuln-card sev-{sev}">
+            <div class="vuln-card sev-{sev_slug}">
                 <div class="vuln-header">
                     <span class="vuln-num">#{i}</span>
-                    <span class="vuln-title">{f.get('title', 'Vulnerability')}</span>
-                    <span class="badge badge-{sev}">{f.get('severity', 'Medium')}</span>
-                    <span class="badge-cvss">CVSS {f.get('cvss_score', '5.0')}</span>
+                    <span class="vuln-title">{title_esc}</span>
+                    <span class="badge badge-{sev_slug}">{sev_esc}</span>
+                    <span class="badge-cvss">CVSS {cvss_esc}</span>
                 </div>
                 <div class="vuln-body">
-                    <p><strong>Tool:</strong> {f.get('tool', 'Unknown')}</p>
-                    <p><strong>Description:</strong> {f.get('description', f.get('title', ''))}</p>
+                    <p><strong>Tool:</strong> {tool_esc}</p>
+                    <p><strong>Description:</strong> {desc_esc}</p>
                     <h4>Evidence:</h4>
-                    <pre><code>{f.get('evidence', 'N/A')}</code></pre>
+                    <pre><code>{ev_esc}</code></pre>
                     <h4>Remediation:</h4>
-                    <p class="remediation">{f.get('recommendation', 'Review and patch.')}</p>
+                    <p class="remediation">{rem_esc}</p>
                 </div>
             </div>
             """
 
-        html = f"""<!DOCTYPE html>
+        report_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -199,6 +223,6 @@ class BugBountyReporter:
 </html>"""
 
         sid = session_data.get("id", "session")
-        out_file = self.output_dir / f"{sid}_executive.html"
-        out_file.write_text(html, encoding="utf-8")
+        out_file = self._safe_report_path(sid, "_executive.html")
+        out_file.write_text(report_html, encoding="utf-8")
         return str(out_file)

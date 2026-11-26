@@ -17,11 +17,15 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
+from core.scope_engine import validate_http_url_target
 from skills.base_skill import BaseSkill, SkillContext, SkillResult
 
 
@@ -40,23 +44,33 @@ class IDORTesterSkill(BaseSkill):
     async def execute(self, ctx: SkillContext) -> SkillResult:
         result = SkillResult(skill_name=self.name, success=True, tool_used="idor_tester")
         target = ctx.target
-        candidate_urls: List[str] = ctx.extra.get("urls", []) or []
+        candidate_urls: List[str] = list(ctx.extra.get("urls", []) or [])
 
         # If no URLs provided, try reading from katana/arjun outputs in workspace
         if not candidate_urls:
             candidate_urls = self._read_candidate_urls(ctx, target)
 
         candidates: List[Dict[str, Any]] = []
-        t0 = time.time()
+        allow_loopback = bool(ctx.extra.get("allow_loopback", False))
+        in_scope = ctx.extra.get("in_scope")
 
-        async with httpx.AsyncClient(timeout=15, verify=False, follow_redirects=True, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=15, verify=False, follow_redirects=False, trust_env=False) as client:
             for url in candidate_urls[:40]:  # 5-minute rule cap
+                ok_url, _ = validate_http_url_target(
+                    url,
+                    in_scope=in_scope,
+                    allow_loopback=allow_loopback,
+                    resolve_dns=False,
+                    fail_closed=False,
+                )
+                if not ok_url:
+                    continue
                 param = self._find_id_param(url)
                 if not param:
                     continue
                 try:
                     baseline = await self._fetch(client, url, param, "1")
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.1)
                     altered = await self._fetch(client, url, param, "2")
                 except Exception as exc:
                     self.logger.warning(f"Request failed for {url}: {exc}")
@@ -95,7 +109,8 @@ class IDORTesterSkill(BaseSkill):
                 recommendation="Verify authorization server-side for every object access. Apply 7-Question Gate before reporting.",
                 url=c["url"],
             )
-            result.next_skills.append("validation_gate")
+            if "triage_gate" not in result.next_skills:
+                result.next_skills.append("triage_gate")
 
         self.logger.info(f"[IDOR] tested {len(candidate_urls)} URLs, {len(candidates)} suspicious candidates")
         return result
@@ -109,9 +124,19 @@ class IDORTesterSkill(BaseSkill):
         return m.group(1) if m else None
 
     async def _fetch(self, client: httpx.AsyncClient, url: str, param: str, value: str) -> Dict[str, Any]:
-        new_url = re.sub(rf"([?&]{re.escape(param)}=)[^&]+", rf"\g<1>{value}", url, flags=re.I)
-        if new_url == url:
-            new_url = url + (("&" if "?" in url else "?") + f"{param}={value}")
+        parsed = urlsplit(url)
+        pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        updated = False
+        new_pairs: List[tuple[str, str]] = []
+        for k, v in pairs:
+            if k.lower() == param.lower() and not updated:
+                new_pairs.append((k, value))
+                updated = True
+            else:
+                new_pairs.append((k, v))
+        if not updated:
+            new_pairs.append((param, value))
+        new_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(new_pairs), parsed.fragment))
         resp = await client.get(new_url)
         return {
             "url": new_url,
@@ -149,11 +174,10 @@ class IDORTesterSkill(BaseSkill):
     def _read_candidate_urls(self, ctx: SkillContext, target: str) -> List[str]:
         urls: List[str] = []
         try:
-            from pathlib import Path
             ws = ctx.workspace.get_workspace_path(target, ctx.session_id)
-            for fname in ("katana_output.txt", "arjun_output.txt", "urls.txt"):
+            for fname in ("web/urls.txt", "web/katana_output.txt", "web/arjun_output.txt", "katana_output.txt", "arjun_output.txt", "urls.txt"):
                 p = ws / fname
-                if p.exists():
+                if p.is_file():
                     for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
                         line = line.strip()
                         if line and ("?" in line or "=" in line):
@@ -172,11 +196,9 @@ if __name__ == "__main__":
 
     class FakeWS:
         def get_workspace_path(self, t, s):
-            from pathlib import Path
-            return Path("/tmp")
+            return Path(tempfile.gettempdir())
         def write_file(self, *a, **k):
-            from pathlib import Path
-            return Path("/tmp/x")
+            return Path(tempfile.gettempdir()) / "idor_candidates.json"
 
     class FakeCtx:
         target = "example.com"

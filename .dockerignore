@@ -1,0 +1,50 @@
+# External upstream reference codebases (local intake/audit only — never ship in images)
+/external/
+
+# VCS, CI & local skill intake archives
+.git/
+.gitignore
+.github/
+skills_library/
+.vscode/
+.idea/
+
+# Frontend build & dependency caches
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+*.tsbuildinfo
+
+# Runtime data, logs, artifacts & local secrets (never bake into images)
+data/
+.env
+*.env
+.env.*
+logs/
+artifacts/
+reports/
+snapshots/
+task_logs/
+storage/
+emergency_save.json
+
+# Python caches & virtualenvs
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+
+# Go & local binaries / databases / archives
+backend/bin/
+*.exe
+*.sqlite*
+*.db
+*.log
+*.zip
+*.tar.gz

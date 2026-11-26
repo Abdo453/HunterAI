@@ -5,21 +5,21 @@ Validates:
 1. CLI argument parsing for `pentest web`, `pentest ui`, `pentest opencode`, `pentest opencode-ui`
 2. Support for `--web` and `--opencode` flags in `pentest all` and `pentest run`
 3. Web application routes (`/opencode`, `/api/opencode/skills`, `/api/opencode/mcp-status`, `/api/opencode/execute`)
-4. OpenCode manifest (217 skills across 5 packs) and MCP config integrity
+4. Central project skill manifest and MCP config integrity
 """
 
 import json
 from pathlib import Path
 import pytest
-from starlette.testclient import TestClient
 
 from pentest import build_parser
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 
 @pytest.fixture
 def test_client():
-    return TestClient(app)
+    with ASGISyncClient() as client:
+        yield client
 
 
 def test_cli_argument_parsing():
@@ -63,20 +63,29 @@ def test_cli_argument_parsing():
 
 
 def test_opencode_web_routes(test_client):
-    """Verifies that OpenCode Studio page and API endpoints return valid data."""
-    # 1. GET /opencode HTML page
-    res_page = test_client.get("/opencode")
-    assert res_page.status_code == 200
-    assert "OpenCode Studio" in res_page.text
-    assert "skills-count-badge" in res_page.text
+    """Verifies that OpenCode Studio compatibility redirect and API endpoints return valid data."""
+    # 1. GET /opencode compatibility redirect to Next.js /studio
+    res_page = test_client.get("/opencode", follow_redirects=False)
+    assert res_page.status_code == 302
+    assert res_page.headers.get("location", "").endswith("/studio")
+    res_json = test_client.get("/opencode", params={"format": "json"})
+    assert res_json.status_code == 200
+    assert res_json.json()["redirect_to"].endswith("/studio")
+
+    studio_tsx = (Path(__file__).resolve().parents[1] / "frontend" / "app" / "studio" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "/api/opencode/skills" in studio_tsx
+    assert "/api/opencode/execute" in studio_tsx
 
     # 2. GET /api/opencode/skills
     res_skills = test_client.get("/api/opencode/skills")
     assert res_skills.status_code == 200
     data_skills = res_skills.json()
-    assert data_skills["count"] >= 217
+    assert data_skills["count"] == 1
     assert len(data_skills["skills"]) == data_skills["count"]
     assert "library_inventory" in data_skills
+    assert data_skills["skills"][0]["name"] == "hunterai-redteam"
 
     # 3. GET /api/opencode/mcp-status
     res_mcp = test_client.get("/api/opencode/mcp-status")
@@ -93,26 +102,36 @@ def test_opencode_execute_endpoint(test_client):
     res_bad = test_client.post("/api/opencode/execute", json={})
     assert res_bad.status_code == 400
 
-    # 2. CORS skill execution via ABHToolBridge
+    # 2. Markdown prompt skill returns truthful UNAVAILABLE (Phase 5: no synthetic "CORS Scan finished" stub)
     res_cors = test_client.post("/api/opencode/execute", json={
-        "skill_name": "abh-cors-audit",
+        "skill_name": "hunterai-redteam",
+        "task": "cors audit",
         "target": "https://example.com"
     })
     assert res_cors.status_code == 200
     data_cors = res_cors.json()
-    assert data_cors["status"] == "ok"
+    assert data_cors["status"] == "UNAVAILABLE"
+    assert data_cors["ok"] is False
+    assert data_cors["executed"] is False
     assert "job_id" in data_cors
-    assert "CORS" in data_cors["output"]
 
-    # 3. General skill execution
+    # 3. General prompt skill request also reports truthful UNAVAILABLE with target reference
     res_gen = test_client.post("/api/opencode/execute", json={
-        "skill_name": "acs-reconnaissance",
+        "skill_name": "hunterai-redteam",
         "target": "target.com"
     })
     assert res_gen.status_code == 200
     data_gen = res_gen.json()
-    assert data_gen["status"] == "ok"
+    assert data_gen["status"] == "UNAVAILABLE"
+    assert data_gen["ok"] is False
+    assert data_gen["executed"] is False
     assert "target.com" in data_gen["output"]
+
+    legacy = test_client.post("/api/opencode/execute", json={
+        "skill_name": "acs-reconnaissance",
+        "target": "target.com",
+    })
+    assert legacy.status_code == 404
 
 
 def test_manifest_and_mcp_config_integrity():
@@ -123,21 +142,11 @@ def test_manifest_and_mcp_config_integrity():
     manifest_file = repo_root / ".opencode" / "skills" / "MANIFEST.json"
     assert manifest_file.exists()
     mdata = json.loads(manifest_file.read_text(encoding="utf-8"))
-    raw_skills = mdata["skills"]
-    skills_list = (
-        [{"name": k, **v} for k, v in raw_skills.items()]
-        if isinstance(raw_skills, dict)
-        else raw_skills
-    )
-    total_count = mdata.get("count") or mdata.get("total_active_skills") or len(skills_list)
-    assert total_count >= 217
-    assert len(skills_list) >= 217
+    assert mdata["schema"] == "hunterai-active-skills/1"
+    assert mdata["count"] == 1
+    assert len(mdata["skills"]) == mdata["count"]
 
-    # Verify core packs exist (supporting v1 and v2 manifest schemas)
-    packs = {s.get("pack", "") for s in skills_list}
-    assert any(p in packs for p in ("agentic-bug-hunter", "abdo453-hunterai"))
-    assert any("trailofbits" in p for p in packs)
-    assert any(p in packs for p in ("anthropic-cyber", "anthropics-official", "owasp-asvs"))
+    assert mdata["primary"] == "hunterai-redteam"
 
     # Check opencode.json
     opencode_cfg = repo_root / "opencode.json"
@@ -145,3 +154,58 @@ def test_manifest_and_mcp_config_integrity():
     cdata = json.loads(opencode_cfg.read_text(encoding="utf-8"))
     assert "mcp" in cdata
     assert "hunter-arsenal" in cdata["mcp"]
+
+
+def test_artex_windows_native_go_launcher(monkeypatch, tmp_path):
+    """Verify _launch_go_backend prefers native artex-server.exe over WSL on win32."""
+    import pentest
+
+    backend_dir = tmp_path / "backend"
+    (backend_dir / "cmd" / "server").mkdir(parents=True)
+    port_checks = iter([False, False, True])
+
+    monkeypatch.setattr(pentest.sys, "platform", "win32")
+    monkeypatch.setattr(pentest, "_is_port_open", lambda host, port: next(port_checks, True))
+
+    calls = {"run": [], "popen": []}
+
+    def fake_run(cmd, cwd=None, check=False, **kwargs):
+        calls["run"].append((cmd, cwd))
+        (backend_dir / "bin" / "artex-server.exe").parent.mkdir(parents=True, exist_ok=True)
+        (backend_dir / "bin" / "artex-server.exe").write_bytes(b"MZ")
+        return None
+
+    class FakeProc:
+        def poll(self):
+            return None
+
+    def fake_popen(cmd, cwd=None, **kwargs):
+        calls["popen"].append((cmd, cwd))
+        return FakeProc()
+
+    import shutil
+    import subprocess
+
+    monkeypatch.setattr(shutil, "which", lambda name: "C:\\Go\\bin\\go.exe" if name == "go" else None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    proc = pentest._launch_go_backend(backend_dir)
+    assert proc is not None
+    assert calls["run"] and calls["run"][0][0][0].endswith("go.exe")
+    assert calls["popen"] and calls["popen"][0][0][0].endswith("artex-server.exe")
+    assert "wsl" not in calls["popen"][0][0][0].lower()
+
+
+def test_ensure_local_postgres_handles_missing_install(monkeypatch, tmp_path):
+    """Verify _ensure_local_postgres returns False cleanly when no local Postgres exists."""
+    import shutil
+    import pentest
+
+    monkeypatch.setattr(pentest.sys, "platform", "win32")
+    monkeypatch.setattr(pentest, "_is_port_open", lambda host, port: False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.delenv("PGDATA", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+
+    assert pentest._ensure_local_postgres() is False

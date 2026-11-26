@@ -133,41 +133,59 @@ class FinalEvidenceCourt:
                 "standard_web_behavior",
             )
 
-        # R6: غير مثبت → لا يُعرض في التقرير النهائي
-        if status in ("UNVERIFIED", "FALSE_POSITIVE"):
+        # R6: غير مثبت أو غير مؤكد → لا يُعرض في التقرير النهائي أبدًا
+        status_upper = status.strip().upper()
+        if status_upper in (
+            "UNVERIFIED",
+            "FALSE_POSITIVE",
+            "REJECTED",
+            "INCONCLUSIVE",
+            "UNAVAILABLE",
+            "ERROR",
+        ):
             return (
                 CourtDocketEntry(fid, title, endpoint, "DEMOTED", "unreported_unverified",
-                                 f"الحالة {status} — لا تُعرض في التقرير النهائي أبدًا."),
+                                 f"الحالة {status_upper} — لا تُعرض في التقرير النهائي أبدًا."),
                 "unreported_unverified",
             )
 
-        # R2: ثغرات مكمّلة مثل CONFIRMED/LIKELY يجب أن تحمل إثباتًا موادًّا
-        if status in ("CONFIRMED", "LIKELY"):
-            if not vetted:
-                return (
-                    CourtDocketEntry(fid, title, endpoint, "DEMOTED", "no_evidence",
-                                     "…لا مُقتنِ يُورَد — حتى CONFIRMED بلا إثبات مستقل."),
-                    "no_evidence",
-                )
-            # R3: إثبات مكتوية/غير متحقق منه
-            unverified_ev = [str(e.get("description", "")) if isinstance(e, dict) else str(e)
-                             for e in vetted
-                             if isinstance(e, dict) and not e.get("verified", True)]
-            if unverified_ev:
-                return (
-                    CourtDocketEntry(fid, title, endpoint, "DEMOTED", "unverified_evidence",
-                                     "أجزاء الإثبات لم تُتحقق verify=True."),
-                    "unverified_evidence",
-                )
-            # R4: CONFIRMED بلا إعادة إنتاج إلا إن كان مكتفيًا بالفروقات
-            has_repro = d.get("reproduction") is not None
-            has_fp_checks = bool(d.get("false_positive_checks"))
-            if not (has_repro or has_fp_checks):
-                return (
-                    CourtDocketEntry(fid, title, endpoint, "DEMOTED", "no_reproduction",
-                                     "CONFIRMED بلا reproduction/فروقات عن FP — لا يُصدَّق."),
-                    "no_reproduction",
-                )
+        # LIKELY / CANDIDATE (أو أي حالة غير CONFIRMED) لا تُقبل أبدًا كـ PASSED/CONFIRMED
+        if status_upper != "CONFIRMED":
+            return (
+                CourtDocketEntry(fid, title, endpoint, "DEMOTED", "unconfirmed_status",
+                                 f"الحالة {status_upper} ليست CONFIRMED — لا يمكن اعتمادها كمؤكدة في التقرير النهائي."),
+                "unconfirmed_status",
+            )
+
+        # R2: نتيجة CONFIRMED يجب أن تحمل إثباتًا ماديًا مستقلاً
+        if not vetted:
+            return (
+                CourtDocketEntry(fid, title, endpoint, "DEMOTED", "no_evidence",
+                                 "…لا مُقتنِ يُورَد — حتى CONFIRMED بلا إثبات مستقل."),
+                "no_evidence",
+            )
+        # R3: كل قطعة إثبات يجب أن تحمل verified=True صراحةً (المفقود يُعامل كـ False)
+        unverified_ev = [
+            (str(e.get("description", "")) if isinstance(e, dict) else str(e))
+            for e in vetted
+            if (isinstance(e, dict) and not bool(e.get("verified", False)))
+            or (not isinstance(e, dict) and not bool(getattr(e, "verified", False)))
+        ]
+        if unverified_ev:
+            return (
+                CourtDocketEntry(fid, title, endpoint, "DEMOTED", "unverified_evidence",
+                                 "أجزاء الإثبات لم تُتحقق بـ verified=True صراحةً."),
+                "unverified_evidence",
+            )
+        # R4: CONFIRMED بلا إعادة إنتاج إلا إن كان مكتفيًا بالفروقات
+        has_repro = d.get("reproduction") is not None
+        has_fp_checks = bool(d.get("false_positive_checks"))
+        if not (has_repro or has_fp_checks):
+            return (
+                CourtDocketEntry(fid, title, endpoint, "DEMOTED", "no_reproduction",
+                                 "CONFIRMED بلا reproduction/فروقات عن FP — لا يُصدَّق."),
+                "no_reproduction",
+            )
 
         # تأريخ الحكم النهائي: البرهان كامل
         return (

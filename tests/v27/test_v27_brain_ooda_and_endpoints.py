@@ -29,7 +29,8 @@ from core.brain.autonomous_brain import AutonomousBrain
 from core.burp_gateway.capture_store import CaptureStore, CapturedTransaction
 from core.burp_gateway.gateway import BurpGateway
 from core.burp_gateway.traffic_normalizer import CanonicalRequest, CanonicalResponse
-from ui.web.app import app, get_burp_gateway
+from hunter_backend.runtime import get_burp_gateway
+from hunter_backend.testing import ASGISyncClient
 
 
 @pytest.mark.asyncio
@@ -155,58 +156,60 @@ def test_burp_gateway_v27_endpoints(tmp_path):
 
 
 def test_web_ui_v27_endpoints():
-    """Verifies Web UI FastAPI REST endpoints proxy to BurpGateway V27 components."""
-    client = TestClient(app)
-    gw = get_burp_gateway()
+    """Verifies Django ASGI REST endpoints proxy to BurpGateway V27 components."""
+    with ASGISyncClient() as client:
+        gw = get_burp_gateway()
 
-    # 1. GET /api/v27/attack-surface
-    res_surface = client.get("/api/v27/attack-surface")
-    assert res_surface.status_code == 200
-    assert "nodes" in res_surface.json()
+        # 1. GET /api/v27/attack-surface
+        res_surface = client.get("/api/v27/attack-surface")
+        assert res_surface.status_code == 200
+        assert "nodes" in res_surface.json()
 
-    # 2. GET /api/v27/ledger/blocks
-    res_ledger = client.get("/api/v27/ledger/blocks")
-    assert res_ledger.status_code == 200
-    assert "is_valid" in res_ledger.json()
-    assert res_ledger.json()["is_valid"] is True
+        # 2. GET /api/v27/ledger/blocks
+        res_ledger = client.get("/api/v27/ledger/blocks")
+        assert res_ledger.status_code == 200
+        assert "is_valid" in res_ledger.json()
+        assert res_ledger.json()["is_valid"] is True
 
-    # 3. GET /api/v27/eig/queue
-    res_queue = client.get("/api/v27/eig/queue")
-    assert res_queue.status_code == 200
-    assert "queue_length" in res_queue.json()
+        # 3. GET /api/v27/eig/queue
+        res_queue = client.get("/api/v27/eig/queue")
+        assert res_queue.status_code == 200
+        assert "queue_length" in res_queue.json()
 
-    # 4. POST /api/v27/eig/enqueue
-    res_enqueue = client.post("/api/v27/eig/enqueue", json={
-        "hypothesis_id": "hypo_ui_eig_01",
-        "source_request_id": "tx_ui_01",
-        "target_endpoint": "http://target.local/ui/test",
-        "category": "SQLI",
-        "risk_budget": 0.3,
-    })
-    assert res_enqueue.status_code == 200
-    assert res_enqueue.json()["status"] == "ENQUEUED"
+        # 4. POST /api/v27/eig/enqueue (fail-closed scope requires explicit scope)
+        res_enqueue = client.post("/api/v27/eig/enqueue", json={
+            "hypothesis_id": "hypo_ui_eig_01",
+            "source_request_id": "tx_ui_01",
+            "target_endpoint": "http://target.local/ui/test",
+            "scope": ["target.local"],
+            "category": "SQLI",
+            "risk_budget": 0.3,
+        })
+        assert res_enqueue.status_code == 200
+        assert res_enqueue.json()["status"] == "ENQUEUED"
 
-    # 5. POST /api/v27/triad/execute via UI
-    def mock_ui_triad_transport(req: CanonicalRequest) -> CanonicalResponse:
-        body = req.body or ""
-        if "53+19" in body or "41+31" in body:
-            return CanonicalResponse(status_code=200, body="PING 127.0.0.1\n72\nOK")
-        elif "echo 53" in body:
-            return CanonicalResponse(status_code=200, body="PING 127.0.0.1\n53\nOK")
-        return CanonicalResponse(status_code=200, body="PING baseline")
+        # 5. POST /api/v27/triad/execute via Django ASGI
+        def mock_ui_triad_transport(req: CanonicalRequest) -> CanonicalResponse:
+            body = req.body or ""
+            if "53+19" in body or "41+31" in body:
+                return CanonicalResponse(status_code=200, body="PING 127.0.0.1\n72\nOK")
+            elif "echo 53" in body:
+                return CanonicalResponse(status_code=200, body="PING 127.0.0.1\n53\nOK")
+            return CanonicalResponse(status_code=200, body="PING baseline")
 
-    gw.bcsl.controller._http_transport_fn = mock_ui_triad_transport
+        gw.bcsl.controller._http_transport_fn = mock_ui_triad_transport
 
-    triad_payload = {
-        "hypothesis_id": "hypo_ui_triad_01",
-        "source_request_id": "tx_ui_triad_001",
-        "target_endpoint": "http://target.local/api/ui_ping",
-        "control_mutation": {"body": "host=127.0.0.1; echo 53;"},
-        "experiment_1_mutation": {"body": "host=127.0.0.1; echo $((53+19));"},
-        "experiment_2_mutation": {"body": "host=127.0.0.1; echo $((41+31));"},
-        "invariant_id": "CommandExecutionInvariant",
-    }
-    res_triad = client.post("/api/v27/triad/execute", json=triad_payload)
-    assert res_triad.status_code == 200
-    assert res_triad.json()["execution_status"] == "EXECUTED"
-    assert res_triad.json()["triad_verification_result"]["epistemic_verdict"] == "CONFIRMED"
+        triad_payload = {
+            "hypothesis_id": "hypo_ui_triad_01",
+            "source_request_id": "tx_ui_triad_001",
+            "target_endpoint": "http://target.local/api/ui_ping",
+            "scope": ["target.local"],
+            "control_mutation": {"body": "host=127.0.0.1; echo 53;"},
+            "experiment_1_mutation": {"body": "host=127.0.0.1; echo $((53+19));"},
+            "experiment_2_mutation": {"body": "host=127.0.0.1; echo $((41+31));"},
+            "invariant_id": "CommandExecutionInvariant",
+        }
+        res_triad = client.post("/api/v27/triad/execute", json=triad_payload)
+        assert res_triad.status_code == 200
+        assert res_triad.json()["execution_status"] == "EXECUTED"
+        assert res_triad.json()["triad_verification_result"]["epistemic_verdict"] == "CONFIRMED"

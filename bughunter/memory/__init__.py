@@ -5,7 +5,7 @@ Runtime data stored at ~/.claude/projects/{project}/hunt-memory/
 This package contains the code (read/write/validate), not the data.
 """
 
-from memory.schemas import (
+from bughunter.memory.schemas import (
     validate_journal_entry,
     validate_target_profile,
     validate_pattern_entry,
@@ -13,10 +13,10 @@ from memory.schemas import (
     make_research_event,
     validate_research_block,
 )
-from memory.pattern_db import PatternDB
-from memory.audit_log import AuditLog, RateLimiter, CircuitBreaker
-from memory.hunt_journal import HuntJournal
-from memory.rotation import (
+from bughunter.memory.pattern_db import PatternDB
+from bughunter.memory.audit_log import AuditLog, RateLimiter, CircuitBreaker
+from bughunter.memory.hunt_journal import HuntJournal
+from bughunter.memory.rotation import (
     DEFAULT_KEEP,
     DEFAULT_MAX_BYTES,
     list_backups,

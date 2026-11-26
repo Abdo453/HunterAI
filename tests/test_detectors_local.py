@@ -351,7 +351,7 @@ def test_lab_gate_only_relaxes_its_explicit_allowlist():
         "title": "Lab finding",
         "target": target,
         "evidence": {
-            "poc": "curl ...",
+            "poc": "curl 'http://127.0.0.1:9/search?q=1%27'",
             "nonce": "n1",
             "differential_response": True,
             "deterministic_proof": True,
@@ -360,6 +360,11 @@ def test_lab_gate_only_relaxes_its_explicit_allowlist():
             "severity": "high",
             "request_hash": "a" * 64,
             "response_hash": "b" * 64,
+            "proof_payload": {
+                "artifact_type": "sqli",
+                "response_text": "PostgreSQL 15.4 on x86_64-pc-linux-gnu",
+                "baseline_text": "{\"items\": []}",
+            },
         },
     }
 

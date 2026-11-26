@@ -11,11 +11,11 @@ output:
 depends_on:
   - crawling
 next_skills:
-  - xss
-  - sqli
-  - ssrf
-  - ssti
-  - lfi
+  - xss_hunter
+  - sqli_hunter
+  - ssrf_hunter
+  - SSTISkill
+  - LFISkill
 fallback_skills: []
 tools_required:
   - arjun

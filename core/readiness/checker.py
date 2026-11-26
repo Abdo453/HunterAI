@@ -19,20 +19,43 @@ Unified Readiness Checker (Phase 1 — تثبيت الأساس)
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import logging
 import os
 import socket
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core.constants import BURP_GATEWAY_HOST, BURP_GATEWAY_PORT
-
 log = logging.getLogger("hunter_ai.readiness")
+
+
+def _load_kali_toolchain_probe():
+    """Load (probe, ROOT) from repo scripts/verify_kali_toolchain.py even if site-packages/scripts shadows it."""
+    try:
+        from scripts.verify_kali_toolchain import ROOT, probe
+
+        return probe, ROOT
+    except ImportError:
+        repo_root = Path(__file__).resolve().parents[2]
+        script_path = repo_root / "scripts" / "verify_kali_toolchain.py"
+        if not script_path.is_file():
+            raise
+        mod_name = "_hunter_repo_verify_kali_toolchain"
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            spec = importlib.util.spec_from_file_location(mod_name, script_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Could not create module spec for {script_path}")
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[mod_name] = mod
+            spec.loader.exec_module(mod)
+        return mod.probe, getattr(mod, "ROOT", repo_root)
 
 
 class ComponentStatus(str, Enum):
@@ -131,8 +154,8 @@ class ReadinessChecker:
         tls_timeout: float = 0.8,
         burp_proxy: str = "127.0.0.1",
         burp_proxy_port: int = 8080,
-        gateway_host: str = BURP_GATEWAY_HOST,
-        gateway_port: int = BURP_GATEWAY_PORT,
+        gateway_host: str = "127.0.0.1",
+        gateway_port: int = 8085,
         ollama_host: Optional[str] = None,
         config_path: Path = Path("config/tools.yaml"),
         manifest_path: Path = Path("environment/manifest.json"),
@@ -165,7 +188,7 @@ class ReadinessChecker:
         required: Optional[List[str]] = None,
     ) -> List[ComponentResult]:
         """probe محلي لكل أداة مُعدّة في config/tools.yaml (أو configured المُمررة)."""
-        from scripts.verify_kali_toolchain import probe, ROOT  # إعادة استخدام الدالة المُختبرة
+        probe, ROOT = _load_kali_toolchain_probe()  # إعادة استخدام الدالة المُختبرة
 
         if configured is None:
             import yaml

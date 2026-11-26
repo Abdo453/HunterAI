@@ -3,12 +3,11 @@ Tests for Static Security Reasoning Engine & Agent
 """
 import pytest
 from unittest.mock import patch, AsyncMock
-from starlette.testclient import TestClient
 
 from core.static_reasoning_engine import StaticSecurityReasoningEngine, StaticFinding, ReasoningMemoryItem
 from agents.static_reasoning_agent import StaticSecurityReasoningAgent
 from agents.base_agent import AgentTask
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 MOCK_REASONING_JSON = """[
   {
@@ -76,23 +75,22 @@ async def test_static_reasoning_agent_run():
 
 
 def test_api_static_audit_and_memory_endpoints():
-    client = TestClient(app)
-    
-    with patch("core.ai_reasoning_core.AIReasoningCore.ask_ai", new=AsyncMock(return_value=MOCK_REASONING_JSON)):
-        # 1. Audit Endpoint
-        resp = client.post("/api/static/audit", json={
-            "source_code": "class Sample: pass",
-            "target_name": "SampleTarget",
-            "context": "unit test"
-        })
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["total_findings"] == 2
-        assert len(data["findings"]) == 2
-        
-        # 2. Memory Endpoint
-        mem_resp = client.get("/api/static/memory")
-        assert mem_resp.status_code == 200
-        mem_data = mem_resp.json()
-        assert "reasoning_memory" in mem_data
-        assert len(mem_data["reasoning_memory"]) >= 2
+    with ASGISyncClient() as client:
+        with patch("core.ai_reasoning_core.AIReasoningCore.ask_ai", new=AsyncMock(return_value=MOCK_REASONING_JSON)):
+            # 1. Audit Endpoint
+            resp = client.post("/api/static/audit", json={
+                "source_code": "class Sample: pass",
+                "target_name": "SampleTarget",
+                "context": "unit test",
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["total_findings"] == 2
+            assert len(data["findings"]) == 2
+
+            # 2. Memory Endpoint
+            mem_resp = client.get("/api/static/memory")
+            assert mem_resp.status_code == 200
+            mem_data = mem_resp.json()
+            assert "reasoning_memory" in mem_data
+            assert len(mem_data["reasoning_memory"]) >= 2

@@ -1,8 +1,7 @@
 {
   "working": {
     "example.com:current_task": "memory\\structured\\working\\example.com\\current_task.json",
-    "example.com:task": "memory\\structured\\working\\example.com\\task.json",
-    "test.com:test_key": "memory\\structured\\working\\test.com\\test_key.json"
+    "example.com:task": "memory\\structured\\working\\example.com\\task.json"
   },
   "semantic": {
     "example.com:kb:learning_state:last_run": "memory\\structured\\semantic\\example.com\\kb_learning_state_last_run.json",
