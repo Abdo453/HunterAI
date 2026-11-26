@@ -1,63 +1,213 @@
-version: '3.9'
-
 # ============================================================
-# HunterAI / PentestAI-Unified — Docker Compose
-# ويب + (اختياريًا) صورة عامل بأدوات Kali.
-# المتطلبات:
-#   export MUTEKI-style secrets في .env قبل التشغيل
+# HunterAI / ARTEX-Pro Unified Platform — Docker Compose
+# Stack:
+#   - postgres : PostgreSQL 16 (:5432, loopback-bound, env-driven credentials)
+#   - artex    : Go ARTEX-Pro Concurrency Core (:7071)
+#   - web      : Django 5.2 + DRF Pure ASGI Backend (:8000)
+#   - frontend : Next.js 15 Obsidian Sentinel UI (:3000)
+#   - worker / worker-kali : Optional isolated scanner workers (profiles)
+#
+# Usage:
+#   export POSTGRES_PASSWORD="<strong-random-password>"
 #   docker compose up --build
+#   docker compose --profile worker up --build
+#   docker compose --profile worker-kali up --build
 # ============================================================
 
 services:
+  postgres:
+    image: postgres:16.16-alpine3.24@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+    container_name: hunterai-postgres
+    user: "70:70"
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-artex}
+      POSTGRES_DB: ${POSTGRES_DB:-artex_pro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /run/postgresql:size=16m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-artex} -d ${POSTGRES_DB:-artex_pro}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - hunterai-internal
+
+  artex:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: artex
+    container_name: hunterai-artex
+    ports:
+      - "127.0.0.1:${ARTEX_PORT:-7071}:7071"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ARTEX_PORT: "7071"
+      ARTEX_BIND_ADDR: "0.0.0.0:7071"
+      ARTEX_DB_HOST: postgres
+      ARTEX_DB_PORT: "5432"
+      ARTEX_DB_USER: ${POSTGRES_USER:-artex}
+      ARTEX_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      ARTEX_DB_NAME: ${POSTGRES_DB:-artex_pro}
+      # Internal bridge default; override to require/verify-full for external/production DBs
+      ARTEX_DB_SSLMODE: ${ARTEX_DB_SSLMODE:-disable}
+      ARTEX_API_TOKEN: ${ARTEX_API_TOKEN:-}
+      HUNTER_API_TOKEN: ${HUNTER_API_TOKEN:-}
+      ARTEX_ALLOWED_ORIGINS: ${ARTEX_ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:8000,http://localhost:8000}
+      ARTEX_ALLOW_LOCAL_SCAN: ${ARTEX_ALLOW_LOCAL_SCAN:-0}
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7071/api/v1/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - hunterai-internal
+      - hunterai-egress
+
   web:
     build:
       context: .
       dockerfile: Dockerfile
+      target: web
     container_name: hunterai-web
     ports:
-      - "7070:7070"
+      - "127.0.0.1:${WEB_PORT:-8000}:8000"
+    depends_on:
+      artex:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - ./data:/app/data
       - ./artifacts:/app/artifacts
       - ./reports:/app/reports
-      - ./.env:/app/.env:ro
     environment:
-      - WEB_HOST=0.0.0.0
-      - WEB_PORT=7070
-      - HUNTER_UNRESTRICTED=0
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      WEB_HOST: "0.0.0.0"
+      WEB_PORT: "8000"
+      HUNTERAI_DEBUG: ${HUNTERAI_DEBUG:-0}
+      HUNTERAI_ALLOWED_HOSTS: ${HUNTERAI_ALLOWED_HOSTS:-web,hunterai-web}
+      HUNTERAI_TRUSTED_ORIGINS: ${HUNTERAI_TRUSTED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000}
+      HUNTERAI_ARTEX_URL: "http://artex:7071"
+      HUNTER_UNRESTRICTED: "0"
+      HUNTER_LLM_POLICY: ${HUNTER_LLM_POLICY:-local_first}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      HUNTER_API_TOKEN: ${HUNTER_API_TOKEN:-}
+      HUNTERAI_DJANGO_SECRET: ${HUNTERAI_DJANGO_SECRET:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    tmpfs:
+      - /tmp:size=256m,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 2g
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:7070/api/status"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - hunterai-internal
+      - hunterai-egress
 
-  # صورة العامل بأدوات Kali — تُستخدم عند اختيار وضع container للوكلاء
-  # اختر إحدى الصورتين عبر build target:
-  #   الخفيفة: docker/worker.Dockerfile (أدوات أساسية)
-  #   Kali:     docker/worker-kali.Dockerfile (سلسلة Kali كاملة)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+      args:
+        HUNTER_API_BASE: "http://web:8000"
+    container_name: hunterai-frontend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      HUNTER_API_BASE: "http://web:8000"
+      NEXT_PUBLIC_HUNTER_STREAM_SAME_ORIGIN: "1"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,nosuid,nodev
+      - /app/.next/cache:size=128m,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok||r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - hunterai-internal
+
+  # Isolated lightweight scanner worker (egress-only; dedicated volume — no access to host ./data secrets or Postgres)
   worker:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
     container_name: hunterai-worker
-    profiles: ["worker"]          # لا تُشغَّل إلا مع: docker compose --profile worker up
+    profiles: ["worker"]
     volumes:
-      - ./data:/worker/data
+      - worker-data:/worker/data
     environment:
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    tmpfs:
+      - /tmp:size=256m,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
     restart: unless-stopped
-    # عزل شبكة صريح: لا يفتح منافذ؛ يتصل للخارج فقط
     networks:
       - hunterai-egress
 
-  # بديل: عامل بقاعدة Kali Rolling (سلسلة أدوات ثقيلة)
+  # Isolated Kali-based scanner worker (non-root, cap_drop ALL, dedicated volume, egress-only, no host-gateway)
   worker-kali:
     build:
       context: .
@@ -65,13 +215,26 @@ services:
     container_name: hunterai-worker-kali
     profiles: ["worker-kali"]
     volumes:
-      - ./data:/worker/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - worker-kali-data:/worker/data
+    tmpfs:
+      - /tmp:size=512m,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 2g
     restart: unless-stopped
     networks:
       - hunterai-egress
 
 networks:
+  hunterai-internal:
+    driver: bridge
   hunterai-egress:
     driver: bridge
+
+volumes:
+  postgres-data:
+  worker-data:
+  worker-kali-data:

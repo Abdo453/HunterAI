@@ -1,26 +1,42 @@
-# HunterAI — CI / Epistemic Regression Pipeline (Phase 8)
-# دمج الـ workflow القديم (السويت + جلسات التحقق الإبستمي) مع إضافات المرحلة 8:
-# السويت offline مع استثناءات صريحة + بوابة الجاهزية كدخان واقعي على كل runner.
-# tests/v27 و tests/integration تحتاج بيئة خارجية/شبكة — مستثناة صراحة.
-name: CI / Epistemic Regression Pipeline
+# HunterAI / ARTEX-Pro — Multi-Stack CI & Epistemic Regression Pipeline
+# Covers:
+#   1. Python (Ubuntu + Windows matrix): isolation, security, contracts, full offline suite,
+#      E2E integration/benchmarks, skill & tool manifest parity, causal arena, readiness smoke
+#   2. Go ARTEX-Pro Core: go vet + go test -race ./...
+#   3. Frontend Next.js (Node 22): lint, strict tsc, build, verify:ui, Playwright mock-tier/a11y/contrast/palette
+#   4. Infrastructure static validation: Compose & YAML schema validation
+
+name: CI / Multi-Stack Verification Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master, feat/platform-unification]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master, feat/platform-unification]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test Suite & Epistemic Verification
-    runs-on: ubuntu-latest
+  python-tests:
+    name: Python (${{ matrix.os }} / py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.11"]
+    env:
+      PYTHONUTF8: "1"
+      HUNTER_LLM_POLICY: local_only
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -28,27 +44,154 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install Dependencies
+      - name: Install Python dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest pytest-asyncio pytest-cov pytest-timeout
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          python -m pip install pytest pytest-asyncio pytest-cov pytest-timeout
 
-      - name: Run Core Test Suite
+      - name: External isolation & AGPL boundary tests
+        shell: bash
+        run: python -m pytest tests/test_external_isolation.py -q -p no:cacheprovider
+
+      - name: OpenCode skill & tool manifest parity checks
+        shell: bash
+        run: |
+          python tools/install_opencode_skills.py --check
+          python scripts/sync_tool_manifests.py --check
+
+      - name: Core security, contracts, court, sandbox, prompts, sensory & AI infra tests
+        shell: bash
+        run: |
+          python -m pytest \
+            tests/security/ \
+            tests/test_canonical_runtime_contracts.py \
+            tests/test_evidence_court_truthfulness.py \
+            tests/test_registry_parity.py \
+            tests/test_cross_platform_sandbox.py \
+            tests/test_prompt_templates.py \
+            tests/test_sensory_triad_and_vuln_intel.py \
+            tests/test_llm_context_vram.py \
+            -q -p no:cacheprovider
+
+      - name: Full offline Python test suite (incl. v27 and vuln_intel)
+        shell: bash
         run: |
           python -m pytest tests/ -q -m "not slow" \
-            --ignore=tests/benchmarks --ignore=tests/v27 --ignore=tests/integration \
+            --ignore=tests/integration \
             -p no:cacheprovider
 
-      - name: Run Physical Wire Epistemic Live Session
-        run: |
-          python run_unified_live_session.py
+      - name: Full platform hermetic E2E & benchmark suite
+        shell: bash
+        run: python -m pytest tests/integration/test_full_platform_e2e.py -q -p no:cacheprovider
 
-      - name: Run Epistemic Specification Suite
-        run: |
-          python run_causal_validation_arena.py
+      - name: Epistemic causal validation arena
+        shell: bash
+        run: python run_causal_validation_arena.py
 
-      - name: Readiness Gate Smoke
+      - name: Readiness gate smoke check
+        shell: bash
         run: |
           python -m core.readiness --timeout 5 --output ci_readiness_report.json
-          python -c "import json; r=json.load(open('ci_readiness_report.json')); print('strict_ready:', r['strict_ready'], '| counts:', r['counts'])"
+          python -c "import json; r = json.load(open('ci_readiness_report.json', encoding='utf-8')); print('strict_ready:', r['strict_ready'], '| counts:', r['counts'])"
+
+  go-artex:
+    name: Go ARTEX-Pro Core (race detector)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Run go vet & race-enabled test suite
+        working-directory: backend
+        run: |
+          go vet ./...
+          go test -race ./...
+
+  frontend-nextjs:
+    name: Frontend Next.js (Node 22 + Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install Playwright harness dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Strict TypeScript check
+        working-directory: frontend
+        run: npx tsc --noEmit --incremental false
+
+      - name: Build Next.js production bundle
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify UI parity, sanitizer, CSS opacity & tooling
+        working-directory: frontend
+        run: npm run verify:ui
+
+      - name: Install Playwright Chromium browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright mock-tier, a11y, contrast & palette checks
+        working-directory: frontend
+        env:
+          CI: "true"
+          NEXT_PUBLIC_HUNTER_STREAM_SAME_ORIGIN: "1"
+        run: |
+          ../node_modules/.bin/playwright test --config=e2e/playwright.config.ts \
+            e2e/specs/dashboard.spec.ts \
+            e2e/specs/a11y.spec.ts \
+            e2e/specs/contrast.spec.ts \
+            e2e/specs/palette.spec.ts \
+            e2e/specs/copilot.spec.ts \
+            e2e/specs/reconnect.spec.ts
+
+  infra-validation:
+    name: Docker, Compose & Ignore Static Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate YAML & Compose configurations
+        env:
+          POSTGRES_PASSWORD: ci-config-validation-placeholder
+        run: |
+          python -m pip install --quiet pyyaml
+          python -c "import yaml; [yaml.safe_load(open(p, encoding='utf-8')) for p in ('docker-compose.yml', 'docker-compose.waf-lab.yml', '.github/workflows/ci.yml')]; print('YAML syntax OK')"
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.waf-lab.yml config --quiet
+          git check-ignore -q external/pentesterflow-agent/package.json external/pentagi/go.mod frontend/tsconfig.tsbuildinfo

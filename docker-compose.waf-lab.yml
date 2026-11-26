@@ -1,26 +1,87 @@
-version: "3.8"
+# ============================================================
+# HunterAI Local WAF Testing Lab (ModSecurity + OWASP CRS v4)
+# Exposed on loopback 127.0.0.1:8088 to avoid colliding with
+# the default Burp Suite proxy port and Burp Gateway (:8085).
+#
+# Usage:
+#   docker compose -f docker-compose.waf-lab.yml up -d
+#   python pentest.py waf-bypass http://127.0.0.1:8088/search --payload "<svg onload=alert(1)>"
+# ============================================================
 
 services:
-  # ModSecurity + OWASP CRS كـ WAF أمامي على البورت 8080
+  # ModSecurity + OWASP CRS v4 reverse proxy on loopback :8088 (forwards to victim-app:8081)
   modsecurity:
-    image: owasp/modsecurity-crs:nginx
+    image: owasp/modsecurity-crs:4.25.2-nginx-alpine-lts@sha256:d7dee7afff5b7983bf6705f143b82494cf258ad2dacc37d580b1278d508b6089
+    container_name: hunterai-waf-modsecurity
     ports:
-      - "8080:80"
+      - "127.0.0.1:8088:8088"
+    depends_on:
+      victim-app:
+        condition: service_healthy
     volumes:
-      - ./modsecurity-lab:/etc/modsecurity.d/owasp-crs:ro
+      - ./modsecurity-lab:/etc/modsecurity.d/local:ro
     environment:
-      - PARANOIA_LEVEL=1
-      - ANOMALY_INBOUND=5
+      PORT: "8088"
+      BACKEND: "http://victim-app:8081"
+      PARANOIA: "1"
+      ANOMALY_INBOUND: "5"
+      ANOMALY_OUTBOUND: "4"
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /var/cache/nginx:size=64m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8088/ >/dev/null 2>&1 || wget -qO- http://127.0.0.1:8088/ >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - waf-lab-net
 
-  # تطبيق ضحية بسيط على البورت 8081 (يُستهدف عبر ModSecurity)
+  # Local test target application on loopback :8081 (fronted by ModSecurity on :8088)
   victim-app:
-    image: python:3.11-slim
+    image: python:3.11.18-slim-bookworm@sha256:ef56ae98435cc40d8a27020b0b32a9941515acd5840f0fba34858bb34dd362d1
+    container_name: hunterai-waf-victim
+    user: "10001:10001"
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     working_dir: /app
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      PIP_NO_CACHE_DIR: "1"
+      HOME: /tmp
+      PYTHONPATH: /tmp/pydeps
     command: >
-      sh -c "pip install flask -q && python app.py"
+      sh -c "pip install --no-cache-dir --target /tmp/pydeps flask==3.1.0 -q && python app.py"
     volumes:
-      - ./victim-app:/app
+      - ./victim-app:/app:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    networks:
+      - waf-lab-net
+
+networks:
+  waf-lab-net:
+    driver: bridge

@@ -1,23 +1,25 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# HunterAI — صورة العامل الكاملة (Kali-based Worker)
-# تستخدم قاعدة Kali Rolling لسلسلة أدوات اختبار الاختراق الحقيقية.
-# هذه "الصورة الثقيلة" لوضع container للوكلاء — بديل الصورة الخفيفة
-# في docker/worker.Dockerfile.
+# HunterAI — Hardened Kali-Based Security Worker Image
+# Pinned to an immutable multi-arch quarterly Kali snapshot digest
+# (`kalilinux/kali-last-release`, backed by `kali-last-snapshot`).
+# Runs as non-root user `hunter` (UID/GID 10001) on isolated egress network.
 #
-# البناء (يستغرق وقتًا ومساحة):
+# Build:
 #   docker build -f docker/worker-kali.Dockerfile -t hunterai-worker:kali .
 # ============================================================
 
-FROM kalilinux/kali-rolling AS base
+FROM kalilinux/kali-last-release@sha256:20c8d1ad4390a533be1649b7532a9cd77a3caeb719ca39d23d809295d67a2aec AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /worker
 
-# تحديث + سلسلة الأدوات الأساسية (نترك ما هو ثقيل اختياريًا)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
@@ -28,7 +30,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         jq \
         ca-certificates \
         nmap \
-        masscan \
         whatweb \
         nikto \
         sqlmap \
@@ -38,22 +39,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         wordlists \
     && rm -rf /var/lib/apt/lists/*
 
-# أدوات بايثون إضافية
-RUN pip3 install --no-cache-dir --break-system-packages \
+# Isolated virtual environment avoids mutating system Python packages
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir \
         requests \
         httpx \
         beautifulsoup4 \
         python-nmap \
         pwntools \
-        lxml || \
-    pip3 install --no-cache-dir \
-        requests httpx beautifulsoup4 python-nmap lxml
+        lxml
 
-# أدوات subfinder/httpx/katana (Go) — تُبنى أو تُنزَّل حسب الحاجة
-# (تُترك للتشغيل الخارجي لتفادي تصغير الصورة أكثر من اللازم)
+RUN groupadd --gid 10001 hunter \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /bin/sh hunter \
+    && mkdir -p /worker/data \
+    && chown -R hunter:hunter /worker
 
-# حساب غير متمكّن للأمان
-RUN useradd -m -u 1000 hunter && chown -R hunter:hunter /worker
+COPY --chown=hunter:hunter scripts/ /worker/scripts/
+COPY --chown=hunter:hunter tools/ /worker/tools/
+
+HEALTHCHECK --interval=60s --timeout=5s --start-period=10s --retries=3 \
+    CMD test -d /worker/data && command -v nmap >/dev/null && command -v ffuf >/dev/null
+
 USER hunter
 
 CMD ["sleep", "infinity"]
