@@ -85,7 +85,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 try:
-    from tools.prompt_safety import delimit_untrusted
+    from bughunter.tools.prompt_safety import delimit_untrusted
 except ModuleNotFoundError:
     from bughunter.tools.prompt_safety import delimit_untrusted
 
@@ -1715,7 +1715,7 @@ Do NOT fabricate hypothetical chains using invented endpoints or made-up evidenc
         import json as _json
 
         try:
-            from tools.validate_core import is_report_ready
+            from bughunter.tools.validate_core import is_report_ready
         except Exception:  # noqa: BLE001 - if the gate can't load, fail open loudly
             return True, ""
 

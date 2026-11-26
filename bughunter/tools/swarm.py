@@ -40,7 +40,7 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO not in sys.path:
     sys.path.append(_REPO)
 
-from tools import lead_board  # noqa: E402
+from bughunter.tools import lead_board  # noqa: E402
 from bughunter.tools.verifiers import normalize_class  # noqa: E402
 from bughunter.tools.validate_core import verify_finding_programmatic  # noqa: E402
 

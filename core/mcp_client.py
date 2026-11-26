@@ -109,12 +109,16 @@ def bound_content(
         return head
 
     if isinstance(content, dict):
-        return {
+        items = list(content.items())
+        out_dict = {
             str(k): bound_content(
                 v, cap, max_blocks=max_blocks, max_depth=max_depth, _depth=_depth + 1
             )
-            for k, v in content.items()
+            for k, v in items[:max_blocks]
         }
+        if len(items) > max_blocks:
+            out_dict["__truncated_keys__"] = len(items) - max_blocks
+        return out_dict
 
     return content
 
@@ -321,7 +325,28 @@ class MCPClient:
 
         if target:
             try:
-                from core.scope_engine import ScopePolicy, StrictScopeEngine
+                from core.scope_engine import ScopePolicy, StrictScopeEngine, validate_http_url_target
+
+                in_scope = list(self.scope_engine.in_scope) if self.scope_engine is not None else None
+                out_of_scope = list(self.scope_engine.out_of_scope) if self.scope_engine is not None else None
+                allow_loopback = bool(
+                    self.scope_engine is not None
+                    and getattr(self.scope_engine.policy, "allow_private_ips_override", False)
+                )
+                fail_closed = bool(
+                    self.scope_engine is not None
+                    and getattr(self.scope_engine.policy, "fail_closed", False)
+                )
+                ok_url, url_reason = validate_http_url_target(
+                    target,
+                    in_scope=in_scope,
+                    out_of_scope=out_of_scope,
+                    allow_loopback=allow_loopback,
+                    resolve_dns=False,
+                    fail_closed=fail_closed,
+                )
+                if not ok_url:
+                    return ("SCOPE_VIOLATION", f"SSRF/scheme invariant denied target '{target}': {url_reason}")
 
                 parsed = urlparse(target if "://" in target else f"http://{target}")
                 host = parsed.hostname or target

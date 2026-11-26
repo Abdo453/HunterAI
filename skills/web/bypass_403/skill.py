@@ -107,7 +107,7 @@ class Bypass403Skill(BaseSkill):
                 recommendation="تحقق من الصلاحية على مستوى التطبيق وليس केवल على طبقة الويب سيرفر/WAF.",
                 url=c["url"],
             )
-            result.next_skills.append("validation_gate")
+            result.next_skills.append("triage_gate")
 
         self.logger.info(f"[Bypass403] tested {len(urls)} URLs, {len(candidates)} candidates")
         return result
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     class FakeWS:
         def write_file(self, *a, **k):
             from pathlib import Path
-            return Path("/tmp/x")
+            return Path(__import__("tempfile").gettempdir()) / "x"
 
     class FakeCtx:
         target = "example.com"

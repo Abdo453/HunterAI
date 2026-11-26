@@ -19,8 +19,8 @@ from pathlib import Path
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from memory.schemas import CURRENT_SCHEMA_VERSION, SchemaError, validate_journal_entry  # noqa: E402
-from memory.schemas import validate_pattern_entry, validate_audit_entry  # noqa: E402
+from bughunter.memory.schemas import CURRENT_SCHEMA_VERSION, SchemaError, validate_journal_entry  # noqa: E402
+from bughunter.memory.schemas import validate_pattern_entry, validate_audit_entry  # noqa: E402
 
 MIGRATE_FILES = ("journal.jsonl", "patterns.jsonl", "audit.jsonl")
 

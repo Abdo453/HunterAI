@@ -1,194 +1,143 @@
 """
-HunterAI Web Scanners — Advanced Vulnerability Scanners
-========================================================
-CORS, CRLF, NoSQLi, JWT, OOB, SAST, DOM XSS, LLM RedTeam scanners.
+HunterAI Web Scanners — Real Delegation to ``ABHToolBridge`` / ``bughunter.tools.*``
+=====================================================================================
+Replaces all legacy simulated scanner stubs with real delegation to
+``hunter_ai.tools.abh_bridge.ABHToolBridge`` and ``bughunter.tools.*``.
+
+Truthfulness invariant: NEVER fabricates findings when an external tool,
+headless browser, or target is unavailable or denied by SSRF/scope policy.
 """
 from __future__ import annotations
 
-import hashlib
-import json
-import re
-import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from hunter_ai.tools.abh_bridge import ABHToolBridge
 
 
 class CORSScanner:
-    """CORS misconfig scanner — origin reflection, null, credentialed, suffix/prefix regex."""
+    """CORS misconfiguration scanner delegated to ``bughunter.tools.cors_scanner``."""
 
-    def scan(self, url: str) -> Dict[str, Any]:
-        results = {
+    def scan(self, url: str, *, allow_loopback: bool = False) -> Dict[str, Any]:
+        res = ABHToolBridge.scan_cors(url, allow_loopback=allow_loopback)
+        findings = res.get("findings") or []
+        return {
             "url": url,
-            "vulnerable": False,
-            "issues": [],
-            "evidence": {},
+            "status": res.get("status", "ERROR"),
+            "vulnerable": len(findings) > 0,
+            "issues": [f.get("title", "") for f in findings],
+            "findings": findings,
+            "error": res.get("error"),
         }
-        # Simulated CORS checks
-        checks = [
-            ("Arbitrary origin reflection", False),
-            ("Null origin allowed", False),
-            ("Credentialed with wildcard", False),
-            ("Suffix/prefix regex bypass", False),
-        ]
-        for name, vuln in checks:
-            if vuln:
-                results["vulnerable"] = True
-                results["issues"].append(name)
-        return results
 
 
 class CRLFScanner:
-    """CRLF / response-splitting + host-header injection."""
+    """CRLF / response-splitting + host-header scanner delegated to ``bughunter.tools.crlf_scanner``."""
 
-    def scan(self, url: str, host_header: bool = False) -> Dict[str, Any]:
-        results = {
+    def scan(self, url: str, host_header: bool = False, *, allow_loopback: bool = False) -> Dict[str, Any]:
+        res = ABHToolBridge.scan_crlf(url, host_header=host_header, allow_loopback=allow_loopback)
+        findings = res.get("findings") or []
+        return {
             "url": url,
-            "vulnerable": False,
-            "issues": [],
-            "evidence": {},
+            "status": res.get("status", "ERROR"),
+            "vulnerable": len(findings) > 0,
+            "issues": [f.get("injection_type", "") for f in findings],
+            "findings": findings,
+            "error": res.get("error"),
         }
-        # Simulated CRLF checks
-        checks = [
-            ("Set-Cookie injection", False),
-            ("Response splitting", False),
-            ("Host-header injection", host_header),
-        ]
-        for name, vuln in checks:
-            if vuln:
-                results["vulnerable"] = True
-                results["issues"].append(name)
-        return results
 
 
 class NoSQLiScanner:
-    """NoSQL injection — operator auth-bypass, $where timing."""
+    """NoSQL injection scanner delegated to ``bughunter.tools.nosqli_scanner``."""
 
-    def scan(self, url: str, user_field: str = "username", pass_field: str = "password") -> Dict[str, Any]:
-        results = {
+    def scan(
+        self,
+        url: str,
+        user_field: str = "username",
+        pass_field: str = "password",
+        *,
+        allow_loopback: bool = False,
+    ) -> Dict[str, Any]:
+        res = ABHToolBridge.scan_nosqli(
+            url, user_field=user_field, pass_field=pass_field, allow_loopback=allow_loopback
+        )
+        findings = res.get("findings") or []
+        return {
             "url": url,
-            "vulnerable": False,
-            "issues": [],
-            "evidence": {},
+            "status": res.get("status", "ERROR"),
+            "vulnerable": len(findings) > 0,
+            "issues": [f.get("vector", "") for f in findings],
+            "findings": findings,
+            "error": res.get("error"),
         }
-        checks = [
-            ("Operator auth-bypass", False),
-            ("$where time-based blind", False),
-        ]
-        for name, vuln in checks:
-            if vuln:
-                results["vulnerable"] = True
-                results["issues"].append(name)
-        return results
 
 
 class JWTScanner:
-    """Offline JWT toolkit — alg:none, RS256→HS256 confusion, secret crack."""
+    """Offline JWT analyzer delegated to ``bughunter.tools.jwt_scanner``."""
 
     def scan(self, token: str, mode: str = "analyze") -> Dict[str, Any]:
-        results = {
+        res = ABHToolBridge.analyze_jwt(token, mode=mode)
+        issues = res.get("issues") or []
+        return {
             "token": token[:20] + "...",
             "mode": mode,
-            "vulnerable": False,
-            "issues": [],
+            "status": res.get("status", "ERROR"),
+            "header": res.get("header"),
+            "payload": res.get("payload"),
+            "vulnerable": any(
+                str(i.get("severity", "")).lower() in ("critical", "high", "medium")
+                for i in issues
+            ),
+            "issues": issues,
+            "error": res.get("error"),
         }
-        # Decode header without verification
-        try:
-            parts = token.split(".")
-            header = json.loads(self._base64url_decode(parts[0]))
-            alg = header.get("alg", "none")
-            if alg == "none":
-                results["vulnerable"] = True
-                results["issues"].append("alg:none — no signature verification")
-            if alg == "RS256" and mode in ("confuse", "analyze"):
-                results["issues"].append("RS256→HS256 confusion possible")
-        except Exception:
-            results["issues"].append("Invalid JWT format")
-        return results
-
-    @staticmethod
-    def _base64url_decode(s: str) -> str:
-        import base64
-
-        s += "=" * (4 - len(s) % 4)
-        return base64.urlsafe_b64decode(s).decode("utf-8", errors="replace")
 
 
 class OOBListener:
-    """Out-of-band listener (interactsh) for blind SSRF/XXE/SQLi/RCE/Log4Shell."""
+    """Out-of-band payload generator & correlator delegated to ``bughunter.tools.oob_listener``."""
 
     def __init__(self, oob_domain: str = "interact.sh"):
         self.oob_domain = oob_domain
-        self.payloads: List[str] = []
+        self.payloads: List[Any] = []
 
-    def generate_payloads(self) -> List[str]:
-        self.payloads = [
-            f"http://{hashlib.md5(b'xss').hexdigest()[:8]}.{self.oob_domain}",
-            f"http://{hashlib.md5(b'ssrf').hexdigest()[:8]}.{self.oob_domain}",
-            f"http://{hashlib.md5(b'sqli').hexdigest()[:8]}.{self.oob_domain}",
-        ]
-        return self.payloads
+    def generate_payloads(self, classes: Optional[List[str]] = None) -> List[str]:
+        res = ABHToolBridge.generate_oob_payloads(self.oob_domain, classes=classes)
+        raw = res.get("payloads") or []
+        self.payloads = list(raw)
+        formatted: List[str] = []
+        for item in raw:
+            if isinstance(item, dict):
+                formatted.append(str(item.get("payload") or item.get("url") or item))
+            else:
+                formatted.append(str(item))
+        return formatted
 
-    def correlate(self, payload: str) -> bool:
-        """Check if OOB callback received."""
-        return payload in self.payloads
+    def correlate(self, interactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        from bughunter.tools import oob_listener
+        if not isinstance(interactions, list):
+            return []
+        hits = oob_listener.correlate(interactions, self.payloads)
+        return [dict(h.__dict__) if hasattr(h, "__dict__") else {"hit": h} for h in hits]
 
 
 class SASTScanner:
-    """Semgrep security packs over fetched JS/source → ranked sinks."""
+    """Real Semgrep SAST scanner delegated to ``bughunter.tools.sast_scan`` (zero fake findings)."""
 
-    def scan(self, path: str) -> Dict[str, Any]:
-        results = {
-            "path": path,
-            "findings": [],
-            "total": 0,
-        }
-        p = Path(path)
-        if not p.exists():
-            return results
-        # Simulated SAST findings
-        results["findings"] = [
-            {"file": str(p), "rule": "hardcoded-secret", "severity": "high"},
-            {"file": str(p), "rule": "eval-usage", "severity": "medium"},
-        ]
-        results["total"] = len(results["findings"])
-        return results
+    def scan(self, path: str, configs: Optional[List[str]] = None) -> Dict[str, Any]:
+        return ABHToolBridge.scan_sast(path, configs=configs)
 
 
 class DOMXSSScanner:
-    """Confirms DOM XSS in headless Chromium — reports only when payload executes."""
+    """Real headless Chromium DOM XSS verifier delegated to ``bughunter.tools.dom_xss_harness``."""
 
-    def scan(self, url: str) -> Dict[str, Any]:
-        results = {
-            "url": url,
-            "vulnerable": False,
-            "evidence": "",
-        }
-        # Simulated DOM XSS confirmation
-        results["vulnerable"] = False
-        results["evidence"] = "Payload not executed in DOM context"
-        return results
+    def scan(self, url: str, *, allow_loopback: bool = False) -> Dict[str, Any]:
+        return ABHToolBridge.scan_domxss(url, allow_loopback=allow_loopback)
 
 
-class LLMRedTeamScanner:  # type: ignore
-    """LLM red-team corpus — prompt injection, jailbreak, exfil."""
+class LLMRedTeamScanner:
+    """Real LLM red-team probe runner delegated to ``bughunter.tools.llm_redteam``."""
 
-    def scan(self, endpoint: str) -> Dict[str, Any]:
-        results = {
-            "endpoint": endpoint,
-            "tests": [],
-            "vulnerable": False,
-        }
-        corpus = [
-            "prompt-injection",
-            "jailbreak",
-            "system-prompt-leak",
-            "exfil",
-            "indirect-injection",
-            "guardrail-bypass",
-        ]
-        for test in corpus:
-            results["tests"].append({"test": test, "blocked": True})
-        return results
+    def scan(self, endpoint: str, *, field: str = "prompt", allow_loopback: bool = False) -> Dict[str, Any]:
+        return ABHToolBridge.scan_llm_redteam(endpoint, field=field, allow_loopback=allow_loopback)
 
 
 __all__ = [

@@ -32,13 +32,21 @@ from core.mcp_client import (
     mcpServerFingerprint,
     truncate_mcp_string,
 )
-from core.scope_engine import HARD_BLOCKED_HOSTS, ScopePolicy, StrictScopeEngine
+from core.scope_engine import (
+    HARD_BLOCKED_HOSTS,
+    INVIOLABLE_IPV4_SUBNETS,
+    INVIOLABLE_IPV6_SUBNETS,
+    ScopePolicy,
+    StrictScopeEngine,
+    normalize_ip_literal,
+    validate_http_url_target,
+)
 from core.secret_sanitizer import SecretSanitizer
 from core.security_mode import unrestricted_mode
 
 logger = logging.getLogger("hunter_ai.arsenal.mcp_bridge")
 
-_CLOUD_METADATA_IPS = {"169.254.169.254", "169.254.170.2", "100.100.100.200"}
+_CLOUD_METADATA_IPS = {"169.254.169.254", "169.254.170.2", "100.100.100.200", "fd00:ec2::254"}
 
 
 class UniversalMCPBridge:
@@ -112,23 +120,83 @@ class UniversalMCPBridge:
         extra_args: Optional[List[str]],
         risk_level: str = "medium",
     ) -> Optional[Dict[str, Any]]:
-        """Evaluate PolicyGate + StrictScopeEngine before invoking any tool (fail-closed)."""
+        """Evaluate non-overridable SSRF/scheme invariants (EVEN under unrestricted_mode),
+        then PolicyGate + StrictScopeEngine before invoking any tool (fail-closed)."""
+        target_clean = (target or "").strip()
+
+        # 0. Non-overridable scheme, cloud-metadata, and inviolable IP invariants
+        #    run unconditionally — NEVER bypassed by unrestricted_mode().
+        if target_clean:
+            if any(ord(ch) < 32 or ch.isspace() for ch in target_clean):
+                return {
+                    "tool": resolved_tool,
+                    "target": target_clean,
+                    "success": False,
+                    "error": f"SCOPE VIOLATION: target '{target_clean}' contains control or whitespace characters.",
+                    "error_category": "SCOPE_VIOLATION",
+                }
+            if target_clean.startswith("//"):
+                return {
+                    "tool": resolved_tool,
+                    "target": target_clean,
+                    "success": False,
+                    "error": f"SCOPE VIOLATION: scheme-relative target '{target_clean}' rejected.",
+                    "error_category": "SCOPE_VIOLATION",
+                }
+            if "://" in target_clean:
+                scheme = target_clean.split("://", 1)[0].lower()
+                if scheme not in ("http", "https"):
+                    return {
+                        "tool": resolved_tool,
+                        "target": target_clean,
+                        "success": False,
+                        "error": f"SCOPE VIOLATION: disallowed URL scheme '{scheme}://' in target '{target_clean}'.",
+                        "error_category": "SCOPE_VIOLATION",
+                    }
+            elif ":" in target_clean and not target_clean.startswith("["):
+                # Catch bare non-HTTP schemes like file:/etc/passwd or javascript:alert(1)
+                prefix, rest = target_clean.split(":", 1)
+                if prefix.isalpha() and not (rest.split("/", 1)[0].isdigit()):
+                    return {
+                        "tool": resolved_tool,
+                        "target": target_clean,
+                        "success": False,
+                        "error": f"SCOPE VIOLATION: disallowed URL scheme '{prefix}:' in target '{target_clean}'.",
+                        "error_category": "SCOPE_VIOLATION",
+                    }
+
+        parsed = urlparse(target_clean if "://" in target_clean else f"http://{target_clean}") if target_clean else None
+        host = (parsed.hostname or target_clean).lower().rstrip(".") if parsed and target_clean else ""
+
+        if host:
+            if host in _CLOUD_METADATA_IPS or host in HARD_BLOCKED_HOSTS:
+                return {
+                    "tool": resolved_tool,
+                    "target": target_clean,
+                    "success": False,
+                    "error": f"SCOPE VIOLATION: target '{target_clean}' is a hard-blocked host/metadata endpoint.",
+                    "error_category": "SCOPE_VIOLATION",
+                }
+            ip_obj = normalize_ip_literal(host)
+            if ip_obj is not None:
+                inviolable_hit = False
+                if ip_obj.version == 4:
+                    inviolable_hit = any(ip_obj in net for net in INVIOLABLE_IPV4_SUBNETS)
+                else:
+                    inviolable_hit = any(ip_obj in net for net in INVIOLABLE_IPV6_SUBNETS)
+                    if not inviolable_hit and getattr(ip_obj, "ipv4_mapped", None) is not None:
+                        inviolable_hit = any(ip_obj.ipv4_mapped in net for net in INVIOLABLE_IPV4_SUBNETS)
+                if inviolable_hit or str(ip_obj) in _CLOUD_METADATA_IPS:
+                    return {
+                        "tool": resolved_tool,
+                        "target": target_clean,
+                        "success": False,
+                        "error": f"SCOPE VIOLATION: target '{target_clean}' resolves to an inviolable/metadata IP ({ip_obj}).",
+                        "error_category": "SCOPE_VIOLATION",
+                    }
+
         if unrestricted_mode():
             return None
-
-        target_clean = (target or "").strip()
-        parsed = urlparse(target_clean if "://" in target_clean else f"http://{target_clean}") if target_clean else None
-        host = (parsed.hostname or target_clean).lower() if parsed and target_clean else ""
-
-        # 0. Inviolable cloud metadata protection is ALWAYS active
-        if host and (host in _CLOUD_METADATA_IPS or host in HARD_BLOCKED_HOSTS):
-            return {
-                "tool": resolved_tool,
-                "target": target_clean,
-                "success": False,
-                "error": f"SCOPE VIOLATION: target '{target_clean}' is a hard-blocked host/metadata endpoint.",
-                "error_category": "SCOPE_VIOLATION",
-            }
 
         # 1. PolicyGate (fail-closed when attached)
         if self.policy_gate is not None:

@@ -101,10 +101,10 @@ if __name__ == "__main__":
     class FakeWS:
         def get_workspace_path(self, t, s):
             from pathlib import Path
-            return Path(f"/tmp/ws/{t}/{s}")
+            return Path(__import__("tempfile").gettempdir()) / "ws" / str(t) / str(s)
         def write_file(self, *a, **k):
             from pathlib import Path
-            return Path("/tmp/x")
+            return Path(__import__("tempfile").gettempdir()) / "x"
 
     class FakeCtx:
         target = "example.com"

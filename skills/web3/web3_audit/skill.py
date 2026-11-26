@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 from skills.base_skill import BaseSkill, SkillContext, SkillResult
@@ -21,7 +23,7 @@ from skills.base_skill import BaseSkill, SkillContext, SkillResult
 class Web3AuditSkill(BaseSkill):
     name = "web3_audit"
     category = "web3"
-    description = "تدقيق أولي للعقود الذكية Solidty للأنماط الخطرة"
+    description = "تدقيق أولي للعقود الذكية Solidity للأنماط الخطرة"
     tools_required: List[str] = []
     fallback_tools: List[str] = []
     timeout_seconds = 40.0
@@ -31,6 +33,13 @@ class Web3AuditSkill(BaseSkill):
         result = SkillResult(skill_name=self.name, success=True, tool_used="web3_audit")
         target = ctx.target
         source = ctx.extra.get("source", "") or ""
+        if not source and target:
+            candidate_path = Path(target)
+            if candidate_path.is_file():
+                try:
+                    source = candidate_path.read_text(encoding="utf-8", errors="ignore")
+                except Exception:
+                    source = ""
 
         issues: List[Dict[str, Any]] = []
 
@@ -39,7 +48,7 @@ class Web3AuditSkill(BaseSkill):
 
         # Reentrancy: call/transfer before state update (heuristic: .call/.transfer then balance change)
         if re.search(r"\.call\s*\{|externalCall|\.transfer\(", source):
-            if re.search(r"\+\=|\-=|\balances\s*\[" , source):
+            if re.search(r"\+\=|\-=|\bbalances\s*\[", source):
                 add("Potential reentrancy", "استدعاء خارجي (.call/.transfer) مع تعديل حالة قد يسمح بإعادة الدخول", "High")
 
         # tx.origin for authorization
@@ -59,8 +68,8 @@ class Web3AuditSkill(BaseSkill):
             add("delegatecall usage", "استخدام delegatecall قد يسمح بتنفيذ كود خبيث إذا كان الهدف يُتحكم فيه من المستخدم", "Medium")
 
         # Overflow/underflow hints (solidity <0.8 without SafeMath)
-        if re.search(r"pragma solidity\s+\^?0\.\d\.", source) and "SafeMath" not in source:
-            add("Possible integer overflow", "إصدار Solidty قديم (<0.8) بدون SafeMath قد يسمح بالتجاوز الحسابي", "Low")
+        if re.search(r"pragma solidity\s+\^?0\.[0-7]\.", source) and "SafeMath" not in source:
+            add("Possible integer overflow", "إصدار Solidity قديم (<0.8) بدون SafeMath قد يسمح بالتجاوز الحسابي", "Low")
 
         risk = "High" if any(i["severity"] == "High" for i in issues) else ("Medium" if issues else "Low")
 
@@ -98,8 +107,7 @@ if __name__ == "__main__":
 
     class FakeWS:
         def write_file(self, *a, **k):
-            from pathlib import Path
-            return Path("/tmp/x")
+            return Path(tempfile.gettempdir()) / "web3_audit.json"
 
     class FakeCtx:
         target = "0xcontract"

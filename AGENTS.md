@@ -18,11 +18,11 @@ python pentest.py artex target.com
 # (Or using alias: python pentest.py unified target.com or ./artex.sh target.com or artex.bat target.com)
 
 # ── ALTERNATIVE LAUNCHERS (Launch with specific UI if preferred) ──
-# Command 1: All Skills + Unified Web Control Center (:8000)
+# Command 1: All Skills + Unified Web Control Center (Next.js :3000 + Django ASGI :8000)
 python pentest.py web target.com
 # (Or using alias: python pentest.py ui target.com or python pentest.py all target.com --web)
 
-# Command 2: Central Red-Team Skill + OpenCode Studio Hub & MCP Arsenal (:8000/opencode)
+# Command 2: Central Red-Team Skill + OpenCode Studio Hub & MCP Arsenal (:3000/studio + :8000)
 python pentest.py opencode target.com
 # (Or using alias: python pentest.py opencode-ui target.com or python pentest.py all target.com --opencode)
 
@@ -42,8 +42,8 @@ python pentest.py report target.com "finding" --platform hackerone
 | Command | Usage |
 |---------|-------|
 | `/evolve [topic]` | Autonomous Multi-Model Self-Evolution & Permanent Knowledge Storing |
-| `/web [target]` | Dual Master 1: All skills + Unified Web Control Center (`http://127.0.0.1:8000`) |
-| `/opencode [target]` | Dual Master 2: Central `hunterai-redteam` skill + OpenCode Studio Hub (`http://127.0.0.1:8000/opencode`) |
+| `/web [target]` | Dual Master 1: All skills + Unified Web Control Center (`http://127.0.0.1:3000` + `:8000`) |
+| `/opencode [target]` | Dual Master 2: Central `hunterai-redteam` skill + OpenCode Studio Hub (`http://127.0.0.1:3000/studio`) |
 | `/all target.com` | Headless Master: All skills + AI Browser + Burp + Report |
 | `/burp-logs <file_or_live>` | Professional Burp Suite log & HTTP history inspector (XML/JSON/HAR/live) |
 | `/wordlist <query>` | Cognitive SecLists & Wordlist Resolver (AI/LLM, Passwords, Discovery, Fuzzing) |
@@ -136,6 +136,7 @@ Inside configured runtime scope, tool capabilities are evaluated under the red_t
 
 ## OpenCode Integration (Active)
 
-- Skills: one reviewed public project skill, `hunterai-redteam`, is canonical under `skills/` and mirrored into `.opencode/skills/` and `.agents/skills/`. Its references cover jailbreak/LLM, agents/MCP, web/API/browser, mobile/RE, cloud/network/identity, and tooling/evidence. Community packs under `skills_library/` are inactive intake material.
+- Skills: one reviewed public project skill, `hunterai-redteam`, is canonical under `skills/` and mirrored into `.opencode/skills/` and `.agents/skills/`. Its references cover jailbreak/LLM, agents/MCP, web/API/browser, mobile/RE, cloud/network/identity, and tooling/evidence (backed by Apache-2.0 reference corpora under `wordlists/pentesterflow/`). Community packs under `skills_library/` are inactive intake material.
+- Tool catalog: `config/tools.catalog.yaml` is canonical; validate manifests with `python scripts/sync_tool_manifests.py --check`.
 - MCP: `opencode.json` — tool integrations remain runtime capabilities and do not create extra prompt skills or reviewer gates.
 - Install/refresh: `.\install_agent.ps1`; validate with `python tools/install_opencode_skills.py --check`.

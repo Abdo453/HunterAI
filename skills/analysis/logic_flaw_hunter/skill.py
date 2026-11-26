@@ -17,7 +17,10 @@ Logic Flaw Hunter Skill — مهارة "صيد ثغرات منطق العمل"
 from __future__ import annotations
 
 import json
+import re
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 from skills.base_skill import BaseSkill, SkillContext, SkillResult
@@ -89,13 +92,11 @@ class LogicFlawHunterSkill(BaseSkill):
                 recommendation=f["suggested_test"],
                 url=f["url"],
             )
-            result.next_skills.append("validation_gate")
+            if "triage_gate" not in result.next_skills:
+                result.next_skills.append("triage_gate")
 
         self.logger.info(f"[LogicFlaw] {len(endpoints)} endpoints, {len(flaws)} potential flaws")
         return result
-
-
-import re  # noqa: E402  (used above)
 
 
 if __name__ == "__main__":
@@ -107,8 +108,7 @@ if __name__ == "__main__":
 
     class FakeWS:
         def write_file(self, *a, **k):
-            from pathlib import Path
-            return Path("/tmp/x")
+            return Path(tempfile.gettempdir()) / "logic_flaws.json"
 
     class FakeCtx:
         target = "example.com"

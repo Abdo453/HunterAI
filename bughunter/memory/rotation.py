@@ -8,7 +8,10 @@ N backups (file.1, file.2, ...) and dropping the oldest.
 Rotation is performed under fcntl.LOCK_EX to be safe with concurrent writers.
 """
 
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
 import os
 from pathlib import Path
 
@@ -82,7 +85,7 @@ def rotate_if_needed(
     # 0o600: these memory files may hold secret-bearing recon data.
     fd = os.open(str(path), os.O_RDONLY | os.O_CREAT, 0o600)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_EX)
         # Re-check size under lock — another process may have rotated already.
         if not needs_rotation(path, max_bytes):
             return False
@@ -90,7 +93,7 @@ def rotate_if_needed(
         return True
     finally:
         try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_UN)
         finally:
             os.close(fd)
 

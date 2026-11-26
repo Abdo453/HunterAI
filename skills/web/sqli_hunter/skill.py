@@ -12,18 +12,22 @@ import asyncio
 import hashlib
 import json
 import re
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
+from core.scope_engine import validate_http_url_target
 from skills.base_skill import BaseSkill, SkillContext, SkillResult
 
 
 class SQLiHunterSkill(BaseSkill):
     name = "sqli_hunter"
     category = "web"
-    description = "كشف SQLi آمن عبر المقارنة التفاضلية (읽ة فقط، بدون تعديل بيانات)"
+    description = "كشف SQLi آمن عبر المقارنة التفاضلية (قراءة فقط، بدون تعديل بيانات)"
     tools_required: List[str] = []
     fallback_tools: List[str] = []
     timeout_seconds = 90.0
@@ -35,18 +39,29 @@ class SQLiHunterSkill(BaseSkill):
     async def execute(self, ctx: SkillContext) -> SkillResult:
         result = SkillResult(skill_name=self.name, success=True, tool_used="sqli_hunter")
         target = ctx.target
-        urls: List[str] = ctx.extra.get("urls", []) or []
+        urls: List[str] = list(ctx.extra.get("urls", []) or [])
         candidates: List[Dict[str, Any]] = []
+        allow_loopback = bool(ctx.extra.get("allow_loopback", False))
+        in_scope = ctx.extra.get("in_scope")
 
-        async with httpx.AsyncClient(timeout=12, verify=False, follow_redirects=True, trust_env=False) as client:
+        async with httpx.AsyncClient(timeout=12, verify=False, follow_redirects=False, trust_env=False) as client:
             for url in urls[:40]:
+                ok_url, _ = validate_http_url_target(
+                    url,
+                    in_scope=in_scope,
+                    allow_loopback=allow_loopback,
+                    resolve_dns=False,
+                    fail_closed=False,
+                )
+                if not ok_url:
+                    continue
                 param = self._find_injective_param(url)
                 if not param:
                     continue
                 try:
                     normal = await self._fetch(client, url, param, "1")
-                    true_v = await self._fetch(client, url, param, f"1 {self.SAFE_TRUE}")
-                    false_v = await self._fetch(client, url, param, f"1 {self.SAFE_FALSE}")
+                    true_v = await self._fetch(client, url, param, self.SAFE_TRUE)
+                    false_v = await self._fetch(client, url, param, self.SAFE_FALSE)
                 except Exception as exc:
                     self.logger.warning(f"SQLi request failed {url}: {exc}")
                     continue
@@ -79,10 +94,11 @@ class SQLiHunterSkill(BaseSkill):
                 evidence=c["evidence"],
                 severity=c["severity"],
                 vuln_type="sqli",
-                recommendation="استخدم استعلامات معلمّات (parameterized queries) وتحقق من المدخلات من الخادم. aplic البوابة السباعية قبل الإبلاغ.",
+                recommendation="استخدم استعلامات معلمّات (parameterized queries) وتحقق من المدخلات من الخادم. طبّق البوابة السباعية قبل الإبلاغ.",
                 url=c["url"],
             )
-            result.next_skills.append("validation_gate")
+            if "triage_gate" not in result.next_skills:
+                result.next_skills.append("triage_gate")
 
         self.logger.info(f"[SQLi] tested {len(urls)} URLs, {len(candidates)} candidates")
         return result
@@ -92,9 +108,19 @@ class SQLiHunterSkill(BaseSkill):
         return m.group(1) if m else None
 
     async def _fetch(self, client: httpx.AsyncClient, url: str, param: str, value: str) -> Dict[str, Any]:
-        new_url = re.sub(rf"([?&]{re.escape(param)}=)[^&]+", rf"\g<1>{value}", url, flags=re.I)
-        if new_url == url:
-            new_url = url + (("&" if "?" in url else "?") + f"{param}={value}")
+        parsed = urlsplit(url)
+        pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        updated = False
+        new_pairs: List[tuple[str, str]] = []
+        for k, v in pairs:
+            if k.lower() == param.lower() and not updated:
+                new_pairs.append((k, value))
+                updated = True
+            else:
+                new_pairs.append((k, v))
+        if not updated:
+            new_pairs.append((param, value))
+        new_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(new_pairs), parsed.fragment))
         resp = await client.get(new_url)
         return {
             "url": new_url,
@@ -131,8 +157,7 @@ if __name__ == "__main__":
 
     class FakeWS:
         def write_file(self, *a, **k):
-            from pathlib import Path
-            return Path("/tmp/x")
+            return Path(tempfile.gettempdir()) / "sqli_candidates.json"
 
     class FakeCtx:
         target = "example.com"

@@ -18,7 +18,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Protocol, Tuple
 from urllib.parse import urlparse
 
-from core.scope_engine import ScopePolicy, StrictScopeEngine
+from core.scope_engine import ScopePolicy, StrictScopeEngine, validate_http_url_target
 from core.secret_sanitizer import SecretSanitizer
 from core.tools.sploitus import (
     FatalSearchError,
@@ -163,13 +163,31 @@ class WebSearchOrchestrator:
         return any(e is not None and e.is_available() for e in self.engines.values())
 
     def _check_engine_egress(self, engine_id: EngineID, engine: SearchEngine) -> Tuple[bool, str]:
-        """Fail closed when ``local_only`` is active or ``StrictScopeEngine`` denies the engine host."""
+        """Fail closed when ``local_only`` is active or ``validate_http_url_target`` /
+        ``StrictScopeEngine`` denies the engine endpoint or host."""
         if self.local_only:
             return False, "local_only mode forbids external web_search egress"
 
         endpoint = getattr(engine, "api_url", "") or getattr(engine, "base_url", "")
         if endpoint:
-            parsed = urlparse(str(endpoint))
+            endpoint_str = str(endpoint).strip()
+            in_scope = list(self.scope_engine.in_scope) if self.scope_engine is not None else None
+            out_of_scope = list(self.scope_engine.out_of_scope) if self.scope_engine is not None else None
+            fail_closed = bool(
+                self.scope_engine is not None
+                and getattr(self.scope_engine.policy, "fail_closed", False)
+            )
+            ok_url, url_reason = validate_http_url_target(
+                endpoint_str,
+                in_scope=in_scope,
+                out_of_scope=out_of_scope,
+                allow_loopback=False,
+                resolve_dns=False,
+                fail_closed=fail_closed,
+            )
+            if not ok_url:
+                return False, url_reason
+            parsed = urlparse(endpoint_str)
             host = parsed.hostname or ""
             port = parsed.port or (443 if parsed.scheme == "https" else 80)
             path = parsed.path or "/"
@@ -180,6 +198,22 @@ class WebSearchOrchestrator:
 
         if not host:
             return True, "internal/in-process engine"
+
+        # Always run non-overridable SSRF/scheme validation on effective target URL
+        effective_url = str(endpoint).strip() if endpoint else f"https://{host}{path}"
+        ok_eff, eff_reason = validate_http_url_target(
+            effective_url,
+            in_scope=list(self.scope_engine.in_scope) if self.scope_engine is not None else None,
+            out_of_scope=list(self.scope_engine.out_of_scope) if self.scope_engine is not None else None,
+            allow_loopback=False,
+            resolve_dns=False,
+            fail_closed=bool(
+                self.scope_engine is not None
+                and getattr(self.scope_engine.policy, "fail_closed", False)
+            ),
+        )
+        if not ok_eff:
+            return False, eff_reason
 
         # Always run inviolable check (blocks loopback/IMDS/reserved metadata)
         inviolable = self.scope_engine or StrictScopeEngine(ScopePolicy(allowed_domains=[host]))

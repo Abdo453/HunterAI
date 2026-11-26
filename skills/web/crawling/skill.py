@@ -19,24 +19,27 @@ class CrawlingSkill(BaseSkill):
     async def execute(self, ctx: SkillContext) -> SkillResult:
         result = SkillResult(skill_name=self.name, success=True, tool_used="katana")
 
-        target = ctx.target if ctx.target.startswith("http") else f"http://{ctx.target}"
+        target = ctx.target if ctx.target.startswith(("http://", "https://")) else f"http://{ctx.target}"
         all_urls: set = set()
+        tool_invoked = False
 
         # 1. katana
-        if ctx.tool_manager.is_available("katana"):
+        if ctx.tool_manager and ctx.tool_manager.is_available("katana"):
+            tool_invoked = True
             res = await ctx.tool_manager.execute(
-                f"katana -u {target} -silent -depth 3 -jc", timeout=180
+                ["katana", "-u", target, "-silent", "-depth", "3", "-jc"], timeout=180
             )
-            urls = [l.strip() for l in res.stdout.splitlines() if l.strip().startswith("http")]
+            urls = [l.strip() for l in (res.stdout or "").splitlines() if l.strip().startswith("http")]
             all_urls.update(urls)
             result.tool_used = "katana"
 
         # 2. gospider
-        if ctx.tool_manager.is_available("gospider"):
+        if ctx.tool_manager and ctx.tool_manager.is_available("gospider"):
+            tool_invoked = True
             res = await ctx.tool_manager.execute(
-                f"gospider -s {target} -q -d 2", timeout=120
+                ["gospider", "-s", target, "-q", "-d", "2"], timeout=120
             )
-            for line in res.stdout.splitlines():
+            for line in (res.stdout or "").splitlines():
                 parts = line.strip().split()
                 for p in parts:
                     if p.startswith("http"):
@@ -44,20 +47,44 @@ class CrawlingSkill(BaseSkill):
 
         # 3. gau (historical URLs)
         clean = ctx.target.replace("https://", "").replace("http://", "").split("/")[0]
-        if ctx.tool_manager.is_available("gau"):
+        if ctx.tool_manager and ctx.tool_manager.is_available("gau"):
+            tool_invoked = True
             res = await ctx.tool_manager.execute(
-                f"gau {clean} --subs", timeout=120
+                ["gau", clean, "--subs"], timeout=120
             )
-            urls = [l.strip() for l in res.stdout.splitlines() if l.strip().startswith("http")]
+            urls = [l.strip() for l in (res.stdout or "").splitlines() if l.strip().startswith("http")]
             all_urls.update(urls)
 
-        # 4. waybackurls
-        if ctx.tool_manager.is_available("waybackurls"):
-            res = await ctx.tool_manager.execute(
-                f"echo {clean} | waybackurls", timeout=90
-            )
-            urls = [l.strip() for l in res.stdout.splitlines() if l.strip().startswith("http")]
-            all_urls.update(urls)
+        # 4. waybackurls (cross-platform stdin pipe via create_subprocess_exec, no shell pipe)
+        if ctx.tool_manager and ctx.tool_manager.is_available("waybackurls"):
+            import asyncio
+            tool_invoked = True
+            wb_bin = ctx.tool_manager.resolve_binary("waybackurls")
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    wb_bin,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                out, _ = await asyncio.wait_for(
+                    proc.communicate((clean + "\n").encode("utf-8")),
+                    timeout=90,
+                )
+                urls = [
+                    l.strip()
+                    for l in out.decode("utf-8", errors="replace").splitlines()
+                    if l.strip().startswith("http")
+                ]
+                all_urls.update(urls)
+            except Exception as exc:
+                self.logger.warning(f"waybackurls failed: {exc}")
+
+        if not tool_invoked:
+            result.add_error("tool_missing", "No web crawling tool available (katana/gospider/gau/waybackurls)")
+            result.success = False
+            result.metadata = {"status": "UNAVAILABLE", "reason": "tool_missing"}
+            return result
 
         if not all_urls:
             result.errors.append("No URLs found")

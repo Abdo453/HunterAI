@@ -89,10 +89,10 @@ pip install -r requirements.txt || true
 echo -e "${BLUE}  -> Installing Playwright browser engines (Chromium & Firefox)...${NC}"
 playwright install --with-deps chromium firefox 2>/dev/null || true
 
-# 6. ضبط عنوان Windows Ollama Host
-echo -e "${YELLOW}[6/6] Configuring Windows Ollama Connection...${NC}"
-DEFAULT_IP="192.168.1.8"
-read -p "Enter your Windows Host IP address [$DEFAULT_IP]: " WIN_IP
+# 6. ضبط عنوان Ollama Host (الافتراضي محلي 127.0.0.1)
+echo -e "${YELLOW}[6/6] Configuring Ollama Connection...${NC}"
+DEFAULT_IP="${OLLAMA_HOST_IP:-127.0.0.1}"
+read -p "Enter your Ollama Host IP address [$DEFAULT_IP]: " WIN_IP
 WIN_IP=${WIN_IP:-$DEFAULT_IP}
 
 OLLAMA_URL="http://${WIN_IP}:11434"
@@ -105,12 +105,12 @@ else
     echo "OLLAMA_HOST=${OLLAMA_URL}" >> .env
 fi
 
-echo -e "${CYAN}Testing connection to Windows Ollama at ${OLLAMA_URL}...${NC}"
+echo -e "${CYAN}Testing connection to Ollama at ${OLLAMA_URL}...${NC}"
 if curl -s --connect-timeout 4 "${OLLAMA_URL}/api/tags" > /dev/null; then
-    echo -e "${GREEN}[✓] SUCCESS: Connected to Windows Ollama!${NC}"
+    echo -e "${GREEN}[✓] SUCCESS: Connected to Ollama!${NC}"
 else
-    echo -e "${RED}[!] WARNING: Could not connect to Windows Ollama at ${OLLAMA_URL}.${NC}"
-    echo -e "${YELLOW}Make sure Windows Firewall allows port 11434 and OLLAMA_HOST=0.0.0.0:11434 is set on Windows.${NC}"
+    echo -e "${RED}[!] WARNING: Could not connect to Ollama at ${OLLAMA_URL}.${NC}"
+    echo -e "${YELLOW}Make sure Ollama is running (default: http://127.0.0.1:11434).${NC}"
 fi
 
 # ── post-install tool verification (fail fast if required tools missing) ────
@@ -126,9 +126,10 @@ fi
 
 echo -e "${GREEN}"
 echo "======================================================================"
-echo " 🎉 PentestAI Unified Setup Complete!"
-echo " Tool readiness check: python3 scripts/verify_kali_toolchain.py --strict"
-echo " To start the Web UI on Kali:  python3 main.py"
-echo " To test the 3 models on Kali: python3 test_3_models.py ${OLLAMA_URL}"
+echo " 🎉 HunterAI Setup Complete!"
+echo " Tool readiness check:  python3 scripts/verify_kali_toolchain.py --strict"
+echo " Sync tool manifests:   python3 scripts/sync_tool_manifests.py --check"
+echo " Launch Unified UI:     python3 pentest.py artex"
+echo " Check AI providers:    python3 pentest.py status"
 echo "======================================================================"
 echo -e "${NC}"

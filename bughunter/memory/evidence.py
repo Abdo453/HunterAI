@@ -23,7 +23,10 @@ See docs/phase3-evidence-provenance.md.
 
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
 import hashlib
 import json
 import os
@@ -32,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from memory.redaction import redact_obj
+from bughunter.memory.redaction import redact_obj
 
 EVIDENCE_SCHEMA_VERSION = 1
 GENESIS_HASH = "0" * 64
@@ -202,7 +205,7 @@ class EvidenceStore:
         # and the head anchor is written before the lock is released.
         fd = os.open(str(self.path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_EX)
             try:
                 prev, count = self._tail_state()
                 record["prev_hash"] = prev
@@ -216,7 +219,7 @@ class EvidenceStore:
                     written += n
                 self._write_head(record["digest"], count + 1)
             finally:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                if fcntl is not None: fcntl.flock(fd, fcntl.LOCK_UN)
         finally:
             os.close(fd)
         return record

@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e
 
-echo "[*] Initializing Kali Linux Environment for PentestAI-Unified..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="${HUNTERAI_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
+echo "[*] Initializing Kali Linux Environment for HunterAI ($REPO_DIR)..."
 
 # 1. Force IPv4 for apt to prevent IPv6 timeout on regional mirrors
 echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
@@ -66,8 +69,8 @@ mkdir -p /home/kali/wordlist/SecLists/Ai/LLM_Testing
 mkdir -p /home/kali/wordlist/SecLists/Passwords/Common-Credentials
 mkdir -p /usr/share/wordlists
 
-if [ -d "/mnt/e/Agant/PentestAI-Unified/data/wordlists" ]; then
-    cp -r /mnt/e/Agant/PentestAI-Unified/data/wordlists/* /home/kali/wordlist/SecLists/ 2>/dev/null || true
+if [ -d "$REPO_DIR/data/wordlists" ]; then
+    cp -r "$REPO_DIR/data/wordlists/"* /home/kali/wordlist/SecLists/ 2>/dev/null || true
 fi
 
 if [ ! -e "/usr/share/seclists" ]; then
@@ -83,8 +86,8 @@ if [ ! -x "/home/kali/pentest-venv/bin/python" ]; then
     python3 -m venv /home/kali/pentest-venv
 fi
 
-if [ -f "/mnt/e/Agant/PentestAI-Unified/requirements.txt" ]; then
-    /home/kali/pentest-venv/bin/pip install -q -r /mnt/e/Agant/PentestAI-Unified/requirements.txt
+if [ -f "$REPO_DIR/requirements.txt" ]; then
+    /home/kali/pentest-venv/bin/pip install -q -r "$REPO_DIR/requirements.txt"
 fi
 
 # Symlink venv CLI tools to /usr/local/bin if missing on system PATH
@@ -114,28 +117,28 @@ chown -R kali:kali /home/kali/Desktop /home/kali/wordlist /home/kali/pentest-ven
 
 # 7. Create global CLI launcher /usr/local/bin/pentest
 echo "[*] Creating global /usr/local/bin/pentest launcher..."
-cat << 'EOF' > /usr/local/bin/pentest
+cat << EOF > /usr/local/bin/pentest
 #!/bin/bash
-export PATH="$PATH:/usr/local/go/bin:/usr/local/bin:/home/kali/go/bin:/home/kali/pentest-venv/bin"
-REPO_DIR="/mnt/e/Agant/PentestAI-Unified"
+export PATH="\$PATH:/usr/local/go/bin:/usr/local/bin:/home/kali/go/bin:/home/kali/pentest-venv/bin"
+REPO_DIR="\${HUNTERAI_ROOT:-$REPO_DIR}"
 VENV_PY="/home/kali/pentest-venv/bin/python"
 
 if ! curl -s --connect-timeout 1 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-    WIN_IP="$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')"
-    if [ -n "$WIN_IP" ]; then
-        export OLLAMA_HOST="http://${WIN_IP}:11434"
-        export OLLAMA_BASE_URL="http://${WIN_IP}:11434"
+    WIN_IP="\$(ip route show default 2>/dev/null | awk '/default/ {print \$3; exit}')"
+    if [ -n "\$WIN_IP" ]; then
+        export OLLAMA_HOST="http://\${WIN_IP}:11434"
+        export OLLAMA_BASE_URL="http://\${WIN_IP}:11434"
     fi
 fi
 
-if [ -f "$REPO_DIR/pentest.py" ] && [ -x "$VENV_PY" ]; then
-    cd "$REPO_DIR" && exec "$VENV_PY" "$REPO_DIR/pentest.py" "$@"
+if [ -f "\$REPO_DIR/pentest.py" ] && [ -x "\$VENV_PY" ]; then
+    cd "\$REPO_DIR" && exec "\$VENV_PY" "\$REPO_DIR/pentest.py" "\$@"
 else
-    echo "Error: PentestAI repository or virtualenv not found."
+    echo "Error: HunterAI repository or virtualenv not found."
     exit 1
 fi
 EOF
 chmod +x /usr/local/bin/pentest
 
-echo "[+] PentestAI-Unified setup complete on Kali Linux!"
-echo "[+] You can now run: pentest web [target] or pentest opencode [target] or pentest all [target]"
+echo "[+] HunterAI setup complete on Kali Linux!"
+echo "[+] You can now run: pentest artex [target] or pentest web [target] or pentest opencode [target]"

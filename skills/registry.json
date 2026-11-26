@@ -32,7 +32,8 @@
             "session", "scrape", "graphql", "oauth", "ssrf", "xss", "sqli",
             "idor", "bola", "bfla", "csrf", "xxe", "ssti", "lfi", "rce",
             "smuggling", "websocket", "cors", "crlf", "nosql", "jwt",
-            "redirect", "403", "burp", "recon", "subdomain", "domain", "http"
+            "redirect", "403", "burp", "recon", "subdomain", "domain", "http",
+            "supabase", "takeover", "deserialize", "deserialization", "race", "toctou"
           ]
         },
         {

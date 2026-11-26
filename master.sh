@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
-python3 /mnt/e/Agant/PentestAI-Unified/scripts/master_agent.py "$@"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$REPO_DIR/scripts/master_agent.py" "$@"

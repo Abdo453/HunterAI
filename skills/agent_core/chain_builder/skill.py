@@ -142,7 +142,7 @@ class ChainBuilderSkill(BaseSkill):
                 recommendation="Validate each link with the 7-Question Gate before reporting.",
                 url=target,
             )
-            result.next_skills = ["validation_gate", "report_generator"]
+            result.next_skills = ["triage_gate", "report_generator"]
 
         self.logger.info(f"[ChainBuilder] {len(chains)} chains built for {target}")
         return result
@@ -158,7 +158,7 @@ if __name__ == "__main__":
     class FakeWS:
         def write_file(self, *a, **k):
             from pathlib import Path
-            return Path("/tmp/x")
+            return Path(__import__("tempfile").gettempdir()) / "x"
 
     class FakeCtx:
         target = "example.com"

@@ -57,10 +57,10 @@ class SshAuditSkill(BaseSkill):
         weak: List[Dict[str, str]] = []          # {section, algorithm, level, message}
         banner_notes: List[str] = []
 
-        if ctx.tool_manager.is_available("ssh-audit"):
+        if ctx.tool_manager and ctx.tool_manager.is_available("ssh-audit"):
             result.tool_used = "ssh-audit"
             res = await ctx.tool_manager.execute(
-                f"ssh-audit -j -p {port} {host}", timeout=60
+                ["ssh-audit", "-j", "-p", str(port), host], timeout=60
             )
             raw_output = (res.stdout or "") + (res.stderr or "")
             parsed = self._parse_ssh_audit(raw_output)
@@ -69,20 +69,30 @@ class SshAuditSkill(BaseSkill):
             else:
                 banner_notes.append("ssh-audit JSON could not be parsed; see raw output.")
 
-        elif ctx.tool_manager.is_available("nmap"):
+        elif ctx.tool_manager and ctx.tool_manager.is_available("nmap"):
             result.tool_used = "nmap"
             res = await ctx.tool_manager.execute(
-                f"nmap -Pn -p {port} --script ssh2-enum-algos,ssh-hostkey {host}", timeout=60
+                ["nmap", "-Pn", "-p", str(port), "--script", "ssh2-enum-algos,ssh-hostkey", host],
+                timeout=60,
             )
             raw_output = (res.stdout or "") + (res.stderr or "")
             weak = self._parse_nmap_algos(raw_output)
 
-        elif ctx.tool_manager.is_available("nc"):
+        elif ctx.tool_manager and ctx.tool_manager.is_available("nc"):
+            import asyncio
             result.tool_used = "nc"
-            res = await ctx.tool_manager.execute(
-                f"nc -w 5 {host} {port} < /dev/null", timeout=15
-            )
-            banner = (res.stdout or "") + (res.stderr or "")
+            nc_bin = ctx.tool_manager.resolve_binary("nc")
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    nc_bin, "-w", "5", host, str(port),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                out, err = await asyncio.wait_for(proc.communicate(), timeout=15)
+                banner = out.decode("utf-8", errors="replace") + err.decode("utf-8", errors="replace")
+            except Exception as exc:
+                banner_notes.append(f"nc banner grab failed: {exc}")
             banner_notes.append(
                 "Only SSH banner captured (ssh-audit and nmap unavailable); "
                 "algorithm audit is incomplete — treat as negative space."

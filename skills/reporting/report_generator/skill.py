@@ -22,6 +22,7 @@ class ReportGeneratorSkill(BaseSkill):
         result = SkillResult(skill_name=self.name, success=True, tool_used="report_generator")
 
         all_files = ctx.workspace.list_files(ctx.target, session_id=ctx.session_id)
+        findings: List[Dict[str, Any]] = list(ctx.extra.get("findings") or [])
         report_lines = [
             f"# Autonomous Security Assessment Report: {ctx.target}",
             f"**Session ID:** `{ctx.session_id}`",
@@ -33,23 +34,45 @@ class ReportGeneratorSkill(BaseSkill):
             "## 1. Executive Summary",
             f"An automated, modular security reconnaissance and assessment mission was conducted against target **{ctx.target}**.",
             f"Total discovered artifacts and logs: **{len(all_files)}** files generated.",
+            f"Total findings supplied to report generator: **{len(findings)}**.",
             "",
-            "## 2. Artifacts and Workspace Breakdown",
+            "## 2. Findings Summary",
+        ]
+
+        if findings:
+            report_lines.extend([
+                "| Severity | Title | Type | Evidence |",
+                "|---|---|---|---|",
+            ])
+            for finding in findings[:100]:
+                if not isinstance(finding, dict):
+                    continue
+                sev = str(finding.get("severity", "Info")).replace("|", "/")
+                title = str(finding.get("title", "Untitled")).replace("|", "/")
+                vtype = str(finding.get("type", finding.get("vuln_type", "general"))).replace("|", "/")
+                ev = str(finding.get("evidence", ""))[:160].replace("\n", " ").replace("|", "/")
+                report_lines.append(f"| {sev} | {title} | {vtype} | {ev} |")
+        else:
+            report_lines.append("_No verified findings were attached to this report context._")
+
+        report_lines.extend([
+            "",
+            "## 3. Artifacts and Workspace Breakdown",
             "| Category | File | Size (Bytes) |",
             "|---|---|---|",
-        ]
+        ])
 
         for f in all_files:
             report_lines.append(f"| {f.get('category', '-')} | `{f.get('name', '-')}` | {f.get('size', 0)} |")
 
         report_lines.extend([
             "",
-            "## 3. Methodological Overview",
+            "## 4. Methodological Overview",
             "- **Phase 1: Reconnaissance & Asset Discovery:** Subdomain enumeration, DNS record interrogation, live host probing, port scanning, and technology fingerprinting.",
             "- **Phase 2: Web Surface Mapping:** Content crawling, directory & endpoint fuzzing, parameter discovery, and client-side JavaScript analysis.",
             "- **Phase 3: Defensive Recommendations & Remediation:** Hardening guidance based on discovered services and exposed endpoints.",
             "",
-            "## 4. Key Recommendations",
+            "## 5. Key Recommendations",
             "1. **Surface Minimization:** Decommission obsolete DNS records and restrict access to administrative/internal endpoints.",
             "2. **Configuration Hardening:** Ensure web servers do not leak software version banners, server headers, or internal paths.",
             "3. **Secrets Management:** Audit client-side JavaScript assets to verify no production credentials, tokens, or API keys are exposed.",
@@ -61,5 +84,6 @@ class ReportGeneratorSkill(BaseSkill):
         report_content = "\n".join(report_lines)
         p = ctx.workspace.write_file(ctx.target, "reports", "final_report.md", report_content, ctx.session_id)
         result.output_files["final_report.md"] = str(p)
+        result.metadata = {"files_count": len(all_files), "findings_count": len(findings)}
 
         return result

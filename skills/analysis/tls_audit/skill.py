@@ -71,26 +71,37 @@ class TlsAuditSkill(BaseSkill):
         if testssl_bin:
             result.tool_used = testssl_bin
             res = await ctx.tool_manager.execute(
-                f"{testssl_bin} --quiet --color 0 --protocols --ciphers --server-defaults "
-                f"--vulnerabilities {host}:{port}",
+                [testssl_bin, "--quiet", "--color", "0", "--protocols", "--ciphers",
+                 "--server-defaults", "--vulnerabilities", f"{host}:{port}"],
                 timeout=120,
             )
             raw_output = _clean((res.stdout or "") + (res.stderr or ""))
             issues, certificate = self._parse_testssl(raw_output)
 
-        elif ctx.tool_manager.is_available("sslscan"):
+        elif ctx.tool_manager and ctx.tool_manager.is_available("sslscan"):
             result.tool_used = "sslscan"
-            res = await ctx.tool_manager.execute(f"sslscan --no-colour {host}:{port}", timeout=90)
+            res = await ctx.tool_manager.execute(["sslscan", "--no-colour", f"{host}:{port}"], timeout=90)
             raw_output = _clean((res.stdout or "") + (res.stderr or ""))
             issues, certificate = self._parse_sslscan(raw_output)
 
-        elif ctx.tool_manager.is_available("openssl"):
+        elif ctx.tool_manager and ctx.tool_manager.is_available("openssl"):
+            import asyncio
             result.tool_used = "openssl"
-            res = await ctx.tool_manager.execute(
-                f"openssl s_client -connect {host}:{port} -servername {host} -brief < /dev/null",
-                timeout=30,
-            )
-            raw_output = _clean((res.stdout or "") + (res.stderr or ""))
+            openssl_bin = ctx.tool_manager.resolve_binary("openssl")
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    openssl_bin, "s_client", "-connect", f"{host}:{port}",
+                    "-servername", host, "-brief",
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                out, err = await asyncio.wait_for(proc.communicate(), timeout=30)
+                raw_output = _clean(
+                    out.decode("utf-8", errors="replace") + err.decode("utf-8", errors="replace")
+                )
+            except Exception as exc:
+                raw_output = f"openssl failed: {exc}"
             issues, certificate = self._parse_openssl(raw_output)
 
         else:

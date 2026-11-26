@@ -50,7 +50,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from tools.prompt_safety import delimit_untrusted
+from bughunter.tools.prompt_safety import delimit_untrusted
 
 # ── LangGraph optional import ──────────────────────────────────────────────────
 try:
@@ -96,7 +96,7 @@ def _h():
 try:
     _here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, _here)
-    from brain import Brain, BRAIN_SYSTEM, MODEL_PRIORITY, OLLAMA_HOST, _pick_model
+    from bughunter.brain import Brain, BRAIN_SYSTEM, MODEL_PRIORITY, OLLAMA_HOST, _pick_model
     _BRAIN_OK = True
 except Exception as _brain_err:
     _BRAIN_OK = False
@@ -107,10 +107,10 @@ except Exception as _brain_err:
 # ── Scope enforcement for autonomous tool dispatch ──────────────────────────────
 # _here is the repo root (inserted onto sys.path above), so tools.* / memory.*
 # import as regular packages here.
-from tools.scope_checker import ScopeChecker, ScopeError, _split_patterns  # noqa: E402
-from memory.audit_log import AutopilotGuard  # noqa: E402
-from memory.redaction import redact_obj as _redact_obj  # noqa: E402
-from memory.evidence import EvidenceStore, new_finding_id  # noqa: E402
+from bughunter.tools.scope_checker import ScopeChecker, ScopeError, _split_patterns  # noqa: E402
+from bughunter.memory.audit_log import AutopilotGuard  # noqa: E402
+from bughunter.memory.redaction import redact_obj as _redact_obj  # noqa: E402
+from bughunter.memory.evidence import EvidenceStore, new_finding_id  # noqa: E402
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 GREEN   = "\033[0;32m"
@@ -1725,7 +1725,7 @@ class ReActAgent:
 
     def run(self) -> dict:
         """Run the full ReAct loop until done or max_steps reached."""
-        from tools.banner import print_banner
+        from bughunter.tools.banner import print_banner
         print_banner(
             "ReAct Hunt Agent",
             target=self.domain,

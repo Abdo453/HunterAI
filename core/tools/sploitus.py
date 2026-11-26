@@ -19,7 +19,7 @@ from urllib.parse import quote_plus, urlparse
 
 import httpx
 
-from core.scope_engine import ScopePolicy, StrictScopeEngine
+from core.scope_engine import ScopePolicy, StrictScopeEngine, validate_http_url_target
 from core.secret_sanitizer import SecretSanitizer
 
 logger = logging.getLogger(__name__)
@@ -219,7 +219,25 @@ class SploitusSearcher:
         return self._enabled
 
     def _enforce_scope(self) -> None:
-        """Validate Sploitus egress through ``StrictScopeEngine`` (fail closed)."""
+        """Validate Sploitus egress through ``validate_http_url_target`` and
+        ``StrictScopeEngine`` (fail closed, non-overridable SSRF/scheme invariants)."""
+        in_scope = list(self.scope_engine.in_scope) if self.scope_engine is not None else None
+        out_of_scope = list(self.scope_engine.out_of_scope) if self.scope_engine is not None else None
+        fail_closed = bool(
+            self.scope_engine is not None
+            and getattr(self.scope_engine.policy, "fail_closed", False)
+        )
+        ok_url, url_reason = validate_http_url_target(
+            self.api_url,
+            in_scope=in_scope,
+            out_of_scope=out_of_scope,
+            allow_loopback=False,
+            resolve_dns=False,
+            fail_closed=fail_closed,
+        )
+        if not ok_url:
+            raise FatalSearchError(f"Sploitus egress denied for '{self.api_url}': {url_reason}")
+
         parsed = urlparse(self.api_url)
         host = parsed.hostname or ""
         if not host:
@@ -275,7 +293,11 @@ class SploitusSearcher:
             "DNT": "1",
         }
 
-        client_kwargs: Dict[str, Any] = {"timeout": self.timeout_s, "follow_redirects": False}
+        client_kwargs: Dict[str, Any] = {
+            "timeout": self.timeout_s,
+            "follow_redirects": False,
+            "trust_env": False,
+        }
         if self._transport is not None:
             client_kwargs["transport"] = self._transport
 

@@ -9,16 +9,18 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.secret_sanitizer import SecretSanitizer
 from skills.base_skill import BaseSkill, SkillContext, SkillResult
 
 
 SECRET_PATTERNS: List[Dict[str, str]] = [
     {"name": "AWS Access Key", "pattern": r"AKIA[0-9A-Z]{16}"},
-    {"name": "AWS Secret Key", "pattern": r"[0-9a-zA-Z/+]{40}"},
+    {"name": "AWS Secret Key", "pattern": r"(?i)(?:aws[_-]?secret[_-]?(?:access[_-]?)?key|secret[_-]?access[_-]?key)\s*[=:]\s*['\"]?[0-9a-zA-Z/+]{40}['\"]?"},
     {"name": "GitHub Token", "pattern": r"gh[pousr]_[A-Za-z0-9]{36,}"},
     {"name": "Slack Token", "pattern": r"xox[baprs]-[0-9a-zA-Z-]{10,}"},
     {"name": "Stripe Key", "pattern": r"(sk|rk)_(live|test)_[0-9a-zA-Z]{24,}"},
@@ -31,7 +33,7 @@ SECRET_PATTERNS: List[Dict[str, str]] = [
 class SecretsHunterSkill(BaseSkill):
     name = "secrets_hunter"
     category = "analysis"
-    description = "بحث عن أسرار ومفاتيح مسربة باستخدام أنماط أو trufflehog/gileaks"
+    description = "بحث عن أسرار ومفاتيح مسربة باستخدام أنماط أو trufflehog/gitleaks"
     tools_required: List[str] = []
     fallback_tools: List[str] = ["trufflehog", "gitleaks"]
     timeout_seconds = 90.0
@@ -44,18 +46,32 @@ class SecretsHunterSkill(BaseSkill):
         contents: Dict[str, str] = ctx.extra.get("contents", {}) or {}
         candidates: List[Dict[str, Any]] = []
 
-        # 1) أداة خارجية إن توفّرت
+        # 1) أداة خارجية إن توفّرت (argv-safe)
         tool = self._pick_tool(ctx.tool_manager)
         if tool:
             for p in paths[:20]:
+                if not Path(p).exists():
+                    continue
                 try:
-                    res = await ctx.tool_manager.execute(f"{tool} {p}", timeout=60)
-                    out = res.stdout + res.stderr
+                    cmd = (
+                        [tool, "filesystem", str(p), "--json"]
+                        if tool == "trufflehog"
+                        else [tool, "detect", "--source", str(p), "--no-git"]
+                    )
+                    res = await ctx.tool_manager.execute(cmd, timeout=60)
+                    out = (res.stdout or "") + (res.stderr or "")
                     candidates.extend(self._parse_secret_output(out, p, tool))
                 except Exception as exc:
                     self.logger.warning(f"{tool} failed for {p}: {exc}")
 
-        # 2) بحث أنماطي على محتويات مقدمة
+        # 2) بحث أنماطي على محتويات مقدمة أو ملفات محلية
+        for p in paths[:20]:
+            fp = Path(p)
+            if fp.is_file():
+                try:
+                    candidates.extend(self._scan_text(fp.read_text(encoding="utf-8", errors="ignore"), str(fp)))
+                except Exception:
+                    pass
         for p, text in contents.items():
             candidates.extend(self._scan_text(text, p))
 
@@ -64,7 +80,7 @@ class SecretsHunterSkill(BaseSkill):
             "paths_scanned": len(paths) + len(contents),
             "candidates": candidates,
             "generated_at": time.time(),
-            "methodology": "أنماط تعبير منظم للمفاتيح والرموز الحساسة؛ يدعم trufflehog/gileaks إن توفّرا.",
+            "methodology": "أنماط تعبير منظم للمفاتيح والرموز الحساسة؛ يدعم trufflehog/gitleaks إن توفّرا.",
         }
 
         p_out = ctx.workspace.write_file(target, "analysis", "secrets_candidates.json", json.dumps(payload, indent=2, ensure_ascii=False), ctx.session_id)
@@ -74,13 +90,14 @@ class SecretsHunterSkill(BaseSkill):
         for c in candidates[:8]:
             result.add_finding(
                 title=f"Potential leaked secret: {c['type']} ({c['file'][:60]})",
-                evidence=c["evidence"],
+                evidence=SecretSanitizer.sanitize_text(c["evidence"]),
                 severity="High",
                 vuln_type="secret_exposure",
                 recommendation="أزل السر من الكود، دوّره فورًا، وتحقق من استخدامه غير المصرح به.",
                 url=c["file"],
             )
-            result.next_skills.append("validation_gate")
+            if "triage_gate" not in result.next_skills:
+                result.next_skills.append("triage_gate")
 
         self.logger.info(f"[Secrets] scanned {payload['paths_scanned']} paths, {len(candidates)} candidates")
         return result
@@ -102,7 +119,7 @@ class SecretsHunterSkill(BaseSkill):
             found.append({
                 "type": f"secret ({tool})",
                 "file": file,
-                "evidence": line[:300],
+                "evidence": SecretSanitizer.sanitize_text(line[:300]),
             })
         return found
 
@@ -110,12 +127,14 @@ class SecretsHunterSkill(BaseSkill):
         found: List[Dict[str, Any]] = []
         for rule in SECRET_PATTERNS:
             for m in re.finditer(rule["pattern"], text):
+                raw_match = m.group(0)[:200]
+                masked = raw_match[:6] + "..." + raw_match[-4:] if len(raw_match) > 14 else "[REDACTED]"
                 found.append({
                     "type": rule["name"],
                     "file": file,
-                    "evidence": m.group(0)[:200],
+                    "evidence": f"{rule['name']} match ({masked})",
                 })
-                break  #一种类型 لكل ملف لتجنب التكرار المفرط
+                break
         return found
 
 
@@ -128,8 +147,7 @@ if __name__ == "__main__":
 
     class FakeWS:
         def write_file(self, *a, **k):
-            from pathlib import Path
-            return Path("/tmp/x")
+            return Path(tempfile.gettempdir()) / "secrets_candidates.json"
 
     class FakeCtx:
         target = "example.com"

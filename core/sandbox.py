@@ -93,20 +93,47 @@ def get_allowed_docker_images(explicit: Optional[Sequence[str]] = None) -> Set[s
     return set(DEFAULT_ALLOWED_DOCKER_IMAGES)
 
 
+_FORBIDDEN_MOUNT_PREFIXES: Tuple[str, ...] = (
+    "/etc",
+    "/proc",
+    "/sys",
+    "/dev",
+    "/var/run",
+    "/run",
+    "/root",
+    "/boot",
+)
+_FORBIDDEN_MOUNT_TOKENS: Tuple[str, ...] = (
+    "docker.sock",
+    "docker_engine",
+    "containerd.sock",
+    "crio.sock",
+    "podman.sock",
+)
+
+
 def validate_docker_mounts(volumes: Optional[Dict[str, Any]]) -> None:
-    """Reject any bind mount referencing ``docker.sock``, Docker named pipe, or host root."""
+    """Reject any bind mount referencing ``docker.sock``, Docker named pipe, host root,
+    or sensitive host directories (``/etc``, ``/proc``, ``/sys``, ``/dev``, ``/var/run``, ``/run``)."""
     if not volumes:
         return
-    for host_path in volumes.keys():
+    for host_path, mount_spec in volumes.items():
         norm = str(host_path).strip().lower().replace("\\", "/")
+        trimmed = norm.rstrip("/") or ("/" if norm.startswith("/") else norm)
         if (
-            "docker.sock" in norm
-            or "docker_engine" in norm
-            or norm in ("/", "/etc", "/proc", "/sys", "/dev", "/var/run", "c:/", "c:")
+            any(tok in norm for tok in _FORBIDDEN_MOUNT_TOKENS)
+            or trimmed in ("/", "c:", "c:/", "d:", "d:/")
+            or any(trimmed == p or trimmed.startswith(p + "/") for p in _FORBIDDEN_MOUNT_PREFIXES)
         ):
             raise PermissionError(
                 f"Forbidden Docker volume mount rejected (container escape vector): {host_path!r}"
             )
+        if isinstance(mount_spec, dict):
+            bind_target = str(mount_spec.get("bind") or "").strip().lower().replace("\\", "/")
+            if any(tok in bind_target for tok in _FORBIDDEN_MOUNT_TOKENS):
+                raise PermissionError(
+                    f"Forbidden Docker mount target rejected: {bind_target!r}"
+                )
 
 
 @dataclass
@@ -301,10 +328,8 @@ class LocalSandbox(Sandbox):
             out, err = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout_s)
         except asyncio.TimeoutError:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
+            from core.process_utils import kill_process_tree
+            await kill_process_tree(proc)
             dur = time.time() - start
             return SandboxResult(
                 ok=False, command=command,
@@ -380,9 +405,9 @@ class DockerSandbox(Sandbox):
         volumes: Optional[Dict[str, Any]] = None,
     ):
         net_clean = (network_mode or "none").strip().lower()
-        if net_clean in FORBIDDEN_NETWORK_MODES:
+        if net_clean in FORBIDDEN_NETWORK_MODES or net_clean.startswith("container:"):
             raise PermissionError(
-                f"DockerSandbox forbids network_mode={network_mode!r} (host network isolation invariant)"
+                f"DockerSandbox forbids network_mode={network_mode!r} (host/shared network isolation invariant)"
             )
         validate_docker_mounts(volumes)
 
@@ -399,7 +424,7 @@ class DockerSandbox(Sandbox):
         self._engagement_containers: Dict[str, Any] = {}
 
     def _validate_image(self, image: str) -> None:
-        if self.allowed_images and image not in self.allowed_images:
+        if not self.allowed_images or image not in self.allowed_images:
             raise PermissionError(
                 f"Docker image {image!r} is not in DOCKER_ALLOWED_IMAGES allowlist"
             )
@@ -415,14 +440,18 @@ class DockerSandbox(Sandbox):
         entrypoint: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Construct hardened Docker container run parameters (single source of truth)."""
-        if (self.network_mode or "").strip().lower() in FORBIDDEN_NETWORK_MODES:
-            raise PermissionError("DockerSandbox forbids network_mode='host'")
+        self._validate_image(self.image)
+        net_clean = (self.network_mode or "").strip().lower()
+        if net_clean in FORBIDDEN_NETWORK_MODES or net_clean.startswith("container:"):
+            raise PermissionError(f"DockerSandbox forbids network_mode={self.network_mode!r}")
         merged_volumes = dict(self.volumes)
         if volumes:
             merged_volumes.update(volumes)
         validate_docker_mounts(merged_volumes)
 
         caps = worker_capabilities(docker_net_admin=self.docker_net_admin)
+        if set(caps) & FORBIDDEN_CAPABILITIES:
+            raise PermissionError("DockerSandbox capability allowlist contains a forbidden capability")
         kwargs: Dict[str, Any] = {
             "working_dir": cwd or self.allowed_workdir,
             "environment": dict(env or {}),

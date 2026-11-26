@@ -68,7 +68,7 @@ class PolicyEngine:
     def set_scope(self, domains: list[str], excluded_domains: list[str] | None = None) -> None:
         _ensure_path()
         try:
-            from tools.scope_checker import ScopeChecker, ScopeError
+            from bughunter.tools.scope_checker import ScopeChecker, ScopeError
         except ModuleNotFoundError:
             from bughunter.tools.scope_checker import ScopeChecker, ScopeError
 
@@ -167,7 +167,7 @@ class PolicyEngine:
             return Decision(DecisionKind.BLOCK, f"URL out of scope: {url}", OUT_OF_SCOPE)
         try:
             try:
-                from memory.audit_log import AutopilotGuard
+                from bughunter.memory.audit_log import AutopilotGuard
             except ModuleNotFoundError:
                 from bughunter.memory.audit_log import AutopilotGuard
 

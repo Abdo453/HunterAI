@@ -102,7 +102,7 @@ if __name__ == "__main__":
     class FakeWS:
         def write_file(self, *a, **k):
             from pathlib import Path
-            return Path("/tmp/x")
+            return Path(__import__("tempfile").gettempdir()) / "x"
 
     class FakeCtx:
         target = "0x123"

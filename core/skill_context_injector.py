@@ -196,16 +196,31 @@ class SkillContextInjector:
                 if len(parts) >= 3:
                     content = parts[2].strip()
 
-            # Preserve complete structured instructions (no 24-line or 150-char line dropping)
-            lines = [line.rstrip() for line in content.splitlines() if line.strip()]
+            routes = self._routes_for_query(
+                skill, query, top_k=top_k_routes, min_score=min_route_score
+            )
+            routed_set = {r.strip().replace("\\", "/") for r in routes}
+
+            # Preserve complete structured instructions (no 24-line or 150-char line dropping),
+            # while omitting unrouted `references/*.md` routing-table entries when a query
+            # selected specific route(s) so unrouted reference paths never pollute context.
+            ref_link_pat = re.compile(r"\((references/[^)\s]+\.md)\)")
+            lines: List[str] = []
+            for raw_line in content.splitlines():
+                stripped = raw_line.rstrip()
+                if not stripped.strip():
+                    continue
+                if routed_set:
+                    linked_refs = [m.replace("\\", "/") for m in ref_link_pat.findall(stripped)]
+                    if linked_refs and not any(ref in routed_set for ref in linked_refs):
+                        continue
+                lines.append(stripped)
+
             body = "\n".join(lines)
             if max_chars > 0 and len(body) > max_chars:
                 body = body[:max_chars]
 
             routed_sections: List[str] = []
-            routes = self._routes_for_query(
-                skill, query, top_k=top_k_routes, min_score=min_route_score
-            )
             skill_dir_resolved = skill_dir.resolve()
             for route in routes:
                 reference = (skill_dir / route).resolve(strict=False)
