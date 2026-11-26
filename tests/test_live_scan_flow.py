@@ -133,14 +133,15 @@ def isolated_scan_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 def test_django_hub_live_scan_populates_assets_findings_events_and_overview(
-    live_target_server, isolated_scan_client
+    live_target_server, isolated_scan_client, monkeypatch
 ) -> None:
     target_url, _port = live_target_server
     client, data_dir = isolated_scan_client
+    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
 
     start_resp = client.post(
         "/api/platform/runs/start",
-        json={"kind": "omni", "target": target_url, "mode": "full"},
+        json={"kind": "omni", "target": target_url, "mode": "full", "scope": ["127.0.0.1"]},
     )
     assert start_resp.status_code == 200, start_resp.text
     run_id = start_resp.json()["run_id"]

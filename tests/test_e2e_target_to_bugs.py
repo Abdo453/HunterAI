@@ -238,6 +238,7 @@ def test_end_to_end_target_to_confirmed_bugs_pipeline(vuln_lab_server, isolated_
     )
     assert blocked_eng.status_code == 403
     monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
 
     meta_blocked = client.post(
         "/api/platform/engagements",
@@ -372,7 +373,6 @@ def test_end_to_end_target_to_confirmed_bugs_pipeline(vuln_lab_server, isolated_
     assert r_logout.status_code == 403
     assert handler_cls.logout_hits == []
     monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
-    monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
 
     # 5. Differential analysis + Evidence Court FP filtering & confirmation
     diff = DifferentialAnalyzer().compare_responses(

@@ -109,13 +109,14 @@ def test_engagements_crud_and_unified_context(isolated_client: ASGISyncClient, m
     assert ctx_init.status_code == 200
     assert ctx_init.json()["status"] == "ok"
 
-    # Cloud metadata SSRF stays strictly 403 even by default, while explicit localhost/private lab targets succeed
+    # Cloud metadata SSRF stays strictly 403 even by default, while explicit opt-in unrestricted mode allows lab targets
     bad_meta = isolated_client.post(
         "/api/platform/engagements",
         json={"name": "Bad Metadata", "target": "http://169.254.169.254/latest", "in_scope": ["169.254.169.254"]},
     )
     assert bad_meta.status_code == 403
 
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
     for lab_tgt in ("localhost", "http://127.0.0.1:8080", "http://192.168.1.50"):
         ok_lab = isolated_client.post(
             "/api/platform/engagements",
@@ -229,7 +230,8 @@ def test_managed_run_lifecycle_sse_replay_and_reconciliation(
     assert unscoped.status_code == 403
     monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
-    # Default explicit target runs cleanly without prior scope, while metadata SSRF stays 403
+    # Explicit opt-in web unrestricted runs cleanly without prior scope, while metadata SSRF stays 403
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
     meta_run = isolated_client.post(
         "/api/platform/runs/start",
         json={"kind": "pipeline", "target": "http://169.254.169.254/latest"},
@@ -242,6 +244,7 @@ def test_managed_run_lifecycle_sse_replay_and_reconciliation(
     )
     assert free_run.status_code == 200
     isolated_client.post(f"/api/platform/runs/{free_run.json()['run_id']}/stop")
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
     isolated_client.put("/api/platform/context", json={"active_engagement_id": eid})
 
     class _CooperativeFakeRunner:
@@ -582,7 +585,8 @@ def test_copilot_crud_concurrent_stream_and_untrusted_isolation(
         assert any(e["event"] == "policy_blocked" for e in evs_meta_blk)
         assert not any(e["event"] == "approval_request" for e in evs_meta_blk)
 
-        # 2b) Default mode allows explicit loopback lab request, while strict governed mode blocks it
+        # 2b) Explicit opt-in unrestricted mode allows loopback lab request, while governed mode blocks it
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
         stream_lb_ok = isolated_client.post(
             "/api/copilot/chat/stream",
             json={
@@ -988,15 +992,16 @@ def test_run_tool_policy_and_shell_metacharacter_gate(isolated_client: ASGISyncC
     )
     assert r_out_of_scope.status_code == 403
     assert r_out_of_scope.json()["blocked"] is True
-    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
 
-    # In default explicit-target mode, even forbidden.example.com / 192.168.1.50 execute cleanly
+    # Under explicit opt-in web unrestricted mode, even 192.168.1.50 executes cleanly
     r_free_lab = isolated_client.post(
         "/api/run-tool",
         json={"command": "nmap 192.168.1.50", "engagement_id": eng["engagement_id"]},
     )
     assert r_free_lab.status_code == 200
     executed.clear()
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
     r_cmd_ok = isolated_client.post(
         "/api/run-tool",

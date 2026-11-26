@@ -86,7 +86,7 @@ def test_api_arsenal_run_tool(client, monkeypatch):
     monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
     unscoped = client.post("/api/arsenal/run", json={"tool": "katana", "target": "http://example.com"})
     assert unscoped.status_code == 403
-    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
 
     payload = {
         "tool": "katana",

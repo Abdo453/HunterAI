@@ -29,6 +29,9 @@ def test_fail_closed_web_governance_under_unrestricted_cli(monkeypatch):
 
     monkeypatch.setenv("HUNTER_UNRESTRICTED", "1")
     monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+    assert web_governance_enforced() is True
+
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
     assert web_governance_enforced() is False
 
     async def _fake_run(cmd, timeout_s=60.0):
@@ -36,7 +39,7 @@ def test_fail_closed_web_governance_under_unrestricted_cli(monkeypatch):
 
     monkeypatch.setattr(arsenal_api, "run_command_no_shell", _fake_run)
 
-    # Default explicit-target mode still enforces non-overridable metadata SSRF
+    # Explicit opt-in web unrestricted mode still enforces non-overridable metadata SSRF
     # while permitting arbitrary websites, local labs, private ranges, and ?url= query params.
     with ASGISyncClient() as client:
         assert (
@@ -106,8 +109,11 @@ def test_ssrf_metadata_private_scheme_and_dns_rebind_blocked(monkeypatch):
             )
             assert r.status_code == 403, f"SSRF not blocked for {url}: {r.status_code} {r.text}"
 
-        # Destination host is target.com; metadata literal inside query param must remain ALLOWED
-        q_chk = client.post("/api/scope/check", json={"target": "http://target.com/?url=http://169.254.169.254"})
+        # Destination host is target.com (in scope); metadata literal inside query param must remain ALLOWED
+        q_chk = client.post(
+            "/api/scope/check",
+            json={"target": "http://target.com/?url=http://169.254.169.254", "in_scope": ["target.com"]},
+        )
         assert q_chk.status_code == 200
         assert q_chk.json()["allowed"] is True
 
@@ -311,7 +317,8 @@ def test_approval_decide_unmocked_gateway_and_scope_boundaries(isolated_platform
 
     store = ps.get_platform_store()
 
-    # 1. Explicit engagement for 127.0.0.1 and example.com
+    # 1. Explicit engagement for 127.0.0.1 and example.com under opt-in web unrestricted mode
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
     eng_resp = isolated_platform_client.post(
         "/api/platform/engagements",
         json={
@@ -720,6 +727,8 @@ def test_web_unrestricted_mode_allows_public_and_labs_keeps_metadata_403(isolate
     monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
     monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
     monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+    assert web_governance_enforced() is True
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
     assert web_governance_enforced() is False
 
     async def _fake_run(cmd, timeout_s=60.0):

@@ -472,7 +472,7 @@ async def test_security_hardening_ssrf_scope_paths_subprocess_and_secret(
         ):
             r_gov = await client.post("/api/burp/repeater/send", json={"url": governed_blocked_url})
             assert r_gov.status_code == 403, f"Expected governed 403 for {governed_blocked_url}, got {r_gov.status_code}"
-        monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
 
         # 2. Scope collision resolved: canonical /api/scope/check vs Phase G /api/scope/enforce
         r_chk = await client.post(
@@ -492,6 +492,7 @@ async def test_security_hardening_ssrf_scope_paths_subprocess_and_secret(
         r_enf = await client.post("/api/scope/enforce", json={"target": "http://192.168.1.50:8080"})
         assert r_enf.status_code == 200
         assert r_enf.json()["allowed"] is True
+        monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
         # 3. Persisted policy secret (no hardcoded fallback)
         r_issue = await client.post(

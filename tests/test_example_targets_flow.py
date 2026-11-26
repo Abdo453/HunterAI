@@ -328,9 +328,11 @@ def isolated_example_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     rt.EVENT_BUS._history.clear()
 
 
-def test_all_example_targets_pass_scope_engagement_and_recon_run(isolated_example_env):
-    """All 8 public demo and local lab presets pass validate-scope, scope/check, engagement, and recon run."""
+def test_all_example_targets_pass_scope_engagement_and_recon_run(isolated_example_env, monkeypatch):
+    """All 8 public demo and local lab presets pass validate-scope, scope/check, engagement, and recon run under opt-in web unrestricted mode."""
     client, _tmp_path, _reports_dir, _sessions_dir, _ev_store = isolated_example_env
+    assert web_governance_enforced() is True
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
     assert web_governance_enforced() is False
 
     csrf_token = client.get("/api/csrf").json()["csrfToken"]
@@ -540,11 +542,12 @@ def test_non_overridable_safety_invariants_blocked(isolated_example_env, monkeyp
 
 
 def test_practice_lab_repeater_diff_seven_gate_and_report_export(
-    practice_lab_server, isolated_example_env
+    practice_lab_server, isolated_example_env, monkeypatch
 ):
     """End-to-end multi-bug flow against isolated Acunetix/JuiceShop HTTP server via Django ASGI."""
     base_url, _port = practice_lab_server
     client, _tmp_path, reports_dir, sessions_dir, ev_store = isolated_example_env
+    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
 
     csrf_token = client.get("/api/csrf").json()["csrfToken"]
     headers = {"X-CSRFToken": csrf_token}
@@ -552,13 +555,13 @@ def test_practice_lab_repeater_diff_seven_gate_and_report_export(
     # 1. Validate scope + register engagement + launch recon pipeline run
     assert client.post(
         "/api/control/targets/validate-scope",
-        json={"target_url": base_url},
+        json={"target_url": base_url, "in_scope": ["127.0.0.1"]},
         headers=headers,
     ).json()["allowed"] is True
 
     assert client.post(
         "/api/scope/check",
-        json={"target": base_url},
+        json={"target": base_url, "in_scope": ["127.0.0.1"]},
         headers=headers,
     ).json()["allowed"] is True
 

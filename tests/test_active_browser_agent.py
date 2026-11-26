@@ -71,7 +71,7 @@ def test_api_browser_browse_endpoint(monkeypatch):
         monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
         unscoped = client.post("/api/browser/browse", json={"url": "https://api.test.local"})
         assert unscoped.status_code == 403
-        monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
 
         payload = {
             "url": "https://api.test.local",
