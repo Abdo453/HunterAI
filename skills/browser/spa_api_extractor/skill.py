@@ -56,7 +56,7 @@ class SPAAPIExtractorSkill(BaseSkill):
         logger.info("[spa_api_extractor] Starting SPA navigation on: %s", target)
 
         # 1. Run AI browser SPA crawl
-        raw_endpoints, pages_visited = await self._browser_crawl(target, auth)
+        raw_endpoints, pages_visited, crawl_live = await self._browser_crawl(target, auth)
 
         # 2. Normalize and deduplicate
         endpoints = self._normalize_endpoints(raw_endpoints, target)
@@ -64,7 +64,7 @@ class SPAAPIExtractorSkill(BaseSkill):
         # 3. Classify by sensitivity
         classified = self._classify_endpoints(endpoints)
 
-        # 4. Build findings
+        # 4. Build findings (only from real live crawl)
         for ep in classified:
             if ep["sensitivity"] in ("Critical", "High"):
                 result.add_finding(
@@ -86,7 +86,13 @@ class SPAAPIExtractorSkill(BaseSkill):
 
         # 5. Write spa_endpoints.json
         endpoints_json = json.dumps(
-            {"target": target, "endpoints": classified, "pages_visited": pages_visited},
+            {
+                "target": target,
+                "status": "OK" if crawl_live else "UNAVAILABLE",
+                "verified": False,
+                "endpoints": classified,
+                "pages_visited": pages_visited,
+            },
             indent=2,
         )
         ep_path = ctx.workspace.write_file(
@@ -108,12 +114,14 @@ class SPAAPIExtractorSkill(BaseSkill):
             "critical_count": sum(1 for e in classified if e["sensitivity"] == "Critical"),
             "high_count": sum(1 for e in classified if e["sensitivity"] == "High"),
             "pages_visited": len(pages_visited),
+            "status": "OK" if crawl_live else "UNAVAILABLE",
+            "verified": False,
             "duration": round(time.time() - t0, 2),
         }
-        result.success = True
+        result.success = crawl_live
         logger.info(
-            "[spa_api_extractor] Done. Endpoints: %d, Pages: %d",
-            len(classified), len(pages_visited)
+            "[spa_api_extractor] Done. status=%s, Endpoints: %d, Pages: %d",
+            result.metadata["status"], len(classified), len(pages_visited)
         )
         return result
 
@@ -123,7 +131,7 @@ class SPAAPIExtractorSkill(BaseSkill):
     async def _browser_crawl(
         self, target: str, auth: Dict[str, Any]
     ) -> tuple:
-        """Run AI browser session to crawl SPA and intercept API calls."""
+        """Run AI browser session to crawl SPA; fail closed with UNAVAILABLE if offline."""
         try:
             from core.browser.ai_browser_operator import run_ai_browser_session_sync
             objective = (
@@ -142,10 +150,13 @@ class SPAAPIExtractorSkill(BaseSkill):
                     timeout_secs=60.0,
                 ),
             )
-            return self._parse_browser_report(report)
+            if report is None or not getattr(report, "success", True) or "Synthetic Fallback" in str(getattr(report, "title", "")):
+                return [], [], False
+            eps, pages = self._parse_browser_report(report)
+            return eps, pages, True
         except Exception as exc:
-            logger.warning("[spa_api_extractor] Browser crawl skipped (%s), using fallback", exc)
-            return self._fallback_extraction(target)
+            logger.warning("[spa_api_extractor] Browser crawl unavailable (%s)", exc)
+            return [], [], False
 
     def _parse_browser_report(self, report: Any) -> tuple:
         """Extract endpoint list and pages visited from browser report."""
@@ -254,30 +265,8 @@ class SPAAPIExtractorSkill(BaseSkill):
     # Fallback / offline synthetic endpoint list
     # ------------------------------------------------------------------
     def _fallback_extraction(self, target: str) -> tuple:
-        """Return synthetic endpoint list and page list for offline testing."""
-        raw_endpoints = [
-            {"method": "GET",    "url": f"{target}/api/v1/users",           "params": ["page", "limit"]},
-            {"method": "POST",   "url": f"{target}/api/v1/users",           "params": ["username", "email", "role"]},
-            {"method": "GET",    "url": f"{target}/api/v1/users/me",        "params": []},
-            {"method": "PUT",    "url": f"{target}/api/v1/users/123",       "params": ["username", "email"]},
-            {"method": "DELETE", "url": f"{target}/api/v1/admin/users/123", "params": []},
-            {"method": "POST",   "url": f"{target}/api/v1/auth/login",      "params": ["username", "password"]},
-            {"method": "POST",   "url": f"{target}/api/v1/auth/token/refresh", "params": ["refresh_token"]},
-            {"method": "GET",    "url": f"{target}/api/v1/admin/settings",  "params": []},
-            {"method": "POST",   "url": f"{target}/api/v1/payments/checkout", "params": ["amount", "card_token"]},
-            {"method": "GET",    "url": f"{target}/api/v1/orders",          "params": ["status", "page"]},
-            {"method": "GET",    "url": f"{target}/api/v1/products",        "params": ["category", "q"]},
-            {"method": "POST",   "url": f"{target}/api/v1/files/upload",    "params": ["file", "type"]},
-        ]
-        pages_visited = [
-            target,
-            f"{target}/dashboard",
-            f"{target}/profile",
-            f"{target}/admin",
-            f"{target}/orders",
-            f"{target}/products",
-        ]
-        return raw_endpoints, pages_visited
+        """Disabled: never return fabricated synthetic endpoints when browser is unavailable."""
+        return [], []
 
     # ------------------------------------------------------------------
     # Report builder

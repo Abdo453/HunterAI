@@ -60,12 +60,21 @@ class RequestMutatorSkill(BaseSkill):
         strategy = ctx.extra.get("mutation_strategy", "auto")
 
         if not requests_list:
-            requests_list = self._generate_sample_requests(target)
+            result.success = False
+            result.findings = []
+            result.metadata = {
+                "status": "UNAVAILABLE",
+                "verified": False,
+                "anomalies_count": 0,
+                "reason": "no_captured_requests_provided",
+            }
+            return result
 
         logger.info("[RequestMutator] Testing %d requests with strategy '%s'", len(requests_list), strategy)
 
         mutation_results = []
         findings = []
+        had_any_live_response = False
 
         async with httpx.AsyncClient(timeout=6.0, verify=False, follow_redirects=False, trust_env=False) as client:
             for req in requests_list[:15]:
@@ -75,15 +84,18 @@ class RequestMutatorSkill(BaseSkill):
                 params = dict(req.get("params", {}))
                 body = req.get("body")
 
-                # Baseline request
-                baseline_status = 200
-                baseline_len = 500
+                # Baseline request (never fabricate baseline_status=200 on network error)
+                baseline_status: Optional[int] = None
+                baseline_len: Optional[int] = None
+                baseline_error: Optional[str] = None
                 try:
                     r_base = await client.request(method, req_url, headers=headers, params=params, json=body if isinstance(body, dict) else None)
                     baseline_status = r_base.status_code
                     baseline_len = len(r_base.content)
-                except Exception:
-                    pass
+                    had_any_live_response = True
+                except Exception as exc:
+                    baseline_error = str(exc)
+                    result.add_error("network", f"Baseline request failed for {req_url}: {exc}", tool=self.name)
 
                 # Apply mutations
                 mutations_to_try = self._select_mutations(req, strategy)
@@ -102,19 +114,32 @@ class RequestMutatorSkill(BaseSkill):
                     elif m_type == "mass_assignment" and isinstance(m_body, dict):
                         m_body.update(mut["fields"])
 
-                    # Execute mutated request
-                    mut_status = 0
-                    mut_len = 0
+                    # Execute mutated request — NEVER synthesize mut_status=200 on exception
+                    mut_status: Optional[int] = None
+                    mut_len: Optional[int] = None
+                    mut_error: Optional[str] = None
                     try:
                         r_mut = await client.request(method, req_url, headers=m_headers, params=m_params, json=m_body if isinstance(m_body, dict) else None)
                         mut_status = r_mut.status_code
                         mut_len = len(r_mut.content)
-                    except Exception:
-                        mut_status = 200
-                        mut_len = baseline_len + 150  # synthetic variance for offline
+                        had_any_live_response = True
+                    except Exception as exc:
+                        mut_error = str(exc)
+                        result.add_error("network", f"Mutated request ({m_type}) failed for {req_url}: {exc}", tool=self.name)
 
-                    # Check differential anomaly
-                    is_anomaly = (mut_status == 200 and baseline_status in [401, 403]) or (abs(mut_len - baseline_len) > 200 and mut_status == 200)
+                    # Check differential anomaly ONLY when both baseline and mutated requests succeeded
+                    is_anomaly = False
+                    if (
+                        mut_error is None
+                        and baseline_error is None
+                        and baseline_status is not None
+                        and baseline_len is not None
+                        and mut_status is not None
+                        and mut_len is not None
+                    ):
+                        is_anomaly = (mut_status == 200 and baseline_status in [401, 403]) or (
+                            abs(mut_len - baseline_len) > 200 and mut_status == 200
+                        )
 
                     record = {
                         "url": req_url,
@@ -126,19 +151,26 @@ class RequestMutatorSkill(BaseSkill):
                         "baseline_length": baseline_len,
                         "mutated_length": mut_len,
                         "anomaly_detected": is_anomaly,
+                        "error": mut_error or baseline_error,
+                        "status": "ERROR" if (mut_error or baseline_error) else "OK",
                     }
                     mutation_results.append(record)
 
                     if is_anomaly:
                         findings.append({
-                            "title": f"Request Mutation Anomaly ({m_type.upper()}): {method} {req_url}",
+                            "title": f"Request Mutation Candidate ({m_type.upper()}): {method} {req_url}",
                             "severity": "High" if m_type in ["idor", "auth_bypass"] else "Medium",
                             "category": "business_logic",
                             "endpoint": req_url,
-                            "description": f"Mutating request with {m_type} yielded status {mut_status} (baseline: {baseline_status}) and length delta {abs(mut_len - baseline_len)} bytes.",
+                            "verified": False,
+                            "status": "CANDIDATE",
+                            "description": f"Mutating request with {m_type} yielded status {mut_status} (baseline: {baseline_status}) and length delta {abs((mut_len or 0) - (baseline_len or 0))} bytes.",
                         })
 
         result.findings = findings
+        result.success = had_any_live_response
+        result.metadata["status"] = "OK" if had_any_live_response else "UNAVAILABLE"
+        result.metadata["verified"] = False
 
         # Write output files
         json_content = json.dumps({

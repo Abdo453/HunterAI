@@ -462,40 +462,48 @@ class WorldEliteOrchestrator:
             except Exception as exc:
                 return f"[ERROR] {exc}"
 
+        def _unavailable(tool_name: str, tgt: str, reason: str = "binary_not_installed") -> str:
+            return json.dumps({
+                "status": "UNAVAILABLE",
+                "tool": tool_name,
+                "target": tgt,
+                "verified": False,
+                "reason": reason,
+            })
+
         # ── Port Scanner (nmap) ───────────────────────────────────────────────
         def port_scanner(target: str, phase: str = "recon", **kwargs) -> str:
-            """nmap port scanner — الركيزة الأولى"""
-            # استخرج IP/hostname من URL
+            """nmap port scanner — fails closed with UNAVAILABLE if binary is absent."""
             import re
             host = re.sub(r"https?://", "", target).split("/")[0].split(":")[0]
             if shutil.which("nmap"):
                 return _run_tool(["nmap", "-sV", "-sC", "--top-ports", "1000", host])
-            return f"[SIMULATED] Port scan on {host}: 80/http, 443/https, 22/ssh"
+            return _unavailable("nmap", host)
 
         # ── Web Crawler ───────────────────────────────────────────────────────
         def web_crawler(target: str, **kwargs) -> str:
-            """يزحف على الموقع ويكتشف endpoints"""
+            """ffuf crawler — fails closed with UNAVAILABLE if binary is absent."""
             if shutil.which("ffuf"):
                 return _run_tool(["ffuf", "-u", f"{target}/FUZZ",
                                    "-w", "/usr/share/wordlists/dirb/common.txt",
                                    "-mc", "200,301,302", "-t", "50"])
-            return f"[SIMULATED] Web crawl on {target}: /admin, /api, /login"
+            return _unavailable("ffuf", target)
 
         # ── Nuclei Scanner ────────────────────────────────────────────────────
         def nuclei_scan(target: str, **kwargs) -> str:
-            """nuclei template-based vulnerability scanner"""
+            """nuclei scanner — fails closed with UNAVAILABLE if binary is absent."""
             if shutil.which("nuclei"):
                 return _run_tool(["nuclei", "-u", target, "-severity", "critical,high,medium",
                                    "-silent"], timeout=120)
-            return f"[SIMULATED] Nuclei scan: potential XSS at {target}/search"
+            return _unavailable("nuclei", target)
 
         # ── SQLMap ────────────────────────────────────────────────────────────
         def sqlmap_scan(target: str, **kwargs) -> str:
-            """sqlmap SQLi detection"""
+            """sqlmap detector — fails closed with UNAVAILABLE if binary is absent."""
             if shutil.which("sqlmap"):
                 return _run_tool(["sqlmap", "-u", target, "--batch",
                                    "--level=2", "--risk=1", "--output-dir=data/sqlmap"])
-            return f"[SIMULATED] SQLMap: no injection found at {target}"
+            return _unavailable("sqlmap", target)
 
         # ── Subdomain Enum (amass) ────────────────────────────────────────────
         def subdomain_enum(target: str, **kwargs) -> str:
@@ -503,33 +511,38 @@ class WorldEliteOrchestrator:
             domain = re.sub(r"https?://", "", target).split("/")[0]
             if shutil.which("amass"):
                 return _run_tool(["amass", "enum", "-passive", "-d", domain], timeout=60)
-            return f"[SIMULATED] Subdomains: api.{domain}, dev.{domain}"
+            return _unavailable("amass", domain)
 
         # ── WhatWeb (fingerprinting) ──────────────────────────────────────────
         def web_fingerprint(target: str, **kwargs) -> str:
             if shutil.which("whatweb"):
                 return _run_tool(["whatweb", "-a", "3", target])
-            return f"[SIMULATED] WhatWeb: PHP/7.4, Apache/2.4, WordPress/5.9"
+            return _unavailable("whatweb", target)
 
         # ── Nikto ────────────────────────────────────────────────────────────
         def nikto_scan(target: str, **kwargs) -> str:
             if shutil.which("nikto"):
                 return _run_tool(["nikto", "-h", target], timeout=120)
-            return f"[SIMULATED] Nikto: found /phpmyadmin exposed"
+            return _unavailable("nikto", target)
 
         # ── Exploit Runner ────────────────────────────────────────────────────
         def exploit_runner(target: str, **kwargs) -> str:
-            """يشغل exploits محددة على الهدف"""
-            return f"[EXPLOIT] Running authorized exploits on {target}"
+            """Requires explicit delegated exploit module; otherwise UNAVAILABLE."""
+            return _unavailable("exploit_runner", target, reason="no_delegated_exploit_executor")
 
         # ── Privilege Checker ─────────────────────────────────────────────────
         def privilege_checker(target: str, **kwargs) -> str:
-            """يتحقق من إمكانية تصعيد الصلاحيات"""
-            return f"[PRIVESC] Checking privilege escalation vectors on {target}"
+            """Requires explicit delegated privilege verifier; otherwise UNAVAILABLE."""
+            return _unavailable("privilege_checker", target, reason="no_delegated_privilege_verifier")
 
         # ── Report Generator ──────────────────────────────────────────────────
         def report_generator(target: str, **kwargs) -> str:
-            return f"[REPORT] Generating final report for {target}"
+            return json.dumps({
+                "status": "DELEGATED",
+                "tool": "report_generator",
+                "target": target,
+                "confirmed_findings_count": len(self.all_findings),
+            })
 
         return {
             "port_scanner":      port_scanner,

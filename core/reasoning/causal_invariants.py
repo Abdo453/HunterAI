@@ -23,11 +23,57 @@ import abc
 import logging
 import re
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from core.reasoning.triad_verifier import TransactionSnapshot, TriadBundle
 
 logger = logging.getLogger("hunter_ai.causal_invariants")
+
+# Volatile content patterns stripped before structural boolean comparison
+_VOLATILE_PATTERNS: Tuple[re.Pattern[str], ...] = (
+    re.compile(r"<!--.*?-->", re.S),                                        # HTML jitter comments
+    re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I),  # UUIDs
+    re.compile(r"\b(?:nonce|csrf|token|req|trace|request)[_-]?[0-9a-f]{4,}\b", re.I),
+    re.compile(r'name=["\']csrf[-_]?token["\']\s+content=["\'][^"\']+["\']', re.I),
+    re.compile(r"\b\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\b"),  # ISO/SQL timestamps
+    re.compile(r"\b1[5-9]\d{8}(?:\.\d+)?\b"),                               # Unix epoch seconds
+)
+
+
+def _token_boundary_in(token: str, text: str) -> bool:
+    """Return True iff `token` appears in `text` at non-alphanumeric boundaries."""
+    if not token or not text:
+        return False
+    return bool(re.search(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", text))
+
+
+def normalize_volatile_content(text: str) -> str:
+    """Strip nonces, timestamps, UUIDs, and HTML comments to compare stable structure."""
+    if not text:
+        return ""
+    cleaned = text
+    for pat in _VOLATILE_PATTERNS:
+        cleaned = pat.sub(" ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _structural_tokens(text: str) -> Set[str]:
+    """Extract normalized structural + semantic tokens after stripping volatile noise."""
+    norm = normalize_volatile_content(text)
+    if not norm:
+        return set()
+    tags = re.findall(r"</?[a-zA-Z][a-zA-Z0-9]*", norm)
+    words = re.findall(r"[A-Za-z0-9_]{2,}", re.sub(r"<[^>]+>", " ", norm))
+    return {t.lower() for t in tags} | {w.lower() for w in words}
+
+
+def _jaccard_similarity(a: Set[str], b: Set[str]) -> float:
+    if not a and not b:
+        return 1.0
+    union = a | b
+    if not union:
+        return 1.0
+    return len(a & b) / len(union)
 
 
 @dataclass
@@ -75,7 +121,8 @@ class CausalInvariant(abc.ABC):
 class CommandExecutionInvariant(CausalInvariant):
     """
     Evaluates arbitrary command execution / SSTI / arithmetic evaluation.
-    Distinguishes algebraic evaluation from literal string reflection.
+    Distinguishes algebraic evaluation from literal string reflection, checking
+    BOTH Baseline (B) and Control (C) using strict word/token boundaries.
     """
 
     def __init__(
@@ -92,7 +139,11 @@ class CommandExecutionInvariant(CausalInvariant):
             input_relation={"e1": e1_expr, "e2": e2_expr, "control": control_expr},
             expected_output_relation={"evaluated_token": expected_token},
             control_constraint={"must_not_contain": expected_token},
-            invalidation_conditions=["literal_reflection_without_evaluation", "control_produces_token"],
+            invalidation_conditions=[
+                "literal_reflection_without_evaluation",
+                "baseline_contains_token",
+                "control_produces_token",
+            ],
         )
         self.expected_token = expected_token
         self.e1_expr = e1_expr
@@ -105,8 +156,18 @@ class CommandExecutionInvariant(CausalInvariant):
         e1 = bundle.experiment_1
         e2 = bundle.experiment_2
 
-        # 1. Check control constraint: Control must NOT produce the exploit token
-        if self.expected_token in c.body:
+        # 1a. Check Baseline (B) constraint using strict token boundaries
+        if _token_boundary_in(self.expected_token, b.body) or self.expected_token in b.extracted_tokens:
+            return InvariantEvaluationResult(
+                passed=False,
+                confidence=0.0,
+                reason="Baseline response B already contained the target token; token is not causally induced.",
+                invalidation_triggered=True,
+                invalidation_detail="baseline_contains_token",
+            )
+
+        # 1b. Check Control (C) constraint using strict token boundaries
+        if _token_boundary_in(self.expected_token, c.body) or self.expected_token in c.extracted_tokens:
             return InvariantEvaluationResult(
                 passed=False,
                 confidence=0.0,
@@ -124,7 +185,14 @@ class CommandExecutionInvariant(CausalInvariant):
             or f"`{self.e1_expr}`" in e1.body
             or bool(re.search(r'["\']' + escaped_expr + r'["\']', e1.body))
         )
-        if reflection_detected and self.expected_token not in e1.body:
+        e1_has_token = _token_boundary_in(self.expected_token, e1.body) or (
+            self.expected_token in e1.extracted_tokens
+        )
+        e2_has_token = _token_boundary_in(self.expected_token, e2.body) or (
+            self.expected_token in e2.extracted_tokens
+        )
+
+        if reflection_detected and not e1_has_token:
             return InvariantEvaluationResult(
                 passed=False,
                 confidence=0.05,
@@ -134,9 +202,6 @@ class CommandExecutionInvariant(CausalInvariant):
             )
 
         # 3. Metamorphic Verification across E1 and E2
-        e1_has_token = (self.expected_token in e1.body) or (self.expected_token in e1.extracted_tokens)
-        e2_has_token = (self.expected_token in e2.body) or (self.expected_token in e2.extracted_tokens)
-
         if e1_has_token and e2_has_token:
             return InvariantEvaluationResult(
                 passed=True,
@@ -163,16 +228,19 @@ class CommandExecutionInvariant(CausalInvariant):
 class BooleanDifferentialInvariant(CausalInvariant):
     """
     Evaluates Boolean-based injection (SQLi / LDAP / XPath).
-    Requires deterministic state bifurcation between True and False expressions.
+    Strips volatile nonces/timestamps/jitter comments and verifies structural &
+    semantic token bifurcation between True (E1, E2) and False (C) predicates.
     """
 
-    def __init__(self):
+    def __init__(self, match_threshold: float = 0.85, diverge_threshold: float = 0.75):
         super().__init__(
             invariant_id="INV-BOOLEAN-DIFF-01",
             name="Boolean Differential Invariant",
-            description="True condition branches must match baseline, False condition must diverge.",
-            invalidation_conditions=["false_condition_matches_true_condition"],
+            description="True condition branches must structurally match baseline after volatile stripping, while False condition diverges.",
+            invalidation_conditions=["false_condition_matches_true_condition", "volatile_jitter_only"],
         )
+        self.match_threshold = match_threshold
+        self.diverge_threshold = diverge_threshold
 
     def evaluate(self, bundle: TriadBundle) -> InvariantEvaluationResult:
         b = bundle.baseline
@@ -180,26 +248,72 @@ class BooleanDifferentialInvariant(CausalInvariant):
         e1 = bundle.experiment_1   # Injected True condition 1 (e.g. ' AND 1=1)
         e2 = bundle.experiment_2   # Injected True condition 2 (e.g. ' AND 2=2)
 
-        # True condition probes (E1, E2) should match Baseline (B)
-        e1_matches_b = (e1.status_code == b.status_code) and (abs(e1.body_length - b.body_length) < 20)
-        e2_matches_b = (e2.status_code == b.status_code) and (abs(e2.body_length - b.body_length) < 20)
+        norm_b = normalize_volatile_content(b.body)
+        norm_c = normalize_volatile_content(c.body)
+        norm_e1 = normalize_volatile_content(e1.body)
+        norm_e2 = normalize_volatile_content(e2.body)
 
-        # False condition probe (C) must diverge significantly from Baseline (B) and True probes (E1, E2)
-        c_diverges = (c.status_code != b.status_code) or (abs(c.body_length - b.body_length) > 50)
+        tok_b = _structural_tokens(b.body)
+        tok_c = _structural_tokens(c.body)
+        tok_e1 = _structural_tokens(e1.body)
+        tok_e2 = _structural_tokens(e2.body)
+
+        sim_e1_b = _jaccard_similarity(tok_e1, tok_b)
+        sim_e2_b = _jaccard_similarity(tok_e2, tok_b)
+        sim_c_b = _jaccard_similarity(tok_c, tok_b)
+        sim_c_e1 = _jaccard_similarity(tok_c, tok_e1)
+
+        e1_matches_b = (e1.status_code == b.status_code) and (norm_e1 == norm_b or sim_e1_b >= self.match_threshold)
+        e2_matches_b = (e2.status_code == b.status_code) and (norm_e2 == norm_b or sim_e2_b >= self.match_threshold)
+
+        # False condition (C) must diverge structurally/semantically after stripping volatile nonces/timestamps
+        c_status_diverges = c.status_code != b.status_code
+        c_structure_diverges = (
+            norm_c != norm_b
+            and sim_c_b < self.diverge_threshold
+            and sim_c_e1 < self.diverge_threshold
+        )
+        c_diverges = c_status_diverges or c_structure_diverges
+
+        observables = {
+            "sim_e1_b": round(sim_e1_b, 3),
+            "sim_e2_b": round(sim_e2_b, 3),
+            "sim_c_b": round(sim_c_b, 3),
+            "sim_c_e1": round(sim_c_e1, 3),
+            "boolean_split_confirmed": bool(e1_matches_b and e2_matches_b and c_diverges),
+        }
 
         if e1_matches_b and e2_matches_b and c_diverges:
             return InvariantEvaluationResult(
                 passed=True,
                 confidence=0.98,
-                reason="Boolean Differential Invariant satisfied: True branches preserve Baseline while False branch diverges.",
-                extracted_observables={"boolean_split_confirmed": True},
+                reason=(
+                    "Boolean Differential Invariant satisfied: True branches preserve normalized "
+                    f"Baseline structure (sim={sim_e1_b:.2f}/{sim_e2_b:.2f}) while False branch "
+                    f"diverges structurally (sim={sim_c_b:.2f}, status={c.status_code})."
+                ),
+                extracted_observables=observables,
             )
-        else:
+
+        if not c_status_diverges and norm_c == norm_b:
             return InvariantEvaluationResult(
                 passed=False,
-                confidence=0.20,
-                reason="Boolean differential failed: Response did not bifurcate consistently on boolean predicate.",
+                confidence=0.05,
+                reason="False probe C matched Baseline B after stripping volatile nonces/timestamps (volatile jitter only).",
+                extracted_observables=observables,
+                invalidation_triggered=True,
+                invalidation_detail="volatile_jitter_only",
             )
+
+        return InvariantEvaluationResult(
+            passed=False,
+            confidence=0.20,
+            reason=(
+                "Boolean differential failed: Normalized structure did not bifurcate consistently "
+                f"(sim_e1_b={sim_e1_b:.2f}, sim_e2_b={sim_e2_b:.2f}, sim_c_b={sim_c_b:.2f})."
+            ),
+            extracted_observables=observables,
+        )
 
 
 class AuthorizationInvariant(CausalInvariant):
@@ -284,30 +398,96 @@ class OOBCorrelationInvariant(CausalInvariant):
 
 
 class DOMExecutionInvariant(CausalInvariant):
-    """Evaluates context-aware DOM breakout and script execution."""
+    """
+    Evaluates ACTUAL browser/DOM script execution telemetry.
+    Inert regex reflection inside raw HTML (<div data-x="canary">) NEVER passes.
+    """
 
     def __init__(self, canary: str):
         super().__init__(
             invariant_id="INV-DOM-EXECUTION-01",
             name="DOM Script Execution Invariant",
-            description="Verifies unescaped tag breakout vs harmless attribute reflection.",
+            description="Requires verified runtime DOM/JS execution telemetry (never raw HTML regex match).",
+            invalidation_conditions=["inert_html_reflection_only", "baseline_contains_canary", "control_triggers_execution"],
         )
         self.canary = canary
 
     def evaluate(self, bundle: TriadBundle) -> InvariantEvaluationResult:
+        b = bundle.baseline
+        c = bundle.control
         e1 = bundle.experiment_1
-        unescaped_pattern = r'<[^>]+' + re.escape(self.canary) + r'[^>]*>'
-        if re.search(unescaped_pattern, e1.body, re.IGNORECASE):
+        e2 = bundle.experiment_2
+        meta = bundle.metadata or {}
+
+        # Baseline / control must not trigger the canary
+        if meta.get("control_dom_executed") or (self.canary and self.canary in c.extracted_tokens):
+            return InvariantEvaluationResult(
+                passed=False,
+                confidence=0.0,
+                reason="Control probe triggered DOM execution signal; not causally attributable to exploit payload.",
+                invalidation_triggered=True,
+                invalidation_detail="control_triggers_execution",
+            )
+        if self.canary and self.canary in b.extracted_tokens:
+            return InvariantEvaluationResult(
+                passed=False,
+                confidence=0.0,
+                reason="Baseline already emitted DOM canary token.",
+                invalidation_triggered=True,
+                invalidation_detail="baseline_contains_canary",
+            )
+
+        # Require explicit runtime DOM execution evidence (dialog, console canary, JS hook/sink execution)
+        runtime_events = meta.get("dom_execution_events") or meta.get("console_logs") or meta.get("dialogs") or []
+        runtime_fired = bool(
+            meta.get("dom_execution_observed")
+            or meta.get("dom_executed")
+            or meta.get("dialog_triggered")
+            or meta.get("console_canary_fired")
+            or meta.get("js_sink_executed")
+            or any(self.canary in str(ev) for ev in runtime_events)
+        )
+        canary_observed_at_runtime = (
+            not self.canary
+            or any(self.canary in str(ev) for ev in runtime_events)
+            or self.canary in e1.extracted_tokens
+            or str(meta.get("executed_canary") or "") == self.canary
+        )
+
+        if runtime_fired and canary_observed_at_runtime:
+            # Check metamorphic consistency if E2 runtime execution was explicitly reported False
+            if meta.get("dom_execution_e2_observed") is False:
+                return InvariantEvaluationResult(
+                    passed=False,
+                    confidence=0.35,
+                    reason="Metamorphic DOM inconsistency: E1 executed in browser DOM but E2 did not.",
+                    invalidation_triggered=False,
+                    invalidation_detail="metamorphic_divergence",
+                )
             return InvariantEvaluationResult(
                 passed=True,
-                confidence=0.97,
-                reason=f"DOM Execution Invariant satisfied: Canary '{self.canary}' broke out of HTML attribute context.",
-                extracted_observables={"dom_breakout_confirmed": True},
+                confidence=0.98,
+                reason=f"DOM Execution Invariant satisfied: Runtime JS execution observed for canary '{self.canary}'.",
+                extracted_observables={"dom_execution_confirmed": True, "canary": self.canary},
             )
+
+        # Inert raw HTML reflection without browser execution telemetry MUST fail
+        if self.canary and self.canary in e1.body:
+            return InvariantEvaluationResult(
+                passed=False,
+                confidence=0.10,
+                reason=(
+                    f"Inert HTML reflection of '{self.canary}' observed in raw response without "
+                    "runtime DOM execution evidence (Reflection != DOM Execution)."
+                ),
+                invalidation_triggered=True,
+                invalidation_detail="inert_html_reflection_only",
+            )
+
         return InvariantEvaluationResult(
             passed=False,
-            confidence=0.15,
-            reason="Canary remained safely encoded or inside quoted attribute.",
+            confidence=0.10,
+            reason="No runtime DOM execution evidence observed.",
         )
 
 
@@ -353,7 +533,7 @@ class CausalInvariantRegistry:
     _invariants: Dict[str, CausalInvariant] = {}
 
     @classmethod
-    def register(cls, invariant: CausalInvariant):
+    def register(cls, invariant: CausalInvariant) -> None:
         cls._invariants[invariant.invariant_id] = invariant
 
     @classmethod
@@ -366,3 +546,21 @@ class CausalInvariantRegistry:
             {"id": inv.invariant_id, "name": inv.name, "description": inv.description}
             for inv in cls._invariants.values()
         ]
+
+    @classmethod
+    def register_defaults(cls) -> None:
+        """Register all built-in causal invariants by default."""
+        defaults: List[CausalInvariant] = [
+            CommandExecutionInvariant(),
+            BooleanDifferentialInvariant(),
+            AuthorizationInvariant(resource_id="default", owner_id="owner", actor_id="actor"),
+            OOBCorrelationInvariant(expected_nonce="default"),
+            DOMExecutionInvariant(canary="default"),
+            StateTransitionInvariant(prerequisite_step="prerequisite", target_step="target"),
+        ]
+        for inv in defaults:
+            cls._invariants.setdefault(inv.invariant_id, inv)
+
+
+# Ensure built-in causal invariants are registered by default at import time
+CausalInvariantRegistry.register_defaults()

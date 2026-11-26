@@ -97,30 +97,8 @@ class ThreatModelerSkill(BaseSkill):
     # Fallback synthetic data
     # ------------------------------------------------------------------
     def _fallback_analysis(self, target: str) -> List[Dict[str, Any]]:
-        """Returns synthetic endpoint list when no real data is provided."""
-        return [
-            {
-                "url":            f"https://{target}/api/v1/users?id=1",
-                "method":         "GET",
-                "risk_score":     8.0,
-                "attack_vectors": ["IDOR", "BOLA"],
-                "likely_vulns":   ["IDOR", "BOLA"],
-            },
-            {
-                "url":            f"https://{target}/search?q=test",
-                "method":         "GET",
-                "risk_score":     7.0,
-                "attack_vectors": ["XSS", "SQLi"],
-                "likely_vulns":   ["XSS", "SQLi"],
-            },
-            {
-                "url":            f"https://{target}/redirect?url=http://evil.com",
-                "method":         "GET",
-                "risk_score":     9.0,
-                "attack_vectors": ["SSRF", "Open Redirect"],
-                "likely_vulns":   ["SSRF", "Open Redirect"],
-            },
-        ]
+        """Disabled: never fabricate synthetic endpoints when no real input is supplied."""
+        return []
 
     # ------------------------------------------------------------------
     # AI enhancement (optional)
@@ -154,12 +132,22 @@ class ThreatModelerSkill(BaseSkill):
 
         logger.info("[threat_modeler] Analysing target=%s endpoints=%d", target, len(endpoints_raw))
 
-        # --- Analyse or fall back ---
-        if endpoints_raw:
-            analysed = [self._analyze_endpoint(ep) for ep in endpoints_raw]
-        else:
-            logger.info("[threat_modeler] No endpoints provided -- using fallback synthetic data")
-            analysed = self._fallback_analysis(target)
+        # --- Analyse real endpoints or fail closed with UNAVAILABLE ---
+        if not endpoints_raw:
+            logger.info("[threat_modeler] No endpoints provided -- returning UNAVAILABLE")
+            result.success = False
+            result.findings = []
+            result.metadata = {
+                "status": "UNAVAILABLE",
+                "verified": False,
+                "total_endpoints": 0,
+                "high_risk_count": 0,
+                "reason": "no_endpoints_provided",
+                "duration": round(time.time() - t0, 2),
+            }
+            return result
+
+        analysed = [self._analyze_endpoint(ep) for ep in endpoints_raw]
 
         # Sort by risk descending
         analysed.sort(key=lambda x: x["risk_score"], reverse=True)

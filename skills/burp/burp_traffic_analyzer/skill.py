@@ -55,9 +55,10 @@ class BurpTrafficAnalyzerSkill(BaseSkill):
         burp_port: int = int(ctx.extra.get("burp_port", 8085))
         traffic_limit: int = int(ctx.extra.get("traffic_limit", 50))
 
-        # 1. Fetch traffic -----------------------------------------------
+        # 1. Fetch traffic (fail closed with UNAVAILABLE if Burp is offline)
         traffic: List[Dict[str, Any]] = []
         burp_live = False
+        unavailable_reason = ""
         if httpx is not None:
             try:
                 async with httpx.AsyncClient(timeout=5.0, trust_env=False, verify=False) as client:
@@ -70,11 +71,23 @@ class BurpTrafficAnalyzerSkill(BaseSkill):
                     burp_live = True
                     logger.info("[burp_traffic_analyzer] Fetched %d live requests from Burp", len(traffic))
             except Exception as exc:
-                logger.info("[burp_traffic_analyzer] Burp unavailable (%s) -- using fallback traffic", exc)
-                traffic = self._fallback_traffic(ctx.target)
+                unavailable_reason = str(exc)
+                logger.info("[burp_traffic_analyzer] Burp unavailable (%s) -- failing closed without synthetic traffic", exc)
         else:
-            logger.info("[burp_traffic_analyzer] httpx not available -- using fallback traffic")
-            traffic = self._fallback_traffic(ctx.target)
+            unavailable_reason = "httpx_not_installed"
+            logger.info("[burp_traffic_analyzer] httpx not available -- failing closed")
+
+        if not burp_live:
+            result.success = False
+            result.findings = []
+            result.metadata = {
+                "status": "UNAVAILABLE",
+                "verified": False,
+                "burp_live": False,
+                "reason": unavailable_reason or "burp_unavailable",
+                "high_risk_requests": [],
+            }
+            return result
 
         # 2. Analyse each request ----------------------------------------
         analyses: List[Dict[str, Any]] = [self._analyze_request(r) for r in traffic]
@@ -213,17 +226,8 @@ class BurpTrafficAnalyzerSkill(BaseSkill):
         }
 
     def _fallback_traffic(self, target: str) -> List[Dict[str, Any]]:
-        """Synthetic traffic for offline/hermetic execution."""
-        base = target.rstrip("/")
-        return [
-            {"url": f"{base}/api/users?id=42", "method": "GET", "headers": {"Authorization": "Bearer eyJhbGciOiJIUzI1NiJ9.test"}, "body": {}},
-            {"url": f"{base}/api/profile?uid=100&redirect_url=https://evil.com", "method": "GET", "headers": {}, "body": {}},
-            {"url": f"{base}/api/file?path=../../etc/passwd", "method": "GET", "headers": {}, "body": {}},
-            {"url": f"{base}/api/search?q=<script>alert(1)</script>", "method": "GET", "headers": {}, "body": {}},
-            {"url": f"{base}/api/order", "method": "POST", "headers": {"Content-Type": "application/json"},
-             "body": {"order_id": "55", "user": {"id": 1, "role": "admin"}, "price": "0.01"}},
-            {"url": f"{base}/dashboard", "method": "GET", "headers": {}, "body": {}},
-        ]
+        """Disabled: synthetic offline traffic is never fabricated."""
+        return []
 
     def _build_report(
         self,

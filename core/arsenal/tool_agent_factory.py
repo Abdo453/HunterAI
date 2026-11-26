@@ -90,7 +90,7 @@ class DynamicToolAgent:
             f"1. Zero Unauthorized Drift: Never execute against any host outside target scope.\n"
             f"2. Evidence First: Parse CLI outputs into structured factual proof.\n"
             f"3. Non-Destructive: Never perform state-destroying commands or schema modifications.\n"
-            f"4. Fail-Safe: If the tool binary is unavailable, seamlessly engage hermetic validation."
+            f"4. Fail-Closed: If the tool binary is unavailable, report UNAVAILABLE honestly and never fabricate output."
         )
 
     def _build_skill_descriptor(self) -> ToolSkillDescriptor:
@@ -285,104 +285,27 @@ class DynamicToolAgent:
         return result
 
     def _generate_fallback_result(self, target: str, duration: float) -> ToolExecutionResult:
-        """Generates realistic synthetic results for hermetic unit testing and offline environments."""
-        clean_target = target.replace("https://", "").replace("http://", "").split("/")[0]
-        cat = self.tool_def.category
-
-        if cat == ToolCategory.RECON:
-            subdomains = [clean_target, f"api.{clean_target}", f"admin.{clean_target}", f"app.{clean_target}"]
-            return ToolExecutionResult(
-                tool_name=self.tool_def.name,
-                target=target,
-                command=["fallback", self.tool_def.binary_name, target],
-                exit_code=0,
-                stdout="\n".join(subdomains),
-                stderr="",
-                duration_secs=duration,
-                used_fallback=True,
-                structured_data={"subdomains": subdomains, "count": len(subdomains)},
-            )
-        elif cat == ToolCategory.PORT_SCAN:
-            ports = [
-                {"port": 80, "service": "http", "state": "open"},
-                {"port": 443, "service": "https", "state": "open"},
-                {"port": 8080, "service": "http-proxy", "state": "open"},
-            ]
-            return ToolExecutionResult(
-                tool_name=self.tool_def.name,
-                target=target,
-                command=["fallback", self.tool_def.binary_name, target],
-                exit_code=0,
-                stdout=f"Discovered {len(ports)} open ports on {clean_target}",
-                stderr="",
-                duration_secs=duration,
-                used_fallback=True,
-                structured_data={"open_ports": ports},
-            )
-        elif cat == ToolCategory.WEB_CRAWL:
-            urls = [
-                f"https://{clean_target}/",
-                f"https://{clean_target}/login",
-                f"https://{clean_target}/api/v1/users",
-                f"https://{clean_target}/dashboard",
-            ]
-            return ToolExecutionResult(
-                tool_name=self.tool_def.name,
-                target=target,
-                command=["fallback", self.tool_def.binary_name, target],
-                exit_code=0,
-                stdout="\n".join(urls),
-                stderr="",
-                duration_secs=duration,
-                used_fallback=True,
-                structured_data={"crawled_urls": urls, "total_discovered": len(urls)},
-            )
-        elif cat == ToolCategory.VULN_SCAN:
-            vulns = [
-                {
-                    "template_id": "cve-2023-sample",
-                    "name": "Sample Disclosed Vulnerability",
-                    "severity": "medium",
-                    "matched_at": f"https://{clean_target}/api/v1",
-                }
-            ]
-            return ToolExecutionResult(
-                tool_name=self.tool_def.name,
-                target=target,
-                command=["fallback", self.tool_def.binary_name, target],
-                exit_code=0,
-                stdout=json.dumps(vulns),
-                stderr="",
-                duration_secs=duration,
-                used_fallback=True,
-                structured_data={"vulnerabilities": vulns},
-            )
-        elif cat == ToolCategory.FUZZING:
-            endpoints = ["/admin", "/backup.zip", "/config.json", "/api"]
-            return ToolExecutionResult(
-                tool_name=self.tool_def.name,
-                target=target,
-                command=["fallback", self.tool_def.binary_name, target],
-                exit_code=0,
-                stdout="\n".join(endpoints),
-                stderr="",
-                duration_secs=duration,
-                used_fallback=True,
-                structured_data={"endpoints": endpoints},
-            )
-        else:
-            # Generic fallback
-            return ToolExecutionResult(
-                tool_name=self.tool_def.name,
-                target=target,
-                command=["fallback", self.tool_def.binary_name, target],
-                exit_code=0,
-                stdout=f"Simulated execution for {self.tool_def.name} on {target}",
-                stderr="",
-                duration_secs=duration,
-                used_fallback=True,
-                structured_data={"status": "completed", "category": cat.value},
-            )
+        """Fail closed honestly when the tool binary is unavailable — never fabricate findings."""
+        reason = f"Tool binary '{self.tool_def.binary_name}' is unavailable or not installed."
+        return ToolExecutionResult(
+            tool_name=self.tool_def.name,
+            target=target,
+            command=[self.tool_def.binary_name, target],
+            exit_code=127,
+            stdout="",
+            stderr=reason,
+            duration_secs=duration,
+            used_fallback=False,
+            status="UNAVAILABLE",
+            structured_data={
+                "status": "UNAVAILABLE",
+                "verified": False,
+                "tool": self.tool_def.name,
+                "binary": self.tool_def.binary_name,
+                "category": self.tool_def.category.value,
+                "reason": reason,
+            },
+        )
 
 
 class ToolAgentFactory:

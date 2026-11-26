@@ -22,6 +22,7 @@ class SkillState(Enum):
 @dataclass
 class SkillResult:
     verified: bool = False
+    status: str = "UNVERIFIED"
     vuln_type: str = "unknown"
     title: str = ""
     severity: str = "Info"
@@ -44,6 +45,7 @@ class SkillResult:
     def to_dict(self) -> Dict[str, Any]:
         d = {
             "verified": self.verified,
+            "status": self.status,
             "type": self.vuln_type,
             "vuln_type": self.vuln_type,
             "title": self.title,

@@ -85,17 +85,21 @@ class AuthSessionExtractorSkill(BaseSkill):
         # 4. Expose auth context via metadata for downstream skills
         # Redact sensitive values before storing in metadata
         redacted_ctx = self._redact_auth_context(auth_ctx)
+        is_unavailable = auth_ctx.get("status") == "UNAVAILABLE" or auth_ctx.get("source") == "unavailable"
         result.metadata = {
-            "auth_context": auth_ctx,          # full context (not logged)
+            "auth_context": auth_ctx,
             "auth_context_redacted": redacted_ctx,
             "login_url": login_url,
-            "session_valid": auth_ctx.get("session_valid", False),
+            "session_valid": bool(auth_ctx.get("session_valid", False)),
+            "verified": bool(auth_ctx.get("session_valid", False)) and not is_unavailable,
+            "status": "UNAVAILABLE" if is_unavailable else ("OK" if auth_ctx.get("session_valid") else "UNVERIFIED"),
             "duration": round(time.time() - t0, 2),
         }
 
-        result.success = True
+        result.success = not is_unavailable
         logger.info(
-            "[auth_session_extractor] Done. session_valid=%s, cookies=%d",
+            "[auth_session_extractor] Done. status=%s, session_valid=%s, cookies=%d",
+            result.metadata["status"],
             auth_ctx.get("session_valid"),
             len(auth_ctx.get("cookies", [])),
         )
@@ -193,23 +197,19 @@ class AuthSessionExtractorSkill(BaseSkill):
     # ------------------------------------------------------------------
     # Fallback / offline synthetic auth context
     # ------------------------------------------------------------------
-    def _fallback_extraction(self, login_url: str) -> Dict[str, Any]:
-        """Return synthetic auth context for offline/hermetic testing."""
+    def _fallback_extraction(self, login_url: str, reason: str = "browser_unavailable") -> Dict[str, Any]:
+        """Fail closed honestly when browser automation is unavailable (never fabricate session_valid=True)."""
         return {
-            "cookies": [
-                {"name": "sessionid", "value": "FALLBACK_SESSION_abc123xyz"},
-                {"name": "csrftoken", "value": "FALLBACK_CSRF_def456uvw"},
-            ],
-            "localStorage_keys": ["access_token", "refresh_token", "user_id"],
-            "jwt_tokens": [
-                "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-                ".eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IlRFU1QiLCJpYXQiOjE1MTYyMzkwMjJ9"
-                ".FALLBACK_SIGNATURE"
-            ],
-            "csrf_tokens": ["FALLBACK_CSRF_def456uvw"],
-            "session_valid": True,
+            "cookies": [],
+            "localStorage_keys": [],
+            "jwt_tokens": [],
+            "csrf_tokens": [],
+            "session_valid": False,
+            "verified": False,
+            "status": "UNAVAILABLE",
+            "reason": reason,
             "login_url": login_url,
-            "source": "fallback",
+            "source": "unavailable",
         }
 
     def _redact_auth_context(self, auth_ctx: Dict[str, Any]) -> Dict[str, Any]:

@@ -91,7 +91,7 @@ class PathTraversalSkill(BaseSkill):
 
         except Exception as exc:
             logs.append(f"[!] PathTraversalSkill error: {exc}")
-            return self._fallback_result(target_url, target_param)
+            return self._fallback_result(target_url, target_param, reason=str(exc))
 
         if not verified:
             return SkillResult(
@@ -123,20 +123,22 @@ class PathTraversalSkill(BaseSkill):
             logs=logs,
         )
 
-    def _fallback_result(self, target_url: str, param_name: str) -> SkillResult:
-        """Synthetic fallback result for hermetic testing."""
+    def _fallback_result(self, target_url: str, param_name: str, reason: str = "transport_unavailable") -> SkillResult:
+        """Fail closed honestly when target transport is unavailable."""
         return SkillResult(
-            verified=True,
+            verified=False,
+            status="UNAVAILABLE",
             vuln_type=self.vuln_type,
-            title=f"Path Traversal Candidate on {target_url}",
-            severity="High",
+            title=f"Path Traversal Audit Unavailable on {target_url}",
+            severity="Info",
             endpoint=target_url,
             param_name=param_name,
-            evidence="Simulated path traversal matched 'root:x:0:0:root:/root:/bin/bash'",
-            payload_used="../../../../etc/passwd",
-            confidence=0.90,
-            fallback_used=True,
+            evidence=f"Target unreachable or transport unavailable ({reason}); no synthetic finding emitted.",
+            payload_used="",
+            confidence=0.0,
+            fallback_used=False,
             cwe=self.cwe,
             owasp_top10=self.owasp_top10,
-            logs=["[Fallback] Offline simulated path traversal verification"],
+            logs=[f"[UNAVAILABLE] Path traversal check skipped: {reason}"],
+            extra={"status": "UNAVAILABLE", "reason": reason},
         )

@@ -256,14 +256,62 @@ def _make_finding(
     description: str,
     curl_cmd: str,
     confidence: float = 0.88,
-    status: str = "TRIAGED",
+    status: str = "CANDIDATE",
+    parameter: str = "",
+    proof_payload: Optional[Dict[str, Any]] = None,
+    verifier_result: Optional[Dict[str, Any]] = None,
+    is_in_scope: bool = True,
 ) -> Dict[str, Any]:
+    """Build a CANDIDATE finding and route it through FindingQualificationGate + EvidenceCourt.
+
+    Direct ``status="CONFIRMED"`` is never trusted; confirmation is granted ONLY when
+    the canonical EvidenceCourt derives a ``CONFIRMED`` verdict with ``DERIVED`` proof.
+    """
+    from core.evidence_court import CourtVerdict, ProofStrength
+    from hunter_ai.pipeline.qualification_gate import FindingQualificationGate
+
     sev_up = severity.upper()
     cvss_map = {"CRITICAL": 9.8, "HIGH": 8.0, "MEDIUM": 5.5, "LOW": 3.1, "INFO": 0.0}
     fid = "hub_fd_" + hashlib.sha1(f"{vuln_class}:{endpoint}".encode("utf-8", errors="ignore")).hexdigest()[:12]
     evidence = description
     if curl_cmd:
         evidence = f"{description}\n\nReproduce:\n{curl_cmd}"
+
+    # Always emit initially as CANDIDATE and route through QualificationGate + canonical EvidenceCourt
+    vr = dict(verifier_result or {})
+    if proof_payload is not None:
+        vr.setdefault("reproduced", True)
+    else:
+        vr.setdefault("reproduced", False)
+        vr.setdefault("status", "CANDIDATE")
+
+    parsed_ep = urlparse(endpoint)
+    asset = parsed_ep.netloc or endpoint
+
+    canon_status, judgment, court_rationale = FindingQualificationGate.adjudicate_to_canonical_status(
+        title=title,
+        asset=asset,
+        endpoint=endpoint,
+        vuln_type=vuln_class,
+        raw_evidence=evidence,
+        source_tool="live_scanner",
+        parameter=parameter or None,
+        verifier_result=vr,
+        is_in_scope=is_in_scope,
+        proof_payload=proof_payload,
+    )
+
+    if (
+        judgment is not None
+        and judgment.verdict == CourtVerdict.CONFIRMED
+        and judgment.proof_strength == ProofStrength.DERIVED.value
+    ):
+        final_status = "CONFIRMED"
+        final_confidence = float(judgment.confidence_score or confidence)
+    else:
+        final_status = canon_status.value if canon_status.value != "CONFIRMED" else "CANDIDATE"
+        final_confidence = min(float(confidence), 0.60)
+
     return {
         "id": fid,
         "run_id": run_id,
@@ -271,7 +319,7 @@ def _make_finding(
         "vuln_class": vuln_class,
         "severity": sev_up,
         "cvss_score": cvss_map.get(sev_up, 3.0),
-        "confidence": confidence,
+        "confidence": final_confidence,
         "endpoint": endpoint,
         "evidence": evidence,
         "poc_details": {
@@ -279,7 +327,11 @@ def _make_finding(
             "curl_command": curl_cmd,
             "template_id": vuln_class,
         },
-        "status": status,
+        "status": final_status,
+        "canonical_verdict": final_status,
+        "proof_strength": judgment.proof_strength if judgment is not None else "NONE",
+        "court_judgment_id": judgment.judgment_id if judgment is not None else "",
+        "court_rationale": court_rationale,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
@@ -679,7 +731,18 @@ async def run_live_security_scan(
                                 description=f"Origin: https://evil.example received Access-Control-Allow-Origin: {acao} (Allow-Credentials: {acac}).",
                                 curl_cmd=f'curl -i -H "Origin: https://evil.example" "{target_url}"',
                                 confidence=0.95,
-                                status="CONFIRMED",
+                                status="CANDIDATE",
+                                proof_payload={
+                                    "artifact_type": "misconfig",
+                                    "response_text": c_resp.text[:2000],
+                                    "baseline_text": body_sample[:2000],
+                                    "metadata": {
+                                        "probe_origin": "https://evil.example",
+                                        "acao": acao,
+                                        "acac": acac,
+                                    },
+                                },
+                                verifier_result={"reproduced": True, "status_code": c_resp.status_code},
                             )
                         )
                 except Exception:
@@ -726,7 +789,14 @@ async def run_live_security_scan(
                                     description=f"HTTP {pr.status_code} matched verification signature at {probe_url}.",
                                     curl_cmd=f'curl -sS "{probe_url}"',
                                     confidence=0.96,
-                                    status="CONFIRMED",
+                                    status="CANDIDATE",
+                                    proof_payload={
+                                        "artifact_type": "misconfig",
+                                        "response_text": b[:4000],
+                                        "baseline_text": "",
+                                        "metadata": {"content_type": ct, "status_code": pr.status_code},
+                                    },
+                                    verifier_result={"reproduced": True, "status_code": pr.status_code},
                                 )
                             )
                     except Exception:
@@ -756,7 +826,9 @@ async def run_live_security_scan(
                                             description=f"Marker `{marker}` reflected verbatim unescaped in text/html response on parameter `{param_name}`.",
                                             curl_cmd=f'curl -sS "{xss_url}"',
                                             confidence=0.92,
-                                            status="CONFIRMED",
+                                            status="CANDIDATE",
+                                            parameter=param_name,
+                                            verifier_result={"reproduced": False, "is_reflection": True, "status_code": xr.status_code},
                                         )
                                     )
                             except Exception:
@@ -780,7 +852,19 @@ async def run_live_security_scan(
                                                 description=f"HTTP {rr.status_code} redirected Location to external origin ({loc}).",
                                                 curl_cmd=f'curl -i "{redir_url}"',
                                                 confidence=0.94,
-                                                status="CONFIRMED",
+                                                status="CANDIDATE",
+                                                parameter=param_name,
+                                                proof_payload={
+                                                    "artifact_type": "misconfig",
+                                                    "response_text": loc,
+                                                    "baseline_text": "",
+                                                    "metadata": {
+                                                        "status_code": rr.status_code,
+                                                        "location": loc,
+                                                        "probe_redirect_host": "evil.example",
+                                                    },
+                                                },
+                                                verifier_result={"reproduced": True, "status_code": rr.status_code},
                                             )
                                         )
                                 except Exception:
@@ -805,7 +889,14 @@ async def run_live_security_scan(
                                                     description=f"SQL engine error signature returned (HTTP {sr.status_code}) when testing parameter `{param_name}`.",
                                                     curl_cmd=f'curl -i "{sqli_url}"',
                                                     confidence=0.93,
-                                                    status="CONFIRMED",
+                                                    status="CANDIDATE",
+                                                    parameter=param_name,
+                                                    proof_payload={
+                                                        "artifact_type": "sqli",
+                                                        "response_text": sr.text[:4000],
+                                                        "baseline_text": body_sample[:4000],
+                                                    },
+                                                    verifier_result={"reproduced": True, "status_code": sr.status_code},
                                                 )
                                             )
                                 except Exception:
