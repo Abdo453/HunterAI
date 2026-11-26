@@ -84,6 +84,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
     engagements,
     selectedEngagementId,
     selectedEngagement,
+    engagementSelectionSeq,
     selectEngagement,
     targetDomain,
     isScanning,
@@ -108,13 +109,36 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
   const presetsContainerRef = useRef<HTMLDivElement>(null);
   const presetsBtnRef = useRef<HTMLButtonElement>(null);
   const targetInputRef = useRef<HTMLInputElement>(null);
+  const lastSyncedEngIdRef = useRef<string>("");
+  const userEditedTargetRef = useRef<boolean>(false);
+  const lastManualPickSeqRef = useRef<number>(engagementSelectionSeq);
 
   useEffect(() => {
-    if (selectedEngagement?.target) {
-      setTargetInput(selectedEngagement.target);
-      setValidationError("");
+    if (engagementSelectionSeq !== lastManualPickSeqRef.current) {
+      lastManualPickSeqRef.current = engagementSelectionSeq;
+      userEditedTargetRef.current = false;
+      const engId = selectedEngagement?.id || "";
+      lastSyncedEngIdRef.current = engId;
+      if (selectedEngagement?.target) {
+        setTargetInput(selectedEngagement.target);
+        setValidationError("");
+      }
+      return;
     }
-  }, [selectedEngagement]);
+
+    const engId = selectedEngagement?.id || "";
+    if (!engId) {
+      lastSyncedEngIdRef.current = "";
+      return;
+    }
+    if (engId !== lastSyncedEngIdRef.current) {
+      lastSyncedEngIdRef.current = engId;
+      if (selectedEngagement?.target && !userEditedTargetRef.current) {
+        setTargetInput(selectedEngagement.target);
+        setValidationError("");
+      }
+    }
+  }, [selectedEngagement, engagementSelectionSeq]);
 
   useEffect(() => {
     if (!presetsOpen) return;
@@ -141,6 +165,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
   }, [presetsOpen]);
 
   const handleSelectPreset = (preset: TargetPreset) => {
+    userEditedTargetRef.current = true;
     setTargetInput(preset.target);
     setValidationError("");
     setPresetsOpen(false);
@@ -170,6 +195,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    userEditedTargetRef.current = true;
     setValidationError("");
 
     const check = validateScanTarget(targetInput);
@@ -237,7 +263,15 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
               id="engagement-selector"
               value={selectedEngagementId}
               onChange={(e) => {
-                void selectEngagement(e.target.value);
+                const nextId = e.target.value;
+                const found = engagements.find((eng) => eng.id === nextId);
+                if (nextId && found?.target) {
+                  userEditedTargetRef.current = false;
+                  lastSyncedEngIdRef.current = nextId;
+                  setTargetInput(found.target);
+                  setValidationError("");
+                }
+                void selectEngagement(nextId);
               }}
               aria-label={t("nav.engagementLabel")}
               className="min-h-[44px] lg:min-h-0 lg:h-9 px-2.5 rounded-md bg-elevated border border-border-subtle text-xs text-ink-primary max-w-[165px] sm:max-w-[190px] truncate shrink-0"
@@ -263,6 +297,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
                 placeholder={t("nav.targetPlaceholder", "Target domain (e.g. example.com)")}
                 value={targetInput}
                 onChange={(e) => {
+                  userEditedTargetRef.current = true;
                   setTargetInput(e.target.value);
                   if (validationError) setValidationError("");
                 }}

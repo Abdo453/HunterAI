@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Radar,
   Globe,
@@ -30,7 +30,7 @@ interface TrafficItem {
 }
 
 export default function InterceptPage() {
-  const { selectedEngagement, targetDomain, sendToRepeater, apiJson } = usePlatform();
+  const { selectedEngagement, engagementSelectionSeq, targetDomain, sendToRepeater, apiJson } = usePlatform();
   const { t } = useI18n();
 
   const [burpStatus, setBurpStatus] = useState<BurpStatusPayload | null>(null);
@@ -56,11 +56,34 @@ export default function InterceptPage() {
   const [bypassUrl, setBypassUrl] = useState<string>("");
   const [bypassOut, setBypassOut] = useState<{ variations?: unknown[] } | null>(null);
 
+  const lastSyncedEngIdRef = useRef<string>("");
+  const userEditedDomainRef = useRef<boolean>(false);
+  const lastManualPickSeqRef = useRef<number>(engagementSelectionSeq);
+
   useEffect(() => {
-    if (selectedEngagement?.target) {
-      setDorkDomain(selectedEngagement.target);
+    if (engagementSelectionSeq !== lastManualPickSeqRef.current) {
+      lastManualPickSeqRef.current = engagementSelectionSeq;
+      userEditedDomainRef.current = false;
+      const engId = selectedEngagement?.id || "";
+      lastSyncedEngIdRef.current = engId;
+      if (selectedEngagement?.target) {
+        setDorkDomain(selectedEngagement.target);
+      }
+      return;
     }
-  }, [selectedEngagement]);
+
+    const engId = selectedEngagement?.id || "";
+    if (!engId) {
+      lastSyncedEngIdRef.current = "";
+      return;
+    }
+    if (engId !== lastSyncedEngIdRef.current) {
+      lastSyncedEngIdRef.current = engId;
+      if (selectedEngagement?.target && !userEditedDomainRef.current) {
+        setDorkDomain(selectedEngagement.target);
+      }
+    }
+  }, [selectedEngagement, engagementSelectionSeq]);
 
   const loadFeed = useCallback(async () => {
     const [stR, trR, brR] = await Promise.all([
@@ -108,6 +131,7 @@ export default function InterceptPage() {
   const fetchDorks = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!dorkDomain.trim()) return;
+    userEditedDomainRef.current = true;
     const res = await apiJson<{ google_dorks?: string[]; github_dorks?: string[] }>(
       `/api/recon/dorks?domain=${encodeURIComponent(dorkDomain.trim())}`
     );
@@ -320,7 +344,10 @@ export default function InterceptPage() {
               type="text"
               dir="ltr"
               value={dorkDomain}
-              onChange={(e) => setDorkDomain(e.target.value)}
+              onChange={(e) => {
+                userEditedDomainRef.current = true;
+                setDorkDomain(e.target.value);
+              }}
               placeholder="example.com"
               className="ltr-isolate flex-1 h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
             />

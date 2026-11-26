@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Rocket,
   Play,
@@ -75,6 +75,7 @@ function statusPillClass(status: string): string {
 export default function OverviewPage() {
   const {
     selectedEngagement,
+    engagementSelectionSeq,
     targetDomain,
     runs,
     isScanning,
@@ -107,15 +108,34 @@ export default function OverviewPage() {
   const [perDayUsd, setPerDayUsd] = useState<string>("");
   const [budgetMsg, setBudgetMsg] = useState<string>("");
 
-  const lastSyncedEngIdRef = React.useRef<string>("");
+  const lastSyncedEngIdRef = useRef<string>("");
+  const userEditedOverviewTargetRef = useRef<boolean>(false);
+  const lastManualPickSeqRef = useRef<number>(engagementSelectionSeq);
+
   useEffect(() => {
-    if (selectedEngagement?.id && selectedEngagement.id !== lastSyncedEngIdRef.current) {
-      lastSyncedEngIdRef.current = selectedEngagement.id;
-      if (selectedEngagement.target) {
+    if (engagementSelectionSeq !== lastManualPickSeqRef.current) {
+      lastManualPickSeqRef.current = engagementSelectionSeq;
+      userEditedOverviewTargetRef.current = false;
+      const engId = selectedEngagement?.id || "";
+      lastSyncedEngIdRef.current = engId;
+      if (selectedEngagement?.target) {
+        setTarget(selectedEngagement.target);
+      }
+      return;
+    }
+
+    const engId = selectedEngagement?.id || "";
+    if (!engId) {
+      lastSyncedEngIdRef.current = "";
+      return;
+    }
+    if (engId !== lastSyncedEngIdRef.current) {
+      lastSyncedEngIdRef.current = engId;
+      if (selectedEngagement?.target && !userEditedOverviewTargetRef.current) {
         setTarget(selectedEngagement.target);
       }
     }
-  }, [selectedEngagement]);
+  }, [selectedEngagement, engagementSelectionSeq]);
 
   const loadBudget = useCallback(async () => {
     if (hunterHubHealth.status === "offline") return;
@@ -135,6 +155,7 @@ export default function OverviewPage() {
 
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
+    userEditedOverviewTargetRef.current = true;
     setLaunchError("");
     setLaunchFeedback("");
 
@@ -250,7 +271,10 @@ export default function OverviewPage() {
               dir="ltr"
               list="target-example-presets"
               value={target}
-              onChange={(e) => setTarget(e.target.value)}
+              onChange={(e) => {
+                userEditedOverviewTargetRef.current = true;
+                setTarget(e.target.value);
+              }}
               placeholder={t("runs.targetPlaceholder")}
               className="ltr-isolate w-full h-9 px-3 rounded-md bg-inset border border-border-subtle text-xs font-mono text-ink-primary"
             />
@@ -370,6 +394,7 @@ export default function OverviewPage() {
           subtitle={t("runs.presetsHint")}
           activeTarget={target}
           onSelect={(preset: TargetPreset) => {
+            userEditedOverviewTargetRef.current = true;
             setTarget(preset.target);
             if (launchError) setLaunchError("");
             if (launchFeedback) setLaunchFeedback("");

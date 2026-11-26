@@ -329,6 +329,14 @@ export function validateScanTarget(rawInput: string): TargetValidationResult {
   return { valid: true, normalizedTarget, hostname };
 }
 
+function normalizeTargetForCompare(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
 function fingerprintData(value: unknown): string {
   try {
     return JSON.stringify(value);
@@ -414,6 +422,7 @@ interface PlatformContextValue {
   engagements: EngagementRecord[];
   selectedEngagementId: string;
   selectedEngagement: EngagementRecord | null;
+  engagementSelectionSeq: number;
   selectEngagement: (id: string) => Promise<void>;
   createEngagement: (input: EngagementCreateInput) => Promise<{ ok: boolean; engagement?: Record<string, unknown>; error?: string }>;
   targetDomain: string;
@@ -475,6 +484,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
 
   const [engagements, setEngagements] = useState<EngagementRecord[]>([]);
   const [selectedEngagementId, setSelectedEngagementId] = useState<string>("");
+  const [engagementSelectionSeq, setEngagementSelectionSeq] = useState<number>(0);
   const [targetDomain, setTargetDomain] = useState<string>("example.com");
 
   const [stats, setStats] = useState<StatsSummary>({
@@ -522,6 +532,8 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
   const lastEventIdRef = useRef<string>("");
   const streamPausedRef = useRef<boolean>(false);
   const selectedEngRef = useRef<string>("");
+  const initialCtxSyncedRef = useRef<boolean>(false);
+  const userClearedEngRef = useRef<boolean>(false);
 
   useEffect(() => {
     isUnmountedRef.current = false;
@@ -793,9 +805,17 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
             fpRef.current.activeRunId = nextRunId || "";
             setActiveRunId(nextRunId);
           }
-          if (!selectedEngRef.current && typeof ctxObj.active_engagement_id === "string" && ctxObj.active_engagement_id) {
-            selectedEngRef.current = ctxObj.active_engagement_id;
-            setSelectedEngagementId(ctxObj.active_engagement_id);
+          if (!initialCtxSyncedRef.current) {
+            initialCtxSyncedRef.current = true;
+            if (
+              !userClearedEngRef.current &&
+              !selectedEngRef.current &&
+              typeof ctxObj.active_engagement_id === "string" &&
+              ctxObj.active_engagement_id
+            ) {
+              selectedEngRef.current = ctxObj.active_engagement_id;
+              setSelectedEngagementId(ctxObj.active_engagement_id);
+            }
           }
         }
 
@@ -1470,14 +1490,18 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
     async (id: string) => {
       setSelectedEngagementId(id);
       selectedEngRef.current = id;
+      userClearedEngRef.current = !id;
+      if (id) {
+        setEngagementSelectionSeq((n) => n + 1);
+      }
       const found = engagements.find((e) => e.id === id);
       if (found && found.target) {
         setTargetDomain(found.target);
       }
-      if (hunterHubHealth.status === "connected" && id) {
+      if (hunterHubHealth.status === "connected") {
         await apiJson("/api/platform/context", {
           method: "PUT",
-          body: { active_engagement_id: id },
+          body: { active_engagement_id: id || null },
         });
       }
       await refreshData();
@@ -1501,6 +1525,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       if (eng && typeof eng.engagement_id === "string") {
         setSelectedEngagementId(eng.engagement_id);
         selectedEngRef.current = eng.engagement_id;
+        userClearedEngRef.current = false;
       }
       await refreshData();
       return { ok: true, engagement: eng };
@@ -1523,6 +1548,12 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         setTargetDomain(normTarget.replace(/^https?:\/\//, "").split("/")[0]);
       }
 
+      const targetMatchesSelected =
+        Boolean(selectedEngagement?.target) &&
+        Boolean(normTarget) &&
+        normalizeTargetForCompare(normTarget) ===
+          normalizeTargetForCompare(selectedEngagement?.target || "");
+
       try {
         if (input.kind === "go_core") {
           addConsoleLog("INFO", "dispatcher", `Dispatching Go Core scan via Django proxy: ${normTarget}`);
@@ -1533,6 +1564,17 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           if (!res.ok) {
             addConsoleLog("ERROR", "go-core", `Go Core scan rejected: ${res.error}`);
             return { ok: false, error: res.error || `HTTP ${res.status}` };
+          }
+          if (selectedEngagementId && !targetMatchesSelected) {
+            setSelectedEngagementId("");
+            selectedEngRef.current = "";
+            userClearedEngRef.current = true;
+            if (hunterHubHealth.status === "connected") {
+              await apiJson("/api/platform/context", {
+                method: "PUT",
+                body: { active_engagement_id: null },
+              });
+            }
           }
           addConsoleLog("SUCCESS", "go-core", `Go Core scan dispatched for ${normTarget}`);
           void refreshData();
@@ -1553,6 +1595,12 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
             : selectedEngagement?.out_of_scope?.length
               ? selectedEngagement.out_of_scope
               : undefined);
+        const resolvedEngagementId =
+          input.engagement_id !== undefined
+            ? input.engagement_id
+            : !normTarget || targetMatchesSelected
+              ? selectedEngagementId || null
+              : null;
 
         addConsoleLog("INFO", "dispatcher", `Starting ${input.kind} mission for ${normTarget || input.engine}`);
         const res = await apiJson<{ status?: string; run?: RunRecord }>("/api/platform/runs/start", {
@@ -1560,7 +1608,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           body: {
             kind: input.kind,
             target: normTarget,
-            engagement_id: input.engagement_id ?? (selectedEngagementId || null),
+            engagement_id: resolvedEngagementId,
             scope: resolvedScope,
             out_of_scope: resolvedOutOfScope,
             mode: input.mode || "full",
@@ -1589,7 +1637,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         window.setTimeout(() => setIsScanning(false), 1000);
       }
     },
-    [selectedEngagement, selectedEngagementId, addConsoleLog, apiJson, refreshData]
+    [selectedEngagement, selectedEngagementId, hunterHubHealth.status, addConsoleLog, apiJson, refreshData]
   );
 
   const launchScan = useCallback(
@@ -1737,6 +1785,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       engagements,
       selectedEngagementId,
       selectedEngagement,
+      engagementSelectionSeq,
       selectEngagement,
       createEngagement,
       targetDomain,
@@ -1784,6 +1833,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       engagements,
       selectedEngagementId,
       selectedEngagement,
+      engagementSelectionSeq,
       selectEngagement,
       createEngagement,
       targetDomain,
