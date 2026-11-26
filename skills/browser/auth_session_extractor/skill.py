@@ -61,10 +61,11 @@ class AuthSessionExtractorSkill(BaseSkill):
         # 2. Write auth_context.json (never log real tokens)
         auth_json = json.dumps(auth_ctx, indent=2)
         auth_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id,
-            "auth_context.json", auth_json
+            ctx.target, "browser",
+            "auth_context.json", auth_json,
+            ctx.session_id,
         )
-        result.output_files["auth_context.json"] = auth_path
+        result.output_files["auth_context.json"] = str(auth_path)
 
         # 3. Surface findings
         if auth_ctx.get("session_valid"):

@@ -96,20 +96,23 @@ class SPAAPIExtractorSkill(BaseSkill):
             indent=2,
         )
         ep_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id,
-            "spa_endpoints.json", endpoints_json
+            ctx.target, "browser",
+            "spa_endpoints.json", endpoints_json,
+            ctx.session_id,
         )
-        result.output_files["spa_endpoints.json"] = ep_path
+        result.output_files["spa_endpoints.json"] = str(ep_path)
 
         # 6. Write spa_api_map.md
         map_md = self._build_api_map_md(target, classified, pages_visited)
         map_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id,
-            "spa_api_map.md", map_md
+            ctx.target, "browser",
+            "spa_api_map.md", map_md,
+            ctx.session_id,
         )
-        result.output_files["spa_api_map.md"] = map_path
+        result.output_files["spa_api_map.md"] = str(map_path)
 
         result.metadata = {
+            "endpoints": classified,
             "total_endpoints": len(classified),
             "critical_count": sum(1 for e in classified if e["sensitivity"] == "Critical"),
             "high_count": sum(1 for e in classified if e["sensitivity"] == "High"),

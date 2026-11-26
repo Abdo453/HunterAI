@@ -946,9 +946,16 @@ class SafeSQLiAssessmentSkill:
       -> Safe Differential Engine -> Evidence Correlation -> Confidence Scoring -> Deduplication -> Report
     """
 
-    def __init__(self, policy: Optional[ScopePolicy] = None, proxy: Optional[str] = None):
+    name: str = "safe_sqli_assessment"
+    vuln_type: str = "sqli"
+    cwe: str = "CWE-89"
+    owasp_top10: str = "A03:2021"
+    default_severity: str = "High"
+
+    def __init__(self, policy: Optional[ScopePolicy] = None, proxy: Optional[str] = None, timeout: float = 12.0):
         self.policy = policy or ScopePolicy()
         self.proxy = proxy
+        self.timeout = timeout
         self.scope_gate = ScopeGate(self.policy)
         self.normalizer = ResponseNormalizer()
         self.profiler = BaselineProfiler(samples=3)
@@ -957,13 +964,29 @@ class SafeSQLiAssessmentSkill:
         self.second_order = SecondOrderTracker()
         self.report_gen = ReportGenerator()
 
+    def can_handle(self, param_name: str, url: str = "", sample_value: str = "") -> float:
+        p = (param_name or "").strip().lower()
+        if not p:
+            return 0.0
+        if p in ParameterClassifier.HIGH_PRIORITY_NAMES or p.endswith("_id"):
+            return 0.85
+        return 0.2
+
     async def run(
         self,
         endpoint: str,
         method: str = "GET",
         headers: Optional[Dict[str, str]] = None,
-        parameters: Optional[List[Dict[str, Any]]] = None
+        parameters: Optional[List[Dict[str, Any]]] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
+        # Support SkillRegistry.run_skill(meta, target_url, param_name) contract
+        http_methods = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+        if method and method.upper() not in http_methods and parameters is None:
+            parameters = [{"name": method, "value": "", "location": "query"}]
+            method = "GET"
+        elif "param_name" in kwargs and kwargs["param_name"] and parameters is None:
+            parameters = [{"name": str(kwargs["param_name"]), "value": "", "location": "query"}]
         scope_eval = self.scope_gate.evaluate(endpoint, method)
         if not scope_eval["allowed"]:
             return {

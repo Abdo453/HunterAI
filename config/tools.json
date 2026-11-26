@@ -5,7 +5,11 @@
     "type": "security",
     "category": "vuln",
     "risk": "medium",
-    "permissions": ["recon", "scan", "active_testing"],
+    "permissions": [
+      "recon",
+      "scan",
+      "active_testing"
+    ],
     "purpose": "Burp Suite automated scanner integration for vulnerability discovery",
     "requires_authorization": true,
     "command_template": "burp --scan {target}"
@@ -16,7 +20,9 @@
     "type": "recon",
     "category": "dns",
     "risk": "low",
-    "permissions": ["recon"],
+    "permissions": [
+      "recon"
+    ],
     "purpose": "Passive subdomain enumeration via multiple public sources",
     "requires_authorization": false,
     "command_template": "subfinder -d {target} -silent -json"
@@ -27,7 +33,9 @@
     "type": "recon",
     "category": "dns",
     "risk": "low",
-    "permissions": ["recon"],
+    "permissions": [
+      "recon"
+    ],
     "purpose": "Fast asset and subdomain discovery using public archives",
     "requires_authorization": false,
     "command_template": "assetfinder --subs-only {target}"
@@ -38,7 +46,9 @@
     "type": "recon",
     "category": "dns",
     "risk": "low",
-    "permissions": ["recon"],
+    "permissions": [
+      "recon"
+    ],
     "purpose": "High-throughput DNS query, resolution, and brute-forcer",
     "requires_authorization": false,
     "command_template": "dnsx -l {input_file} -silent -json"
@@ -49,7 +59,9 @@
     "type": "recon",
     "category": "http",
     "risk": "low",
-    "permissions": ["recon"],
+    "permissions": [
+      "recon"
+    ],
     "purpose": "Fast HTTP probing, status code checking, and tech detection",
     "requires_authorization": false,
     "command_template": "httpx -l {input_file} -silent -json -tech-detect"
@@ -60,7 +72,10 @@
     "type": "scanner",
     "category": "ports",
     "risk": "medium",
-    "permissions": ["recon", "scan"],
+    "permissions": [
+      "recon",
+      "scan"
+    ],
     "purpose": "Network port scanning, OS detection, and service fingerprinter",
     "requires_authorization": false,
     "command_template": "nmap -sV -T3 -Pn --top-ports 100 {target}"
@@ -71,7 +86,10 @@
     "type": "scanner",
     "category": "ports",
     "risk": "medium",
-    "permissions": ["recon", "scan"],
+    "permissions": [
+      "recon",
+      "scan"
+    ],
     "purpose": "Fast SYN/CONNECT port scanner focused on reliability",
     "requires_authorization": false,
     "command_template": "naabu -host {target} -silent"
@@ -82,7 +100,10 @@
     "type": "scanner",
     "category": "ports",
     "risk": "medium",
-    "permissions": ["recon", "scan"],
+    "permissions": [
+      "recon",
+      "scan"
+    ],
     "purpose": "Ultra-fast asynchronous port discovery feeding the network pipeline discovery stage",
     "requires_authorization": true,
     "command_template": "masscan -p{ports} --rate {rate} -oJ {output}"
@@ -93,7 +114,11 @@
     "type": "scanner",
     "category": "ad",
     "risk": "high",
-    "permissions": ["recon", "scan", "active_testing"],
+    "permissions": [
+      "recon",
+      "scan",
+      "active_testing"
+    ],
     "purpose": "Active Directory / SMB / LDAP / WinRM enumeration and credential validation",
     "requires_authorization": true,
     "command_template": "netexec {protocol} {target} {args}"
@@ -104,7 +129,10 @@
     "type": "recon",
     "category": "ad",
     "risk": "medium",
-    "permissions": ["recon", "scan"],
+    "permissions": [
+      "recon",
+      "scan"
+    ],
     "purpose": "SMB/RPC/AD enumeration (users, shares, groups, password policy)",
     "requires_authorization": true,
     "command_template": "enum4linux-ng -A -oJ {output} {target}"
@@ -115,7 +143,10 @@
     "type": "crawler",
     "category": "crawling",
     "risk": "low",
-    "permissions": ["recon", "crawling"],
+    "permissions": [
+      "recon",
+      "crawling"
+    ],
     "purpose": "Modern web crawler and endpoint spider supporting headless browser mode",
     "requires_authorization": false,
     "command_template": "katana -u {target} -silent -json"
@@ -126,7 +157,10 @@
     "type": "crawler",
     "category": "crawling",
     "risk": "low",
-    "permissions": ["recon", "crawling"],
+    "permissions": [
+      "recon",
+      "crawling"
+    ],
     "purpose": "Fetch known URLs from AlienVault, Wayback Machine, and Common Crawl",
     "requires_authorization": false,
     "command_template": "gau {target} --subs"
@@ -137,7 +171,10 @@
     "type": "fuzzer",
     "category": "fuzzing",
     "risk": "medium",
-    "permissions": ["fuzzing", "active_testing"],
+    "permissions": [
+      "fuzzing",
+      "active_testing"
+    ],
     "purpose": "Fast web fuzzer for directory, endpoint, and parameter discovery",
     "requires_authorization": false,
     "command_template": "ffuf -u {target}/FUZZ -w {wordlist} -of json -s"
@@ -148,7 +185,10 @@
     "type": "security",
     "category": "vuln",
     "risk": "high",
-    "permissions": ["scan", "active_testing"],
+    "permissions": [
+      "scan",
+      "active_testing"
+    ],
     "purpose": "Vulnerability scanner powered by community YAML templates",
     "requires_authorization": true,
     "command_template": "nuclei -l {input_file} -silent -jsonl"
@@ -159,7 +199,10 @@
     "type": "security",
     "category": "vuln",
     "risk": "high",
-    "permissions": ["active_testing", "exploit_verify"],
+    "permissions": [
+      "active_testing",
+      "exploit_verify"
+    ],
     "purpose": "Automatic SQL injection detection, verification, and database auditing",
     "requires_authorization": true,
     "command_template": "sqlmap -u {target} --batch --banner"
@@ -170,7 +213,11 @@
     "type": "scanner",
     "category": "tls",
     "risk": "medium",
-    "permissions": ["recon", "scan", "active_testing"],
+    "permissions": [
+      "recon",
+      "scan",
+      "active_testing"
+    ],
     "purpose": "TLS/SSL configuration and cipher intelligence via testssl.sh",
     "requires_authorization": true,
     "command_template": "testssl.sh --json {target}"
@@ -181,7 +228,9 @@
     "type": "recon",
     "category": "http",
     "risk": "low",
-    "permissions": ["recon"],
+    "permissions": [
+      "recon"
+    ],
     "purpose": "Web technology fingerprinting via whatweb",
     "requires_authorization": false,
     "command_template": "whatweb --color=never --log-json=- {target}"
@@ -192,7 +241,11 @@
     "type": "scanner",
     "category": "tls",
     "risk": "medium",
-    "permissions": ["recon", "scan", "active_testing"],
+    "permissions": [
+      "recon",
+      "scan",
+      "active_testing"
+    ],
     "purpose": "TLS cipher and protocol intelligence via sslscan",
     "requires_authorization": true,
     "command_template": "sslscan --xml=- {target}"
@@ -203,7 +256,10 @@
     "type": "browser",
     "category": "crawling",
     "risk": "low",
-    "permissions": ["recon", "browser_automation"],
+    "permissions": [
+      "recon",
+      "browser_automation"
+    ],
     "purpose": "Playwright automated browser session controller for DOM analysis",
     "requires_authorization": false,
     "command_template": "playwright launch {target}"
@@ -214,7 +270,11 @@
     "type": "scanner",
     "category": "wireless",
     "risk": "medium",
-    "permissions": ["recon", "scan", "active_testing"],
+    "permissions": [
+      "recon",
+      "scan",
+      "active_testing"
+    ],
     "purpose": "Wireless network detection, sniffing, and IDS for 802.11",
     "requires_authorization": true,
     "command_template": "kismet --json {target}"
@@ -225,7 +285,11 @@
     "type": "scanner",
     "category": "wireless",
     "risk": "high",
-    "permissions": ["recon", "scan", "active_testing"],
+    "permissions": [
+      "recon",
+      "scan",
+      "active_testing"
+    ],
     "purpose": "WiFi security auditing: capture, injection, and WEP/WPA cracking",
     "requires_authorization": true,
     "command_template": "aircrack-ng {capture_file} -w {wordlist}"
@@ -236,7 +300,11 @@
     "type": "scanner",
     "category": "wireless",
     "risk": "high",
-    "permissions": ["recon", "scan", "active_testing"],
+    "permissions": [
+      "recon",
+      "scan",
+      "active_testing"
+    ],
     "purpose": "Automated WiFi auditing tool (WEP/WPA/WPS)",
     "requires_authorization": true,
     "command_template": "wifite -i {interface} --wps"
@@ -247,7 +315,10 @@
     "type": "recon",
     "category": "iot",
     "risk": "medium",
-    "permissions": ["recon", "scan"],
+    "permissions": [
+      "recon",
+      "scan"
+    ],
     "purpose": "Zigbee to MQTT bridge for IoT device discovery and control",
     "requires_authorization": true,
     "command_template": "zigbee2mqtt {target}"
@@ -258,7 +329,11 @@
     "type": "scanner",
     "category": "ot",
     "risk": "high",
-    "permissions": ["recon", "scan", "active_testing"],
+    "permissions": [
+      "recon",
+      "scan",
+      "active_testing"
+    ],
     "purpose": "Modbus TCP client for OT/ICS register read/write testing",
     "requires_authorization": true,
     "command_template": "modbus-cli read -u {target} -a 0 -i {unit_id}"

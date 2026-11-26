@@ -186,25 +186,28 @@ class BurpLogInspectorSkill(BaseSkill):
             "top_risk_requests": scored_interactions[:15],
         }
         findings_json_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id, "burp_log_findings.json",
+            ctx.target, "burp", "burp_log_findings.json",
             json.dumps(findings_payload, indent=2, ensure_ascii=False),
+            ctx.session_id,
         )
 
         surface_json_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id, "burp_attack_surface.json",
+            ctx.target, "burp", "burp_attack_surface.json",
             json.dumps(attack_surface, indent=2, ensure_ascii=False),
+            ctx.session_id,
         )
 
         report_md = self._build_markdown_report(
             ctx.target, source_desc, len(interactions), findings, attack_surface, scored_interactions
         )
         report_md_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id, "burp_log_analysis_report.md", report_md
+            ctx.target, "burp", "burp_log_analysis_report.md", report_md,
+            ctx.session_id,
         )
 
-        result.output_files["burp_log_findings.json"] = findings_json_path
-        result.output_files["burp_attack_surface.json"] = surface_json_path
-        result.output_files["burp_log_analysis_report.md"] = report_md_path
+        result.output_files["burp_log_findings.json"] = str(findings_json_path)
+        result.output_files["burp_attack_surface.json"] = str(surface_json_path)
+        result.output_files["burp_log_analysis_report.md"] = str(report_md_path)
         result.metadata = {
             "total_interactions": len(interactions),
             "total_findings": len(findings),

@@ -120,17 +120,19 @@ class BurpTrafficAnalyzerSkill(BaseSkill):
             "vuln_groups": {k: [a["url"] for a in v] for k, v in vuln_groups.items()},
         }
         findings_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id, "burp_findings.json",
+            ctx.target, "burp", "burp_findings.json",
             json.dumps(findings_data, indent=2, ensure_ascii=False),
+            ctx.session_id,
         )
 
         report_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id, "burp_analysis_report.md",
+            ctx.target, "burp", "burp_analysis_report.md",
             self._build_report(ctx.target, analyses, vuln_groups, burp_live),
+            ctx.session_id,
         )
 
-        result.output_files["burp_findings.json"] = findings_path
-        result.output_files["burp_analysis_report.md"] = report_path
+        result.output_files["burp_findings.json"] = str(findings_path)
+        result.output_files["burp_analysis_report.md"] = str(report_path)
         result.metadata = {"high_risk_requests": high_risk}  # type: ignore[attr-defined]
         result.success = True
         return result

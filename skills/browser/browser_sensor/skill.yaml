@@ -1,0 +1,24 @@
+name: browser_sensor
+class: BrowserSensorSkill
+category: browser
+description: "Continuous browser-based application sensor (DOM, network, auth state, API surface)"
+version: "1.0"
+input:
+  - target_url: str
+output:
+  - sensor_report.json
+  - coverage_metrics.json
+  - discovered_urls.txt
+  - api_endpoints.txt
+depends_on:
+  - live_host_detection
+next_skills:
+  - form_intelligence
+  - network_intelligence
+fallback_skills:
+  - browser_recon
+tools_required: []
+fallback_tools: []
+timeout_seconds: 180
+max_retries: 1
+enabled: true

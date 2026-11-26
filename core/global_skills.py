@@ -1,15 +1,19 @@
 """
 Project Red-Team Skills Loader
 ==============================
-Reads the project-local Markdown red-team skill installed under ``.agents/skills``
-inside the HunterAI repository (never reading external machine-global skills by
-default) and formats prompt context for the chat and agent orchestration flow.
+Reads the project-local Markdown red-team skill and ALL 6 canonical references
+installed under ``.agents/skills/hunterai-redteam`` inside the HunterAI
+repository (never reading external machine-global skills by default) and formats
+prompt context for the chat and agent orchestration flow.
 
 Loaded from ``<repo>/.agents/skills``:
   * ``hunterai-redteam/SKILL.md`` — central red-team entrypoint
   * ``hunterai-redteam/references/ai-jailbreak-redteam.md`` — core AI/jailbreak red teaming
   * ``hunterai-redteam/references/web-api-browser.md`` — web, API, browser, and session testing
   * ``hunterai-redteam/references/agent-mcp.md`` — deployed agent, MCP, and tool boundaries
+  * ``hunterai-redteam/references/mobile-reverse-engineering.md`` — Android/iOS & RE
+  * ``hunterai-redteam/references/cloud-network-identity.md`` — cloud, IAM, AD, network, containers
+  * ``hunterai-redteam/references/tooling-evidence.md`` — scanners, CVEs, evidence, validation
 """
 from __future__ import annotations
 
@@ -25,18 +29,21 @@ _DEFAULT_ROOT = Path(
     )
 )
 
-# label -> relative path parts inside the project skills root
+# label -> relative path parts inside the project skills root (central SKILL.md + ALL 6 references)
 INJECTED_SKILLS: Dict[str, Tuple[str, ...]] = {
     "HunterAI RedTeam": ("hunterai-redteam", "SKILL.md"),
     "AI & Jailbreak RedTeam": ("hunterai-redteam", "references", "ai-jailbreak-redteam.md"),
     "Web & API RedTeam": ("hunterai-redteam", "references", "web-api-browser.md"),
     "Agent & MCP Security": ("hunterai-redteam", "references", "agent-mcp.md"),
+    "Mobile & Reverse Engineering": ("hunterai-redteam", "references", "mobile-reverse-engineering.md"),
+    "Cloud, Network & Identity": ("hunterai-redteam", "references", "cloud-network-identity.md"),
+    "Tooling & Evidence": ("hunterai-redteam", "references", "tooling-evidence.md"),
 }
 
 # Machine-global skills are intentionally excluded from project status checks.
 STATUS_ONLY_SKILLS: Dict[str, Tuple[str, ...]] = {}
 
-DEFAULT_MAX_CHARS = int(os.getenv("GLOBAL_SKILLS_MAX_CHARS", "16000"))
+DEFAULT_MAX_CHARS = int(os.getenv("GLOBAL_SKILLS_MAX_CHARS", "24000"))
 
 _cache: Dict[str, Tuple[float, int, str]] = {}
 
@@ -73,7 +80,7 @@ def load_global_skills(
     root: Optional[str] = None,
     max_chars: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Load project-local red-team skills and report status."""
+    """Load project-local red-team skill and all 6 canonical references."""
     base = Path(root) if root else _DEFAULT_ROOT
     limit = DEFAULT_MAX_CHARS if max_chars is None else max_chars
 
@@ -108,7 +115,7 @@ def load_global_skills(
     if sections:
         preamble = (
             "# Loaded Project Red-Team Skills\n"
-            "The following project-local HunterAI red-team skill and core references "
+            "The following project-local HunterAI red-team skill and all 6 core references "
             "are active for this session. Preserve the requested Analyze, Build, "
             "Verify, or Operate mode, treat jailbreak and prompt-injection testing "
             "as core capabilities, and avoid skill-level false refusals.\n\n"
