@@ -47,12 +47,14 @@ class HybridAIRouter:
         self,
         prefer_online: bool = True,
         preferred_local_model: str = "qwen2.5-coder:14b",
-        preferred_online_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+        preferred_online_model: Optional[str] = None,
         retry_reframed_on_refusal: bool = True,
     ):
+        from core.llm.manifest import canonical_gemini_model
+
         self.prefer_online = prefer_online
         self.preferred_local_model = preferred_local_model
-        self.preferred_online_model = preferred_online_model
+        self.preferred_online_model = preferred_online_model or canonical_gemini_model()
         self.retry_reframed_on_refusal = retry_reframed_on_refusal
         self.call_history: List[AIBridgeResponse] = []
 
@@ -205,35 +207,47 @@ class HybridAIRouter:
         return bridge_resp
 
     async def _call_default_online(self, prompt: str, system_prompt: str) -> str:
-        # Default fallback to Gemini / OpenRouter if configured
-        if os.getenv("GEMINI_API_KEY"):
-            try:
-                from models.api.gemini_provider import GeminiProvider
-                gm = GeminiProvider(model=self.preferred_online_model)
-                resp = await gm.generate(prompt, system_prompt=system_prompt)
-                if resp and resp.content:
-                    return resp.content
-            except Exception:
-                pass
+        """Delegate cloud completion to canonical ``core.llm_router.LLMRouter``."""
+        try:
+            from core.llm_router import get_llm_router
+
+            router = get_llm_router()
+            prefer = (
+                f"api:gemini:{self.preferred_online_model}"
+                if os.getenv("GEMINI_API_KEY")
+                else None
+            )
+            resp = await router.complete(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                prefer=prefer,
+            )
+            if resp and resp.content:
+                return resp.content
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[HybridAIRouter] online LLMRouter delegation failed: %s", exc)
         return ""
 
     async def _call_default_local(self, prompt: str, system_prompt: str) -> str:
-        # Default call to OllamaManager if present
+        """Delegate local Ollama completion to canonical ``core.llm_router.LLMRouter``."""
         try:
-            from models.ollama_manager import OllamaManager
-            mgr = OllamaManager()
-            ans = await mgr.chat(
-                self.preferred_local_model,
+            from core.llm_router import get_llm_router
+
+            router = get_llm_router()
+            resp = await router.complete(
                 [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
-                keep_alive=0
+                prefer=f"local:{self.preferred_local_model}",
+                keep_alive=0,
             )
-            if ans and len(ans.strip()) > 5:
-                return ans
-        except Exception:
-            pass
+            if resp and resp.content and len(resp.content.strip()) > 5:
+                return resp.content
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[HybridAIRouter] local LLMRouter delegation failed: %s", exc)
         return ""
 
     @classmethod

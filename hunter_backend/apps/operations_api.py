@@ -340,10 +340,71 @@ class RunFindingsView(APIView):
 
 
 class BudgetView(APIView):
-    """GET / POST /api/budget."""
+    """GET / POST /api/budget — backed by persisted PlatformStore.cost_ledger & GLOBAL_COST_CONTROLLER."""
+
+    @staticmethod
+    def _build_budget_snapshot(
+        *,
+        run_id: Optional[str] = None,
+        engagement_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        store = ensure_platform_wiring()
+        persisted = store.summarize_costs_breakdown(run_id=run_id, engagement_id=engagement_id)
+        mem_snap = GLOBAL_COST_CONTROLLER.snapshot()
+
+        # Restore persisted budget ceilings if present in PlatformStore context extra
+        try:
+            ctx = store.get_context()
+            saved_budget = (ctx.get("extra") or {}).get("budget")
+            if isinstance(saved_budget, dict):
+                if GLOBAL_COST_CONTROLLER.budget.per_run_usd is None and saved_budget.get("per_run_usd") is not None:
+                    GLOBAL_COST_CONTROLLER.budget.per_run_usd = float(saved_budget["per_run_usd"])
+                if GLOBAL_COST_CONTROLLER.budget.per_solver_usd is None and saved_budget.get("per_solver_usd") is not None:
+                    GLOBAL_COST_CONTROLLER.budget.per_solver_usd = float(saved_budget["per_solver_usd"])
+                if GLOBAL_COST_CONTROLLER.budget.per_day_usd is None and saved_budget.get("per_day_usd") is not None:
+                    GLOBAL_COST_CONTROLLER.budget.per_day_usd = float(saved_budget["per_day_usd"])
+        except Exception:  # noqa: BLE001
+            pass
+
+        use_persisted = persisted.get("calls", 0) > 0 or mem_snap.get("calls", 0) == 0
+        if use_persisted:
+            by_run = dict(persisted["by_run"])
+            for rid, usd in (mem_snap.get("by_run") or {}).items():
+                if rid not in by_run:
+                    by_run[rid] = {"usd": usd, "input_tokens": 0, "output_tokens": 0, "tokens": 0, "calls": 0}
+            return {
+                "global_usd": persisted["global_usd"],
+                "global_tokens": persisted["global_tokens"],
+                "input_tokens": persisted["input_tokens"],
+                "output_tokens": persisted["output_tokens"],
+                "calls": persisted["calls"],
+                "unpriced_calls": mem_snap.get("unpriced_calls", 0),
+                "today_usd": persisted["today_usd"],
+                "by_run": by_run,
+                "by_solver": mem_snap.get("by_solver", {}),
+                "by_provider": persisted["by_provider"],
+                "by_model": persisted["by_model"],
+                "by_role": persisted["by_role"],
+                "budget": {
+                    "per_run_usd": GLOBAL_COST_CONTROLLER.budget.per_run_usd,
+                    "per_solver_usd": GLOBAL_COST_CONTROLLER.budget.per_solver_usd,
+                    "per_day_usd": GLOBAL_COST_CONTROLLER.budget.per_day_usd,
+                },
+                "source": "cost_ledger",
+            }
+
+        return {
+            **mem_snap,
+            "by_provider": mem_snap.get("by_provider", {}),
+            "by_model": mem_snap.get("by_model", {}),
+            "by_role": mem_snap.get("by_role", {}),
+            "source": "memory_fallback",
+        }
 
     def get(self, request: Any) -> Any:
-        return ok_json(GLOBAL_COST_CONTROLLER.snapshot())
+        run_id = (request.GET.get("run_id") or "").strip() or None
+        engagement_id = (request.GET.get("engagement_id") or "").strip() or None
+        return ok_json(self._build_budget_snapshot(run_id=run_id, engagement_id=engagement_id))
 
     def post(self, request: Any) -> Any:
         data, err = parse_json_body(request)
@@ -358,7 +419,20 @@ class BudgetView(APIView):
             per_solver_usd=req.per_solver_usd,
             per_day_usd=req.per_day_usd,
         )
-        return ok_json(GLOBAL_COST_CONTROLLER.snapshot())
+        try:
+            store = ensure_platform_wiring()
+            store.update_context(
+                extra={
+                    "budget": {
+                        "per_run_usd": req.per_run_usd,
+                        "per_solver_usd": req.per_solver_usd,
+                        "per_day_usd": req.per_day_usd,
+                    }
+                }
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return ok_json(self._build_budget_snapshot())
 
 
 # ---------------------------------------------------------------------------
@@ -1077,7 +1151,9 @@ class EnhancedOmniStatusView(APIView):
 
 @require_http_methods(["POST"])
 async def enhanced_burp_inspect_view(request: HttpRequest) -> JsonResponse:
-    """POST /api/enhanced/burp/inspect."""
+    """POST /api/enhanced/burp/inspect — supports pasted content, file logs, and live CaptureStore."""
+    from core.secret_sanitizer import SecretSanitizer
+
     data, err = parse_json_body(request)
     if err is not None:
         return err
@@ -1085,22 +1161,72 @@ async def enhanced_burp_inspect_view(request: HttpRequest) -> JsonResponse:
     if verr is not None:
         return verr
     assert req is not None
-    if req.source not in {"live", "pasted"} and "://" not in req.source and not req.content_text:
-        try:
-            safe_resolve_path(req.source, [DATA_DIR, BASE_DIR])
-        except (PermissionError, FileNotFoundError) as exc:
-            return django_err(str(exc), status=403)
-    text = req.content_text or ""
+
+    patterns = (
+        (r"\bAKIA[0-9A-Z]{16}\b", "Exposed AWS Access Key ID", "High"),
+        (r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}", "JWT Bearer Token in HTTP Traffic", "Info"),
+        (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private Key Material Exposed", "Critical"),
+        (r"(?:SQL syntax|PostgreSQL.*ERROR|mysql_fetch|ORA-\d{5})", "Database Error Disclosure", "Medium"),
+    )
+
     findings: List[Dict[str, Any]] = []
-    if text:
-        for pat, title, sev in (
-            (r"\bAKIA[0-9A-Z]{16}\b", "Exposed AWS Access Key ID", "High"),
-            (r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}", "JWT Bearer Token in HTTP Traffic", "Info"),
-            (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private Key Material Exposed", "Critical"),
-            (r"(?:SQL syntax|PostgreSQL.*ERROR|mysql_fetch|ORA-\d{5})", "Database Error Disclosure", "Medium"),
-        ):
-            for m in re.finditer(pat, text):
-                findings.append({"title": title, "severity": sev, "match": m.group(0)[:80], "target": req.target})
+    inspected_transactions = 0
+    text = req.content_text or ""
+
+    if req.source == "live" and not text:
+        from hunter_backend.apps.arsenal_api import _collect_capture_store_transactions
+
+        txs = await asyncio.to_thread(
+            _collect_capture_store_transactions,
+            200,
+            req.target or "",
+        )
+        inspected_transactions = len(txs)
+        for tx in txs:
+            blob = "\n".join(
+                [
+                    str(tx.get("url") or ""),
+                    json.dumps(tx.get("request_headers") or {}, default=str),
+                    str(tx.get("request_body_preview") or ""),
+                    json.dumps(tx.get("response_headers") or {}, default=str),
+                    str(tx.get("response_body_preview") or ""),
+                ]
+            )
+            for pat, title, sev in patterns:
+                for m in re.finditer(pat, blob):
+                    findings.append(
+                        {
+                            "title": title,
+                            "severity": sev,
+                            "match": SecretSanitizer.sanitize_text(m.group(0)[:80]),
+                            "target": tx.get("url") or req.target,
+                            "tx_id": tx.get("id") or tx.get("tx_id"),
+                            "method": tx.get("method"),
+                            "status": tx.get("status"),
+                        }
+                    )
+    else:
+        if req.source not in {"live", "pasted"} and "://" not in req.source and not text:
+            try:
+                resolved = safe_resolve_path(req.source, [DATA_DIR, BASE_DIR])
+                if resolved.is_file():
+                    text = await asyncio.to_thread(
+                        resolved.read_text, encoding="utf-8", errors="replace"
+                    )
+            except (PermissionError, FileNotFoundError) as exc:
+                return django_err(str(exc), status=403)
+        if text:
+            for pat, title, sev in patterns:
+                for m in re.finditer(pat, text):
+                    findings.append(
+                        {
+                            "title": title,
+                            "severity": sev,
+                            "match": SecretSanitizer.sanitize_text(m.group(0)[:80]),
+                            "target": req.target,
+                        }
+                    )
+
     return django_json(
         {
             "ok": True,
@@ -1108,6 +1234,7 @@ async def enhanced_burp_inspect_view(request: HttpRequest) -> JsonResponse:
             "source": req.source,
             "target": req.target,
             "min_risk": req.min_risk,
+            "inspected_transactions": inspected_transactions,
             "total_findings": len(findings),
             "findings": findings,
         }
@@ -1207,7 +1334,7 @@ class EnhancedSkillsCatalogView(APIView):
 
 @require_http_methods(["POST"])
 async def enhanced_skills_elite_run_view(request: HttpRequest) -> JsonResponse:
-    """POST /api/enhanced/skills/elite-run."""
+    """POST /api/enhanced/skills/elite-run — real dispatch via SkillRegistry (zero stubs)."""
     data, err = parse_json_body(request)
     if err is not None:
         return err
@@ -1225,15 +1352,133 @@ async def enhanced_skills_elite_run_view(request: HttpRequest) -> JsonResponse:
     )
     if not ok:
         return django_err(reason, status=403, extra={"policy": policy})
+
+    wanted = req.skill_name.strip()
+    wanted_norm = wanted.lower().replace("-", "_")
+
+    # 1. Dispatch via canonical core.skill_registry.SkillRegistry
+    try:
+        from core.skill_registry import SkillRegistry
+        from core.workspace_manager import WorkspaceManager
+        from skills.base_skill import SkillContext
+        from tools.tool_manager import ToolManager
+
+        reg = SkillRegistry()
+        await asyncio.to_thread(reg.discover)
+        meta = reg.get_skill(wanted)
+        if meta is None:
+            for cand in reg.get_all():
+                if cand.name.lower().replace("-", "_") == wanted_norm:
+                    meta = cand
+                    break
+
+        if meta is not None:
+            inst = await asyncio.to_thread(meta.instantiate)
+            if inst is None:
+                return django_json(
+                    {
+                        "ok": False,
+                        "skill_name": meta.name,
+                        "target_url": req.target_url,
+                        "param_name": req.param_name,
+                        "verified": False,
+                        "status": "UNAVAILABLE",
+                        "error": f"Skill '{meta.name}' could not be instantiated",
+                    },
+                    status=503,
+                )
+            ctx = SkillContext(
+                target=req.target_url,
+                session_id=new_id("elite"),
+                workspace=WorkspaceManager(str(DATA_DIR / "skill_runs")),
+                tool_manager=ToolManager(),
+                extra={
+                    "param_name": req.param_name or "",
+                    "proxy": req.proxy,
+                    "disable_fallback": True,
+                },
+            )
+            skill_res = await inst.execute(ctx)
+            findings = list(getattr(skill_res, "findings", None) or [])
+            errors = list(getattr(skill_res, "errors", None) or [])
+            success = bool(getattr(skill_res, "success", False))
+            metadata = dict(getattr(skill_res, "metadata", None) or {})
+            verified = bool(
+                findings
+                and any(
+                    isinstance(f, dict) and bool(f.get("verified"))
+                    for f in findings
+                )
+            )
+            return django_json(
+                {
+                    "ok": success,
+                    "skill_name": meta.name,
+                    "registry": "SkillRegistry",
+                    "target_url": req.target_url,
+                    "param_name": req.param_name,
+                    "verified": verified,
+                    "status": "completed" if success else "failed",
+                    "findings": findings,
+                    "findings_count": len(findings),
+                    "metadata": metadata,
+                    "errors": errors,
+                }
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("SkillRegistry dispatch failed for '%s': %s", wanted, exc)
+
+    # 2. Dispatch via agents.skills.registry builtin prober skills
+    try:
+        from agents.skills.registry import bootstrap_builtin_skills
+
+        builtin_reg = bootstrap_builtin_skills()
+        matched_skill = None
+        all_skills = getattr(builtin_reg, "_skills", None) or {}
+        if isinstance(all_skills, dict):
+            for k, sk in all_skills.items():
+                sk_name = str(getattr(sk, "name", "") or type(sk).__name__ or k)
+                sk_vuln = str(getattr(sk, "vuln_type", "") or "")
+                if wanted_norm in {
+                    str(k).lower().replace("-", "_"),
+                    sk_name.lower().replace("-", "_"),
+                    sk_vuln.lower().replace("-", "_"),
+                }:
+                    matched_skill = sk
+                    break
+        if matched_skill is not None:
+            sk_res = await matched_skill.run(req.target_url, param_name=req.param_name or "")
+            is_fb = bool(getattr(sk_res, "fallback_used", False))
+            verified = bool(getattr(sk_res, "verified", False)) and not is_fb
+            return django_json(
+                {
+                    "ok": True,
+                    "skill_name": getattr(matched_skill, "name", wanted),
+                    "registry": "agents.skills.registry",
+                    "target_url": req.target_url,
+                    "param_name": req.param_name,
+                    "verified": verified,
+                    "status": "UNAVAILABLE" if is_fb else "completed",
+                    "title": getattr(sk_res, "title", ""),
+                    "evidence": getattr(sk_res, "evidence", ""),
+                    "confidence": float(getattr(sk_res, "confidence", 0.0) or 0.0),
+                    "cwe": getattr(sk_res, "cwe", ""),
+                }
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("agents.skills.registry dispatch failed for '%s': %s", wanted, exc)
+
     return django_json(
         {
-            "ok": True,
-            "skill_name": req.skill_name,
+            "ok": False,
+            "skill_name": wanted,
             "target_url": req.target_url,
             "param_name": req.param_name,
             "verified": False,
-            "status": "executed",
-        }
+            "status": "not_found",
+            "error": f"Skill '{wanted}' is not registered in SkillRegistry",
+        },
+        status=404,
     )
 
 

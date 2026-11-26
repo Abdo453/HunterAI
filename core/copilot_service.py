@@ -102,9 +102,17 @@ _URL_OR_HOST_RE = re.compile(
     re.IGNORECASE,
 )
 _ACTION_INTENT_RE = re.compile(
-    r"\b(run|execute|launch|start|scan|fuzz|exploit|probe|attack|pentest|test|enumerate|crawl)\b",
+    r"\b(run|execute|launch|start|scan|fuzz|exploit|probe|attack|pentest|test|enumerate|crawl|pause|resume|unpause|cancel|stop|abort|patch|modify|update)\b",
     re.IGNORECASE,
 )
+
+RUN_CONTROL_ACTION_TYPES = frozenset({"PAUSE_RUN", "RESUME_RUN", "CANCEL_RUN", "PATCH_PLAN"})
+
+_RUN_ID_RE = re.compile(r"\b((?:run|omni|mission|pipeline|hunter|scan|eng)[_-][A-Za-z0-9_-]{3,48})\b", re.IGNORECASE)
+_PAUSE_RUN_RE = re.compile(r"\bpause\s+(?:the\s+)?(?:active\s+|current\s+)?(?:run|scan|mission|pipeline|job|hunt)\b", re.IGNORECASE)
+_RESUME_RUN_RE = re.compile(r"\b(?:resume|unpause)\s+(?:the\s+)?(?:paused\s+|active\s+|current\s+)?(?:run|scan|mission|pipeline|job|hunt)\b", re.IGNORECASE)
+_CANCEL_RUN_RE = re.compile(r"\b(?:cancel|stop|abort|terminate)\s+(?:the\s+)?(?:active\s+|current\s+|running\s+)?(?:run|scan|mission|pipeline|job|hunt)\b", re.IGNORECASE)
+_PATCH_PLAN_RE = re.compile(r"\b(?:patch|update|modify|edit|revise)\s+(?:the\s+)?(?:attack\s+|scan\s+|mission\s+|execution\s+)?plan\b", re.IGNORECASE)
 
 
 def is_tcp_reachable(host: str, port: int, timeout: float = 0.15) -> bool:
@@ -643,6 +651,72 @@ def evaluate_action_policy(
             "sanitized_args": "",
         }
 
+    # Validate via immutable PolicyGate in addition to PolicyEngine
+    try:
+        from core.control_plane.policy_gate import ActionCategory as PGCategory
+        from core.control_plane.policy_gate import ActionRequest as PGRequest
+        from core.control_plane.policy_gate import PolicyGate
+
+        pg_category = (
+            PGCategory.ACTIVE_FUZZING
+            if risk_tier in (RiskTier.TIER_2_PROBE, RiskTier.TIER_3_EXPLOIT_POC)
+            else PGCategory.HTTP_REQUEST
+        )
+        pg_allowed: List[str] = []
+        for entry in list(in_scope or []):
+            clean_entry = str(entry or "").strip()
+            if not clean_entry:
+                continue
+            pg_allowed.append(clean_entry)
+            # Align bare domain entries with ScopeGuard subdomain semantics while
+            # keeping excluded_targets (out_of_scope) strictly enforced.
+            host_only = extract_target_host(clean_entry)
+            if (
+                host_only
+                and not host_only.startswith("*.")
+                and "/" not in clean_entry
+                and normalize_ip_literal(host_only) is None
+                and "." in host_only
+            ):
+                pg_allowed.append(f"*.{host_only}")
+        pg_scope = ScopePolicy(
+            allowed_targets=pg_allowed,
+            excluded_targets=list(out_of_scope or []),
+            fail_closed=web_governance_enforced(),
+        )
+        pg = PolicyGate(scope_policy=pg_scope, authorized=allow_active_tests, allow_destructive=False)
+        pg_req = PGRequest(
+            category=pg_category,
+            target=target or "",
+            command=sanitized_args or None,
+            url=target if (target or "").startswith(("http://", "https://")) else None,
+            reason=rationale or f"Copilot proposal {action_type}",
+            requested_by_model="copilot",
+            metadata={"action_type": action_type, "tool_name": tool_name},
+        )
+        pg_dec = pg.evaluate(pg_req)
+        if not pg_dec.allowed and web_governance_enforced():
+            return {
+                "allowed": False,
+                "status": "BLOCKED_POLICY_GATE",
+                "reason": pg_dec.reason,
+                "risk_tier": risk_tier.value,
+                "sanitized_args": "",
+                "proposal_id": proposal.id,
+            }
+    except ImportError as pg_imp_exc:
+        logger.debug("[Copilot] PolicyGate unavailable during secondary check: %s", pg_imp_exc)
+    except Exception as pg_exc:  # noqa: BLE001 - fail closed on PolicyGate runtime errors
+        logger.warning("[Copilot] PolicyGate secondary check error (fail-closed): %s", pg_exc)
+        return {
+            "allowed": False,
+            "status": "BLOCKED_POLICY_GATE",
+            "reason": f"PolicyGate evaluation error (fail-closed): {pg_exc}",
+            "risk_tier": risk_tier.value,
+            "sanitized_args": "",
+            "proposal_id": proposal.id,
+        }
+
     verdict = engine.evaluate_proposal(proposal)
     return {
         "allowed": bool(verdict.allowed),
@@ -650,6 +724,8 @@ def evaluate_action_policy(
         "reason": verdict.reason,
         "risk_tier": verdict.risk_tier.value,
         "sanitized_args": verdict.sanitized_args if verdict.sanitized_args is not None else sanitized_args,
+        "proposal_id": proposal.id,
+        "action_type": proposal.action_type,
     }
 
 
@@ -925,13 +1001,89 @@ def collect_live_context(
 def _extract_proposed_action(
     user_message: str,
     active_engagement: Optional[Dict[str, Any]],
+    active_run: Optional[Dict[str, Any]] = None,
+    runs: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Detect whether the operator requested a consequential execution action."""
+    """Detect whether the operator requested a consequential execution or run-control action.
+
+    Produces typed ``ActionProposal`` payloads including ``PAUSE_RUN``, ``RESUME_RUN``,
+    ``CANCEL_RUN``, ``PATCH_PLAN``, ``RUN_TOOL``, ``START_RUN``, and ``EXPLOIT_POC``.
+    NEVER auto-executes; every returned proposal must pass PolicyGate + approval creation.
+    """
     msg = (user_message or "").strip()
     if not msg:
         return None
     if not _ACTION_INTENT_RE.search(msg):
         return None
+
+    # Detect shell injection operators in ANY user action request
+    unsafe_reason = None
+    for meta in (";", "&&", "||", "|", "`", "$(", "${", ">", "<", "\x00"):
+        if meta in msg:
+            unsafe_reason = f"Unsafe shell metacharacter {meta!r} detected in action request."
+            break
+    if unsafe_reason is None and re.search(r"(?:^|\s)&(?:\s|$)", msg):
+        unsafe_reason = "Unsafe shell operator '&' detected in action request."
+
+    # 1. Typed run-control & plan-patch proposals (PAUSE_RUN, RESUME_RUN, CANCEL_RUN, PATCH_PLAN)
+    control_action_type: Optional[str] = None
+    if _PAUSE_RUN_RE.search(msg):
+        control_action_type = "PAUSE_RUN"
+    elif _RESUME_RUN_RE.search(msg):
+        control_action_type = "RESUME_RUN"
+    elif _CANCEL_RUN_RE.search(msg):
+        control_action_type = "CANCEL_RUN"
+    elif _PATCH_PLAN_RE.search(msg):
+        control_action_type = "PATCH_PLAN"
+
+    if control_action_type is not None:
+        run_id_match = _RUN_ID_RE.search(msg)
+        target_run_id = run_id_match.group(1) if run_id_match else (
+            str(active_run.get("run_id") or "") if isinstance(active_run, dict) else ""
+        )
+        matched_run = active_run
+        if target_run_id and runs:
+            found = next((r for r in runs if str(r.get("run_id") or "") == target_run_id), None)
+            if found is not None:
+                matched_run = found
+
+        url_match = _URL_OR_HOST_RE.search(msg)
+        target = ""
+        if url_match:
+            target = url_match.group(1).strip().rstrip(".,;)")
+        elif isinstance(matched_run, dict) and matched_run.get("target"):
+            target = str(matched_run["target"])
+        elif active_engagement and active_engagement.get("target"):
+            target = str(active_engagement["target"])
+
+        clean_args = target_run_id or ""
+        if control_action_type == "PATCH_PLAN":
+            # Keep sanitized structured patch note (never raw shell args)
+            clean_args = re.sub(r"[^A-Za-z0-9_.:/\- ]+", " ", msg)[:180].strip()
+
+        proposal_model = ActionProposal(
+            proposing_agent="HunterCopilot",
+            target=target,
+            tool_name=control_action_type.lower(),
+            command_args=clean_args,
+            action_type=control_action_type,
+            rationale=f"Requested via Copilot prompt: {msg[:180]}",
+        )
+        return {
+            "proposal": proposal_model.model_dump(),
+            "action_type": control_action_type,
+            "tool_name": control_action_type.lower(),
+            "target": target,
+            "target_run_id": target_run_id,
+            "command_args": clean_args,
+            "unsafe_args_reason": unsafe_reason,
+            "rationale": proposal_model.rationale,
+            "payload_extra": {
+                "intent": control_action_type,
+                "target_run_id": target_run_id,
+                "patch_request": msg[:400] if control_action_type == "PATCH_PLAN" else "",
+            },
+        }
 
     # Ignore purely analytical questions unless paired with a concrete tool/scan target
     is_question_only = msg.endswith("?") and not any(
@@ -959,16 +1111,6 @@ def _extract_proposed_action(
     if any(w in msg.lower() for w in ("exploit", "poc", "os-shell", "sql-shell")):
         action_type = "EXPLOIT_POC"
 
-    # Never pass raw chat prose as CLI arguments into subprocess shells.
-    # Detect shell injection operators in the user request and build clean structured args.
-    unsafe_reason = None
-    for meta in (";", "&&", "||", "|", "`", "$(", "${", ">", "<", "\x00"):
-        if meta in msg:
-            unsafe_reason = f"Unsafe shell metacharacter {meta!r} detected in action request."
-            break
-    if unsafe_reason is None and re.search(r"(?:^|\s)&(?:\s|$)", msg):
-        unsafe_reason = "Unsafe shell operator '&' detected in action request."
-
     clean_args = ""
     if target:
         try:
@@ -980,13 +1122,22 @@ def _extract_proposed_action(
         except ValueError:
             unsafe_reason = unsafe_reason or "Target contains malformed quoting."
 
+    proposal_model = ActionProposal(
+        proposing_agent="HunterCopilot",
+        target=target,
+        tool_name=tool_name,
+        command_args=clean_args,
+        action_type=action_type,
+        rationale=f"Requested via Copilot prompt: {msg[:180]}",
+    )
     return {
+        "proposal": proposal_model.model_dump(),
         "action_type": action_type,
         "tool_name": tool_name,
         "target": target,
         "command_args": clean_args,
         "unsafe_args_reason": unsafe_reason,
-        "rationale": f"Requested via Copilot prompt: {msg[:180]}",
+        "rationale": proposal_model.rationale,
     }
 
 
@@ -1021,16 +1172,40 @@ def detect_live_providers() -> Dict[str, Any]:
     }
 
 
-def _build_system_prompt(mode: str, live_ctx: Dict[str, Any]) -> str:
+def _build_budgeted_skills_preamble(*, context_window: int = 32768) -> str:
+    """Build structured skills preamble across ALL routed references using AST context budget.
+
+    Never applies raw ``[:4000]`` slicing that silently drops routed reference files.
+    """
+    try:
+        from core.context.chain_ast import chain_byte_budget
+        from core.context.truncate import truncate_result
+        from core.global_skills import INJECTED_SKILLS, build_skills_preamble, load_global_skills
+
+        # Compute generous structured budget (up to 40% of chain byte budget, at least 24KB)
+        total_budget_chars = max(24_000, int(chain_byte_budget(context_window) * 0.40))
+        num_refs = max(1, len(INJECTED_SKILLS))
+        per_ref_limit = max(4_000, total_budget_chars // num_refs)
+
+        preamble = build_skills_preamble(max_chars=per_ref_limit)
+        if preamble and len(preamble) > total_budget_chars:
+            # Preserve every routed skill section cleanly via per-section structured allocation
+            data = load_global_skills(max_chars=per_ref_limit)
+            loaded = data.get("loaded") or []
+            if loaded:
+                tighter = max(2_000, (total_budget_chars - 600) // len(loaded))
+                preamble = build_skills_preamble(max_chars=tighter)
+            if len(preamble) > total_budget_chars:
+                preamble = truncate_result(preamble, max_half_bytes=total_budget_chars // 2)
+        return preamble
+    except Exception:
+        return ""
+
+
+def _build_system_prompt(mode: str, live_ctx: Dict[str, Any], *, context_window: int = 32768) -> str:
     eng = live_ctx.get("active_engagement")
     run = live_ctx.get("active_run")
-    skills_preamble = ""
-    try:
-        from core.global_skills import build_skills_preamble
-
-        skills_preamble = build_skills_preamble()[:4000]
-    except Exception:
-        pass
+    skills_preamble = _build_budgeted_skills_preamble(context_window=context_window)
 
     eng_desc = (
         f"{eng.get('name')} (ID: {eng.get('engagement_id')}, target: {eng.get('target')}, "
@@ -1271,9 +1446,14 @@ class CopilotService:
             yield ("error", {"error": "message is required"})
             return
 
-        conv = self.store.get_conversation(conversation_id) if conversation_id else None
+        conv = (
+            await asyncio.to_thread(self.store.get_conversation, conversation_id)
+            if conversation_id
+            else None
+        )
         if not conv:
-            conv = self.create_conversation(
+            conv = await asyncio.to_thread(
+                self.create_conversation,
                 title=user_text[:60],
                 engagement_id=engagement_id,
                 run_id=run_id,
@@ -1305,9 +1485,9 @@ class CopilotService:
             metadata={"turn_status": "running", "active_turn": True, "interrupted_note_written": False},
         )
 
-        # Update title from first message if default
+        # Update title from first message if default (offloaded via asyncio.to_thread)
         if conv.get("title") in ("New Investigation", "New Conversation", "") and len(user_text) > 0:
-            self.store.update_conversation(cid, title=user_text[:72])
+            await asyncio.to_thread(self.store.update_conversation, cid, title=user_text[:72])
 
         assistant_msg_id = new_id("msg")
         yield (
@@ -1346,13 +1526,27 @@ class CopilotService:
                 "citations": citations,
             },
         )
+        yield (
+            "citations",
+            {
+                "conversation_id": cid,
+                "citations": citations,
+                "refs": refs,
+            },
+        )
 
-        # Enforce ScopeGuard & PolicyEngine in Python before any consequential action
-        proposed = _extract_proposed_action(user_text, live_ctx.get("active_engagement"))
+        # Enforce ScopeGuard & PolicyGate/PolicyEngine in Python before any consequential action
+        proposed = _extract_proposed_action(
+            user_text,
+            live_ctx.get("active_engagement"),
+            active_run=live_ctx.get("active_run"),
+            runs=live_ctx.get("runs"),
+        )
         policy_outcome: Optional[Dict[str, Any]] = None
         approval_record: Optional[Dict[str, Any]] = None
 
         if proposed is not None:
+            eng = live_ctx.get("active_engagement") or {}
             if proposed.get("unsafe_args_reason"):
                 policy_outcome = {
                     "allowed": False,
@@ -1362,9 +1556,12 @@ class CopilotService:
                     "sanitized_args": "",
                 }
             else:
-                eng = live_ctx.get("active_engagement") or {}
                 in_scope = list(eng.get("in_scope") or [])
                 out_of_scope = list(eng.get("out_of_scope") or [])
+                if not in_scope and isinstance(live_ctx.get("active_run"), dict):
+                    run_in_scope = live_ctx["active_run"].get("in_scope") or []
+                    if isinstance(run_in_scope, list):
+                        in_scope = [str(s) for s in run_in_scope if str(s).strip()]
                 policy_outcome = evaluate_action_policy(
                     action_type=proposed["action_type"],
                     target=proposed["target"],
@@ -1376,7 +1573,15 @@ class CopilotService:
                     rationale=proposed["rationale"],
                 )
             if policy_outcome["allowed"]:
-                approval_record = self.store.create_approval(
+                approval_payload: Dict[str, Any] = {
+                    "source": "copilot",
+                    "mode": eff_mode,
+                    "proposal": proposed.get("proposal") or {},
+                }
+                if isinstance(proposed.get("payload_extra"), dict):
+                    approval_payload.update(proposed["payload_extra"])
+                approval_record = await asyncio.to_thread(
+                    self.store.create_approval,
                     action_type=proposed["action_type"],
                     target=proposed["target"],
                     tool_name=proposed["tool_name"],
@@ -1384,9 +1589,9 @@ class CopilotService:
                     risk_tier=policy_outcome["risk_tier"],
                     rationale=proposed["rationale"],
                     engagement_id=eng.get("engagement_id") or eff_eng_id,
-                    run_id=eff_run_id,
+                    run_id=proposed.get("target_run_id") or eff_run_id,
                     conversation_id=cid,
-                    payload={"source": "copilot", "mode": eff_mode},
+                    payload=approval_payload,
                 )
                 refs = refs + [{
                     "kind": "approval",
@@ -1394,13 +1599,24 @@ class CopilotService:
                     "label": f"Approve {approval_record['action_type']} ({approval_record['tool_name']})",
                     "section": "approvals",
                 }]
-                yield ("approval_request", {"approval": approval_record, "conversation_id": cid})
+                yield (
+                    "approval_request",
+                    {
+                        "approval": approval_record,
+                        "proposal_digest": approval_record.get("proposal_digest", ""),
+                        "conversation_id": cid,
+                    },
+                )
             else:
                 yield ("policy_blocked", {"policy": policy_outcome, "conversation_id": cid})
 
-        # Build isolated prompt with conversation history & untrusted blocks
-        history = self.store.list_messages(cid, limit=12)[:-1]  # exclude just-added turn if re-sent
-        system_prompt = _build_system_prompt(eff_mode, live_ctx)
+        # Build isolated prompt with conversation history & untrusted blocks (all store reads offloaded)
+        raw_history = await asyncio.to_thread(self.store.list_messages, cid, limit=12)
+        history = raw_history[:-1]  # exclude just-added turn if re-sent
+        from core.llm.manifest import get_model_manifest
+
+        ctx_window = get_model_manifest().context_window_for(eff_model, default=32768)
+        system_prompt = _build_system_prompt(eff_mode, live_ctx, context_window=ctx_window)
 
         untrusted_section = ""
         if live_ctx["untrusted_blocks"]:
@@ -1416,8 +1632,10 @@ class CopilotService:
             if policy_outcome["allowed"] and approval_record:
                 policy_note = (
                     f"\n\n[PYTHON POLICY GATE]: Consequential action queued for operator approval: "
-                    f"approval_id={approval_record['approval_id']}, tool={approval_record['tool_name']}, "
-                    f"target={approval_record['target']}, risk_tier={approval_record['risk_tier']}. "
+                    f"approval_id={approval_record['approval_id']}, action_type={approval_record['action_type']}, "
+                    f"tool={approval_record['tool_name']}, target={approval_record['target']}, "
+                    f"risk_tier={approval_record['risk_tier']}, "
+                    f"proposal_digest={approval_record.get('proposal_digest', '')[:16]}. "
                     f"Do NOT claim it has executed yet."
                 )
             else:
@@ -1468,6 +1686,8 @@ class CopilotService:
                     await token_queue.put(delta)
 
             async def _run_live_stream() -> Tuple[str, str, str, str]:
+                from core.llm.gpu_scheduler import PRIORITY_INTERACTIVE, get_gpu_scheduler
+
                 # Returns (text, provider_label, model_label, error)
                 if eff_model.startswith("lmstudio:") or (
                     eff_model == "auto" and not providers["cloud"] and not providers["ollama_reachable"] and providers["lm_studio_reachable"]
@@ -1475,30 +1695,56 @@ class CopilotService:
                     lm_url = f"{providers['lm_studio_host'].rstrip('/')}/v1/chat/completions"
                     lm_model = eff_model.split(":", 1)[1] if eff_model.startswith("lmstudio:") else "local-model"
                     collected: List[str] = []
-                    async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
-                        async with client.stream(
-                            "POST",
-                            lm_url,
-                            json={"model": lm_model, "messages": messages_payload, "stream": True},
-                        ) as resp:
-                            resp.raise_for_status()
-                            async for line in resp.aiter_lines():
-                                if not line.startswith("data: "):
-                                    continue
-                                raw = line[6:].strip()
-                                if raw == "[DONE]":
-                                    break
-                                try:
-                                    chunk = json.loads(raw)
-                                    delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
-                                    if delta:
-                                        collected.append(delta)
-                                        await _on_token(delta)
-                                except Exception:
-                                    continue
-                    return "".join(collected), "lm_studio", lm_model, ""
+                    async with get_gpu_scheduler().acquire(lm_model, priority=PRIORITY_INTERACTIVE):
+                        async with httpx.AsyncClient(timeout=45.0, trust_env=False) as client:
+                            async with client.stream(
+                                "POST",
+                                lm_url,
+                                json={"model": lm_model, "messages": messages_payload, "stream": True},
+                            ) as resp:
+                                resp.raise_for_status()
+                                async for line in resp.aiter_lines():
+                                    if not line.startswith("data: "):
+                                        continue
+                                    raw = line[6:].strip()
+                                    if raw == "[DONE]":
+                                        break
+                                    try:
+                                        chunk = json.loads(raw)
+                                        delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                        if delta:
+                                            collected.append(delta)
+                                            await _on_token(delta)
+                                    except Exception:
+                                        continue
+                    full_lm = "".join(collected)
+                    if full_lm:
+                        from core.cost_budget import GLOBAL_COST_CONTROLLER
 
-                # Use LLMRouter.complete_stream (supports cloud APIs + local Ollama)
+                        in_toks = max(1, sum(len(m.get("content", "")) for m in messages_payload) // 4)
+                        out_toks = max(1, len(full_lm) // 4)
+                        charged = GLOBAL_COST_CONTROLLER.charge_call(
+                            model=lm_model,
+                            input_tokens=in_toks,
+                            output_tokens=out_toks,
+                            run_id=eff_run_id or "",
+                            provider="lm_studio",
+                            role="copilot",
+                        )
+                        await asyncio.to_thread(
+                            self.store.record_cost_entry,
+                            provider="lm_studio",
+                            model=lm_model,
+                            input_tokens=in_toks,
+                            output_tokens=out_toks,
+                            cost_usd=float(charged or 0.0),
+                            run_id=eff_run_id or None,
+                            engagement_id=eff_eng_id or None,
+                            metadata={"role": "copilot", "streamed": True},
+                        )
+                    return full_lm, "lm_studio", lm_model, ""
+
+                # Use LLMRouter.complete_stream with interactive GPU priority & cost ledger
                 from core.llm_router import get_llm_router
 
                 router = get_llm_router()
@@ -1507,6 +1753,10 @@ class CopilotService:
                     messages_payload,
                     prefer=prefer,
                     on_token=_on_token,
+                    role="copilot",
+                    priority=PRIORITY_INTERACTIVE,
+                    run_id=eff_run_id or "",
+                    engagement_id=eff_eng_id or "",
                 )
                 if res and res.content:
                     return res.content, getattr(res, "role", "llm"), getattr(res, "model_name", eff_model), ""

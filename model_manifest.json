@@ -1,7 +1,207 @@
 {
-  "manifest_version": "1.0.0",
+  "manifest_version": "2.0.0",
   "inference_backend": "ollama",
-  "default_host": "http://192.168.1.3:11434",
+  "default_host": "http://127.0.0.1:11434",
+  "active_hardware_profile": "auto",
+  "provider_defaults": {
+    "nvidia": {
+      "default_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "models": [
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "nvidia/nemotron-3-super-120b-a12b"
+      ],
+      "context_window": 131072
+    },
+    "gemini": {
+      "default_model": "gemini-2.5-flash",
+      "models": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash"
+      ],
+      "context_window": 1048576
+    },
+    "deepseek": {
+      "default_model": "deepseek-chat",
+      "models": [
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ],
+      "context_window": 131072
+    },
+    "anthropic": {
+      "default_model": "claude-3-5-sonnet-20241022",
+      "models": [
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022"
+      ],
+      "context_window": 200000
+    },
+    "openai": {
+      "default_model": "gpt-4o",
+      "models": [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "o3-mini"
+      ],
+      "context_window": 128000
+    },
+    "groq": {
+      "default_model": "llama-3.3-70b-versatile",
+      "models": [
+        "llama-3.3-70b-versatile"
+      ],
+      "context_window": 131072
+    },
+    "openrouter": {
+      "default_model": "anthropic/claude-3.5-sonnet",
+      "models": [
+        "anthropic/claude-3.5-sonnet",
+        "google/gemini-2.5-flash"
+      ],
+      "context_window": 200000
+    },
+    "taskade": {
+      "default_model": "taskade-ai",
+      "models": [
+        "taskade-ai"
+      ],
+      "context_window": 32768
+    }
+  },
+  "hardware_profiles": {
+    "auto": {
+      "name": "auto",
+      "min_vram_mb": 0,
+      "max_loaded_models": 1,
+      "default_num_ctx": 8192,
+      "keep_alive_seconds": 120,
+      "prefer_cloud_fallback": false,
+      "vram_pressure_unload_pct": 85.0,
+      "role_models": {}
+    },
+    "cpu_only": {
+      "name": "cpu_only",
+      "min_vram_mb": 0,
+      "max_loaded_models": 1,
+      "default_num_ctx": 4096,
+      "keep_alive_seconds": 0,
+      "prefer_cloud_fallback": true,
+      "vram_pressure_unload_pct": 80.0,
+      "role_models": {
+        "triage": "xploiter/pentester:latest",
+        "fixer": "qwen2.5-coder:3b",
+        "planner": "xploiter/pentester:latest",
+        "deep_analyst": "xploiter/pentester:latest",
+        "copilot": "qwen2.5-coder:3b"
+      }
+    },
+    "4GB": {
+      "name": "4GB",
+      "min_vram_mb": 3500,
+      "max_loaded_models": 1,
+      "default_num_ctx": 4096,
+      "keep_alive_seconds": 0,
+      "prefer_cloud_fallback": false,
+      "vram_pressure_unload_pct": 82.0,
+      "role_models": {
+        "triage": "xploiter/pentester:latest",
+        "fixer": "qwen2.5-coder:3b",
+        "planner": "xploiter/pentester:latest",
+        "deep_analyst": "xploiter/pentester:latest",
+        "copilot": "qwen2.5-coder:3b"
+      }
+    },
+    "8GB": {
+      "name": "8GB",
+      "min_vram_mb": 7000,
+      "max_loaded_models": 1,
+      "default_num_ctx": 8192,
+      "keep_alive_seconds": 120,
+      "prefer_cloud_fallback": false,
+      "vram_pressure_unload_pct": 85.0,
+      "role_models": {
+        "triage": "xploiter/pentester:latest",
+        "fixer": "qwen2.5-coder:7b",
+        "planner": "qwen3:8b",
+        "deep_analyst": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
+        "copilot": "qwen3:8b"
+      }
+    },
+    "16GB+": {
+      "name": "16GB+",
+      "min_vram_mb": 14000,
+      "max_loaded_models": 1,
+      "default_num_ctx": 16384,
+      "keep_alive_seconds": 300,
+      "prefer_cloud_fallback": false,
+      "vram_pressure_unload_pct": 88.0,
+      "role_models": {
+        "triage": "xploiter/pentester:latest",
+        "fixer": "qwen2.5-coder:14b",
+        "planner": "qwen3:8b",
+        "deep_analyst": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
+        "copilot": "qwen2.5-coder:14b"
+      }
+    }
+  },
+  "roles": {
+    "triage": {
+      "role": "triage",
+      "local_model": "xploiter/pentester:latest",
+      "cloud_provider": "gemini",
+      "cloud_model": "gemini-2.5-flash",
+      "temperature": 0.15,
+      "max_tokens": 2048,
+      "context_window": 8192,
+      "uses_tools": false,
+      "priority": "background"
+    },
+    "fixer": {
+      "role": "fixer",
+      "local_model": "qwen2.5-coder:14b",
+      "cloud_provider": "gemini",
+      "cloud_model": "gemini-2.5-flash",
+      "temperature": 0.1,
+      "max_tokens": 4096,
+      "context_window": 16384,
+      "uses_tools": true,
+      "priority": "background"
+    },
+    "planner": {
+      "role": "planner",
+      "local_model": "qwen3:8b",
+      "cloud_provider": "gemini",
+      "cloud_model": "gemini-2.5-flash",
+      "temperature": 0.2,
+      "max_tokens": 4096,
+      "context_window": 16384,
+      "uses_tools": true,
+      "priority": "background"
+    },
+    "deep_analyst": {
+      "role": "deep_analyst",
+      "local_model": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
+      "cloud_provider": "gemini",
+      "cloud_model": "gemini-2.5-pro",
+      "temperature": 0.2,
+      "max_tokens": 8192,
+      "context_window": 32768,
+      "uses_tools": true,
+      "priority": "background"
+    },
+    "copilot": {
+      "role": "copilot",
+      "local_model": "qwen2.5-coder:14b",
+      "cloud_provider": "gemini",
+      "cloud_model": "gemini-2.5-flash",
+      "temperature": 0.3,
+      "max_tokens": 4096,
+      "context_window": 16384,
+      "uses_tools": true,
+      "priority": "interactive"
+    }
+  },
   "models": [
     {
       "id": "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest",
@@ -9,6 +209,7 @@
       "role": "Master Offensive Strategist & Security Reasoning",
       "parameters": "8B",
       "context_window": 8192,
+      "min_vram_mb": 6500,
       "responsibilities": [
         "Business logic analysis",
         "Authorization boundaries and IDOR hypothesis formulation",
@@ -21,8 +222,9 @@
       "id": "xploiter/pentester:latest",
       "alias": "xploiter",
       "role": "Rapid Recon Scout & Noise Filtering",
-      "parameters": "1.6GB",
-      "context_window": 4096,
+      "parameters": "2.8B",
+      "context_window": 8192,
+      "min_vram_mb": 2000,
       "responsibilities": [
         "Mass tool output parsing and noise triage",
         "Host reachability assessment",
@@ -36,11 +238,26 @@
       "role": "Code Intelligence & Context Compressor",
       "parameters": "14B",
       "context_window": 16384,
+      "min_vram_mb": 10000,
       "responsibilities": [
         "JavaScript AST auditing",
         "Hidden endpoint and parameter extraction",
         "Client-side secret identification",
         "Context compression into standardized knowledge schemas"
+      ],
+      "requires_gpu": true
+    },
+    {
+      "id": "qwen3:8b",
+      "alias": "qwen3",
+      "role": "Strategic Planner & Coordinator",
+      "parameters": "8B",
+      "context_window": 16384,
+      "min_vram_mb": 6500,
+      "responsibilities": [
+        "Mission planning and phase orchestration",
+        "Interactive Copilot reasoning",
+        "Finding synthesis and remediation guidance"
       ],
       "requires_gpu": true
     }

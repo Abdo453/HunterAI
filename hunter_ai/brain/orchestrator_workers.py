@@ -182,37 +182,33 @@ class ModelWorkerRegistry:
         return preferred
 
     async def _query_ollama(self, model: str, system: str, user: str, temperature: float = 0.2, timeout: int = 25) -> str:
+        """Delegate worker model calls through canonical ``core.llm_router.LLMRouter``."""
         if self._ollama_online is False:
             return ""
 
-        url = f"{self.ollama_host}/api/chat"
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user}
-            ],
-            "stream": False,
-            "keep_alive": "5m",
-            "options": {"temperature": temperature, "num_ctx": 4096}
-        }
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        from core.llm_router import LLMRouter
 
-        loop = asyncio.get_running_loop()
-
-        def _do_http():
-            try:
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    res = json.loads(resp.read().decode("utf-8"))
-                    self._ollama_online = True
-                    return res.get("message", {}).get("content", "").strip()
-            except Exception as e:
-                self._ollama_online = False
-                logger.debug(f"[Worker] Ollama query failed for {model}: {e}")
-                return ""
-
-        return await loop.run_in_executor(None, _do_http)
+        router = LLMRouter(ollama_host=self.ollama_host, policy="local_only")
+        try:
+            res = await asyncio.wait_for(
+                router.complete(
+                    [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    prefer=f"local:{model}",
+                    role="planner",
+                ),
+                timeout=float(timeout),
+            )
+            if res and res.content:
+                self._ollama_online = True
+                return res.content.strip()
+            return ""
+        except Exception as e:
+            self._ollama_online = False
+            logger.debug("[Worker] LLMRouter local query failed for %s: %s", model, e)
+            return ""
 
     # ── WORKER 1: RECON SCOUT (xploiter/pentester) ───────────────────────────
     async def run_recon_scout(self, target: str, subdomains: List[str], ports: List[Any]) -> Dict[str, Any]:

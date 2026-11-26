@@ -74,7 +74,7 @@ def test_catalog_lists_cloud_and_local(monkeypatch):
     assert {c["provider"] for c in cat["cloud"]} == {"gemini", "deepseek"}
 
     ids = {c["id"] for c in cat["choices"]}
-    assert "api:gemini:gemini-3.8-flash" in ids
+    assert "api:gemini:gemini-2.5-flash" in ids
     assert "api:deepseek:deepseek-chat" in ids
     assert "local:qwen2.5-coder:14b" in ids
 
@@ -217,7 +217,7 @@ def test_load_provider_imports_real_adapter():
     r = LLMRouter()
     spec = next(s for s in CLOUD_PROVIDERS if s.id == "gemini")
     provider = r._load_provider(spec)
-    assert provider.name == "gemini-3.8-flash"
+    assert provider.name == "gemini-2.5-flash"
 
 
 # ── web endpoint ─────────────────────────────────────────────────────────────

@@ -3,11 +3,12 @@ import json
 import os
 import httpx
 from typing import Any, Dict, List
+from core.llm.manifest import DEFAULT_GEMINI_MODEL
 from models.base_model import BaseModel, Message, ModelResponse
 
 
 class GeminiProvider(BaseModel):
-    def __init__(self, model: str = "gemini-3.8-flash", role: str = "api_analyst"):
+    def __init__(self, model: str = DEFAULT_GEMINI_MODEL, role: str = "api_analyst"):
         super().__init__(name=model, role=role, description=f"Google Gemini {model}")
         self.model_name = model
         self.api_key = os.getenv("GEMINI_API_KEY", "")
