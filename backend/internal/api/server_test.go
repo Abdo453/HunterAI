@@ -172,36 +172,99 @@ func TestCORSHeaders(t *testing.T) {
 		"/api/v1/scan",
 	}
 
-	for _, path := range paths {
-		req := httptest.NewRequest(http.MethodOptions, path, nil)
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
+	defaultOrigins := []string{
+		"http://127.0.0.1:3000",
+		"http://localhost:3000",
+		"http://127.0.0.1:8000",
+		"http://localhost:8000",
+	}
 
-		if rec.Code != http.StatusOK {
-			t.Fatalf("OPTIONS %s: expected 200, got %d", path, rec.Code)
-		}
-		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-			t.Fatalf("OPTIONS %s: expected Access-Control-Allow-Origin '*', got %q", path, got)
-		}
-		if got := rec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "GET") || !strings.Contains(got, "POST") {
-			t.Fatalf("OPTIONS %s: unexpected Access-Control-Allow-Methods %q", path, got)
-		}
-		if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Content-Type") {
-			t.Fatalf("OPTIONS %s: unexpected Access-Control-Allow-Headers %q", path, got)
+	for _, origin := range defaultOrigins {
+		for _, path := range paths {
+			req := httptest.NewRequest(http.MethodOptions, path, nil)
+			req.Header.Set("Origin", origin)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("OPTIONS %s (origin %s): expected 200, got %d", path, origin, rec.Code)
+			}
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != origin {
+				t.Fatalf("OPTIONS %s: expected Access-Control-Allow-Origin %q, got %q", path, origin, got)
+			}
+			if got := rec.Header().Get("Vary"); !strings.Contains(got, "Origin") {
+				t.Fatalf("OPTIONS %s: expected Vary to contain Origin, got %q", path, got)
+			}
+			if got := rec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "GET") || !strings.Contains(got, "POST") {
+				t.Fatalf("OPTIONS %s: unexpected Access-Control-Allow-Methods %q", path, got)
+			}
+			if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Content-Type") {
+				t.Fatalf("OPTIONS %s: unexpected Access-Control-Allow-Headers %q", path, got)
+			}
 		}
 	}
 
-	// Non-OPTIONS requests must also carry CORS headers
+	// Non-OPTIONS allowed requests echo exact origin and Vary: Origin
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req.Header.Set("Origin", "http://127.0.0.1:3000")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-		t.Fatalf("GET /api/v1/health: expected Access-Control-Allow-Origin '*', got %q", got)
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:3000" {
+		t.Fatalf("GET /api/v1/health: expected echoed origin, got %q", got)
+	}
+	if got := rec.Header().Get("Vary"); !strings.Contains(got, "Origin") {
+		t.Fatalf("GET /api/v1/health: expected Vary: Origin, got %q", got)
+	}
+
+	// Disallowed origins must never receive wildcard or reflected ACAO
+	badPreflight := httptest.NewRequest(http.MethodOptions, "/api/v1/scan", nil)
+	badPreflight.Header.Set("Origin", "https://evil.example.com")
+	badPreflightRec := httptest.NewRecorder()
+	handler.ServeHTTP(badPreflightRec, badPreflight)
+	if badPreflightRec.Code != http.StatusForbidden {
+		t.Fatalf("OPTIONS /api/v1/scan disallowed origin: expected 403, got %d", badPreflightRec.Code)
+	}
+	if got := badPreflightRec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("OPTIONS /api/v1/scan disallowed origin: expected empty ACAO, got %q", got)
+	}
+
+	badGet := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	badGet.Header.Set("Origin", "https://evil.example.com")
+	badGetRec := httptest.NewRecorder()
+	handler.ServeHTTP(badGetRec, badGet)
+	if got := badGetRec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("GET /api/v1/health disallowed origin: expected empty ACAO, got %q", got)
+	}
+
+	// Requests without Origin must never fall back to wildcard '*'
+	noOrigin := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	noOriginRec := httptest.NewRecorder()
+	handler.ServeHTTP(noOriginRec, noOrigin)
+	if got := noOriginRec.Header().Get("Access-Control-Allow-Origin"); got == "*" {
+		t.Fatalf("GET /api/v1/health without Origin: must never emit wildcard '*'")
+	}
+
+	// Custom ARTEX_ALLOWED_ORIGINS overrides default list
+	t.Setenv("ARTEX_ALLOWED_ORIGINS", "https://panel.internal:8443, https://console.example.com/")
+	customAllowed := httptest.NewRequest(http.MethodOptions, "/api/v1/scan", nil)
+	customAllowed.Header.Set("Origin", "https://console.example.com")
+	customAllowedRec := httptest.NewRecorder()
+	handler.ServeHTTP(customAllowedRec, customAllowed)
+	if customAllowedRec.Code != http.StatusOK || customAllowedRec.Header().Get("Access-Control-Allow-Origin") != "https://console.example.com" {
+		t.Fatalf("custom allowed origin failed: code=%d acao=%q", customAllowedRec.Code, customAllowedRec.Header().Get("Access-Control-Allow-Origin"))
+	}
+
+	customDenied := httptest.NewRequest(http.MethodOptions, "/api/v1/scan", nil)
+	customDenied.Header.Set("Origin", "http://127.0.0.1:3000")
+	customDeniedRec := httptest.NewRecorder()
+	handler.ServeHTTP(customDeniedRec, customDenied)
+	if customDeniedRec.Code != http.StatusForbidden {
+		t.Fatalf("default origin should be rejected when ARTEX_ALLOWED_ORIGINS overrides list, got %d", customDeniedRec.Code)
 	}
 }
 
 func TestScanMethodAndPayloadValidation(t *testing.T) {
-	scanDispatched := make(chan struct{}, 1)
+	scanDispatched := make(chan struct{}, 2)
 	state := &stubDriverState{
 		queryHandler: func(query string, _ []driver.NamedValue) (driver.Rows, error) {
 			if strings.Contains(query, "INSERT INTO engagements") {
@@ -217,29 +280,93 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 	srv := NewAPIServer(newStubDB(t, state), 0)
 	handler := srv.Handler()
 
-	// Reject unsupported methods
+	// Reject unsupported methods and echo CORS only for allowed Origin
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
 		req := httptest.NewRequest(method, "/api/v1/scan", nil)
+		req.Header.Set("Origin", "http://127.0.0.1:3000")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("%s /api/v1/scan: expected 405, got %d", method, rec.Code)
 		}
-		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-			t.Fatalf("%s /api/v1/scan: expected CORS header on 405, got %q", method, got)
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:3000" {
+			t.Fatalf("%s /api/v1/scan: expected echoed CORS header on 405, got %q", method, got)
 		}
 	}
 
-	// Reject malformed JSON and empty target
-	for _, body := range []string{`{invalid`, `{}`, `{"target": "   "}`} {
+	// Reject malformed JSON, empty target, shell metacharacters, and non-HTTP schemes with 400
+	badInputs := []string{
+		`{invalid`,
+		`{}`,
+		`{"target": "   "}`,
+		`{"target": "example.com; id"}`,
+		`{"target": "example.com && whoami"}`,
+		`{"target": "$(cat /etc/passwd)"}`,
+		`{"target": "example.com` + "`id`" + `"}`,
+		`{"target": "file:///etc/passwd"}`,
+		`{"target": "gopher://127.0.0.1:6379/_INFO"}`,
+	}
+	for _, body := range badInputs {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(body))
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("POST /api/v1/scan (%s): expected 400, got %d", body, rec.Code)
+			t.Fatalf("POST /api/v1/scan (%s): expected 400, got %d (body: %s)", body, rec.Code, rec.Body.String())
 		}
 	}
+
+	// Reject cloud metadata, link-local, loopback, and RFC1918 targets with 403
+	blockedTargets := []string{
+		"169.254.169.254",
+		"http://169.254.169.254/latest/meta-data/",
+		"[::ffff:169.254.169.254]",
+		"2852039166",
+		"0xa9fea9fe",
+		"metadata.google.internal",
+		"100.100.100.200",
+		"127.0.0.1",
+		"localhost",
+		"::1",
+		"2130706433",
+		"0x7f000001",
+		"10.0.0.1",
+		"172.16.0.5",
+		"192.168.1.10",
+	}
+	for _, target := range blockedTargets {
+		payload := `{"target":"` + target + `"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("POST /api/v1/scan (%s): expected 403, got %d (body: %s)", target, rec.Code, rec.Body.String())
+		}
+	}
+
+	// ARTEX_ALLOW_LOCAL_SCAN=1 allows loopback/private targets, while 169.254.0.0/16 & metadata remain blocked
+	t.Run("ARTEX_ALLOW_LOCAL_SCAN preserves non-overridable metadata block", func(t *testing.T) {
+		t.Setenv("ARTEX_ALLOW_LOCAL_SCAN", "1")
+
+		metaReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"169.254.169.254"}`))
+		metaRec := httptest.NewRecorder()
+		handler.ServeHTTP(metaRec, metaReq)
+		if metaRec.Code != http.StatusForbidden {
+			t.Fatalf("169.254.169.254 must stay 403 even with ARTEX_ALLOW_LOCAL_SCAN=1, got %d", metaRec.Code)
+		}
+
+		localReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"127.0.0.1"}`))
+		localRec := httptest.NewRecorder()
+		handler.ServeHTTP(localRec, localReq)
+		if localRec.Code != http.StatusAccepted {
+			t.Fatalf("127.0.0.1 with ARTEX_ALLOW_LOCAL_SCAN=1 expected 202, got %d (body: %s)", localRec.Code, localRec.Body.String())
+		}
+		select {
+		case <-scanDispatched:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("expected local scan goroutine to invoke orchestrator")
+		}
+	})
 
 	// Reject scan when DB is nil instead of panicking in background goroutine
 	nilSrv := NewAPIServer(nil, 0)

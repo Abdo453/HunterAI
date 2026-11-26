@@ -23,9 +23,11 @@ from __future__ import annotations
 import os
 
 _ENV_VAR = "HUNTER_UNRESTRICTED"
+_WEB_UNRESTRICTED_ENV_VAR = "HUNTER_WEB_UNRESTRICTED"
 
 # Values that explicitly disable unrestricted mode (i.e. restore governance).
 _FALSY = {"0", "false", "no", "off", "disabled", "governed", "restricted"}
+_TRUTHY = {"1", "true", "yes", "on", "enabled", "unrestricted"}
 
 
 def unrestricted_mode() -> bool:
@@ -44,3 +46,16 @@ def unrestricted_mode() -> bool:
 def set_unrestricted(enabled: bool) -> None:
     """Programmatically toggle the execution mode (used by CLI/flags and tests)."""
     os.environ[_ENV_VAR] = "1" if enabled else "0"
+
+
+def web_governance_enforced() -> bool:
+    """Return True when web/API gateways must enforce fail-closed governance.
+
+    Defaults to True so HTTP/WebSocket gateways always enforce scope, SSRF,
+    and policy boundaries unless ``HUNTER_WEB_UNRESTRICTED`` is explicitly
+    set to a truthy value (``1/true/yes/on/enabled/unrestricted``).
+    """
+    value = os.getenv(_WEB_UNRESTRICTED_ENV_VAR)
+    if value is None:
+        return True
+    return value.strip().lower() not in _TRUTHY
