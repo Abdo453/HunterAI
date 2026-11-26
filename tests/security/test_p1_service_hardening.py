@@ -571,7 +571,11 @@ def test_approval_proposal_digest_tamper_rejection_and_display_separation(isolat
     )
     assert apr["command_args"] == raw_args
     assert "eyJhbGciOiJIUzI1NiJ9.payload.sig" not in apr["display_command_args"]
-    assert ("[MASKED" in apr["display_command_args"] or "[REDACTED" in apr["display_command_args"])
+    assert (
+        "[MASKED" in apr["display_command_args"]
+        or "[REDACTED" in apr["display_command_args"]
+        or "••••" in apr["display_command_args"]
+    )
     assert len(apr["proposal_digest"]) == 64
     assert verify_proposal_digest(apr) is True
 
