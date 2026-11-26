@@ -162,6 +162,34 @@ class CopilotConversationDetailView(APIView):
         if not conv:
             return err_json(f"Conversation {cid} not found", status=404)
         messages = store.list_messages(cid, limit=300)
+        approval_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+        for msg in messages:
+            aid = msg.get("approval_id")
+            if not aid and isinstance(msg.get("refs"), list):
+                for ref in msg["refs"]:
+                    if isinstance(ref, dict) and ref.get("kind") == "approval" and ref.get("id"):
+                        aid = str(ref["id"])
+                        break
+            if aid:
+                aid_str = str(aid)
+                if aid_str not in approval_cache:
+                    approval_cache[aid_str] = store.get_approval(aid_str)
+                ap = approval_cache[aid_str]
+                if ap:
+                    if not msg.get("approvalNotice"):
+                        msg["approvalNotice"] = ap
+                    if not msg.get("approval"):
+                        msg["approval"] = ap
+            meta = msg.get("metadata")
+            if isinstance(meta, dict) and not msg.get("policyNotice"):
+                pol = meta.get("policy_outcome")
+                if isinstance(pol, dict) and pol.get("allowed") is False:
+                    msg["policyNotice"] = {
+                        "allowed": False,
+                        "status": str(pol.get("status") or "BLOCKED"),
+                        "reason": str(pol.get("reason") or "Blocked by PolicyEngine"),
+                        "risk_tier": str(pol.get("risk_tier") or ""),
+                    }
         return ok_json({"conversation": conv, "messages": messages})
 
     def patch(self, request: Any, cid: str) -> Any:

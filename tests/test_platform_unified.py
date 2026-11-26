@@ -625,10 +625,39 @@ def test_copilot_crud_concurrent_stream_and_untrusted_isolation(
         assert apr["command_args"] == "api.example.com"
         assert "check open ports" not in apr["command_args"]
 
-        # Conversation detail persists messages across turns
+        # Conversation detail persists messages across turns and hydrates approvalNotice/policyNotice
         detail = isolated_client.get(f"/api/copilot/conversations/{cid}")
         assert detail.status_code == 200
-        assert len(detail.json()["messages"]) >= 6
+        detail_msgs = detail.json()["messages"]
+        assert len(detail_msgs) >= 6
+        apr_msgs = [m for m in detail_msgs if m.get("approval_id") == apr["approval_id"]]
+        assert len(apr_msgs) == 1
+        assert apr_msgs[0]["approvalNotice"]["approval_id"] == apr["approval_id"]
+        assert apr_msgs[0]["approvalNotice"]["tool_name"] == "nmap"
+        assert apr_msgs[0]["approvalNotice"]["target"] == "api.example.com"
+        assert apr_msgs[0]["approval"]["approval_id"] == apr["approval_id"]
+        blocked_msgs = [
+            m for m in detail_msgs
+            if isinstance(m.get("metadata"), dict)
+            and isinstance(m["metadata"].get("policy_outcome"), dict)
+            and m["metadata"]["policy_outcome"].get("allowed") is False
+        ]
+        assert blocked_msgs
+        assert blocked_msgs[0]["policyNotice"]["allowed"] is False
+
+        # Missing approval record on a message does not break conversation detail reload
+        store.add_message(
+            conversation_id=cid,
+            role="assistant",
+            content="Orphan approval ref test",
+            approval_id="apr_missing_nonexistent",
+        )
+        detail_orphan = isolated_client.get(f"/api/copilot/conversations/{cid}")
+        assert detail_orphan.status_code == 200
+        orphan_msg = next(
+            m for m in detail_orphan.json()["messages"] if m.get("approval_id") == "apr_missing_nonexistent"
+        )
+        assert orphan_msg.get("approvalNotice") is None
 
         # Delete conversation
         deleted = isolated_client.delete(f"/api/copilot/conversations/{cid}")

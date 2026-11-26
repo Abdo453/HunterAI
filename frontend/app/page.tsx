@@ -105,9 +105,13 @@ export default function OverviewPage() {
   const [perDayUsd, setPerDayUsd] = useState<string>("");
   const [budgetMsg, setBudgetMsg] = useState<string>("");
 
+  const lastSyncedEngIdRef = React.useRef<string>("");
   useEffect(() => {
-    if (selectedEngagement?.target) {
-      setTarget(selectedEngagement.target);
+    if (selectedEngagement?.id && selectedEngagement.id !== lastSyncedEngIdRef.current) {
+      lastSyncedEngIdRef.current = selectedEngagement.id;
+      if (selectedEngagement.target) {
+        setTarget(selectedEngagement.target);
+      }
     }
   }, [selectedEngagement]);
 

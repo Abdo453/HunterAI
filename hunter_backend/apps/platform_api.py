@@ -187,9 +187,13 @@ class PlatformContextView(APIView):
         return ok_json({"status": "ok", "context": updated, **updated})
 
 
+_TOOLS_CACHE: Tuple[float, Any] = (0.0, [])
+
+
 @require_GET
 async def platform_overview_view(request: HttpRequest) -> JsonResponse:
     """GET /api/platform/overview: aggregated platform state, providers, runs, and Artex probe."""
+    global _TOOLS_CACHE
     store = ensure_platform_wiring()
     ctx = store.get_context()
     engagements = store.list_engagements(limit=50)
@@ -209,20 +213,37 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
         else None
     )
 
-    try:
-        providers = await asyncio.to_thread(detect_live_providers)
-    except Exception:
-        providers = {}
-
-    try:
+    def _load_tools() -> Any:
         from tools.tool_manager import ToolManager
 
-        tm = ToolManager()
-        tools = tm.get_available_tools()
-    except Exception:
-        tools = {}
+        return ToolManager().get_available_tools()
 
-    artex = await probe_artex_health()
+    async def _safe_providers() -> Dict[str, Any]:
+        try:
+            res = await asyncio.to_thread(detect_live_providers)
+            return res if isinstance(res, dict) else {}
+        except Exception:
+            return {}
+
+    async def _safe_tools() -> Any:
+        global _TOOLS_CACHE
+        now_m = time.monotonic()
+        cached_at, cached_val = _TOOLS_CACHE
+        if cached_val and (now_m - cached_at) < 15.0:
+            return cached_val
+        try:
+            res = await asyncio.to_thread(_load_tools)
+            val = res if res is not None else []
+            _TOOLS_CACHE = (time.monotonic(), val)
+            return val
+        except Exception:
+            return cached_val or []
+
+    providers, tools, artex = await asyncio.gather(
+        _safe_providers(),
+        _safe_tools(),
+        probe_artex_health(),
+    )
     prov_dict = providers if isinstance(providers, dict) else {}
     latest_seq = store.latest_seq()
     services = {

@@ -62,6 +62,7 @@ export default function OperationsPage() {
     selectedEngagement,
     selectEngagement,
     createEngagement,
+    isLoading,
     apiJson,
   } = usePlatform();
   const { t } = useI18n();
@@ -102,7 +103,7 @@ export default function OperationsPage() {
   const [newLeadEvidence, setNewLeadEvidence] = useState<string>("");
 
   const loadAll = useCallback(async () => {
-    const lt = selectedEngagement?.target || leadTarget;
+    const lt = selectedEngagement?.target || "example.com";
     const [rtRes, chkRes, lbRes] = await Promise.all([
       apiJson<RedTeamPolicyState>("/api/control/redteam-policy"),
       apiJson<{ categories?: ChecklistCategory[]; progress_percent?: number }>("/api/control/checklists"),
@@ -120,11 +121,13 @@ export default function OperationsPage() {
       setLeadCounts(lbRes.data.counts || {});
       if (lbRes.data.target) setLeadTarget(lbRes.data.target);
     }
-  }, [apiJson, leadTarget, selectedEngagement?.target]);
+  }, [apiJson, selectedEngagement?.target]);
 
   useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
+    if (!isLoading || selectedEngagement) {
+      void loadAll();
+    }
+  }, [isLoading, selectedEngagement, loadAll]);
 
   const handleSaveTarget = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,7 +230,7 @@ export default function OperationsPage() {
     await apiJson("/api/control/lead-board/add", {
       method: "POST",
       body: {
-        target: leadTarget || selectedEngagement?.target || "example.com",
+        target: selectedEngagement?.target || leadTarget || "example.com",
         skill: newLeadSkill,
         evidence: newLeadEvidence.trim(),
         priority: "high",
@@ -240,7 +243,7 @@ export default function OperationsPage() {
   const touchLeadStatus = async (leadId: string, status: string) => {
     await apiJson("/api/control/lead-board/touch", {
       method: "POST",
-      body: { target: leadTarget, lead_id: leadId, status },
+      body: { target: selectedEngagement?.target || leadTarget || "example.com", lead_id: leadId, status },
     });
     await loadAll();
   };

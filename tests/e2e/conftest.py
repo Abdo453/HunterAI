@@ -92,8 +92,9 @@ def _wait_http_ready(
     log_path: Path,
     label: str,
     wait_log_substring: Optional[str] = None,
+    max_status: int = 499,
 ) -> None:
-    """Poll *url* until HTTP < 500 or raise with tail of *log_path*."""
+    """Poll *url* until HTTP <= *max_status* or raise with tail of *log_path*."""
     deadline = time.monotonic() + timeout_s
     last_err = ""
     while time.monotonic() < deadline:
@@ -115,7 +116,7 @@ def _wait_http_ready(
         try:
             with httpx.Client(trust_env=False, timeout=15.0, follow_redirects=False) as client:
                 resp = client.get(url)
-            if resp.status_code < 500:
+            if resp.status_code <= max_status:
                 return
             last_err = f"HTTP {resp.status_code}"
         except Exception as exc:
@@ -360,9 +361,12 @@ def e2e_stack(tmp_path_factory: pytest.TempPathFactory) -> Generator[E2EStack, N
     vuln_thread.start()
 
     uvicorn_log = tmp_dir / "uvicorn.log"
-    next_log = tmp_dir / "next_dev.log"
+    next_build_log = tmp_dir / "next_build.log"
+    next_log = tmp_dir / "next_start.log"
     uvicorn_proc: Optional[subprocess.Popen[Any]] = None
     next_proc: Optional[subprocess.Popen[Any]] = None
+    next_cache_dir = FRONTEND_DIR / ".next"
+    next_backup_dir: Optional[Path] = None
 
     try:
         with uvicorn_log.open("wb") as ulog:
@@ -393,22 +397,40 @@ def e2e_stack(tmp_path_factory: pytest.TempPathFactory) -> Generator[E2EStack, N
             label="Django ASGI (uvicorn)",
         )
 
-        next_cache_dir = FRONTEND_DIR / ".next"
+        # Preserve any pre-existing production `.next` bundle (built for :8000) while
+        # compiling an isolated production bundle bound to this session's ephemeral `api_base`,
+        # avoiding both baked-port mismatches and `next dev` cold-compile timeouts.
         if next_cache_dir.exists():
-            source_mtimes = [
-                p.stat().st_mtime
-                for root_name in ("app", "components", "lib")
-                for p in (FRONTEND_DIR / root_name).rglob("*")
-                if p.is_file()
-            ]
-            newest_src = max(source_mtimes, default=0.0)
-            if (next_cache_dir / "BUILD_ID").exists() or newest_src > next_cache_dir.stat().st_mtime:
-                shutil.rmtree(next_cache_dir, ignore_errors=True)
+            candidate_backup = FRONTEND_DIR / f".next.__e2e_bak_{os.getpid()}"
+            if candidate_backup.exists():
+                shutil.rmtree(candidate_backup, ignore_errors=True)
+            next_cache_dir.rename(candidate_backup)
+            next_backup_dir = candidate_backup
 
         npm_bin = "npm.cmd" if sys.platform.startswith("win") else shutil.which("npm") or "npm"
+        with next_build_log.open("wb") as blog:
+            build_res = subprocess.run(
+                [npm_bin, "run", "build"],
+                cwd=str(FRONTEND_DIR),
+                env=env,
+                stdout=blog,
+                stderr=subprocess.STDOUT,
+                timeout=240,
+                check=False,
+            )
+        if build_res.returncode != 0:
+            build_tail = (
+                next_build_log.read_text(encoding="utf-8", errors="replace")[-3000:]
+                if next_build_log.is_file()
+                else ""
+            )
+            raise RuntimeError(
+                f"Next.js 15 production build failed with code {build_res.returncode}.\n{build_tail}"
+            )
+
         with next_log.open("wb") as nlog:
             next_proc = subprocess.Popen(
-                [npm_bin, "run", "dev", "--", "-p", str(ui_port)],
+                [npm_bin, "run", "start", "--", "-p", str(ui_port)],
                 cwd=str(FRONTEND_DIR),
                 env=env,
                 stdout=nlog,
@@ -417,12 +439,30 @@ def e2e_stack(tmp_path_factory: pytest.TempPathFactory) -> Generator[E2EStack, N
 
         _wait_http_ready(
             f"{ui_base}/",
-            timeout_s=90.0,
+            timeout_s=60.0,
             proc=next_proc,
             log_path=next_log,
-            label="Next.js 15 dev server",
-            wait_log_substring="Ready in",
+            label="Next.js 15 production server",
+            max_status=399,
         )
+        for route in (
+            "/",
+            "/surface",
+            "/findings",
+            "/operations",
+            "/studio",
+            "/intercept",
+            "/arsenal",
+            "/system",
+        ):
+            _wait_http_ready(
+                f"{ui_base}{route}",
+                timeout_s=30.0,
+                proc=next_proc,
+                log_path=next_log,
+                label=f"Next.js 15 route {route}",
+                max_status=399,
+            )
 
         yield E2EStack(
             api_port=api_port,
@@ -442,6 +482,14 @@ def e2e_stack(tmp_path_factory: pytest.TempPathFactory) -> Generator[E2EStack, N
         _terminate_process_tree(uvicorn_proc)
         vuln_server.shutdown()
         vuln_server.server_close()
+        if next_backup_dir is not None and next_backup_dir.exists():
+            shutil.rmtree(next_cache_dir, ignore_errors=True)
+            try:
+                next_backup_dir.rename(next_cache_dir)
+            except OSError:
+                shutil.move(str(next_backup_dir), str(next_cache_dir))
+        elif next_cache_dir.exists():
+            shutil.rmtree(next_cache_dir, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")

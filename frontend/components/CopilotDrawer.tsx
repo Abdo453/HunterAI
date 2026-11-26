@@ -29,12 +29,22 @@ interface ConversationSummary {
   updated_at?: number;
 }
 
+interface ApprovalNoticeData {
+  approval_id: string;
+  action_type: string;
+  tool_name: string;
+  target: string;
+  risk_tier: string;
+  status?: string;
+}
+
 interface ChatMessageItem {
   message_id: string;
   role: "user" | "assistant" | string;
   content: string;
   model?: string;
   mode?: string;
+  approval_id?: string | null;
   refs?: CopilotRef[];
   metadata?: {
     provider?: string;
@@ -42,17 +52,83 @@ interface ChatMessageItem {
     policy_outcome?: { allowed?: boolean; status?: string; reason?: string };
   };
   streaming?: boolean;
-  approvalNotice?: {
-    approval_id: string;
-    action_type: string;
-    tool_name: string;
-    target: string;
-    risk_tier: string;
-  };
+  approvalNotice?: ApprovalNoticeData;
+  approval?: ApprovalNoticeData | null;
   policyNotice?: {
+    allowed?: boolean;
     status: string;
     reason: string;
   };
+}
+
+function getMessageApprovalId(msg: Partial<ChatMessageItem> | undefined): string {
+  if (!msg) return "";
+  return (
+    msg.approvalNotice?.approval_id ||
+    msg.approval?.approval_id ||
+    (typeof msg.approval_id === "string" ? msg.approval_id : "")
+  );
+}
+
+function derivePolicyNotice(
+  raw: ChatMessageItem,
+  existing?: ChatMessageItem
+): ChatMessageItem["policyNotice"] | undefined {
+  if (raw.policyNotice && (raw.policyNotice.reason || raw.policyNotice.status)) {
+    return raw.policyNotice;
+  }
+  const outcome = raw.metadata?.policy_outcome;
+  if (outcome && outcome.allowed === false && (outcome.reason || outcome.status)) {
+    return {
+      allowed: false,
+      status: String(outcome.status || "BLOCKED"),
+      reason: String(outcome.reason || "Blocked by PolicyEngine"),
+    };
+  }
+  return existing?.policyNotice;
+}
+
+function mergeConversationMessages(
+  prev: ChatMessageItem[],
+  incoming: ChatMessageItem[]
+): ChatMessageItem[] {
+  const prevById = new Map<string, ChatMessageItem>();
+  const prevByApprovalId = new Map<string, ChatMessageItem>();
+  for (const item of prev) {
+    if (item.message_id) {
+      prevById.set(item.message_id, item);
+    }
+    const apId = getMessageApprovalId(item);
+    if (apId) {
+      prevByApprovalId.set(apId, item);
+    }
+  }
+
+  const merged: ChatMessageItem[] = [];
+  const seenIds = new Set<string>();
+  for (const raw of incoming) {
+    if (raw.message_id && seenIds.has(raw.message_id)) {
+      continue;
+    }
+    if (raw.message_id) {
+      seenIds.add(raw.message_id);
+    }
+    const rawApId = getMessageApprovalId(raw);
+    const existing =
+      (raw.message_id ? prevById.get(raw.message_id) : undefined) ||
+      (rawApId ? prevByApprovalId.get(rawApId) : undefined);
+
+    const approvalNotice =
+      raw.approvalNotice || raw.approval || existing?.approvalNotice || existing?.approval || undefined;
+    const policyNotice = derivePolicyNotice(raw, existing);
+
+    merged.push({
+      ...raw,
+      ...(approvalNotice ? { approvalNotice } : {}),
+      ...(policyNotice ? { policyNotice } : {}),
+    });
+  }
+  return merged;
 }
 
 interface PendingAttachment {
@@ -128,6 +204,17 @@ export default function CopilotDrawer() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const activeConvIdRef = useRef<string>(activeConvId);
+  const isStreamingRef = useRef<boolean>(isStreaming);
+  const tempMsgSeqRef = useRef<number>(0);
+
+  useEffect(() => {
+    activeConvIdRef.current = activeConvId;
+  }, [activeConvId]);
+
+  useEffect(() => {
+    isStreamingRef.current = isStreaming;
+  }, [isStreaming]);
 
   const activeRunsCount = useMemo(
     () =>
@@ -322,13 +409,14 @@ export default function CopilotDrawer() {
       const data = (await res.json()) as { conversations?: ConversationSummary[] };
       const list = Array.isArray(data.conversations) ? data.conversations : [];
       setConversations(list);
-      if (!activeConvId && list.length > 0) {
+      if (!activeConvIdRef.current && list.length > 0) {
+        activeConvIdRef.current = list[0].conversation_id;
         setActiveConvId(list[0].conversation_id);
       }
     } catch {
       // Hub unavailable
     }
-  }, [hunterHubHealth.status, hunterFetch, activeConvId]);
+  }, [hunterHubHealth.status, hunterFetch]);
 
   const loadConversationMessages = useCallback(
     async (cid: string) => {
@@ -340,11 +428,15 @@ export default function CopilotDrawer() {
           conversation?: ConversationSummary;
           messages?: ChatMessageItem[];
         };
+        if (activeConvIdRef.current !== cid || isStreamingRef.current) {
+          return;
+        }
         if (data.conversation) {
           setMode(data.conversation.mode || "analyst");
           setModel(data.conversation.model || "auto");
         }
-        setMessages(Array.isArray(data.messages) ? data.messages : []);
+        const incoming = Array.isArray(data.messages) ? data.messages : [];
+        setMessages((prev) => mergeConversationMessages(prev, incoming));
       } catch {
         // Ignore load error
       }
@@ -430,6 +522,7 @@ export default function CopilotDrawer() {
       if (!res.ok) return;
       const data = (await res.json()) as { conversation?: ConversationSummary };
       if (data.conversation) {
+        activeConvIdRef.current = data.conversation.conversation_id;
         setConversations((prev) => [data.conversation!, ...prev]);
         setActiveConvId(data.conversation.conversation_id);
         setMessages([]);
@@ -447,8 +540,10 @@ export default function CopilotDrawer() {
       });
       if (!res.ok) return;
       const remaining = conversations.filter((c) => c.conversation_id !== activeConvId);
+      const nextId = remaining[0]?.conversation_id || "";
+      activeConvIdRef.current = nextId;
       setConversations(remaining);
-      setActiveConvId(remaining[0]?.conversation_id || "");
+      setActiveConvId(nextId);
       setMessages([]);
     } catch {
       setStatusNote(t("copilot.offlineBanner"));
@@ -497,12 +592,18 @@ export default function CopilotDrawer() {
     const attachmentIds = attachments.map((a) => a.attachment_id);
     setAttachments([]);
 
+    const nowMs = Date.now();
+    tempMsgSeqRef.current += 1;
+    const uSeq = tempMsgSeqRef.current;
+    tempMsgSeqRef.current += 1;
+    const aSeq = tempMsgSeqRef.current;
+
     const tempUserMsg: ChatMessageItem = {
-      message_id: `tmp-u-${Date.now()}`,
+      message_id: `tmp-u-${nowMs}-${uSeq}`,
       role: "user",
       content: text,
     };
-    const tempAssistId = `tmp-a-${Date.now()}`;
+    const tempAssistId = `tmp-a-${nowMs}-${aSeq}`;
     const tempAssistMsg: ChatMessageItem = {
       message_id: tempAssistId,
       role: "assistant",
@@ -511,6 +612,7 @@ export default function CopilotDrawer() {
       refs: [],
     };
 
+    isStreamingRef.current = true;
     setMessages((prev) => [...prev, tempUserMsg, tempAssistMsg]);
     setIsStreaming(true);
 
@@ -577,6 +679,7 @@ export default function CopilotDrawer() {
 
         if (typeof payload.conversation_id === "string" && payload.conversation_id) {
           streamConvId = payload.conversation_id;
+          activeConvIdRef.current = payload.conversation_id;
           setActiveConvId(payload.conversation_id);
         }
 
@@ -589,7 +692,11 @@ export default function CopilotDrawer() {
           const ap = payload.approval as ChatMessageItem["approvalNotice"] | undefined;
           if (ap) {
             setMessages((prev) =>
-              prev.map((m) => (m.message_id === tempAssistId ? { ...m, approvalNotice: ap } : m))
+              prev.map((m) =>
+                m.message_id === tempAssistId
+                  ? { ...m, approval_id: ap.approval_id, approvalNotice: ap }
+                  : m
+              )
             );
             void refreshNow();
           }
@@ -620,19 +727,51 @@ export default function CopilotDrawer() {
           const provider = typeof payload.provider === "string" ? payload.provider : "";
           const modelUsed = typeof payload.model_used === "string" ? payload.model_used : "";
           const fallback = Boolean(payload.fallback);
+          const serverMsg = payload.message as Partial<ChatMessageItem> | undefined;
+          const serverMsgId =
+            typeof serverMsg?.message_id === "string" && serverMsg.message_id
+              ? serverMsg.message_id
+              : "";
+          const serverApproval =
+            (payload.approval as ChatMessageItem["approvalNotice"] | undefined) || undefined;
+          const serverPolicy =
+            (payload.policy as { allowed?: boolean; status?: string; reason?: string } | undefined) ||
+            undefined;
           setMessages((prev) =>
-            prev.map((m) =>
-              m.message_id === tempAssistId
-                ? {
-                    ...m,
-                    content: answer || m.content,
-                    model: modelUsed || m.model,
-                    refs,
-                    streaming: false,
-                    metadata: { ...m.metadata, provider, fallback },
-                  }
-                : m
-            )
+            prev.map((m) => {
+              if (m.message_id !== tempAssistId) return m;
+              const nextId =
+                serverMsgId && !prev.some((other) => other !== m && other.message_id === serverMsgId)
+                  ? serverMsgId
+                  : m.message_id;
+              const nextApprovalNotice = m.approvalNotice || serverApproval;
+              const nextPolicyNotice =
+                m.policyNotice ||
+                (serverPolicy && serverPolicy.allowed === false
+                  ? {
+                      allowed: false,
+                      status: String(serverPolicy.status || "BLOCKED"),
+                      reason: String(serverPolicy.reason || "Blocked by PolicyEngine"),
+                    }
+                  : undefined);
+              return {
+                ...m,
+                message_id: nextId,
+                content: answer || m.content,
+                model: modelUsed || m.model,
+                approval_id: serverMsg?.approval_id ?? m.approval_id ?? nextApprovalNotice?.approval_id,
+                refs,
+                streaming: false,
+                ...(nextApprovalNotice ? { approvalNotice: nextApprovalNotice } : {}),
+                ...(nextPolicyNotice ? { policyNotice: nextPolicyNotice } : {}),
+                metadata: {
+                  ...m.metadata,
+                  provider,
+                  fallback,
+                  ...(serverPolicy ? { policy_outcome: serverPolicy } : {}),
+                },
+              };
+            })
           );
           void loadConversations();
         } else if (eventName === "error") {
@@ -695,6 +834,7 @@ export default function CopilotDrawer() {
         );
       }
     } finally {
+      isStreamingRef.current = false;
       setIsStreaming(false);
     }
   };
@@ -790,7 +930,10 @@ export default function CopilotDrawer() {
         <div className="flex items-center gap-1.5">
           <select
             value={activeConvId}
-            onChange={(e) => setActiveConvId(e.target.value)}
+            onChange={(e) => {
+              activeConvIdRef.current = e.target.value;
+              setActiveConvId(e.target.value);
+            }}
             aria-label="Copilot conversation"
             className="flex-1 min-w-0 h-8 px-2 rounded bg-inset border border-border-subtle text-xs text-ink-primary truncate"
           >

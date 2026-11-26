@@ -515,10 +515,20 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
   const [repeaterDraft, setRepeaterDraft] = useState<RepeaterDraft | null>(null);
 
   const pollAbortRef = useRef<AbortController | null>(null);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const refreshPendingRef = useRef<boolean>(false);
+  const isUnmountedRef = useRef<boolean>(false);
   const lastSeqRef = useRef<number>(0);
   const lastEventIdRef = useRef<string>("");
   const streamPausedRef = useRef<boolean>(false);
   const selectedEngRef = useRef<string>("");
+
+  useEffect(() => {
+    isUnmountedRef.current = false;
+    return () => {
+      isUnmountedRef.current = true;
+    };
+  }, []);
 
   const fpRef = useRef<Record<string, string>>({});
   const seenAuditIdsRef = useRef<Set<string>>(new Set());
@@ -649,21 +659,32 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
     [hunterFetch]
   );
 
-  const refreshData = useCallback(async () => {
-    if (typeof document !== "undefined" && document.hidden) {
-      return;
-    }
-
-    if (pollAbortRef.current) {
-      pollAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    pollAbortRef.current = controller;
-    const { signal } = controller;
-
+  const runRefreshPass = useCallback(async (signal: AbortSignal) => {
     const currentEngId = selectedEngRef.current;
     const isGoUuid = UUID_RE.test(currentEngId);
     const goFilter = isGoUuid ? `?engagement_id=${encodeURIComponent(currentEngId)}` : "";
+
+    const applyRunsList = (rawRuns: unknown[]) => {
+      const normalizedRuns = rawRuns.filter(
+        (r): r is RunRecord => Boolean(r && typeof r === "object" && "run_id" in r)
+      );
+      const fp = fingerprintData(normalizedRuns);
+      if (fpRef.current.runs !== fp) {
+        fpRef.current.runs = fp;
+        setRuns(normalizedRuns);
+      }
+    };
+
+    const applyApprovalsList = (rawApprovals: unknown[]) => {
+      const normalizedApprovals = rawApprovals.filter(
+        (a): a is ApprovalRecord => Boolean(a && typeof a === "object" && "approval_id" in a)
+      );
+      const fp = fingerprintData(normalizedApprovals);
+      if (fpRef.current.approvals !== fp) {
+        fpRef.current.approvals = fp;
+        setApprovals(normalizedApprovals);
+      }
+    };
 
     try {
       const [
@@ -673,8 +694,24 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         artexHealthRes,
       ] = await Promise.all([
         apiJson<Record<string, unknown>>("/api/platform/overview", { signal }),
-        apiJson<Record<string, unknown>>("/api/platform/approvals", { signal }),
-        apiJson<Record<string, unknown>>("/api/platform/runs", { signal }),
+        apiJson<Record<string, unknown>>("/api/platform/approvals", { signal }).then((res) => {
+          if (!signal.aborted && res.ok) {
+            const payload = res.data as { approvals?: unknown[] } | null;
+            if (payload && Array.isArray(payload.approvals)) {
+              applyApprovalsList(payload.approvals);
+            }
+          }
+          return res;
+        }),
+        apiJson<Record<string, unknown>>("/api/platform/runs", { signal }).then((res) => {
+          if (!signal.aborted && res.ok) {
+            const payload = res.data as { runs?: unknown[] } | null;
+            if (payload && Array.isArray(payload.runs)) {
+              applyRunsList(payload.runs);
+            }
+          }
+          return res;
+        }),
         apiJson<Record<string, unknown>>("/api/platform/artex/health", { signal }),
       ]);
 
@@ -1121,14 +1158,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
             ? hubOv.runs
             : null;
       if (rawRuns) {
-        const normalizedRuns = rawRuns.filter(
-          (r): r is RunRecord => Boolean(r && typeof r === "object" && "run_id" in r)
-        );
-        const fp = fingerprintData(normalizedRuns);
-        if (fpRef.current.runs !== fp) {
-          fpRef.current.runs = fp;
-          setRuns(normalizedRuns);
-        }
+        applyRunsList(rawRuns);
       }
 
       const approvalsPayload = hubApprovalsRes.data as { approvals?: unknown[] } | null;
@@ -1137,14 +1167,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           ? approvalsPayload.approvals
           : null;
       if (rawApprovals) {
-        const normalizedApprovals = rawApprovals.filter(
-          (a): a is ApprovalRecord => Boolean(a && typeof a === "object" && "approval_id" in a)
-        );
-        const fp = fingerprintData(normalizedApprovals);
-        if (fpRef.current.approvals !== fp) {
-          fpRef.current.approvals = fp;
-          setApprovals(normalizedApprovals);
-        }
+        applyApprovalsList(rawApprovals);
       }
     } finally {
       if (!signal.aborted) {
@@ -1152,6 +1175,47 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, [addConsoleLog, apiJson]);
+
+  const refreshData = useCallback(async () => {
+    if (typeof document !== "undefined" && document.hidden) {
+      return;
+    }
+    if (refreshInFlightRef.current) {
+      refreshPendingRef.current = true;
+      await refreshInFlightRef.current;
+      return;
+    }
+
+    const executeLoop = async () => {
+      let shouldRun = true;
+      while (shouldRun) {
+        shouldRun = false;
+        refreshPendingRef.current = false;
+        const controller = new AbortController();
+        pollAbortRef.current = controller;
+        await runRefreshPass(controller.signal);
+        if (
+          refreshPendingRef.current &&
+          !isUnmountedRef.current &&
+          !controller.signal.aborted &&
+          (typeof document === "undefined" || !document.hidden)
+        ) {
+          shouldRun = true;
+        }
+      }
+    };
+
+    const promise = executeLoop();
+    refreshInFlightRef.current = promise;
+    try {
+      await promise;
+    } finally {
+      if (refreshInFlightRef.current === promise) {
+        refreshInFlightRef.current = null;
+      }
+      pollAbortRef.current = null;
+    }
+  }, [runRefreshPass]);
 
   // Visibility-aware polling loop (4s interval, paused when document.hidden === true)
   useEffect(() => {
