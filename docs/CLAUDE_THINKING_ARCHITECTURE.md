@@ -1,63 +1,63 @@
-# دمج معمارية التفكير الفائق لكلاود (Claude Extended Thinking & Steering Architecture) داخل HunterAI
+# Integrating Claude Extended Thinking & Steering Architecture into HunterAI
 
-> **الهدف:** توثيق شامل باللغة العربية والإنجليزية لكيفية عمل عقل **Claude (Anthropic)** في التفكير الداخلي (`<thinking>` / Extended Thinking / Thinking Steering)، وتحويل كافة مبادئه المتقدمة إلى محرك إدراكي رسمي داخل **HunterAI OS**.
-
----
-
-## 1. أسرار معمارية التفكير في Claude (Anthropic Thinking Architecture)
-
-من خلال فحص التوثيق الرسمي لشركة Anthropic (`thinking-steering-and-cost`) وتسريبات النظام التوجيهية (`claude-haiku-5.5.md` و `Thinking-Claude v5.1 Protocol`)، تتلخص قوة تفكير كلاود في **7 ركائز أساسية**:
-
-### الركيزة 1: المونولوج الداخلي المتدفق (Stream-of-Consciousness Inner Monologue)
-* كلاود لا يفكر بقوائم نقطية ميكانيكية أو قوالب جافة داخل مساحة التفكير.
-* التفكير عبارة عن **مسودة حرة ومفتوحة (Raw Scratchpad)** تبدأ بملاحظات بديهية، وتتساءل بشكل طبيعي: *"Hmm...", "Wait, let me rethink this...", "Actually, looking closer at this packet..."*.
-* هذا التدفق الطبيعي يرفع من قدرة النموذج على حل المسائل المعقدة واستكشاف الفرضيات بنسبة تفوق أي صياغة جاهزة.
-
-### الركيزة 2: إطار التفكير التكيفي (Adaptive Thinking Framework & Steering)
-* **معامل الجهد (Effort Parameter):** يتحكم في مدى عمق التفكير ($0.0 \le \text{effort} \le 1.0$).
-* **ميزانية الرموز (Token Budgeting):** تحديد سقف تفكير مرن (مثلاً 1k للمهام السريعة و 16k للتحليل الأمني المعمق).
-* التفكير يتكيف تلقائياً مع درجة تعقيد المهمة (Query Complexity)، والمخاطر المترتبة عليها (Stakes)، وحجم البيانات المتاحة.
-
-### الركيزة 3: التسلسل الإدراكي ذو المراحل الثمانية (8-Stage Core Thinking Sequence)
-1. **Initial Engagement (الارتباط الأولي):** إعادة صياغة المشكلة بكلمات النموذج الخاصة، وتحديد المعلوم يقيناً مقابل المجهول أو الافتراضي.
-2. **Problem Decomposition (التفكيك):** تجزئة سطح الهجوم إلى مكونات دقيقة (مصادقة، حالة جلسة، حدود الثقة).
-3. **Multiple Hypotheses Generation (توليد الفرضيات المتعددة):** منع الاستنتاج المبكر (Anti-Premature Closure) عن طريق الحفاظ على **فرضيتين أو ثلاث فرضيات متنافسة نشطة في نفس الوقت** (مثال: هل هذا IDOR أم أنه مجرد بيانات عامة Public Data أم استجابة مخزنة Cache Reflection؟).
-4. **Detective Discovery Flow (تدفق المحقق):** مطاردة الأدلة من خلال ربط الإشارات غير المتوقعة والعودة للملاحظات القديمة بنظرة أعمق.
-5. **Testing & Self-Verification (الاختبار والتثبت الذاتي):** وضع معيار دحض مسبق (Refutation Criteria): *"ما هو الاختبار الذي إذا فشل يثبت أنني على خطأ تماماً؟"*.
-6. **Error Recognition & Course Correction (تصحيح المسار فوراً):** الاعتراف الفوري بالأخطاء دون عناد أو مكابرة، وتعديل الفهم دون إفراط في الاعتذار.
-7. **Knowledge Synthesis (التركيب واستنباط الأنماط):** دمج النتائج المتفرقة في نموذج سببي موحد.
-8. **Progress Tracking & Meta-Cognition (الوعي الفوقي):** التقييم المستمر: *"ما الذي تأكدنا منه؟ وما هو مستوى الثقة المعرفية Epistemic Confidence؟"*.
-
-### الركيزة 4: التفكير المتخلل لاستخدام الأدوات (Interleaved Thinking / The "Think" Tool)
-* قبل استدعاء أي أداة (`Pre-Tool Deliberation`): يقف النموذج ويسأل: *لماذا هذه الأداة؟ وما هي النتيجة المتوقعة؟ وما هو معيار الدحض؟*.
-* بعد استلام رد الأداة (`Post-Tool Deliberation`): يحلل الرد ويحدث درجات الثقة في الفرضيات قبل المتابعة.
-
-### الركيزة 5: الفصل الصارم بين التفكير الداخلي والناتج النهائي
-* التفكير الداخلي: تفصيلي، فلسفي، تقني عميق، وفضولي.
-* الناتج المعروض للمستخدم: مركز، أنيق، مباشر، قابل للتنفيذ الفوري، وخالٍ من الحشو الذهني.
+> **Goal:** Document how Claude's internal reasoning architecture (`<thinking>` / Extended Thinking / Thinking Steering) works and how its core principles are implemented as an operational cognitive engine inside **HunterAI OS**.
 
 ---
 
-## 2. كيف تم تطبيق هذه المبادئ في HunterAI؟
+## 1. Anthropic Thinking Architecture
 
-تم بناء محرك كامل ومخصص في مسار:
+Based on Anthropic's official documentation (`thinking-steering-and-cost`) and system guidance references (`claude-haiku-5.5.md` and `Thinking-Claude v5.1 Protocol`), Claude's reasoning architecture rests on **5 core pillars**:
+
+### Pillar 1: Stream-of-Consciousness Inner Monologue
+* Inside the reasoning space, Claude does not rely on rigid bullet templates.
+* Thinking operates as a **raw scratchpad** starting from initial observations and naturally questioning assumptions: *"Hmm...", "Wait, let me rethink this...", "Actually, looking closer at this packet..."*.
+* This unconstrained flow improves complex problem solving and hypothesis exploration over rigid pre-formatted checklists.
+
+### Pillar 2: Adaptive Thinking Framework & Steering
+* **Effort Parameter:** Controls reasoning depth ($0.0 \le \text{effort} \le 1.0$).
+* **Token Budgeting:** Sets a flexible thinking ceiling (e.g., `1k` tokens for routine tasks and `16k` for deep security analysis).
+* Reasoning depth adapts automatically to query complexity, stakes, and available evidence.
+
+### Pillar 3: 8-Stage Core Thinking Sequence
+1. **Initial Engagement:** Restate the problem in the model's own words and separate confirmed facts from unknowns or assumptions.
+2. **Problem Decomposition:** Break the attack surface into concrete components (authentication, session state, trust boundaries).
+3. **Multiple Hypotheses Generation:** Prevent premature closure by keeping **two or three competing hypotheses active at once** (e.g., is this IDOR, public data, or a cached response reflection?).
+4. **Detective Discovery Flow:** Follow evidence by linking unexpected signals and revisiting earlier observations with new context.
+5. **Testing & Self-Verification:** Define refutation criteria upfront: *"Which test, if it fails, proves my hypothesis wrong?"*.
+6. **Error Recognition & Course Correction:** Acknowledge mistakes immediately without defensiveness and update the working model cleanly.
+7. **Knowledge Synthesis:** Combine isolated findings into a unified causal model.
+8. **Progress Tracking & Meta-Cognition:** Continuously assess: *"What is confirmed, and what is our current epistemic confidence?"*.
+
+### Pillar 4: Interleaved Thinking (The "Think" Tool)
+* **Pre-Tool Deliberation:** Before invoking any tool, pause and state why this tool is needed, what signal is expected, and what would refute the hypothesis.
+* **Post-Tool Deliberation:** After receiving tool output, analyze the result and update hypothesis confidence scores before proceeding.
+
+### Pillar 5: Strict Separation Between Internal Reasoning and Final Output
+* Internal reasoning: detailed, exploratory, technical, and self-critical.
+* User-facing output: focused, direct, actionable, and free of internal scratchpad noise.
+
+---
+
+## 2. Implementation in HunterAI
+
+The dedicated engine is implemented at:
 [`core/cognitive/claude_thinking_protocol.py`](file:///e:/Agant/PentestAI-Unified/core/cognitive/claude_thinking_protocol.py)
 
-### المكونات البرمجية التي تمت إضافتها:
-1. **`ClaudeThinkingEngine`**: محرك إدارة التفكير الإدراكي لجميع الوكلاء (Strategist, Recon, Web, Verifier).
+### Implemented Components
+1. **`ClaudeThinkingEngine`**: Manages cognitive reasoning across all agents (Strategist, Recon, Web, Verifier).
 2. **`ThinkingMode` & `ThinkingBudget`**:
-   - `CONCISE`: جهد 0.2 (للمهام الروتينية).
-   - `ADAPTIVE`: جهد 0.6 (للتتبع والاستكشاف العادي).
-   - `EXTENDED`: جهد 0.85 (للتحليل الاستراتيجي واختبار الثغرات).
-   - `DEEP_AUDIT`: جهد 1.0 وميزانية 16,384 رمز (للتحقق الحرج في محكمة الأدلة).
-3. **`generate_system_prompt_steering()`**: يولد تلقائياً موجه التفكير الاحترافي `<anthropic_thinking_protocol>` لحقنه في نماذج Ollama (Qwen 2.5/3, WhiteRabbitNeo, DeepSeek).
-4. **`spawn_competing_hypotheses()`**: يولد فرضيات متنافسة تلقائياً لمنع الانحياز التأكيدي (Confirmation Bias).
-5. **`pre_tool_deliberation()` & `post_tool_deliberation()`**: التفكير التداولي قبل وبعد تشغيل أي أداة في HunterAI (Nmap, Katana, FFuf, Burp, Browser).
-6. **`ThinkingTrace`**: تسجيل مسار التفكير بالكامل وحفظه كملفات JSON في `logs/thinking_traces/` ليتمكن مدير النظام من مراجعة تسلسل تفكير الوكيل في أي وقت.
+   - `CONCISE`: effort `0.2` (routine tasks).
+   - `ADAPTIVE`: effort `0.6` (standard exploration and tracking).
+   - `EXTENDED`: effort `0.85` (strategic analysis and vulnerability testing).
+   - `DEEP_AUDIT`: effort `1.0`, `16,384`-token budget (high-stakes evidence verification).
+3. **`generate_system_prompt_steering()`**: Generates the `<anthropic_thinking_protocol>` system prompt block for injection into local Ollama models (Qwen 2.5/3, WhiteRabbitNeo, DeepSeek).
+4. **`spawn_competing_hypotheses()`**: Automatically generates competing hypotheses to counter confirmation bias.
+5. **`pre_tool_deliberation()` & `post_tool_deliberation()`**: Structured deliberation before and after running HunterAI tools (Nmap, Katana, FFuf, Burp, Browser).
+6. **`ThinkingTrace`**: Persists complete reasoning traces as JSON files under `logs/thinking_traces/` for post-run review.
 
 ---
 
-## 3. مثال حي لمونولوج التفكير داخل HunterAI
+## 3. Live Thinking Monologue Example in HunterAI
 
 ```text
 ```thinking
@@ -73,7 +73,7 @@ Proceeding with controlled execution.
 
 ---
 
-## 4. شجرة الملفات التي تم إنشاؤها لدمج المعمارية:
+## 4. Files Added for This Architecture
 - [`core/cognitive/__init__.py`](file:///e:/Agant/PentestAI-Unified/core/cognitive/__init__.py)
 - [`core/cognitive/claude_thinking_protocol.py`](file:///e:/Agant/PentestAI-Unified/core/cognitive/claude_thinking_protocol.py)
 - [`logs/thinking_traces/`](file:///e:/Agant/PentestAI-Unified/logs/thinking_traces/)

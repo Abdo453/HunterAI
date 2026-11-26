@@ -1,30 +1,30 @@
-# إعداد الوكلاء البرمجيين (Coding Agent Adapters) — مرحلة E
+# Coding Agent Adapters Setup — Phase E
 
-## نظرة عامة
+## Overview
 
-يُنفّذ HunterAI واجهة عامة للوكلاء البرمجيين عبر سطر الأوامر (Codex CLI / Claude Code / Cursor Agent / OpenCode / ...) مدمجة مع المنسق وسجل الأدوات. كل وكيل يعمل ضمن مساحة عمل مصرح بها فقط، والتعديلات عالية التأثير تتطلب مراجعة diff وموافقة بشرية.
+HunterAI provides a generic CLI interface for coding agents (Codex CLI / Claude Code / Cursor Agent / OpenCode / ...) integrated with the coordinator and tool registry. Each agent operates strictly within an authorized workspace, and high-impact edits require diff review and human approval.
 
-## الملفات
+## Files
 
-| الملف | الدور |
+| File | Role |
 |---|---|
-| `core/coding_agent_adapter.py` | واجهة `CodingAgentAdapter` مجردة + تطبيق `CLICodingAgentAdapter` + `CodingAgentRegistry` |
-| `tests/test_coding_agent_adapter.py` | اختبارات وحدة (محاكاة subprocess، لا أنظمة خارجية) |
-| `docs/mcp-setup.md` | إعداد عميل MCP (مرتبطة) |
+| `core/coding_agent_adapter.py` | Abstract `CodingAgentAdapter` interface + `CLICodingAgentAdapter` implementation + `CodingAgentRegistry` |
+| `tests/test_coding_agent_adapter.py` | Unit tests (mocked subprocess, no external systems) |
+| `docs/mcp-setup.md` | MCP client setup (related) |
 
-## المصفوفة المدعومة (Capabilities Matrix)
+## Capabilities Matrix
 
-| الوكيل | الملف التنفيذي | قراءة ملفات | بحث | فحص依赖يات | اقتراح diff | تطبيق diff | تنفيذ اختبارات | إلغاء |
+| Agent | Executable | Read Files | Search | Inspect Dependencies | Propose Diff | Apply Diff | Run Tests | Cancel |
 |---|---|---|---|---|---|---|---|---|
 | Claude Code | `claude` | ✅ | ✅ | – | ✅ | ✅ | ✅ | ✅ |
 | Codex CLI | `codex` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | OpenCode | `opencode` | ✅ | ✅ | – | ✅ | – | – | ✅ |
 
-> القدرات تُبلغ ديناميكيًا من كل وكيل؛ لا تُفترض قدرات غير مدعومة.
+> Capabilities are reported dynamically by each agent; unsupported capabilities are never assumed.
 
-## التشغيل
+## Usage
 
-يتم تسجيل الوكلاء افتراضيًا عند استيراد `core/coding_agent_adapter`:
+Default agents are registered automatically when importing `core/coding_agent_adapter`:
 
 ```python
 from core.coding_agent_adapter import GLOBAL_CODING_AGENT_REGISTRY
@@ -34,7 +34,7 @@ for a in agents:
     print(a.agent_id, a.display_name, a.executable)
 ```
 
-لإضافة وكيل مخصص:
+To register a custom agent:
 
 ```python
 from core.coding_agent_adapter import (
@@ -58,18 +58,18 @@ agent = CLICodingAgentAdapter(
 GLOBAL_CODING_AGENT_REGISTRY.register(agent)
 ```
 
-## الأمان
+## Security
 
-- **مساحة عمل مصرح بها فقط**: كل طلب يُنفذ داخل `workspace` محدد؛ لا وصول لملفات خارجه (لا traversal).
-- **لا أسرار**: لا مفاتيح API / SSH / توكنز تُعرض على الوكيل.
-- **مراجعة diff**: التعديلات التي تنتج diff تُعلّم بـ `needs_human_review = True` وتتطلب موافقة بشرية قبل التطبيق عبر `ToolRegistry.approval_handler`.
-- **الإلغاء**: يدعم الإلغاء حيث يدعمه الوكيل؛ المهلة محترمة.
+- **Authorized workspace only**: Every request runs within the specified `workspace`; access outside it is blocked (no path traversal).
+- **No secrets exposed**: API keys, SSH keys, and tokens are never passed to the agent.
+- **Diff review**: Edits that produce a diff are flagged with `needs_human_review = True` and require human approval via `ToolRegistry.approval_handler` before applying.
+- **Cancellation**: Supported wherever the underlying agent supports it; timeouts are enforced.
 
-## التكامل مع المنسق
+## Coordinator Integration
 
-يُحقن سجل الوكلاء البرمجيين في `core/coordinator.py` كمنفّذ مهام (`executor`) بحيث يمكن للمخطط تعيين مهام ترميز لوكلاء محددين مع تتبع الحالة والأحداث.
+The coding agent registry is injected into `core/coordinator.py` as a task `executor`, allowing the planner to assign coding tasks to specific agents with status and event tracking.
 
-## المتطلبات الخارجية
+## External Requirements
 
-- ملفات تنفيذية للوكلاء (claude / codex / opencode) يجب أن تكون مثبتة في PATH أو طريقها محدد صريحًا.
-- مصادقة كل وكيل تُدار بشكل مستقل (تسجيل دخول عبر أداة الوكيل نفسها).
+- Agent executables (`claude` / `codex` / `opencode`) must be installed in `PATH` or configured with an explicit path.
+- Authentication for each agent is managed independently (sign in through the agent's own CLI).

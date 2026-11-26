@@ -1,47 +1,47 @@
-# إعداد تكامل بورب (Burp Adapter) — مرحلة F
+# Burp Adapter Integration Setup — Phase F
 
-## نظرة عامة
+## Overview
 
-يُوفّر `core/burp_adapter.py` محولاً ثابتاً (stable interface) للتكامل مع **Burp Suite Professional/Community**، يُحلق فوق البنية القائمة في `core/burp_gateway/` (البوابة المحلية على `127.0.0.1:8085`، مخزن الحركات، مصدّر النتائج، محرك المصدر).
+`core/burp_adapter.py` provides a stable interface for integrating with **Burp Suite Professional/Community**, layered over `core/burp_gateway/` (local gateway on `127.0.0.1:8085`, traffic store, findings exporter, and provenance engine).
 
-## معمار التكامل (موثق بصراحة)
+## Integration Architecture
 
-> **بورب سوبرليغ لا توفر واجهة برمجية REST عامة رسمية** يمكن استدعاءها مباشرة من بايثون. واجهة البرمجة الرسمية لبورب هي **Java Extension API (BApp / `IBurpExtenderCallbacks`)**.
+> **Burp Suite does not expose an official public REST API** callable directly from Python. Burp's official API is the **Java Extension API (BApp / `IBurpExtenderCallbacks`)**.
 
-لذا يعتمد التكامل على هذه الآلية:
-1. تُثبّت إضافة Burp Suite (BApp) في بورب (انظر `agents/burp_agent/integrations/burp_extension/`).
-2. تُرسل الإضافة حركة HTTP الملتقطة (Proxy / Repeater) إلى بوابة HunterAI المحلية (`BurpGateway` على `127.0.0.1:8085`).
-3. يقرأ `BurpAdapter` من البوابة عبر HTTP محلي ويقدّم واجهة مستقرة للمنسيق.
+The integration uses this flow:
+1. Install the Burp Suite extension (BApp) in Burp (see `agents/burp_agent/integrations/burp_extension/`).
+2. The extension forwards captured HTTP traffic (Proxy / Repeater) to the local HunterAI gateway (`BurpGateway` on `127.0.0.1:8085`).
+3. `BurpAdapter` reads from the gateway over local HTTP and exposes a stable interface to the coordinator.
 
-## الملفات
+## Files
 
-| الملف | الدور |
+| File | Role |
 |---|---|
-| `core/burp_adapter.py` | محول بورب (9 عمليات مستقرة) + نسخة مشتركة `GLOBAL_BURP_ADAPTER` |
-| `core/burp_gateway/` | البنية القائمة: البوابة، مخزن الحركات، مصدّر النتائج، محرك المصدر |
-| `config/burp.example.json` | مثال إعداد (بدون أسرار حقيقية) |
-| `docs/burp-setup.md` | هذا الملف |
-| `tests/test_burp_adapter.py` | اختبارات وحدة (محاكاة، لا أنظمة خارجية) |
+| `core/burp_adapter.py` | Burp adapter (9 stable operations) + shared `GLOBAL_BURP_ADAPTER` instance |
+| `core/burp_gateway/` | Existing infrastructure: gateway, traffic store, findings exporter, provenance engine |
+| `config/burp.example.json` | Example configuration (no real secrets) |
+| `docs/burp-setup.md` | This document |
+| `tests/test_burp_adapter.py` | Unit tests (mocked, no external systems) |
 
-## العمليات المدعومة
+## Supported Operations
 
-| العملية | الوصف |
+| Operation | Description |
 |---|---|
-| `health_check` | فحص وصول بوابة بورب والاستجابة |
-| `get_available_capabilities` | اكتشاف القدرات المدعومة (بدون ادعاء قدرات غير مدعومة) |
-| `retrieve_authorized_http_history` | استرجاع حركة HTTP مرخصة (بعد فحص النطاق) |
-| `retrieve_request` / `retrieve_response` | استرجاع حركة معينة (مُنَظَّقة) |
-| `submit_supported_analysis_job` | إرسال مهمة تحليل مدعومة (مثل فحص سلبي) |
-| `retrieve_analysis_results` | استرجاع نتائج مهمة تحليل |
-| `import_supported_findings` | استيراد نتائج مع تسجيل المنشأ |
-| `export_supported_findings` | تصدير نتائج إلى تنسيق Burp `IScanIssue` JSON |
+| `health_check` | Check Burp gateway reachability and responsiveness |
+| `get_available_capabilities` | Discover supported capabilities without claiming unsupported ones |
+| `retrieve_authorized_http_history` | Retrieve authorized HTTP traffic after scope checks |
+| `retrieve_request` / `retrieve_response` | Retrieve a specific sanitized transaction |
+| `submit_supported_analysis_job` | Submit a supported analysis job (e.g., passive scan) |
+| `retrieve_analysis_results` | Retrieve analysis job results |
+| `import_supported_findings` | Import findings with recorded provenance |
+| `export_supported_findings` | Export findings to Burp `IScanIssue` JSON format |
 
-## التشغيل (إعداد محلي)
+## Setup (Local)
 
-1. ثبّت إضافة Burp Suite (BApp) hunter في بورب.
-2. شغّل بوابة HunterAI المحلية (`BurpGateway` على `127.0.0.1:8085`).
-3. عدل `config/burp.example.json` وحدّد `gateway_base_url` والنطاق المصرح به.
-4. حمّل الإعداد في التطبيق:
+1. Install the Hunter Burp Suite extension (BApp) in Burp.
+2. Start the local HunterAI gateway (`BurpGateway` on `127.0.0.1:8085`).
+3. Edit `config/burp.example.json` and set `gateway_base_url` and the authorized scope.
+4. Load the configuration in your application:
    ```python
    from core.burp_adapter import BurpAdapter, BurpAdapterConfig
 
@@ -50,23 +50,23 @@
    await adapter.health_check()
    ```
 
-## الأمان
+## Security
 
-- تُنشق كوكيز ورؤوس `Authorization` والتوكنز قبل إرسال أي حركة إلى نموذج خارجي.
-- تُسجل المنشأ (provenance) لكل نتيجة مستوردة من بورب.
-- لا يُدعى أن نتيجة "مؤكدة" إلا إذا أكدت أداة بورب فعلاً (`verified_by_burp`).
-- جميع العمليات تخضع لفحص النطاق (`ScopeEnforcer`) قبل استرجاع أي حركة خارجية.
-- حظر خدمات metadata السحابية و loopback / RFC1918 ما لم تُصرح صراحةً.
+- Cookies, `Authorization` headers, and tokens are redacted before sending any traffic to an external model.
+- Provenance is recorded for every finding imported from Burp.
+- A finding is never marked as confirmed unless explicitly verified by Burp (`verified_by_burp`).
+- All operations pass through scope enforcement (`ScopeEnforcer`) before retrieving external traffic.
+- Cloud metadata services and loopback / RFC1918 addresses are blocked unless explicitly authorized.
 
-## التدهور اللطيف (Degraded Mode)
+## Degraded Mode
 
-إذا لم تكن إضافة بورب مثبتة أو البورب غير متاح، يعمل المحول بوضع تدهور لطيف:
-- كل عملية ترجع خطأ `"غير متاح"` دون انهيار.
-- `health_check` تُعيد `available: false`.
-- يمكن للمستخدم المتابعة في مهام أخرى دون تأثر النظام.
+If the Burp extension is not installed or Burp is unreachable, the adapter falls back to degraded mode:
+- Every operation returns an `"unavailable"` error without crashing.
+- `health_check` returns `available: false`.
+- Users can continue other tasks without system disruption.
 
-## القيود
+## Limitations
 
-- التكامل يتم عبر إضافة بورب (BApp) التي ترسل الترافيك إلى البوابة المحلية، لا عبر واجهة برمجية REST رسمية من بورب.
-- لا يُستخدم استخراج واجهة المستخدم (GUI scraping) كآلية تكامل افتراضية.
-- للاختبار ضد بورب حقيقي، استخدم بيئة معزولة مع إضافة معتمدة.
+- Integration works through the Burp extension (BApp) forwarding traffic to the local gateway, not an official Burp REST API.
+- GUI scraping is not used as a default integration mechanism.
+- For testing against a live Burp instance, use an isolated environment with an approved extension.

@@ -1,83 +1,83 @@
-# تقرير التنفيذ النهائي — Final Implementation Report
+# Final Implementation Report
 
-**المستودع:** `E:\Agant\PentestAI-Unified` (HunterAI / PentestAI-Unified)
-**اللغة / الإطار:** Python 3.11 + FastAPI (واجهة ويب على المنفذ 7070)
-**الترخيص:** MIT (كل الكود مضاف أصليًا — لا نسخ من Muteki AGPL-3.0)
-**تاريخ التقرير:** Sat Oct 17 2026
-**الحالة النهائية:** جميع المراحل A→F من المواصفة منفذة ومدمجة في التطبيق الفعلي
+**Repository:** `E:\Agant\PentestAI-Unified` (HunterAI / PentestAI-Unified)
+**Language / Framework:** Python 3.11 + FastAPI (web UI on port 7070)
+**License:** MIT (all added code written from scratch — nothing copied from Muteki AGPL-3.0)
+**Report Date:** Sat Oct 17 2026
+**Final Status:** All phases A→F of the specification are implemented and integrated into the live application
 
 ---
 
-## 1. ملخص التغييرات
+## 1. Summary of Changes
 
-تم تطوير منصة 멀تي-أ Automatic Security Automation Platform مستوحاة من架构ية Muteki المنشورة علنًا، بأصلية كود كاملة (MIT license، لا نسخ من AGPL-3.0). كل الكود جديد ومضاف بشكل **إضافي (additive)** فوق النظام الحالي بدون حذف أو إعادة كتابة أي مكون قائم.
+A Multi-Agent Security Automation Platform inspired by Muteki's publicly documented architecture has been built with original code (MIT license; no copying from AGPL-3.0). All new code is strictly **additive** on top of the existing system, without deleting or rewriting any existing component.
 
-### ما تم بناؤه (مراحل A → F)
+### What Was Built (Phases A → F)
 
-| المرحلة | المكونات الرئيسية | الملفات |
+| Phase | Key Components | Files |
 |---|---|---|
-| **A** تدقيق + baseline | `docs/architecture-audit.md`، baseline 1701/1709 اختبار | `docs/` |
-| **B** واجهة موفري LLM + سجل أدوات + إذن | `AgentProvider` مجردة، `ToolRegistry` مركب، سياسة إذن | `core/agent_provider.py`، `core/tool_registry.py` |
-| **C** منسق مهام + سجل عمال + دورة حياة | `TaskLifecycle` (حالات PENDING→CANCELLED)، `WorkerRegistry`، `Coordinator` | `core/task_lifecycle.py`، `core/worker_registry.py`، `core/coordinator.py` |
-| **D** متجر أدلة دائم + أحداث | `EvidenceStore` (JSONL دائم، content hash)، تكامل `EngineWorker` | `core/evidence_store.py`، `engines/worker.py` |
-| **E** MCP + وكلاء برمجة | عميل MCP حقيقي (stdio، JSON-RPC 2.0)، `CodingAgentAdapter` (claude/codex/opencode) | `core/mcp_config.py`، `core/mcp_client.py`، `core/coding_agent_adapter.py` |
-| **F** تكامل بورب | محول بورب ثابت مع 9 عمليات، إخفاء أسرار، فحص نطاق | `core/burp_adapter.py` |
-| **G** صندوق رمل + فرض نطاق | `LocalSandbox`، `DockerSandbox` موثق، `ScopeEnforcer` (metadata/loopback/redirect/rate-limit) | `core/sandbox.py`، `core/scope_enforcer.py` |
-| **H** واجهة API مدمجة | `GLOBAL_COORDINATOR`، `GLOBAL_EVIDENCE_STORE`، `/api/runs/{id}/events\|evidence\|findings` | `core/global_state.py`، `ui/web/runs_api.py` |
+| **A** Audit + baseline | `docs/architecture-audit.md`, baseline 1701/1709 tests | `docs/` |
+| **B** LLM provider interface + tool registry + authorization | Abstract `AgentProvider`, composite `ToolRegistry`, permission policy | `core/agent_provider.py`, `core/tool_registry.py` |
+| **C** Task coordinator + worker registry + lifecycle | `TaskLifecycle` (states PENDING→CANCELLED), `WorkerRegistry`, `Coordinator` | `core/task_lifecycle.py`, `core/worker_registry.py`, `core/coordinator.py` |
+| **D** Persistent evidence store + events | `EvidenceStore` (persistent JSONL, content hash), `EngineWorker` integration | `core/evidence_store.py`, `engines/worker.py` |
+| **E** MCP + coding agents | Real MCP client (stdio, JSON-RPC 2.0), `CodingAgentAdapter` (claude/codex/opencode) | `core/mcp_config.py`, `core/mcp_client.py`, `core/coding_agent_adapter.py` |
+| **F** Burp integration | Stable Burp adapter with 9 operations, secret redaction, scope check | `core/burp_adapter.py` |
+| **G** Sandbox + scope enforcement | `LocalSandbox`, documented `DockerSandbox`, `ScopeEnforcer` (metadata/loopback/redirect/rate-limit) | `core/sandbox.py`, `core/scope_enforcer.py` |
+| **H** Integrated API | `GLOBAL_COORDINATOR`, `GLOBAL_EVIDENCE_STORE`, `/api/runs/{id}/events\|evidence\|findings` | `core/global_state.py`, `ui/web/runs_api.py` |
 
 ---
 
-## 2. قرارات معمارية
+## 2. Architectural Decisions
 
-1. **كود أصلي 100%** — جميع المكونات مكتوبة من الصفر بأسلوب المشروع الحالي، لا نسخ أي سطر من Muteki (تجنب انتهاك AGPL-3.0 vs MIT).
-2. **إضافي فقط (additive)** — لا حذف ولا استبدال لأي مكون قائم. المكونات الجديدة تُحقن عبر السجلات المشتركة (مثل `GLOBAL_COORDINATOR`).
-3. **فشل-كلوزد (fail-closed)** — أي خطأ في إذن، نطاق، مصادقة، أو اتصال خارجي يؤدي إلى رفض العملية وليس تخطيها.
-4. **فصل واجهة عن تنفيذ** — واجهة الويب منفصلة عن منطق التنفيذ الأمني عبر الراوترات (`ui/web/runs_api.py` تستدعي `core/coordinator` و `core/evidence_store`).
-5. **تكاملات اختيارية** — MCP، بورب، Docker sandbox تعمل بوضع تدهور لطيف (degraded) عند عدم توفر الخدمة الخارجية، دون انهيار النظام.
+1. **100% original code** — Every component is written from scratch in the project's existing style; no line is copied from Muteki (avoiding AGPL-3.0 vs. MIT license conflicts).
+2. **Additive only** — No existing component is deleted or replaced. New components are injected through shared registries (such as `GLOBAL_COORDINATOR`).
+3. **Fail-closed** — Any permission, scope, authentication, or external connection error rejects the operation instead of bypassing checks.
+4. **UI decoupled from execution** — The web UI is separated from security execution logic via routers (`ui/web/runs_api.py` calls `core/coordinator` and `core/evidence_store`).
+5. **Optional integrations** — MCP, Burp, and Docker sandbox operate in a degraded mode when the external service is unavailable, without crashing the application.
 
 ---
 
-## 3. الملفات المنشأة
+## 3. Created Files
 
-### الكود التنفيذي (13 ملفًا جديدًا)
+### Runtime Code (13 new files)
 ```
-core/agent_provider.py          واجهة موفري LLM الموحدة (capabilities/health_check/execute/stream/cancel)
-core/tool_registry.py           سجل أدوات مركب مع إذن، نطاق، allowlist، sandbox
-core/planner/interface.py       واجهة المخطط (Planner/DefaultPlanner)
-core/task_lifecycle.py          آلة حالات المهام (8 حالات، تحولات صالحة)
-core/worker_registry.py         سجل العمال مع بيانات وصفية وتخصيص مهام
-core/coordinator.py             منسق المهام (submit_run، executor، أقفال موارد، موافقة بشرية، إلغاء)
-core/evidence_store.py          متجر أدلة دائم thread-safe (JSONL، content hash، append-only)
-core/global_state.py            سواقل مشتركة GLOBAL_COORDINATOR + GLOBAL_EVIDENCE_STORE
-core/sandbox.py                 صندوق رمل (LocalSandbox + DockerSandbox موثق)
-core/scope_enforcer.py          مفرض نطاق الشبكة (metadata/loopback/redirect/rate-limit/تدقيق)
-core/mcp_config.py              schema إعداد خوادم MCP (Pydantic)
-core/mcp_client.py              عميل MCP حقيقي (stdio، JSON-RPC 2.0، initialize، tools/call)
-core/coding_agent_adapter.py    محولات الوكلاء البرمجيين (claude-code, codex-cli, opencode)
-core/burp_adapter.py            محول بورب ثابت (9 عمليات، إخفاء أسرار، فحص نطاق)
-```
-
-### ملفات الإعداد والتوثيق
-```
-config/mcp.example.json         مثال إعداد خوادم MCP (بدون أسرار)
-config/burp.example.json        مثال إعداد محول بورب (بدون أسرار)
-docs/architecture-audit.md      تدقيق المستودع والفجوات
-docs/implementation-plan.md     خطة التنفيذ + توثيق التقدم المنجز
-docs/mcp-setup.md               دليل إعداد MCP والأمان
-docs/coding-agent-setup.md      دليل إعداد الوكلاء البرمجيين ومصفوفة القدرات
-docs/burp-setup.md              دليل إعداد بورب والأمان والتدهور اللطيف
-docs/AGENT_SYSTEMS.md           توثيق الأنظمة السبعة المضافة سابقًا
+core/agent_provider.py          Unified LLM provider interface (capabilities/health_check/execute/stream/cancel)
+core/tool_registry.py           Composite tool registry with authorization, scope, allowlist, sandbox
+core/planner/interface.py       Planner interface (Planner/DefaultPlanner)
+core/task_lifecycle.py          Task state machine (8 states, valid transitions)
+core/worker_registry.py         Worker registry with metadata and task assignment
+core/coordinator.py             Task coordinator (submit_run, executor, resource locks, human approval, cancellation)
+core/evidence_store.py          Thread-safe persistent evidence store (JSONL, content hash, append-only)
+core/global_state.py            Shared singletons GLOBAL_COORDINATOR + GLOBAL_EVIDENCE_STORE
+core/sandbox.py                 Sandbox (LocalSandbox + documented DockerSandbox)
+core/scope_enforcer.py          Network scope enforcer (metadata/loopback/redirect/rate-limit/audit)
+core/mcp_config.py              MCP server configuration schema (Pydantic)
+core/mcp_client.py              Real MCP client (stdio, JSON-RPC 2.0, initialize, tools/call)
+core/coding_agent_adapter.py    Coding agent adapters (claude-code, codex-cli, opencode)
+core/burp_adapter.py            Stable Burp adapter (9 operations, secret redaction, scope check)
 ```
 
-### التعديلات على كود قائم (إضافية فقط)
+### Configuration and Documentation Files
 ```
-engines/worker.py               معلمتان جديدتان (evidence_graph, evidence_store) + تخزين دائم لنتيجة التشغيل
-core/tool_registry.py           دمج LocalSandbox ك back-end للتنفيذ + ScopeEnforcer في authorize + register_mcp_tools + MCPTool wrapper
-ui/web/app.py                   تركيب runs_api_router بعد control/budget routers
-ui/web/runs_api.py              نقاط /api/runs/{id}/events | /evidence | /findings (جديد)
+config/mcp.example.json         MCP server configuration example (no secrets)
+config/burp.example.json        Burp adapter configuration example (no secrets)
+docs/architecture-audit.md      Repository and gap audit
+docs/implementation-plan.md     Implementation plan and completed progress
+docs/mcp-setup.md               MCP setup and security guide
+docs/coding-agent-setup.md      Coding agent setup guide and capability matrix
+docs/burp-setup.md              Burp setup, security, and graceful degradation guide
+docs/AGENT_SYSTEMS.md           Documentation of the 7 previously added agent systems
 ```
 
-### الاختبارات الجديدة (252 اختبارًا، كلها ناجحة)
+### Modifications to Existing Code (Additive Only)
+```
+engines/worker.py               Two new parameters (evidence_graph, evidence_store) + persistent run result storage
+core/tool_registry.py           Integrated LocalSandbox execution backend + ScopeEnforcer in authorize + register_mcp_tools + MCPTool wrapper
+ui/web/app.py                   Mounted runs_api_router after control/budget routers
+ui/web/runs_api.py              Endpoints /api/runs/{id}/events | /evidence | /findings (new)
+```
+
+### New Tests (252 tests, all passing)
 ```
 tests/test_agent_provider.py (10)
 tests/test_tool_registry.py (18)
@@ -90,130 +90,130 @@ tests/test_coding_agent_adapter.py (19)
 tests/test_burp_adapter.py (16)
 tests/test_new_api_smoke.py (6)
 tests/test_runs_api.py (2)
-tests/test_ctf_flag_bridge.py (10)   # جلسة سابقة
-tests/test_action_evaluator_and_policy.py (4)  # موجود مسبقًا
+tests/test_ctf_flag_bridge.py (10)   # previous session
+tests/test_action_evaluator_and_policy.py (4)  # pre-existing
 ```
 
 ---
 
-## 4. التبعيات المضافة
-لا تبعات خارجية جديدة إلزامية. جميع المكونات تستخدم مكتبة Python 표준 فقط:
-- `pydantic` (موجود بالفعل في المستودع) لتحقق إعداد MCP
-- `httpx` (اختياري) لعميل HTTP في محول بورب — يُحقن للاختبار، يُنشأ من SDK عند النشر
+## 4. Added Dependencies
+No mandatory new external dependencies. All components rely on the Python standard library only:
+- `pydantic` (already in the repository) for MCP config validation
+- `httpx` (optional) for the HTTP client in the Burp adapter — injected in tests, instantiated from the SDK on deployment
 
 ---
 
-## 5. أوامر التشغيل
+## 5. Run Commands
 ```bash
-# تشغيل التطبيق
+# Run the application
 python main.py
 
-# تشغيل السuite الجديدة الكاملة (252 اختبار)
+# Run the full new test suite (252 tests)
 python -m pytest tests/test_agent_provider.py tests/test_tool_registry.py tests/test_coordinator_phase_c.py tests/test_evidence_store.py tests/test_sandbox.py tests/test_scope_enforcer.py tests/test_mcp_client.py tests/test_coding_agent_adapter.py tests/test_burp_adapter.py tests/test_new_api_smoke.py tests/test_runs_api.py tests/test_ctf_flag_bridge.py tests/test_action_evaluator_and_policy.py -q
 
-# تشغيل السويت الكاملة للمستودع (بما فيها baseline 1709)
+# Run the full repository test suite (including the 1709 baseline)
 python -m pytest tests -q --no-header
 ```
 
 ---
 
-## 6. نتائج الاختبارات
+## 6. Test Results
 
-| المجموعة | عدد | حالة |
+| Suite | Count | Status |
 |---|---|---|
-| جميع الأنظمة الجديدة (Phase B–H) | **252** | ✅ كلها ناجحة |
-| baseline القديمة (1709 اختبار) | 1701 ناجح / 7 فشل مسبق | ✅ لا رجعية |
+| All new systems (Phase B–H) | **252** | ✅ All passing |
+| Existing baseline (1709 tests) | 1701 passed / 7 pre-existing failures | ✅ No regression |
 
-الـ 7 فشل مسبق الوجود في ملفات `*_pilot.py` (gitleaks, ssh_audit, subjack, testssl) غير مرتبطة بهذا العمل وتم توثيقها في baseline.
-
----
-
-## 7. المراجعة الأمنية (Security Review)
-
-تمت مراجعة الكود الجديد للتأكد من:
-- **لا أسرار مكشوفة:** لا مفاتيح API، توكنز، أو كلمات مرور صلبة في الكود الجديد.
-- **لا shell strings:** جميع أوامر العملية تستخدم `create_subprocess_exec` مع argv arrays (لا `create_subprocess_shell`، لا `shell=True`).
-- **لا eval/exec:** لا تقييم لسلاسل نموذجية ككود.
-- **سماحية ملفات تنفيذية (allowlist):** `CliTool` يستخدم `allowed_executables` صريحة.
-- **صندوق رمل:** `LocalSandbox` يقيد cwd، env، timeout، وحجم المخرجات.
-- **فرض نطاق:** `ScopeEnforcer` يحظر خدمات metadata، loopback، RFC1918، ويحقق من إعادة التوجيه.
-- **فشل-كلوزد:** جميع فحوصات الإذن والنطاق ترفض عند الخطأ.
-- **إخفاء أسرار:** `_redact_secrets` ينظف كوكيز/Authorization/توكنز قبل السجلات والإثباتات.
+The 7 pre-existing failures in `*_pilot.py` files (`gitleaks`, `ssh_audit`, `subjack`, `testssl`) are unrelated to this work and are documented in the baseline.
 
 ---
 
-## 8. التكاملات: حقيقي مقابل محاكاة
+## 7. Security Review
 
-| التكامل | حالة التحقق | ملاحظة |
+The new code was reviewed to confirm:
+- **No exposed secrets:** No hardcoded API keys, tokens, or passwords in the new code.
+- **No shell strings:** All subprocess commands use `create_subprocess_exec` with argv arrays (no `create_subprocess_shell`, no `shell=True`).
+- **No eval/exec:** No model-generated strings are evaluated as code.
+- **Executable allowlist:** `CliTool` enforces an explicit `allowed_executables` list.
+- **Sandboxing:** `LocalSandbox` restricts `cwd`, `env`, timeout, and output size.
+- **Scope enforcement:** `ScopeEnforcer` blocks metadata services, loopback, and RFC1918 ranges, and validates redirects.
+- **Fail-closed:** All permission and scope checks deny on error.
+- **Secret redaction:** `_redact_secrets` strips cookies, `Authorization` headers, and tokens before writing logs and evidence.
+
+---
+
+## 8. Integrations: Real vs. Mocked
+
+| Integration | Verification Status | Note |
 |---|---|---|
-| واجهة موفري LLM | اختبار وحدة (محاكاة) | لا نظام خارجي |
-| سجل الأدوات | اختبار وحدة (محاكاة محلية) | لا نظام خارجي |
-| منسق المهام | اختبار وحدة (executor وهمي) | لا نظام خارجي |
-| متجر الأدلة | اختبار وحدة (JSONL محلي) | لا نظام خارجي |
-| عميل MCP | اختبار وحدة (محاكاة عميل HTTP) | لا خادم MCP حقيقي |
-| الوكلاء البرمجيون | اختبار وحدة (محاكاة subprocess) | لا وكيل حقيقي مثبت |
-| محول بورب | اختبار وحدة (محاكاة بوابة HTTP) | لا بورب حقيقي مثبت |
-| الساندبوكس | اختبار وحدة (أوامر محلية) | لا Docker على الجهاز |
-| فرض النطاق | اختبار وحدة (نطاقات وهمية) | لا شبكة خارجية |
+| LLM provider interface | Unit tested (mocked) | No external system |
+| Tool registry | Unit tested (local mock) | No external system |
+| Task coordinator | Unit tested (stub executor) | No external system |
+| Evidence store | Unit tested (local JSONL) | No external system |
+| MCP client | Unit tested (mocked HTTP client) | No live MCP server |
+| Coding agents | Unit tested (mocked subprocess) | No real agent installed |
+| Burp adapter | Unit tested (mocked HTTP gateway) | No live Burp installed |
+| Sandbox | Unit tested (local commands) | No Docker on this host |
+| Scope enforcer | Unit tested (synthetic scopes) | No external network |
 
 ---
 
-## 9. القيود المعروفة (موثقة بصراحة)
+## 9. Known Limitations (Documented Explicitly)
 
-1. **بورب لا توفر REST API رسمية عامة** — التكامل عبر إضافة Burp (BApp) ترسل الترافيك إلى البوابة المحلية `127.0.0.1:8085`. الموثق في `docs/burp-setup.md`.
-2. **Docker غير مثبت على جهاز التطوير** — `DockerSandbox` موثق ومكتوب لكنه غير قابل للاختبار الفعلي هنا.
-3. **`mcp` SDK غير مثبت** — تم تنفيذ عميل MCP باستخدام stdlib فقط (لا تبعات خارجية). يمكن استبداله بـ SDK رسمي عند النشر.
-4. **7 فشل مسبق الوجود** في ملفات `*_pilot.py` — غير مرتبطة بهذا العمل، موثقة في baseline.
-5. HTTP transport لـ MCP موثق في الإعداد لكن تنفيذه يُترك للإنتاج عند توفر SDK رسمي.
+1. **Burp has no public official REST API** — Integration relies on a Burp extension (BApp) forwarding traffic to the local gateway at `127.0.0.1:8085`. Documented in `docs/burp-setup.md`.
+2. **Docker is not installed on the development machine** — `DockerSandbox` is implemented and documented but could not be tested live here.
+3. **`mcp` SDK is not installed** — The MCP client is implemented using stdlib only (no external dependencies). It can be swapped for the official SDK on deployment.
+4. **7 pre-existing failures** in `*_pilot.py` files — unrelated to this work and documented in the baseline.
+5. HTTP transport for MCP is documented in config, but runtime implementation is deferred to production once the official SDK is available.
 
 ---
 
-## 10. تعريف الإنجاز (Definition of Done) — التحقق
+## 10. Definition of Done — Verification
 
-| البند | الحالة |
+| Item | Status |
 |---|---|
-| التطبيق يبدأ بنجاح | ✅ استيرادات جميع المكونات تعمل |
-| الوظائف القائمة تعمل دون رجعية | ✅ 1701/1709 baseline ناجح |
-| البنية الجديدة مدمجة في التطبيق الفعلي | ✅ عبر core/global_state و ui/web/runs_api |
-| يمكن تسجيل العمال وتخصيص مهام | ✅ core/worker_registry + core/coordinator (مختبر) |
-| المنسق يتبع حالة المهمة والعامل | ✅ core/task_lifecycle + core/coordinator (مختبر) |
-| استدعاءات الأدوات تُتحقق وتُفوض قبل التنفيذ | ✅ core/tool_registry.call_tool (مختبر) |
-| تنفيذ CLI يستخدم مصفوفات وسيطات | ✅ core/sandbox.LocalSandbox + core/tool_registry.CliTool (مختبر) |
-| خوادم MCP يمكن تكوينها واكتشافها | ✅ core/mcp_config + core/mcp_client (مختبر) |
-| محول بورب يستخدم إمكانيات موثقة | ✅ core/burp_adapter مع توثيق صريح للقيود (مختبر) |
-| تكاملات وكلاء البرمجة تبلغ عن قدراتها بدقة | ✅ core/coding_agent_adapter.CodingAgentCapabilities (مختبر) |
-| الإثباتات تُخزن مع مصدر | ✅ core/evidence_store (مختبر) |
-| الإيجابيات الكاذبة والفرضيات غير المؤكدة تُمثَّل بشكل صحيح | ✅ core/evidence_store Hypothesis/DeadEnd/verification_status (مختبر) |
-| المهام الطويلة يمكن مراقبتها وإلغاؤها | ✅ core/coordinator events + cancel_run + run_control (مختبر) |
-| الإجراءات عالية المخاطر تحترم موافقات بشرية | ✅ core/tool_registry.ApprovalRequired + coordinator.approve_task (مختبر) |
-| فرض النطاق ينطبق على العمليات الشبكية | ✅ core/scope_enforcer + tool_registry authorize (مختبر) |
-| الأسرار لا تُكشف في السجلات أو الإثباتات | ✅ مراجعة أمنية منفذة أعلاه (مختبر) |
-| الاختبارات الآلية تجتاز | ✅ 252 اختبارًا ناجحًا |
-| التوثيق يطابق التنفيذ الفعلي | ✅ docs/ மotten.md + setup docs |
-| لا تكامل حاسم يُمثَّل بـ placeholder | ✅ جميع التكاملات موثقة بقيودها الحقيقية |
-| التقرير يفرق بين منجز / مختبر / جزئي / محظور | ✅ هذا التقرير |
+| Application starts cleanly | ✅ All component imports succeed |
+| Existing functionality works without regression | ✅ 1701/1709 baseline passing |
+| New architecture integrated into the live application | ✅ Via `core/global_state` and `ui/web/runs_api` |
+| Workers can be registered and assigned tasks | ✅ `core/worker_registry` + `core/coordinator` (tested) |
+| Coordinator tracks task and worker state | ✅ `core/task_lifecycle` + `core/coordinator` (tested) |
+| Tool calls are validated and authorized before execution | ✅ `core/tool_registry.call_tool` (tested) |
+| CLI execution uses argument arrays | ✅ `core/sandbox.LocalSandbox` + `core/tool_registry.CliTool` (tested) |
+| MCP servers can be configured and discovered | ✅ `core/mcp_config` + `core/mcp_client` (tested) |
+| Burp adapter uses documented capabilities | ✅ `core/burp_adapter` with explicit limitation docs (tested) |
+| Coding agent integrations report capabilities accurately | ✅ `core/coding_agent_adapter.CodingAgentCapabilities` (tested) |
+| Evidence is stored with provenance | ✅ `core/evidence_store` (tested) |
+| False positives and unconfirmed hypotheses are represented properly | ✅ `core/evidence_store` Hypothesis/DeadEnd/`verification_status` (tested) |
+| Long-running tasks can be monitored and cancelled | ✅ `core/coordinator` events + `cancel_run` + `run_control` (tested) |
+| High-risk actions enforce human approval | ✅ `core/tool_registry.ApprovalRequired` + `coordinator.approve_task` (tested) |
+| Scope enforcement applies to network operations | ✅ `core/scope_enforcer` + `tool_registry` authorize (tested) |
+| Secrets are never leaked in logs or evidence | ✅ Security review completed above (tested) |
+| Automated tests pass | ✅ 252 tests passing |
+| Documentation matches actual implementation | ✅ `docs/architecture-audit.md`, `docs/implementation-plan.md` + setup docs |
+| No critical integration is represented as a placeholder | ✅ All integrations documented with real constraints |
+| Report distinguishes implemented / tested / partial / blocked | ✅ This report |
 
 ---
 
-## 11. الخطوات المتبقية (اختيارية)
+## 11. Remaining Steps (Optional)
 
-| المرحلة | ما يلزم |
+| Stage | What Is Needed |
 |---|---|
-| مراجعة أمنية نهائية من قبل فريق أمن المعلومات | يوصى قبل النشر الإنتاجي |
-| اختبار تكامل end-to-end مع بورب حقيقي / MCP حقيقي | يتطلب بيئة معزولة مع خدمات خارجية |
-| اختبار Docker sandbox على خادم Kali | يتطلب Docker و صورة hunterai-worker:kali |
-| شاشات واجهة أمامية للعرض ( Phase H المتبقٍ ) | تطوير واجهة React/Vue للتبويب الجديد |
+| Final security review by the InfoSec team | Recommended before production deployment |
+| End-to-end integration testing with live Burp / live MCP | Requires an isolated environment with external services |
+| Docker sandbox testing on a Kali host | Requires Docker and the `hunterai-worker:kali` image |
+| Frontend display screens (remaining Phase H) | React/Vue UI work for the new tab |
 
 ---
 
-## الخلاصة
+## Summary
 
-جميع المراحل A→F من MASTER IMPLEMENTATION SPECIFICATION منفذة ومدمجة في التطبيق الفعلي، مع 252 اختبارًا ناجحًا ولا رجعية في الوظائف القائمة. النظام الآن يدعم:
-- منسق مهام متعدد الوكلاء مع دورة حياة كاملة
-- سجل أدوات مركب مع إذن ونطاق وساندبوكس
-- عميل MCP حقيقي ووكلاء برمجيين (claude/codex/opencode)
-- محول بورب ثابت مع إخفاء أسرار وفحص نطاق
-- متجر أدلة دائم مع مصداقية وتتبع المنشأ
-- واجهة API للأحداث والأدلة والنتائج لكل تشغيل
+All phases A→F of the MASTER IMPLEMENTATION SPECIFICATION are implemented and integrated into the live application, with 252 passing tests and zero regressions in existing functionality. The system now supports:
+- Multi-agent task coordinator with full task lifecycle management
+- Composite tool registry with authorization, scope checks, and sandboxing
+- Real MCP client and coding agent adapters (`claude`/`codex`/`opencode`)
+- Stable Burp adapter with secret redaction and scope enforcement
+- Persistent evidence store with credibility and provenance tracking
+- Per-run API endpoints for events, evidence, and findings
 
-جميع المكونات إضافية (additive)، fail-closed، ولا تكشف أسرارًا، وكل تكامل خارجي اختياري ومُوثق بقيوده الحقيقية.
+All components are additive, fail-closed, and redact secrets; every external integration is optional and documented with its real constraints.

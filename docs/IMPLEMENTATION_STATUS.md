@@ -1,8 +1,7 @@
 # HunterAI — Implementation Status Tracker
-# حالة التنفيذ الموحد لمنصة HunterAI
 
-> **Branch:** `feat/platform-unification`
-> **Completed Gates:** `phase/0-green` through `phase/7-green` (Phase 8 release hardening in progress)
+> **Branch:** `main` / `feat/platform-unification`
+> **Completed Gates:** `phase/0-green` through `phase/8-green` (merged into `main`)
 > **Scope Note:** This tracker reflects verified repository structure and git milestones. Test pass counts are intentionally not hard-coded here; run the verification commands in Section 4 to obtain live counts for the current checkout.
 
 ---
@@ -19,7 +18,7 @@
 | Phase 4 — Skills, Tools & Sandbox | `phase/4-green` | `0fced3af` | `config/tools.catalog.yaml` (68 tools), hardened `DockerSandbox`, `skills/registry.json` (`hunterai-redteam`), dual-channel `core/prompts/`, 8 Apache-2.0 PentesterFlow corpora |
 | Phase 5 & 6 — Sensors, Vuln Intel & AI Infra | `phase/5-6-green` | `79ce0ccf` | Sensory Triad seam fixes, `core/vuln_intel/` API wiring, `LLMRouter`, `core/context/` AST compaction, `GPUScheduler`, fail-closed `core/security_mode.py` |
 | Phase 7 — Unified Frontend UI | `phase/7-green` | `0111cdd2` | Next.js Obsidian Sentinel dashboard (`frontend/app/`), live Copilot UI, WCAG contrast & Arabic RTL hardening |
-| Phase 8 — Release Hardening | *(in progress)* | `feat/platform-unification` | Hardened Docker/Compose (`:8088` WAF lab), full multi-stack CI matrix, E2E/VRAM alignment, zero-caller dead-code retirement, documentation reconciliation |
+| Phase 8 — Release Hardening | `phase/8-green` | `6c5e9881` | Hardened Docker/Compose (`:8088` WAF lab), full multi-stack CI matrix, E2E/VRAM alignment, zero-caller dead-code retirement, documentation reconciliation |
 
 ---
 

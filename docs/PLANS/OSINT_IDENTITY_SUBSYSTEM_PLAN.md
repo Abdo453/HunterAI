@@ -1,48 +1,48 @@
-# خطة OSINT Identity Subsystem — HunterAI
-> **موصفات جاهزة للتنفيذ (Codex-Ready Spec)**
-> الإصدار: 1.0 | التاريخ: 2026-09-30 | الحالة: PROPOSED
+# OSINT Identity Subsystem Plan — HunterAI
+> **Codex-Ready Implementation Specification**
+> Version: 1.0 | Date: 2026-09-30 | Status: PROPOSED
 
 ---
 
-## 1. الملخص التنفيذي (Executive Summary)
+## 1. Executive Summary
 
-إضافة **OSINT Identity Subsystem** كامل لـ HunterAI: نظام اكتشاف الهوية الرقمية (Digital Identity) متعدد المتجهات (Username + Email + GitHub + Domains + Breach Indicators)، ينتهي بـ **Evidence Graph** و **Identity Correlation Engine** يحسب درجة ثقة لكل ربط هوية.
+Add a complete **OSINT Identity Subsystem** to HunterAI: a multi-vector digital identity discovery pipeline (Username + Email + GitHub + Domains + Breach Indicators) feeding an **Evidence Graph** and an **Identity Correlation Engine** that computes confidence scores for each identity link.
 
-**المبدأ الحاكم (مستخلص من النقاش):**
+**Governing Principle:**
 
 ```text
-نتائج الـ OSINT = Evidence فقط، وليست Findings مؤكدة أبدًا.
-"وجود نفس الـ username وحده لا يثبت أن الحسابات لنفس الشخص."
-درجة الثقة يحددها Correlation Engine حصريًا — ليس الـ LLM، وليس الأداة.
+OSINT outputs = Evidence only, never confirmed Findings.
+"Sharing the same username alone does not prove two accounts belong to the same person."
+Confidence scores are computed exclusively by the Correlation Engine — never by the LLM or individual tools.
 ```
 
-هذا المبدأ **متوافق 100%** مع الـ Invariant الموجود في `ARCHITECTURE.md`:
-> *Zero LLM Heuristic Confirmation* — الـ LLM يعمل كـ Hypothesis Generator فقط.
+This aligns 100% with the invariant in `ARCHITECTURE.md`:
+> *Zero LLM Heuristic Confirmation* — the LLM acts solely as a Hypothesis Generator.
 
 ---
 
-## 2. الفجوة الحالية (Gap Analysis)
+## 2. Gap Analysis
 
-| الموجود حاليًا | أين | المشكلة |
+| Currently Exists | Location | Problem |
 |:---|:---|:---|
-| `OSINTTools.sherlock(username)` | `tools/osint_tools.py` | تنفيذ خام (raw execution) — بدون normalize أو تفسير أو confidence |
-| `CorrelationEngine` | `hunter_ai/pipeline/correlation.py` | مخصص للـ endpoints/secrets — لا يعرف الهوية إطلاقًا |
-| `IdentityGraph` (مذكور) | `ARCHITECTURE.md` — Layer 2 | **لا يوجد أي module يغذيه** بـ identity evidence حقيقي |
-| `BugBountyMethodology.generate_dorks()` | `core/playbooks/` | passive dorks فقط — لا يربط النتائج بحسابات فعلية |
+| `OSINTTools.sherlock(username)` | `tools/osint_tools.py` | Raw execution — no normalization, interpretation, or confidence scoring |
+| `CorrelationEngine` | `hunter_ai/pipeline/correlation.py` | Scoped to endpoints/secrets — no awareness of identity data |
+| `IdentityGraph` (referenced) | `ARCHITECTURE.md` — Layer 2 | **No module feeds it** real identity evidence |
+| `BugBountyMethodology.generate_dorks()` | `core/playbooks/` | Passive dorks only — does not correlate results to actual accounts |
 
-**الخلاصة:** عندنا أدوات مفككة بلا عقل. المطلوب Agent يعرف **إمتى** يستخدم OSINT، **إيه** الـ input، **إزاي** يفسر النتائج، و**إزاي** يمنع الـ false positives.
+**Summary:** The codebase has disconnected tools with no reasoning layer. It needs an agent that knows **when** to run OSINT, **what** input to pass, **how** to interpret outputs, and **how** to block false positives.
 
 ---
 
-## 3. المبادئ الحاكمة (Governing Principles)
+## 3. Governing Principles
 
 ### P-OSINT-1: Evidence ≠ Finding
-كل نتيجة username/email match تُسجل كـ `IdentityEvidenceRecord` بمستوى **E0 (Observation)** كحد أقصى **E1 (Corroborated)**. لا يمكن أن تصل E2 (Repro) إلا عبر:
-- فحص فعلي للحساب المكتشف (صفحة/محتوى/API) بواسطة Browser Worker أو أداة second-source.
-- مرورها على الـ **Adversarial Evidence Court** كأي finding آخر.
+Every username/email match is recorded as an `IdentityEvidenceRecord` at **E0 (Observation)**, or at most **E1 (Corroborated)**. Reaching E2 (Repro) requires:
+- Active inspection of the discovered account (page/content/API) by a Browser Worker or independent second-source tool.
+- Review by the **Adversarial Evidence Court**, like any other finding.
 
-### P-OSINT-2: Multi-Tool Fan-Out — لا قلب واحد للنظام
-الأداة الموجودة في المقالات (CB UserHunter وأمثالها) **قديمة** مقارنة بأدوات 2026 مثل `user-scanner v1.5.1` (مئات الـ vectors + cross-scanning بين username/email + استخدام mobile app APIs بدل web status codes فقط). لذلك:
+### P-OSINT-2: Multi-Tool Fan-Out — No Single Core Tool
+Tools referenced in older writeups (such as CB UserHunter) are **outdated** compared to 2026 tooling like `user-scanner v1.5.1` (hundreds of vectors, username/email cross-scanning, and mobile app APIs instead of relying solely on web HTTP status codes). Therefore:
 
 ```text
                 HunterAI
@@ -58,7 +58,7 @@
      └────┴────┘        └───┴────┘
              │
              ▼
-      Evidence Normalizer   ← كل الأدوات تُصب في schema واحد
+      Evidence Normalizer   ← All tools normalize into one schema
              │
              ▼
       Identity Correlation
@@ -67,21 +67,21 @@
         Evidence Graph
 ```
 
-- كل vector يشغّل 2-3 أدوات على الأقل؛ الأداة الواحدة لا تصدّق أبدًا وحدها.
-- الأدوات **قابلة للاستبدال** (pluggable) — لو ظهر أداة أحدث، نضيف adapter بدون تغيير الـ pipeline.
+- Every vector runs at least 2–3 tools; no single tool is trusted in isolation.
+- Tools are **pluggable** — newer tools can be integrated via adapters without changing the pipeline.
 
 ### P-OSINT-3: Scope & Egress Governance (P0 Constitution)
-الـ OSINT يلمس خدمات خارجية (GitHub, Reddit, Instagram...). لذلك:
-- كل query خارجي يمر عبر **Policy Gate** ويُسجل في Negative Space Ledger (`PROBED_EXTERNAL`, `SKIPPED_POLICY_RESTRICTION`).
-- حظر أي فحص خارج نطاق الـ authorization scope المعلن (P0: Zero Out-of-Scope Egress).
-- Rate limiting إجباري per-platform لحظر الـ abuse والكشف.
+OSINT queries external services (GitHub, Reddit, Instagram, etc.). Therefore:
+- Every external query passes through the **Policy Gate** and is logged in the Negative Space Ledger (`PROBED_EXTERNAL`, `SKIPPED_POLICY_RESTRICTION`).
+- Any lookup outside the declared authorization scope is blocked (P0: Zero Out-of-Scope Egress).
+- Per-platform rate limiting is mandatory to prevent abuse and detection.
 
-### P-OSINT-4: الوكيل يعرف السياق (Agent Epistemics)
-الـ Agent (وليس الأداة) يحدد: متى يشغّل الفحص، بأي input، كيف يقرأ النتيجة، وكيف يمنع الـ false positives — عبر reasoning rules صريحة (القسم 8).
+### P-OSINT-4: Agent Epistemics
+The agent—not the underlying tool—decides when to trigger scans, what inputs to use, how to interpret outputs, and how to suppress false positives using explicit reasoning rules (Section 8).
 
 ---
 
-## 4. المعمارية (Architecture)
+## 4. Architecture
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
@@ -113,7 +113,7 @@
 │                                         ▼                      │
 │                     ┌───────────────────────────────────────┐  │
 │                     │  IDENTITY EVIDENCE GRAPH               │  │
-│                     │  → يغذي IdentityGraph (Layer 2)        │  │
+│                     │  → feeds IdentityGraph (Layer 2)       │  │
 │                     │  → Evidence Court (Layer 5)            │  │
 │                     │  → Evidence Graph (control plane)      │  │
 │                     └───────────────────────────────────────┘  │
@@ -122,56 +122,56 @@
 
 ---
 
-## 5. المكونات والتغييرات على مستوى الملفات (File-Level Changes)
+## 5. File-Level Changes
 
-### 5.1 حزمة جديدة: `core/osint/`
+### 5.1 New Package: `core/osint/`
 
 ```
 core/osint/
 ├── __init__.py
 ├── schemas.py               # IdentityEvidenceRecord, IdentityCluster, ...
-├── evidence_normalizer.py   # توحيد مخرجات كل الأدوات في schema واحد
-├── identity_correlation.py  # محرك الربط + confidence scoring
-├── confidence_model.py      # أوزان الإشارات (Signal Weights)
-├── fp_guards.py             # قواعد منع الـ False Positives
-└── platform_registry.py     # قائمة المنصات + متطلبات كل منصة
+├── evidence_normalizer.py   # Normalizes all tool outputs into one canonical schema
+├── identity_correlation.py  # Correlation engine + confidence scoring
+├── confidence_model.py      # Signal weights
+├── fp_guards.py             # False-positive prevention rules
+└── platform_registry.py     # Platform catalog + per-platform requirements
 ```
 
-### 5.2 توسيع `tools/osint_tools.py` (نفس نمط الأدوات الموجود)
+### 5.2 Extending `tools/osint_tools.py` (Matching Existing Tool Pattern)
 
 ```python
 # ── Username Vector ──────────────────────────────────────────
 async def maigret(self, username: str) -> ToolResult:
-    """مئات المواقع + cloudflare bypass — أقوى من sherlock في 2026"""
+    """Hundreds of sites + Cloudflare bypass — stronger than sherlock in 2026."""
 
 async def blackbird(self, username: str) -> ToolResult:
-    """Fast username scan across APIs"""
+    """Fast username scan across APIs."""
 
 # ── Email Vector ─────────────────────────────────────────────
 async def holehe(self, email: str) -> ToolResult:
-    """يكتشف على أي منصة الـ email مسجل (uses password-reset flows)"""
+    """Detects platforms where an email is registered (uses password-reset flows)."""
 
 async def ghunt(self, email: str) -> ToolResult:
-    """Google account enumeration من الـ email"""
+    """Google account enumeration from an email address."""
 
-# ── Breach Indicators (metadata فقط — انظر القسم 11) ─────────
+# ── Breach Indicators (metadata only — see Section 11) ───────
 async def breach_indicator(self, email_or_username: str) -> ToolResult:
-    """فحص سطحي لبعضان الظهور في breaches معروفة — بدون تنزيل بيانات"""
+    """Surface check for presence in known breaches — downloads no breach data."""
 
 # ── Cross-Scan (user-scanner style) ──────────────────────────
 async def cross_scan(self, username: str, email: str) -> ToolResult:
-    """استخراج username من email والعكس + فحص مزدوج — v1.5.1 style"""
+    """Derives username from email and vice versa + dual scan — v1.5.1 style."""
 ```
 
-### 5.3 Agent جديد: `agents/osint_identity_agent.py`
+### 5.3 New Agent: `agents/osint_identity_agent.py`
 
-يتبع نفس نمط `BaseAgent` / `AgentTask` / `AgentResult` الموجود:
+Follows the existing `BaseAgent` / `AgentTask` / `AgentResult` pattern:
 
 ```python
 class OSINTIdentityAgent(BaseAgent):
     """
-    OSINT Identity Agent — اكتشاف الهوية الرقمية + ربط الحسابات.
-    يُنتج IdentityEvidence (E0/E1) فقط — أبدًا Findings مؤكدة.
+    OSINT Identity Agent — digital identity discovery + account correlation.
+    Produces IdentityEvidence (E0/E1) only — never confirmed Findings.
     """
     def __init__(self, mgr: ToolManager, cb=None):
         super().__init__(
@@ -183,24 +183,24 @@ class OSINTIdentityAgent(BaseAgent):
 
     async def run(self, task: AgentTask) -> AgentResult:
         # task.extra: {"username": str?, "email": str?, "source": str}
-        # 1. التحقق من trigger conditions + policy gate (P0)
-        # 2. Fan-out على المتجهات المتاحة
+        # 1. Verify trigger conditions + policy gate (P0)
+        # 2. Fan out across available vectors
         # 3. Normalize → Correlate → Score
-        # 4. إخراج IdentityCluster(s) كـ evidence findings (severity=Info)
+        # 4. Emit IdentityCluster(s) as evidence findings (severity=Info)
         ...
 ```
 
-### 5.4 ربط الـ Subsystem بالـ Pipeline الحالي
+### 5.4 Integrating the Subsystem into the Existing Pipeline
 
-| نقطة الربط | الملف | التغيير |
+| Integration Point | File | Change |
 |:---|:---|:---|
-| Schemas | `hunter_ai/pipeline/schemas.py` | إضافة `IdentityEvidenceRecord` + `IdentityCluster` |
-| Correlation | `hunter_ai/pipeline/correlation.py` | دالة `correlate_identity_evidence()` بجانب الموجود |
-| Capabilities | `hunter_ai/agents/capabilities.py` | إضافة `OSINT_IDENTITY = auto()` |
-| Registry | `hunter_ai/agents/registry.py` | تسجيل `OSINTIdentityAgent` |
-| Task Classifier | `orchestrator/task_classifier.py` | كلمات مفتاحية: `username`, `email osint`, `identity`, `holehe`, `maigret` |
-| Playbook | `core/playbooks/master_recon_playbook.md` | مرحلة "Public Identity Discovery" بعد الـ Recon |
-| CLI | `cli/hunter_cli.py` | أمر `hunter osint-identity` |
+| Schemas | `hunter_ai/pipeline/schemas.py` | Add `IdentityEvidenceRecord` + `IdentityCluster` |
+| Correlation | `hunter_ai/pipeline/correlation.py` | Add `correlate_identity_evidence()` alongside existing functions |
+| Capabilities | `hunter_ai/agents/capabilities.py` | Add `OSINT_IDENTITY = auto()` |
+| Registry | `hunter_ai/agents/registry.py` | Register `OSINTIdentityAgent` |
+| Task Classifier | `orchestrator/task_classifier.py` | Add keywords: `username`, `email osint`, `identity`, `holehe`, `maigret` |
+| Playbook | `core/playbooks/master_recon_playbook.md` | Add "Public Identity Discovery" phase after Recon |
+| CLI | `cli/hunter_cli.py` | Add `hunter osint-identity` command |
 
 ---
 
@@ -209,207 +209,207 @@ class OSINTIdentityAgent(BaseAgent):
 ```python
 @dataclass
 class IdentityEvidenceRecord:
-    """نتيجة واحدة من أداة واحدة على منصة واحدة — E0 دائمًا."""
+    """Single result from one tool on one platform — always E0."""
     record_id: str                  # uuid
     vector: str                     # "username" | "email" | "github" | "domain" | "breach"
     platform: str                   # "github" | "reddit" | "tiktok" | ...
-    query_value: str                # القيمة المفحوصة
-    match_url: str                  # رابط الحساب/الصفحة المكتشفة
+    query_value: str                # Queried identifier
+    match_url: str                  # URL of discovered account/profile
     detection_method: str           # "web_status" | "mobile_api" | "password_reset" | "api_enumeration"
-    raw_response_digest: str        # hash من الـ response (لا نحتفظ بـ PII زائدة)
+    raw_response_digest: str        # Hash of the response (avoids storing excess PII)
     tool_name: str                  # "sherlock" | "maigret" | "holehe" | ...
-    evidence_level: str = "E0"     # E0 Observation — الافتراضي دائمًا
+    evidence_level: str = "E0"     # E0 Observation — always the default
     captured_at: float              # timestamp
-    validation_note: str = ""       # ملاحظات الفحص (soft-404? redirect?)
+    validation_note: str = ""       # Validation notes (soft-404? redirect?)
 
 @dataclass
 class IdentityCluster:
-    """مجموعة evidence مرتبطة بنفس الهوية الافتراضية."""
+    """Group of evidence records linked to the same candidate identity."""
     cluster_id: str
-    anchor: str                     # username أو email المرجعي
+    anchor: str                     # Reference username or email
     members: List[IdentityEvidenceRecord]
-    correlation_signals: Dict[str, float]   # الإشارات المكتشفة وأوزانها
-    confidence: float                # 0.0 → 1.0 (يحددها Correlation Engine فقط)
+    correlation_signals: Dict[str, float]   # Detected signals and their weights
+    confidence: float                # 0.0 → 1.0 (computed by Correlation Engine only)
     confidence_label: str            # "weak" | "possible" | "probable" | "strong"
-    open_questions: List[str]        # أسئلة غير محسومة → Negative Space Ledger
+    open_questions: List[str]        # Unresolved questions → Negative Space Ledger
 ```
 
-**قاعدة صارمة:** `confidence_label != "strong"` → لا يدخل تقرير النتائج كـ finding؛ يبقى evidence في الـ graph للاستكشاف اللاحق.
+**Strict rule:** If `confidence_label != "strong"`, the cluster never enters the findings report; it remains graph evidence for further investigation.
 
 ---
 
-## 7. نموذج الـ Confidence Scoring (Correlation Signals)
+## 7. Confidence Scoring Model (Correlation Signals)
 
-الـ Correlation Engine يجمع إشارات من الحسابات المكتشفة ويحسب وزنًا مركبًا:
+The Correlation Engine aggregates signals across discovered accounts into a weighted composite score:
 
-| الإشارة | الوزن | طريقة الالتقاط |
+| Signal | Weight | Capture Method |
 |:---|:---:|:---|
-| Username exact match | +0.15 | أساس كل شيء — **ضعيف وحده** |
-| Display name match | +0.10 | مقارنة الاسم الظاهر عبر المنصات |
-| Bio cross-links (حساب يذكر الآخر) | +0.25 | أقوى إشارة — ربط صريح |
-| Avatar similarity (pHash) | +0.20 | perceptual hash بين صور البروفايل |
-| Linked website مشترك | +0.20 | نفس الـ URL في bio أكثر من منصة |
-| GitHub references (commit emails, org overlap) | +0.15 | ربط تقني عالي الثقة |
-| Email → Username cross-scan hit | +0.15 | user-scanner style cross-validation |
-| Registration date proximity | +0.05 | إشارة مساندة فقط |
-| **إشارات سالبة (خصم):** | | |
-| Generic username (admin/test/user/...) | −0.30 | قائمة blacklist |
-| Soft-404 / generic profile page | −0.50 | دلالة عدم موثوقية |
-| منصة واحدة فقط بلا تأكيد ثانٍ | −0.20 | single-source penalty |
+| Username exact match | +0.15 | Baseline only — **weak on its own** |
+| Display name match | +0.10 | Cross-platform display name comparison |
+| Bio cross-links (account mentions another) | +0.25 | Strongest signal — explicit link |
+| Avatar similarity (pHash) | +0.20 | Perceptual hash across profile images |
+| Shared linked website | +0.20 | Same URL in bio across multiple platforms |
+| GitHub references (commit emails, org overlap) | +0.15 | High-confidence technical correlation |
+| Email → Username cross-scan hit | +0.15 | `user-scanner`-style cross-validation |
+| Registration date proximity | +0.05 | Supporting signal only |
+| **Negative signals (penalties):** | | |
+| Generic username (`admin`/`test`/`user`/...) | −0.30 | Blacklist check |
+| Soft-404 / generic profile page | −0.50 | Unreliable match indicator |
+| Single platform with no second source | −0.20 | Single-source penalty |
 
 ```text
 Score = Σ(positive signals) − Σ(negative signals)
 Label mapping:
-  0.00 – 0.25 → weak       (evidence only — لا يُعرض في التقرير)
+  0.00 – 0.25 → weak       (evidence only — omitted from report)
   0.25 – 0.50 → possible   (evidence + open question)
   0.50 – 0.75 → probable   (candidate for E1 corroboration)
-  0.75 – 1.00 → strong     (مسموح بالعرض كـ "probable identity link" — ليس "confirmed")
+  0.75 – 1.00 → strong     (eligible for display as "probable identity link" — not "confirmed")
 ```
 
-> **ملاحظة مهمة:** حتى `strong` لا يعني CONFIRMED بمعنى HunterAI (اللي يتطلب E2+ reproducible proof) — يعني فقط أن الـ correlation قوي بما يكفي لعرضه كـ **identity intelligence**.
+> **Note:** Even `strong` does not mean CONFIRMED in HunterAI terms (which requires E2+ reproducible proof) — it only means the correlation is strong enough to surface as **identity intelligence**.
 
 ---
 
-## 8. قواعد عقل الوكيل (Agent Reasoning Rules)
+## 8. Agent Reasoning Rules
 
-الوكيل (وليس الأداة) يطبق هذه القواعد الصريحة:
+The agent—not the tool—enforces these explicit rules:
 
-### 8.1 متى يشغّل OSINT Identity؟ (Trigger Conditions)
+### 8.1 Trigger Conditions
 ```text
-TRIGGER إذا توفر واحد على الأقل:
-  T1. username ظهر في recon (git commits, JS author tags, package.json authors, HTML meta)
-  T2. email ظهر في crawled JS / leaked strings / DNS TXT / whois registrant
-  T3. المهمة صراحةً طلبت identity mapping (scope يشمل "employees" أو "public identities")
-  T4. correlation مبدئي: نفس الـ identifier ظهر في أكثر من أصل (asset) من أصول الهدف
+TRIGGER when at least one condition holds:
+  T1. A username appears during recon (git commits, JS author tags, package.json authors, HTML meta)
+  T2. An email appears in crawled JS, leaked strings, DNS TXT, or WHOIS registrant data
+  T3. The task explicitly requests identity mapping (scope includes "employees" or "public identities")
+  T4. Initial correlation: the same identifier appears across multiple target assets
 
-لا يشغّل أبدًا:
-  X1. بدون policy gate يسمح بالـ external egress (P0)
-  X2. على أهداف خارج الـ scope
-  X3. كـ "fishing expedition" عشوائي بلا trigger
+NEVER trigger:
+  X1. Without a policy gate allowing external egress (P0)
+  X2. Against out-of-scope targets
+  X3. As an unprompted fishing expedition with no trigger
 ```
 
-### 8.2 الـ Input Contract
+### 8.2 Input Contract
 ```python
 task.extra = {
-    "username": "abdo453",          # اختياري
-    "email": "abdo@example.com",    # اختياري
-    "source": "git_commit_metadata", # إلزامي — مصدر الاكتشاف (يذهب للـ provenance)
-    "vectors": ["username", "email"],  # اختياري — افتراضيًا كل المتاحة
-    "max_platforms": 60             # حد أقصى للمنصات (rate-limit governance)
+    "username": "abdo453",          # Optional
+    "email": "abdo@example.com",    # Optional
+    "source": "git_commit_metadata", # Required — discovery source (recorded for provenance)
+    "vectors": ["username", "email"],  # Optional — defaults to all available
+    "max_platforms": 60             # Platform cap (rate-limit governance)
 }
 ```
 
-### 8.3 كيف يفسر النتائج؟ (Interpretation)
+### 8.3 Result Interpretation
 ```text
-R1. كل match = E0 observation حتى إشعار آخر.
-R2. وجود نفس الـ username في N منصة ≠ نفس الشخص — هذه فرضية (H) وليست استنتاجًا.
-R3. النتيجة تُصاغ كـ: "Hypothesis: accounts X, Y, Z may share an operator —
+R1. Every match starts as an E0 observation until corroborated.
+R2. Seeing the same username on N platforms ≠ same person — treat it as a hypothesis (H), not a conclusion.
+R3. Format output as: "Hypothesis: accounts X, Y, Z may share an operator —
     confidence: possible (0.42) — signals: display_name(+0.10), avatar_phash(+0.20)..."
-R4. أي حساب اكتُشف يدخل في Negative Space Ledger لو لم يُفحص محتواه:
+R4. Log every uninspected discovered account in the Negative Space Ledger:
     "ACCOUNT_DISCOVERED_NOT_VERIFIED: github.com/abdo453 (reason: content scan pending)"
-R5. الـ LLM ممنوع من رفع confidence لأي cluster — التعديل يمر حصريًا عبر
-    إشارات correlation جديدة (deterministic).
+R5. The LLM must never raise a cluster's confidence — updates happen exclusively
+    through new deterministic correlation signals.
 ```
 
-### 8.4 كيف يمنع الـ False Positives؟ (FP Guards — `fp_guards.py`)
+### 8.4 False-Positive Prevention (`fp_guards.py`)
 ```text
 G1. Generic-username blacklist: admin, test, user, info, root, support, null, ...
-G2. Soft-404 detection: صفحات تعيد 200 مع "profile not found" → تُرفض.
-G3. Status-code unreliability: بعض المنصات ترجع 200 دائمًا (react SPA) →
-    نثق فقط في mobile app APIs أو password-reset flows حيثما توفرت.
-G4. Redirect chains: أي match انتهى في redirect لصفحة رئيسية = غير صالح.
-G5. Single-source rule: أي cluster من منصة واحدة لا يتجاوز label=weak أبدًا.
-G6. Rate limiting per platform: حد أقصى N queries/minute — يمنع الـ false bans
-    التي تنتج matches كاذبة (anti-bot pages).
+G2. Soft-404 detection: pages returning HTTP 200 with "profile not found" are rejected.
+G3. Status-code unreliability: platforms that always return 200 (React SPAs) require
+    mobile app APIs or password-reset flows whenever available.
+G4. Redirect chains: any match redirecting to a homepage is invalid.
+G5. Single-source rule: a cluster backed by only one platform never exceeds label=weak.
+G6. Per-platform rate limiting: cap at N queries/minute to avoid false bans
+    that return misleading anti-bot pages.
 ```
 
 ---
 
-## 9. ربط الـ Evidence Levels بنظام HunterAI
+## 9. Evidence Level Mapping in HunterAI
 
 ```text
-E0 (Observation)      ← كل tool match فور الاكتشاف (الافتراضي)
-E1 (Corroborated)     ← match صُدّق من second source مختلف تمامًا
-                         (مثال: maigret + فحص فعلي للـ profile بالـ browser)
-E2 (Repro)           ← ⚠️ نادر ومقصود: فقط لو فحص المحتوى أثبت ربطًا
-                         (نفس avatar bytes + bio links متبادلة) — يتطلب Court
-E3+                   ← غير قابل للوصول عبر OSINT وحده — يتطلب تفاعلًا فعليًا
-                         مع الحسابات وهو خارج non-goals (القسم 11)
+E0 (Observation)      ← Every tool match upon discovery (default)
+E1 (Corroborated)     ← Match corroborated by an independent second source
+                         (e.g., maigret + live profile inspection in a browser)
+E2 (Repro)            ← ⚠️ Rare and deliberate: only when content inspection proves linkage
+                         (identical avatar bytes + mutual bio links) — requires Evidence Court
+E3+                   ← Unreachable via OSINT alone — requires active account interaction,
+                         which is out of scope (Section 11)
 ```
 
 ---
 
-## 10. المراحل (Phases) + معايير القبول
+## 10. Implementation Phases & Acceptance Criteria
 
 ### Phase 1 — Username Vector + Evidence Normalizer
-- إضافة `core/osint/schemas.py` + `evidence_normalizer.py`
-- توسيع `OSINTTools` (maigret, blackbird) + تحويل sherlock إلى normalizer
-- إضافة `agents/osint_identity_agent.py` (نسخة أولية)
-- ✅ **Acceptance:** تشغيل username واحد → ملف evidence موحد (JSON) من 2+ أدوات، بلا نتائج منصات مكررة، وكل سجل E0.
+- Add `core/osint/schemas.py` and `evidence_normalizer.py`
+- Extend `OSINTTools` (`maigret`, `blackbird`) and route `sherlock` through the normalizer
+- Add initial `agents/osint_identity_agent.py`
+- ✅ **Acceptance:** Running a single username produces one normalized JSON evidence file from 2+ tools, with no duplicate platform entries and every record tagged `E0`.
 
 ### Phase 2 — Email Vector + Cross-Scanning
-- إضافة holehe + ghunt adapters + `cross_scan()`
-- استخراج username من email والعكس (regex + heuristics)
-- ✅ **Acceptance:** فحص email واحد يُنتج vector records + cross-scan hits تدخل نفس الـ cluster graph.
+- Add `holehe` and `ghunt` adapters plus `cross_scan()`
+- Derive username candidates from email and vice versa (regex + heuristics)
+- ✅ **Acceptance:** Scanning one email produces vector records and cross-scan hits merged into the same cluster graph.
 
 ### Phase 3 — Identity Correlation + Confidence Scoring
-- بناء `identity_correlation.py` + `confidence_model.py` + `fp_guards.py`
-- pHash للمقارنة بين الـ avatars، مقارنة bio cross-links
-- ✅ **Acceptance:** على مجموعة اختبار معروفة (test identities): 
-  - الـ clusters الصحيحة (نفس الشخص) ≥ 0.5 score
-  - الـ clusters الخاطئة (أشخاص مختلفون بنفس الاسم) ≤ 0.25
-  - zero generic usernames تتجاوز weak.
+- Build `identity_correlation.py`, `confidence_model.py`, and `fp_guards.py`
+- Implement avatar perceptual hashing (pHash) and bio cross-link matching
+- ✅ **Acceptance:** Against a known test-identity benchmark:
+  - True clusters (same person) score ≥ 0.5
+  - False clusters (different people sharing a username) score ≤ 0.25
+  - Zero generic usernames exceed `weak`.
 
-### Phase 4 — تكامل World Model + Evidence Court
-- إرسال الـ clusters إلى `IdentityGraph` (Layer 2) و `Evidence Graph` (control plane)
-- توليد hypotheses تلقائيًا من الـ clusters للـ investigation loop
-- ✅ **Acceptance:** فتح `hunter trace --last` يظهر قرار الـ Agent بمتى/لماذا شغّل الـ OSINT، وكل cluster يظهر بـ confidence + signals + open questions.
+### Phase 4 — World Model + Evidence Court Integration
+- Emit clusters to `IdentityGraph` (Layer 2) and `Evidence Graph` (control plane)
+- Auto-generate hypotheses from clusters for the investigation loop
+- ✅ **Acceptance:** `hunter trace --last` shows when and why the agent triggered OSINT, and each cluster includes confidence, signals, and open questions.
 
-### Phase 5 — MCP Tools + CLI + التوثيق
+### Phase 5 — MCP Tools + CLI + Documentation
 - MCP tools: `osint_username_scan`, `osint_email_scan`, `osint_identity_correlate`
 - CLI: `hunter osint-identity --username X --email Y --vectors all`
-- تحديث `AGENT_CONTEXT.md` (قسم جديد: OSINT Identity Subsystem) + `ARCHITECTURE.md`
-- ✅ **Acceptance:** كل أمر MCP/CLI يعمل standalone ويُعيد نفس canonical schema.
+- Update `AGENT_CONTEXT.md` (new section: OSINT Identity Subsystem) and `ARCHITECTURE.md`
+- ✅ **Acceptance:** Every MCP tool and CLI command runs standalone and returns the same canonical schema.
 
 ---
 
-## 11. Non-Goals & حدود قانونية/أخلاقية
+## 11. Non-Goals & Legal/Ethical Boundaries
 
 ```text
-NG1. لا تنزيل أو تخزين بيانات breaches (كلمات سر/بيانات شخصية) —
-     breach indicators فقط (نعم/لا + مصدر المؤشر) بدون محتوى.
-NG2. لا تفاعل مع الحسابات المكتشفة (login, follow, message) — E3+ خارج النطاق.
-NG3. لا OSINT على أشخاص بدون صلة بالـ scope المصرح به (P0 constitution).
-NG4. احترام ToS للمنصات: التزام بـ rate limits، عدم scraping عنيف،
-     تفضيل mobile/public APIs المشروعة على HTML scraping.
-NG5. لا عرض "confirmed identity" أبدًا في أي تقرير — الحد الأقصى
+NG1. No downloading or storing breach data (passwords or personal records) —
+     emit breach indicators only (boolean + indicator source) with zero raw content.
+NG2. No interacting with discovered accounts (login, follow, message) — E3+ is out of scope.
+NG3. No OSINT on individuals unrelated to the authorized engagement scope (P0 constitution).
+NG4. Respect platform ToS: enforce rate limits, avoid aggressive scraping, and
+     prefer legitimate mobile/public APIs over HTML scraping.
+NG5. Never label an output "confirmed identity" in any report — cap wording at
      "probable identity link (correlation-based)".
-NG6. الـ PII المجموعة (avatars, bios) تُخزن digests/hashes حيثما أمكن،
-     وتُحذف مع نهاية الـ engagement (retention policy).
+NG6. Store collected PII (avatars, bios) as digests/hashes wherever possible,
+     and purge them at engagement end (retention policy).
 ```
 
 ---
 
-## 12. Test Plan (مختصر)
+## 12. Test Plan (Summary)
 
-| الاختبار | النوع | الملف المقترح |
+| Test Case | Type | Proposed File |
 |:---|:---|:---|
-| Normalizer يوحد مخرجات 3 أدوات مختلفة بلا فقد بيانات | unit | `tests/test_osint_normalizer.py` |
-| Generic usernames لا تتجاوز weak أبدًا | unit | `tests/test_fp_guards.py` |
-| Soft-404 يُرفض ولا يُحسب match | unit | `tests/test_fp_guards.py` |
-| Cluster صحيح (نفس الشخص عبر منصات) يتجاوز 0.5 | integration | `tests/test_identity_correlation.py` |
-| Policy gate يمنع فحص خارج scope | integration | `tests/test_osint_policy.py` |
+| Normalizer merges outputs from 3 distinct tools without data loss | unit | `tests/test_osint_normalizer.py` |
+| Generic usernames never exceed `weak` | unit | `tests/test_fp_guards.py` |
+| Soft-404 responses are rejected and not counted as matches | unit | `tests/test_fp_guards.py` |
+| True cluster (same person across platforms) scores above 0.5 | integration | `tests/test_identity_correlation.py` |
+| Policy gate blocks out-of-scope scans | integration | `tests/test_osint_policy.py` |
 | E2E: username → clusters → evidence graph → hypotheses | e2e | `tests/test_osint_e2e.py` |
 
 ---
 
-## 13. المراجع (من النقاش)
+## 13. References
 
-- **CB UserHunter** (أداة المقال): فكرة username enumeration عبر عشرات المواقع — **ليست قلب النظام**، مجرد إشارة في fan-out layer.
-- **user-scanner v1.5.1 (2026)**: مئات username/email scan vectors + automated cross-scanning + native MCP support + mobile app API vectors — نموذج معماري نستلهم منه الـ vectors وcross-scan.
-- **arXiv:1101.5578** — *How Unique and Traceable are Usernames?*: الأساس العلمي — إعادة استخدام الـ usernames قابلة للتتبع لكنها ليست إثباتًا.
-- hunterAI invariants: `ARCHITECTURE.md` (Zero LLM Heuristic Confirmation, E0→E5, P0-P4, Negative Space Ledger).
+- **CB UserHunter** (referenced article tool): username enumeration across dozens of sites — **not the core engine**, just one signal in the fan-out layer.
+- **user-scanner v1.5.1 (2026)**: hundreds of username/email scan vectors, automated cross-scanning, native MCP support, and mobile app API vectors — architectural reference for vectors and cross-scanning.
+- **arXiv:1101.5578** — *How Unique and Traceable are Usernames?*: empirical basis — username reuse is traceable, not proof of identity.
+- HunterAI invariants: `ARCHITECTURE.md` (Zero LLM Heuristic Confirmation, E0→E5, P0–P4, Negative Space Ledger).
 
 ---
 
-> **جاهزة للتسليم لـ Codex** — هذه المواصفات self-contained: كل ما يحتاجه المنفذ من context (المسارات، الأنماط، الأنماط المعمارية الموجودة، معايير القبول) موجود أعلاه أو مُشار إليه بملفاته في الـ repo.
+> **Ready for Codex handoff** — this specification is self-contained: all paths, patterns, existing architectural conventions, and acceptance criteria are included above or referenced in repository files.

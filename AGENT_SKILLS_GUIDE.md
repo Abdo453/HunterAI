@@ -1,230 +1,231 @@
-# دليل مهارات الوكيل الشامل — Agent Skills Guide (المربع الكامل)
-**اللغة:** العربية · الغرض: توثيق كل المهارات المضافة، كيف يفكر الوكيل، كيف يستخدم الأدوات، الأفكار، وسير العمل المستقل.
+# Agent Skills Guide
+
+**Language:** English · **Purpose:** Documents all added skills, how the agent reasons and selects tools, core concepts, and the autonomous workflow.
 
 ---
 
-## فهرس المحتويات
-1. [فكرة المهارات والفئات](#1-فكرة-المهارات)
-2. [كيف يفكر الوكيل؟ (الحلقة الرباعية ReAct)](#2-كيف-يفكر-الوكيل)
-3. [كيف يستخدم الوكيل الأدوات؟ (مخطط الأدوات)](#3-كيف-يستخدم-الوكيل-الأدوات)
-4. [قائمة المهارات الكاملة (42 مهارة)](#4-قائمة-المهارات-الكاملة)
-5. [التفاصيل التقنية لكل مهارة جديدة](#5-تفاصيل-المهارات-الجديدة)
-6. [سجل المهارات الديناميكي (Skill Registry)](#6-سجل-المهارات-الديناميكي)
-7. [الحلقة الذاتية المستقلة (Autonomous Loop)](#7-الحلقة الذاتية-المستقلة)
-8. [ذاكرة الصيد (/remember و /memory-gc)](#8-ذاكرة-الصيد)
-9. [مساعد النموذج اللغوي (LLM Brain)](#9-مساعد-النموذج-اللغوي)
-10. [سير العمل المقترح ( End-to-End )](#10-سير-العمل-المقترح)
-11. [أمثلة كود سريعة](#11-أمثلة-كود-سريعة)
-12. [إضافة مهارة جديدة (قالب)](#12-إضافة-مهارة-جديدة)
-13. [القواعد الذهبية (تطبق دائماً)](#13-القواعد-الذهبية)
+## Table of Contents
+1. [Skills Concept and Categories](#1-skills-concept-and-categories)
+2. [How the Agent Thinks (4-Step ReAct Loop)](#2-how-the-agent-thinks-4-step-react-loop)
+3. [How the Agent Uses Tools (Tool Planner)](#3-how-the-agent-uses-tools-tool-planner)
+4. [Full Skills List (42 Skills)](#4-full-skills-list-42-skills)
+5. [Technical Details for New Skills](#5-technical-details-for-new-skills)
+6. [Dynamic Skill Registry](#6-dynamic-skill-registry)
+7. [Autonomous Loop](#7-autonomous-loop)
+8. [Hunt Memory (/remember and /memory-gc)](#8-hunt-memory-remember-and-memory-gc)
+9. [LLM Brain](#9-llm-brain)
+10. [Recommended End-to-End Workflow](#10-recommended-end-to-end-workflow)
+11. [Quick Code Examples](#11-quick-code-examples)
+12. [Adding a New Skill (Template)](#12-adding-a-new-skill-template)
+13. [Core Rules (Always Active)](#13-core-rules-always-active)
 
 ---
 
-## 1. فكرة المهارات والفئات
+## 1. Skills Concept and Categories
 
-تمت إضافة مجموعة متكاملة من مهارات الوكيل تحت `skills/` tutte ترث من `BaseSkill` وتنّفذ `execute(ctx)`. كل مهارة لها:
-- ملف `skill.py` يحتوي المنطق.
-- ملف `skill.yaml` يحتوي البيانات الوصفية (الفئة، الأدوات المطلوبة، البدائل، المهلة، المهارات التالية).
-- ملف `__init__.py` للتصدير.
+All agent skills under `skills/` inherit from `BaseSkill` and implement `execute(ctx)`. Each skill directory contains:
+- `skill.py`: execution logic.
+- `skill.yaml`: metadata (category, required tools, fallbacks, timeout, next skills).
+- `__init__.py`: module exports.
 
-الفئات الأساسية:
-| الفئة | الغرض |
-|-------|-------|
-| `agent_core` | pensée، تخطيط الأدوات، سلسلة الاستغلال، الحلقة الذاتية، الذاكرة، مساعده النموذج |
-| `recon` | استطلاع نطاقات فرعية، مضيفين حيويين، منافذ، تقنيات، WAF، معاملات مخفية |
-| `web` | IDOR، SSRF، SQLi آمن، XSS انعكاسي، تجاوز 403/401 |
-| `analysis` | ترتيب سطح الهجوم، منطق العمل، استحواذ نطاقات، أسرار، سحابة |
-| `web3` | فحص التوكن (Rug Pull)، تدقيق العقود الذكية |
-| `reporting` | إنشاء التقرير النهائي |
-| `browser` | التحكم بالمتصفح، تحليل الشبكة والسلوك |
-
----
-
-## 2. كيف يفكر الوكيل؟ (الحلقة الرباعية ReAct)
-
-المهارة `agent_reasoning_loop` تطبق نمط **ReAct** (Reason + Act) بأربع خطوات تُسجل جميعها في `thinking_trace.json`:
-
-### الخطوة 1 — Observe (الرصد)
-يقرأ الوكيل:
-- الهدف والمرحلة الحالية (`recon`, `scan`, `analyze`, `exploit`, `report`).
-- الأدوات المثبتة والمتاحة عبر `ToolManager`.
-- الثغرات المسجلة حتى الآن.
-- إشارات مثيرة في الاستجابات (`id=`, `url=`, `price=`, `.env`, `admin`, `swagger`, …).
-
-### الخطوة 2 — Think (اتخاذ القرار)
-باستخدام قواعد أولوية (التأثير أولًا per AGENTS.md):
-- معرّفات تسلسلية (`id=`, `user_id=`, `order=`) → `idor_tester`.
-- معلمات URL خارجية (`url=`, `callback=`, `webhook=`) → `ssrf_hunter` أو زحف بـ `katana`.
-- معاملات مالية (`price=`, `coupon=`) → `logic_flaw_hunter`.
-- ملفات حساسة (`.git/`, `.env`, `config`) → `secrets_hunter`.
-- قشرة استغلال → `takeover_confirm`.
-- مرحلة `recon` بدون دليل → تبدأ بـ `subfinder` ثم `httpx`.
-
-إن توفّر نموذج لغوي عبر `ctx.extra["llm"]`، يثري `agent_llm_brain` القرار بتفسير نصي؛ وإلا يعمل مهارات `reasoning_loop` و `llm_brain` بشكل كامل **بدون اتصال (offline)** باستخدام heuristics.
-
-الناتج: `confidence` (0–1) + `next_tool`/`next_skill` + `reasoning` + `next_skills`.
-
-### الخطوة 3 — Act (التخطيط للتنفيذ)
-يحوّل القرار إلى إجراء ملموس: الأداة المختارة + المهارات التالية المقترحة. إن كانت الثقة `≥ 0.7`، يسجل Finding مبدئي للمراجعة لاحقًا.
-
-### الخطوة 4 — Reflect (التقييم الذاتي)
-ينقد القرار:
-- هل الأداة تدخلية (`sqlmap`, `ffuf`)؟ → يحذّر من التحقق من النطاق أولًا.
-- هل الثقة منخفضة؟ → يفضل الاستطلاع السلبي أولًا.
-- المخرج: `verdict` = `proceed` أو `proceed_with_caution`.
-
-كل دورة تُحفظ في `thinking_trace.json` لمراجعة سبب كل قرار لاحقًا.
+Core categories:
+| Category | Purpose |
+|----------|---------|
+| `agent_core` | Reasoning, tool planning, exploit chaining, autonomous loop, memory, LLM assistance |
+| `recon` | Subdomain enumeration, live host discovery, ports, tech fingerprinting, WAF detection, hidden parameters |
+| `web` | IDOR, SSRF, safe SQLi, reflected XSS, 403/401 bypass |
+| `analysis` | Attack surface ranking, business logic flaws, subdomain takeover, secrets, cloud exposure |
+| `web3` | Token rug-pull scanning, smart contract auditing |
+| `reporting` | Final report generation |
+| `browser` | Browser control, network and behavior analysis |
 
 ---
 
-## 3. كيف يستخدم الوكيل الأدوات؟ (مخطط الأدوات)
+## 2. How the Agent Thinks (4-Step ReAct Loop)
 
-المهارة `agent_tool_planner` تجيب عن سؤال: "أداة nào تُستخدم، ومتى، وبأي ترتيب؟"
+`agent_reasoning_loop` implements a 4-step **ReAct** (Reason + Act) cycle, logging every step to `thinking_trace.json`:
 
-منطق الاختيار:
-1. **المرحلة (phase):** `recon → scan → analyze → exploit → report`.
-2. **مستوى المخاطرة (risk):** يبدأ بأدوات `low` (سلبية، قراءة فقط) ثم `medium`، ولا يستخدم `high` إلا إذا صادّق المستخدم (`max_risk: high`) والنطاق مصرّح به.
-3. **النطاق (scope):** يتحقق من `StrictScopeEngine` قبل أي أداة فعّالة.
-4. **التوفر:** يختار أول أداة مثبتة؛ إن غابت، ينتقل للبديل المسجل (مثلاً `subfinder → amass → crt_sh → waybackurls`).
-5. **المخرج:** `tool_plan.json` (الخطة الكاملة) و `next_tool.json` (الأداة التالية للتنفيذ الفوري).
+### Step 1 — Observe
+The agent reads:
+- Target and current phase (`recon`, `scan`, `analyze`, `exploit`, `report`).
+- Installed and available tools via `ToolManager`.
+- Findings logged so far.
+- Notable response signals (`id=`, `url=`, `price=`, `.env`, `admin`, `swagger`, …).
 
-لا ينفذ الوكيل أي أداة مباشرة؛ يختار اسم الأداة فقط، وتنفيذها يمر عبر `ToolManager` / `ToolRouter` مع بوابات المرحلة والمخاطرة والنطاق.
+### Step 2 — Think
+Applies impact-first priority rules (per `AGENTS.md`):
+- Sequential identifiers (`id=`, `user_id=`, `order=`) → `idor_tester`.
+- External URL parameters (`url=`, `callback=`, `webhook=`) → `ssrf_hunter` or crawl with `katana`.
+- Financial parameters (`price=`, `coupon=`) → `logic_flaw_hunter`.
+- Sensitive files (`.git/`, `.env`, `config`) → `secrets_hunter`.
+- Subdomain takeover indicators → `takeover_confirm`.
+- `recon` phase with no prior evidence → starts with `subfinder`, then `httpx`.
 
----
+If an LLM is provided via `ctx.extra["llm"]`, `agent_llm_brain` enriches the decision with a text rationale; otherwise, `reasoning_loop` and `llm_brain` run fully **offline** using heuristics.
 
-## 4. قائمة المهارات الكاملة (42 مهارة)
+Output: `confidence` (0–1) + `next_tool`/`next_skill` + `reasoning` + `next_skills`.
 
-المهارات الجديدة (المضافة) مصنفة:
+### Step 3 — Act
+Turns the decision into a concrete action: the selected tool plus suggested follow-up skills. If confidence is `≥ 0.7`, it logs a preliminary finding for later review.
 
-### agent_core (الوكيل الأساسي)
-| المهارة | المسار | الغرض |
-|--------|--------|-------|
-| Reasoning Loop | `skills/agent_core/reasoning_loop/` | حلقة تفكير ReAct تقرر الخطوة التالية |
-| Tool Planner | `skills/agent_core/tool_planner/` | يختار الأداة لكل مرحلة مع بديل آمن |
-| Chain Builder | `skills/agent_core/chain_builder/` | يبني سلاسل استغلال A→B→C |
-| Skill Registry | `skills/agent_core/skill_registry/` | يكتشف المهارات من skill.yaml وينفّذها بالاسم |
-| LLM Brain | `skills/agent_core/llm_brain/` | يثري القرارات بالنموذج اللغوي (بدون اتصال احتياطي) |
-| Hunt Memory | `skills/agent_core/hunt_memory/` | /remember و /memory-gc لذاكرة الصيد |
-| Autonomous Loop | `skills/agent_core/autonomous_loop/` | حلقة مستقلة: خطة → أداة → تحقق → سلسلة → تقرير → ذاكرة |
+### Step 4 — Reflect
+Evaluates the decision before execution:
+- Is the tool intrusive (`sqlmap`, `ffuf`)? → warns to verify scope first.
+- Is confidence low? → favors passive recon first.
+- Output: `verdict` = `proceed` or `proceed_with_caution`.
 
-### analysis (التحليل)
-| المهارة | المسار | الغرض |
-|--------|--------|-------|
-| Attack Surface Ranker | `skills/analysis/attack_surface_ranker/` | يرتب الأصول حسب القيمة وسهولة الاستغلال |
-| Logic Flaw Hunter | `skills/analysis/logic_flaw_hunter/` | ثغرات منطق العمل (سعر، كوبون، تجاوز التحقق) |
-| Takeover Confirm | `skills/analysis/takeover_confirm/` | يؤكد استحواذ النطاقات عبر بصمات CNAME |
-| Secrets Hunter | `skills/analysis/secrets_hunter/` | البحث عن مفاتيح وأسرار مسربة |
-| Cloud Recon | `skills/analysis/cloud_recon/` | حاويات سحابة عامة مكشوفة (S3, Azure, GCS) |
-
-### web (ثغرات الويب)
-| المهارة | المسار | الغرض |
-|--------|--------|-------|
-| IDOR Tester | `skills/web/idor_tester/` | معرّفات تسلسلية (مقارنة استجابات) |
-| SSRF Hunter | `skills/web/ssrf_hunter/` | معلمات طلبات التزوير من الخادم |
-| SQLi Hunter | `skills/web/sqli_hunter/` | SQLi آمن عبر المقارنة التفاضلية (قراءة فقط) |
-| XSS Hunter | `skills/web/xss_hunter/` | XSS انعكاسي عبر علامة فريدة |
-| Bypass 403 | `skills/web/bypass_403/` | تجاوز 403/401 (رؤوس وهمية، طرق HTTP بديلة) |
-
-### recon (الاستطلاع)
-| المهارة | المسار | الغرض |
-|--------|--------|-------|
-| Param Discover | `skills/recon/param_discover/` | معاملات HTTP مخفية (arjun/paramspider/Wayback) |
-
-### web3 (العقود الذكية والتوكن)
-| المهارة | المسار | الغرض |
-|--------|--------|-------|
-| Token Scan | `skills/web3/token_scan/` | أنماط Rug Pull في التوكنات |
-| Web3 Audit | `skills/web3/web3_audit/` | تدقيق أولي لعقود Solidity |
-
-المهارات الموجودة سابقًا في المستودع تُكتشف تلقائيًا أيضًا عبر السجل (subdomain_enum, live_host_detection, port_scan, dns_enum, tech_detection, waf_detection, smb_enum, crawling, endpoint_discovery, js_analysis, parameter_discovery, api_surface_audit, cloud_metadata_audit, ssh_audit, tls_audit, perimeter_matrix, triage_gate, behavior_analysis, browser_recon, network_intelligence, form_intelligence, report_generator).
+Every cycle is persisted to `thinking_trace.json` so each decision can be audited later.
 
 ---
 
-## 5. التفاصيل التقنية لكل مهارة جديدة
+## 3. How the Agent Uses Tools (Tool Planner)
+
+`agent_tool_planner` decides which tool to run, when, and in what order.
+
+Selection logic:
+1. **Phase:** `recon → scan → analyze → exploit → report`.
+2. **Risk level:** Starts with `low` (passive, read-only), then `medium`. Uses `high` only when the operator approves (`max_risk: high`) and scope is authorized.
+3. **Scope:** Checks `StrictScopeEngine` before selecting any active tool.
+4. **Availability:** Picks the first installed tool; if missing, falls back to the registered alternative (e.g., `subfinder → amass → crt_sh → waybackurls`).
+5. **Output:** `tool_plan.json` (full plan) and `next_tool.json` (next tool for immediate execution).
+
+The agent never runs tools directly. It outputs only the tool name, and execution passes through `ToolManager` / `ToolRouter` under phase, risk, and scope gates.
+
+---
+
+## 4. Full Skills List (42 Skills)
+
+Newly added skills by category:
+
+### agent_core
+| Skill | Path | Purpose |
+|-------|------|---------|
+| Reasoning Loop | `skills/agent_core/reasoning_loop/` | ReAct thinking loop that decides the next step |
+| Tool Planner | `skills/agent_core/tool_planner/` | Selects the tool for each phase with safe fallbacks |
+| Chain Builder | `skills/agent_core/chain_builder/` | Builds A→B→C exploit chains |
+| Skill Registry | `skills/agent_core/skill_registry/` | Discovers skills from `skill.yaml` and runs them by name |
+| LLM Brain | `skills/agent_core/llm_brain/` | Enriches decisions via LLM with offline heuristic fallback |
+| Hunt Memory | `skills/agent_core/hunt_memory/` | Implements `/remember` and `/memory-gc` for hunt memory |
+| Autonomous Loop | `skills/agent_core/autonomous_loop/` | End-to-end loop: plan → tool → validate → chain → report → memory |
+
+### analysis
+| Skill | Path | Purpose |
+|-------|------|---------|
+| Attack Surface Ranker | `skills/analysis/attack_surface_ranker/` | Ranks assets by value and exploitability |
+| Logic Flaw Hunter | `skills/analysis/logic_flaw_hunter/` | Business logic flaws (pricing, coupons, verification bypass) |
+| Takeover Confirm | `skills/analysis/takeover_confirm/` | Confirms subdomain takeovers via CNAME fingerprints |
+| Secrets Hunter | `skills/analysis/secrets_hunter/` | Scans for leaked keys and credentials |
+| Cloud Recon | `skills/analysis/cloud_recon/` | Discovers exposed public cloud buckets (S3, Azure, GCS) |
+
+### web
+| Skill | Path | Purpose |
+|-------|------|---------|
+| IDOR Tester | `skills/web/idor_tester/` | Tests sequential IDs via response comparison |
+| SSRF Hunter | `skills/web/ssrf_hunter/` | Tests server-side request forgery parameters |
+| SQLi Hunter | `skills/web/sqli_hunter/` | Read-only SQLi detection via differential comparison |
+| XSS Hunter | `skills/web/xss_hunter/` | Reflected XSS detection using a unique marker |
+| Bypass 403 | `skills/web/bypass_403/` | 403/401 bypasses (forged headers, alternate HTTP methods) |
+
+### recon
+| Skill | Path | Purpose |
+|-------|------|---------|
+| Param Discover | `skills/recon/param_discover/` | Discovers hidden HTTP parameters (arjun/paramspider/Wayback) |
+
+### web3
+| Skill | Path | Purpose |
+|-------|------|---------|
+| Token Scan | `skills/web3/token_scan/` | Detects rug-pull patterns in tokens |
+| Web3 Audit | `skills/web3/web3_audit/` | Preliminary static audit for Solidity contracts |
+
+Existing repository skills are also auto-discovered by the registry (`subdomain_enum`, `live_host_detection`, `port_scan`, `dns_enum`, `tech_detection`, `waf_detection`, `smb_enum`, `crawling`, `endpoint_discovery`, `js_analysis`, `parameter_discovery`, `api_surface_audit`, `cloud_metadata_audit`, `ssh_audit`, `tls_audit`, `perimeter_matrix`, `triage_gate`, `behavior_analysis`, `browser_recon`, `network_intelligence`, `form_intelligence`, `report_generator`).
+
+---
+
+## 5. Technical Details for New Skills
 
 ### 5.1 Reasoning Loop (`agent_reasoning_loop`)
-- **مدخلات:** `target`, `phase`, `findings_so_far`, `goal`.
-- **مخرجات:** `thinking_trace.json`, `next_action.json`.
-- **المنطق:** Observe → Think → Act → Reflect. يستخدم Heuristics أوليًا، يمكن enrichment بـ LLM.
+- **Inputs:** `target`, `phase`, `findings_so_far`, `goal`.
+- **Outputs:** `thinking_trace.json`, `next_action.json`.
+- **Logic:** Observe → Think → Act → Reflect. Uses heuristics by default, with optional LLM enrichment.
 
 ### 5.2 Tool Planner (`agent_tool_planner`)
-- **مدخلات:** `target`, `phase`, `max_risk` (low|medium|high), `scope_authorized`.
-- **مخرجات:** `tool_plan.json`, `next_tool.json`.
-- **المنطق:** فلترة حسب المرحلة + المخاطرة + النطاق + التوفر + البدائل.
+- **Inputs:** `target`, `phase`, `max_risk` (`low`|`medium`|`high`), `scope_authorized`.
+- **Outputs:** `tool_plan.json`, `next_tool.json`.
+- **Logic:** Filters by phase, risk level, scope authorization, tool availability, and fallback chains.
 
 ### 5.3 Chain Builder (`agent_chain_builder`)
-- **مدخلات:** `target`, `findings` (قائمة الثغرات المؤكدة).
-- **مخرجات:** `exploit_chains.json`.
-- **أمثلة على السلاسل:** `subdomain_takeover → session_cookie_theft → Account takeover`، `ssrf → internal_network_access → metadata exposure`، `idor → data_exfiltration`.
+- **Inputs:** `target`, `findings` (list of confirmed findings).
+- **Outputs:** `exploit_chains.json`.
+- **Example chains:** `subdomain_takeover → session_cookie_theft → Account takeover`, `ssrf → internal_network_access → metadata exposure`, `idor → data_exfiltration`.
 
 ### 5.4 Attack Surface Ranker (`attack_surface_ranker`)
-- يُقيّم كل أصل بناءً على التقنية، المنافذ المفتوحة الحساسة، غياب WAF، الثغرات السابقة، المسارات الحساسة (`/admin`, `/api/`, `/.env`).
-- **مخرج:** `surface_ranking.json` مع أولوية `critical/high/medium/low`.
+- Scores each asset by technology stack, exposed sensitive ports, absence of WAF, prior findings, and high-value paths (`/admin`, `/api/`, `/.env`).
+- **Output:** `surface_ranking.json` with `critical`/`high`/`medium`/`low` priority.
 
 ### 5.5 IDOR Tester / SSRF Hunter / SQLi Hunter / XSS Hunter / Bypass 403
-كلها مهارات **قراءة فقط (read-only)** لا modify بيانات:
-- تقارن استجابة طبيعية مقابل حقنة آمنة وتسجل الفارق (differential).
-- تسجل `severity` و `evidence` و `recommendation` لكل مرشح.
-- تُحيل المرشحين إلى `validation_gate` قبل الإبلاغ.
+All are **read-only** skills that do not mutate target data:
+- Compare a baseline response against a safe probe and record the differential.
+- Record `severity`, `evidence`, and `recommendation` for every candidate.
+- Forward candidates to `validation_gate` before reporting.
 
 ### 5.6 Secrets Hunter / Cloud Recon / Param Discover
-- **Secrets Hunter:** أنماط regex للمفاتيح (AWS, GitHub, Stripe, Slack, JWT, Private Key) أو trufflehog/gileaks إن توفّرا.
-- **Cloud Recon:** يختبر عناوين S3/Azure/GCS شائعة للنطاق ويسجل الحاويات المفتوحة.
-- **Param Discover:** arjun/paramspider إن توفّرا، fallback إلى Wayback Machine CDX.
+- **Secrets Hunter:** Matches key regexes (AWS, GitHub, Stripe, Slack, JWT, Private Key) or runs `trufflehog`/`gitleaks` when installed.
+- **Cloud Recon:** Probes common S3/Azure/GCS bucket names derived from the target and logs open buckets.
+- **Param Discover:** Uses `arjun`/`paramspider` when installed, falling back to Wayback Machine CDX.
 
 ### 5.7 Token Scan / Web3 Audit
-- **Token Scan:**-score مخاطر التوكن بناءً على مينت غير محدود، رسوم عالية، سيطرة المالك، عدم إمكانية التنصل من الملكية.
-- **Web3 Audit:** أنماط reentrancy، tx.origin، missing access control، delegatecall، overflow الإشارات.
+- **Token Scan:** Scores token risk from unlimited minting, excessive fees, owner privileges, and inability to renounce ownership.
+- **Web3 Audit:** Flags reentrancy, `tx.origin`, missing access control, `delegatecall`, and integer overflow patterns.
 
 ---
 
-## 6. سجل المهارات الديناميكي (Skill Registry)
+## 6. Dynamic Skill Registry
 
-`skills/agent_core/skill_registry/` يتيح للوكيل اكتشاف كل المهارات تلقائيًا من ملفات `skill.yaml`:
+`skills/agent_core/skill_registry/` auto-discovers all skills from `skill.yaml` manifests:
 
 ```python
 from skills.agent_core.skill_registry import SKILL_REGISTRY
 
-# عرض كل المهارات
+# List all skills
 summary = SKILL_REGISTRY.summary()
 print(summary["total"], summary["by_category"])
 
-# تنفيذ مهارة بالاسم
+# Execute a skill by name
 result = await SKILL_REGISTRY.run("attack_surface_ranker", ctx)
 
-# جلب كائن المهارة
+# Fetch a skill instance
 skill = SKILL_REGISTRY.get("idor_tester")
 ```
 
-المسح_recursive يستخدم `rglob("skill.yaml")` ليشمل كل الفئات.
+Recursive discovery uses `rglob("skill.yaml")` across all categories.
 
 ---
 
-## 7. الحلقة الذاتية المستقلة (Autonomous Loop)
+## 7. Autonomous Loop
 
-`agent_autonomous_loop` تنفّذ دورة 사냥 كاملة دون تدخل يدوي:
+`agent_autonomous_loop` runs a complete hunt cycle without manual intervention:
 
 ```
 recon (surface ranker)
   → scan (tool planner)
   → analyze (idor/ssrf/sqlxss/secrets/takeover)
   → exploit (chain builder A→B→C)
-  → validate (البوابة السباعية hunter_ai.validation_gate)
+  → validate (7-Question Gate: hunter_ai.validation_gate)
   → report (report_generator)
-  → remember (تسجيل في ذاكرة الصيد)
+  → remember (log to hunt memory)
 ```
 
-**مدخلات:** `target`, `phases` (قائمة مراحل)، `max_risk`, `scope_authorized`.
-**مخرج:** `autonomous_hunt.json` يحتوي التتبع الكامل (`trace`) والثغرات المثبتة (`proven_findings`).
+**Inputs:** `target`, `phases` (list of phases), `max_risk`, `scope_authorized`.
+**Output:** `autonomous_hunt.json` containing the full execution trace (`trace`) and verified findings (`proven_findings`).
 
 ---
 
-## 8. ذاكرة الصيد (/remember و /memory-gc)
+## 8. Hunt Memory (`/remember` and `/memory-gc`)
 
-`agent_hunt_memory` تُنفذ أوامر الذاكرة:
-- **remember:** `action="remember"`, `note="..."` → يسجل سطر JSONL في `memory/<target>.jsonl`.
-- **gc:** `action="gc"` → يدوّر الملفات ويحتفظ بأحدث ملف لكل هدف.
-- **list:** `action="list"` → يعرض ملفات الذاكرة.
+`agent_hunt_memory` handles memory actions:
+- **remember:** `action="remember"`, `note="..."` → appends a JSONL line to `memory/<target>.jsonl`.
+- **gc:** `action="gc"` → rotates files and retains the latest file per target.
+- **list:** `action="list"` → lists memory files.
 
 ```python
 await SKILL_REGISTRY.run("hunt_memory", Ctx(action="remember", note="id=5 suspect on /order", target="example.com"))
@@ -232,16 +233,16 @@ await SKILL_REGISTRY.run("hunt_memory", Ctx(action="remember", note="id=5 suspec
 
 ---
 
-## 9. مساعد النموذج اللغوي (LLM Brain)
+## 9. LLM Brain
 
-`agent_llm_brain` يثري اتخاذ القرار:
-- إن توفّر `llm` في `ctx.extra["llm"]`، يرسل مPrompt ويحلل إجابة JSON.
-- إن لم يتوفر، يستخدم **heuristics** دون اتصال (offline-safe).
-- **مخرج:** `llm_decision.json` يحتوي `tool`, `skill`, `reasoning`, `confidence`, `next_skills`, `source`.
+`agent_llm_brain` assists decision-making:
+- If `llm` is available in `ctx.extra["llm"]`, sends a prompt and parses the JSON response.
+- Otherwise, uses offline-safe **heuristics**.
+- **Output:** `llm_decision.json` containing `tool`, `skill`, `reasoning`, `confidence`, `next_skills`, and `source`.
 
 ---
 
-## 10. سير العمل المقترح (End-to-End)
+## 10. Recommended End-to-End Workflow
 
 ```text
 target.com
@@ -251,10 +252,10 @@ subdomain_enum → live_host_detection → httpx → tech_detection
    └───────────────────────────────────────┘
                       │
                       ▼
-           attack_surface_ranker  (يُرتّب الأصول الأعلى أولوية)
+           attack_surface_ranker  (ranks highest-priority assets)
                       │
                       ▼
-           agent_tool_planner  (يختار الأداة التالية + بديل)
+           agent_tool_planner  (selects next tool + fallback)
                       │
         ┌─────────────┼─────────────┐
         ▼             ▼             ▼
@@ -265,16 +266,16 @@ subdomain_enum → live_host_detection → httpx → tech_detection
         └─────────────┴─────────────┘
                       │
                       ▼
-           agent_chain_builder  (سلاسل A→B→C)
+           agent_chain_builder  (A→B→C chains)
                       │
                       ▼
-           agent_reasoning_loop  (يُقيّم الخطوة التالية + trace)
+           agent_reasoning_loop  (evaluates next step + trace)
                       │
                       ▼
-           validation_gate  (البوابة السباعية — PROVEN فقط)
+           validation_gate  (7-Question Gate — PROVEN only)
                       │
                       ▼
-           report_generator  (تقرير جاهز للإرسال)
+           report_generator  (submission-ready report)
                       │
                       ▼
            hunt_memory (remember)
@@ -282,7 +283,7 @@ subdomain_enum → live_host_detection → httpx → tech_detection
 
 ---
 
-## 11. أمثلة كود سريعة
+## 11. Quick Code Examples
 
 ```python
 import asyncio, json
@@ -307,29 +308,29 @@ class Ctx:
 async def main():
     ctx = Ctx(phase="recon", max_risk="medium", scope_authorized=True)
 
-    # 1. ترتيب سطح الهجوم
+    # 1. Rank attack surface
     r = await SKILL_REGISTRY.run("attack_surface_ranker", ctx)
     ranking = json.loads(r.raw_output["ranking"])
     top = ranking["ranking"][0]["asset"]
     print("Top asset:", top)
 
-    # 2. تخطيط الأداة
+    # 2. Plan tool
     p = await SKILL_REGISTRY.run("agent_tool_planner", ctx)
     plan = json.loads(p.raw_output["tool_plan"])
     print("Next tool:", plan["next_tool"]["tool"])
 
-    # 3. حلقة التفكير
+    # 3. Reasoning loop
     think = await SKILL_REGISTRY.run("agent_reasoning_loop",
         Ctx(phase="analyze", findings_so_far=[{"type":"idor","evidence":"id=5"}], goal="find idor"))
     action = json.loads(think.raw_output["next_action"])
     print("Next skill:", action["skill"], "| confidence:", action["confidence"])
 
-    # 4. اختبار IDOR
+    # 4. IDOR test
     idor = await SKILL_REGISTRY.run("idor_tester",
         Ctx(urls=["https://example.com/order?id=123"]))
     print("IDOR candidates:", len(json.loads(idor.raw_output["candidates"])))
 
-    # 5. سلسلة استغلال
+    # 5. Exploit chain
     cb = await SKILL_REGISTRY.run("agent_chain_builder",
         Ctx(findings=[{"type":"subdomain_takeover","title":"dangling CNAME"}]))
     print("Chains:", len(json.loads(cb.raw_output["chains"])))
@@ -339,9 +340,9 @@ asyncio.run(main())
 
 ---
 
-## 12. إضافة مهارة جديدة (قالب)
+## 12. Adding a New Skill (Template)
 
-كل مهارة جديدة تتبع `BaseSkill`:
+Every new skill subclasses `BaseSkill`:
 
 ```python
 from skills.base_skill import BaseSkill, SkillContext, SkillResult
@@ -349,29 +350,29 @@ from skills.base_skill import BaseSkill, SkillContext, SkillResult
 class MyNewSkill(BaseSkill):
     name = "my_new_skill"
     category = "web"            # recon | scan | web | analysis | agent_core | reporting | web3
-    description = "وصف مختصر للمهارة"
-    tools_required = ["nmap"]   # الأدوات الأساسية
-    fallback_tools = ["naabu"]  # بدائل
+    description = "Short skill description"
+    tools_required = ["nmap"]   # Primary tools
+    fallback_tools = ["naabu"]  # Fallback tools
     timeout_seconds = 120.0
     max_retries = 2
 
     async def execute(self, ctx: SkillContext) -> SkillResult:
         result = SkillResult(skill_name=self.name, success=True, tool_used=self.name)
-        # المنطق باستخدام ctx.tool_manager و ctx.workspace
+        # Implement logic using ctx.tool_manager and ctx.workspace
         result.add_finding(title="...", evidence="...", severity="Medium", ...)
         return result
 ```
 
-ثم:
-1. أنشئ مجلد `skills/<category>/<name>/` مع `skill.py` + `skill.yaml` + `__init__.py`.
-2. صِدر المهارة في `skills/__init__.py` و `skills/<category>/__init__.py`.
-3. سيعثر عليها `SkillRegistry` تلقائيًا من `skill.yaml`.
+Then:
+1. Create `skills/<category>/<name>/` containing `skill.py`, `skill.yaml`, and `__init__.py`.
+2. Export the skill in `skills/__init__.py` and `skills/<category>/__init__.py`.
+3. `SkillRegistry` will discover it automatically from `skill.yaml`.
 
-ملف `skill.yaml` مثال:
+Example `skill.yaml`:
 ```yaml
 name: my_new_skill
 category: web
-description: "وصف المهارة"
+description: "Skill description"
 version: "1.0"
 input:
   - target: str
@@ -390,16 +391,16 @@ enabled: true
 
 ---
 
-## 13. القواعد الذهبية (تطبق دائماً)
+## 13. Core Rules (Always Active)
 
-1. **اقرأ النطاق قبل لمس أي أصل** — لا شيء خارج النطاق المصرّح به.
-2. **لا ثغرات نظرية فقط** — "هل يمكن للمهاجم فعل هذا الآن؟" (البوابة السباعية).
-3. **شغّل البوابة السباعية قبل كتابة أي تقرير** — نتيجة `PROVEN` فقط تُرسل.
-4. **اقتل النتائج الضعيفة سريعًا** — N/A يضر بنسبة الصالحية.
-5. **تأثير أولًا** — اختبر أسوأ العواقب أولاً.
-6. **سجل كل قرار** — `thinking_trace.json` يُحفظ لكل دورة تفكير.
-7. **5-minute rule** — أي أداة لا تُنجز خلال 5 دقائق، انتقل إلى التالية.
+1. **Read full scope before touching any asset** — stay strictly inside authorized targets.
+2. **No theoretical bugs** — ask "Can an attacker do this right now?" (7-Question Gate).
+3. **Run the 7-Question Gate before writing any report** — submit `PROVEN` findings only.
+4. **Kill weak findings fast** — N/A reports hurt signal and validity ratios.
+5. **Impact first** — test worst-case consequences before low-value issues.
+6. **Log every decision** — save `thinking_trace.json` for every reasoning cycle.
+7. **5-minute rule** — if a tool yields nothing after 5 minutes, move on.
 
 ---
 
-> الملف المرجعي لكل من يضيف مهارات أو يطور الوكيل: `AGENT_SKILLS_GUIDE.md` + كود المهارات تحت `skills/`.
+> Reference for adding skills or extending the agent: `AGENT_SKILLS_GUIDE.md` and skill source under `skills/`.

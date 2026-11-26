@@ -1,36 +1,25 @@
 # HunterAI — Autonomous Evidence-Driven Security Testing Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python)](https://www.python.org)
-[![Go](https://img.shields.io/badge/Go-ARTEX--Pro-00ADD8?style=flat-square&logo=go)](backend/)
+[![Go](https://img.shields.io/badge/Go-1.26%2B%20ARTEX--Pro-00ADD8?style=flat-square&logo=go)](backend/)
 [![Next.js](https://img.shields.io/badge/Frontend-Obsidian%20Sentinel-black?style=flat-square&logo=next.js)](frontend/)
 [![License](https://img.shields.io/badge/License-MIT-purple?style=flat-square)](LICENSE)
 
 HunterAI is a multi-stack autonomous penetration testing and bug bounty platform governed by fail-closed security controls, a deterministic Proof-of-Execution (PoE) engine, and a 7-state Evidence Court.
 
-[English Overview](#english-overview) · [نظرة عامة بالعربية](#نظرة-عامة-بالعربية) · [Architecture](#architecture) · [Service Topology](#service-topology) · [Quickstart](#quickstart) · [Verification](#verification)
+[Overview](#overview) · [Architecture](#architecture) · [Service Topology](#service-topology) · [Core Subsystems](#core-subsystems) · [Quickstart](#quickstart) · [Verification](#verification) · [Documentation](#provenance-isolation--documentation)
 
 ---
 
-## English Overview
+## Overview
 
-Conventional scanners emit high false-positive noise from text reflections or heuristic LLM guesses. HunterAI enforces three deterministic invariants before a finding can reach `CONFIRMED`:
+Conventional scanners generate false positives from string reflections and heuristic LLM guesses. HunterAI enforces three deterministic invariants before any finding can reach `CONFIRMED`:
 
 - `Reflection != Execution`
 - `Dangerous API Pattern != Vulnerability`
 - `Speculative Prediction != Confirmed Finding`
 
-Signals from the Sensory Triad (Browser, Burp Suite, and Client/AST Code Intelligence) and external tool adapters enter as hypotheses or observations. Every candidate passes through `core/evidence_court.py` and `core/poe_engine.py`, where an independent verifier must satisfy a typed `ProofContract` or causal invariant before adjudication.
-
----
-
-## نظرة عامة بالعربية
-
-**HunterAI** منصة اختبار اختراق وصيد ثغرات مبنية على **الإثبات القطعي (Evidence-Driven)** وضوابط أمان افتراضية مغلقة (**Fail-Closed**).
-
-- **محكمة الأدلة ذات السبع حالات (`core/evidence_court.py`)**: لا يعتمد النظام أي ثغرة عبر أداة واحدة أو تخمين نموذج لغوي؛ تمر النتائج عبر `UNVERIFIED` / `CANDIDATE` إلى `CONFIRMED` أو `REJECTED` / `INCONCLUSIVE` / `UNAVAILABLE` / `ERROR`.
-- **محرك إثبات التنفيذ (`core/poe_engine.py`)**: يرفض الانعكاسات النصية المجردة ويتطلب دليلاً حتمياً قابلاً لإعادة الإنتاج (مثل الفارق التفاضلي أو تحقق حسابي/سياقي مستقل).
-- **حوكمة النطاق والأمان المغلق افتراضياً (`core/security_mode.py`, `core/policy/red_team.py`)**: تقييد صارم للنطاق، حظر SSRF وبيانات السحابة الداخلية (`169.254.169.254`)، ومصادقة محلية على جميع واجهات التحكم.
-- **معمارية موحدة متعددة الطبقات**: واجهة Next.js (`:3000`)، خادم تحكم Django ASGI (`:8000`)، محرك Go ARTEX-Pro (`127.0.0.1:7071`)، وجسر Burp Gateway (`127.0.0.1:8085`).
+Signals from the Sensory Triad (Playwright Browser, Burp Suite Gateway, and Client/AST Code Intelligence) and external tool adapters enter strictly as hypotheses or observations. Every candidate passes through [`core/evidence_court.py`](core/evidence_court.py) and [`core/poe_engine.py`](core/poe_engine.py), where an independent verifier must satisfy a typed `ProofContract` or causal invariant before adjudication.
 
 ---
 
@@ -65,7 +54,7 @@ For full subsystem contracts, state machines, and security boundaries, see [ARCH
 
 | Service | Path | Default Bind / Port | Notes |
 | :--- | :--- | :--- | :--- |
-| **Obsidian Sentinel UI** | `frontend/` | `http://127.0.0.1:3000` | Next.js App Router (`/`, `/operations`, `/surface`, `/intercept`, `/findings`, `/arsenal`, `/studio`, `/system`); WCAG & Arabic RTL hardened |
+| **Obsidian Sentinel UI** | `frontend/` | `http://127.0.0.1:3000` | Next.js App Router (`/`, `/operations`, `/surface`, `/intercept`, `/findings`, `/arsenal`, `/studio`, `/system`); WCAG AA & EN/AR RTL support |
 | **Django ASGI Control Plane** | `hunter_backend/` | `http://127.0.0.1:8000` | Pure ASGI + DRF (~252 HTTP routes, WebSockets, SSE); CSPRNG bearer token, CSRF/Origin guard, `userTier` vs `tokenTier` |
 | **Go ARTEX-Pro Engine** | `backend/` | `http://127.0.0.1:7071` | Concurrency scan engine (`ARTEX_BIND_ADDR`); constant-time bearer auth, private/metadata SSRF block |
 | **PostgreSQL** | `docker-compose.yml` | `127.0.0.1:5432` | Relational store for Go ARTEX-Pro engagements, assets, findings, and audit records |
@@ -104,12 +93,15 @@ pip install -r requirements.txt
 
 Optional components:
 - **Frontend UI (`frontend/`):** Node.js 22 (`cd frontend && npm ci`)
-- **Go ARTEX-Pro (`backend/`):** Go 1.24+ (`cd backend && go build ./cmd/server`)
-- **Playwright Browser Sensor:** `playwright install firefox` (or `chromium`)
+- **Go ARTEX-Pro (`backend/`):** Go 1.26+ (or Go 1.24+ with `GOTOOLCHAIN=auto`; `cd backend && go build ./cmd/server`)
+- **Playwright Browser Sensor:** `playwright install chromium` (or `firefox`)
 
 ### 2. Launch the Unified Platform
 
 ```bash
+# Optional: set PostgreSQL password when enabling the Go ARTEX-Pro engine (:7071)
+export ARTEX_DB_PASSWORD="<your-postgres-artex-password>"
+
 # Unified stack: PostgreSQL (:5432) + Go ARTEX-Pro (:7071) + Django ASGI (:8000) + Next.js (:3000)
 python pentest.py artex target.com
 
@@ -125,6 +117,8 @@ python pentest.py all target.com
 # Direct single-target CLI entry point
 python main.py --target https://staging.example.com --mode full
 ```
+
+On first start, Django generates a local CSPRNG operator token at `data/root_controller/.api_token` (shared with Go ARTEX-Pro). Paste this token into the dashboard's **Platform Authentication Required** banner at `http://127.0.0.1:3000/` to unlock live telemetry, SSE streaming, managed runs, and Copilot.
 
 ### 3. Configure LLM Providers
 
@@ -158,16 +152,16 @@ python -m core.detectors.cli scan --target https://staging.example.com --path /s
 
 ## Verification
 
-Run verification gates locally before engaging a target or merging changes. Do not rely on cached counts; execute the target suite for your environment.
+Run verification gates locally before engaging a target or merging changes. Execute the target suite directly rather than relying on cached counts:
 
 ```bash
 # Isolation, security hardening, and canonical architecture contracts
 python -m pytest tests/test_external_isolation.py tests/security/ tests/test_canonical_runtime_contracts.py tests/test_evidence_court_truthfulness.py tests/test_registry_parity.py tests/test_cross_platform_sandbox.py tests/test_prompt_templates.py tests/test_sensory_triad_and_vuln_intel.py tests/test_llm_context_vram.py -q
 
-# Full hermetic Python test suite (excluding live/opt-in integration tests)
+# Full hermetic Python test suite (excluding slow/live browser E2E and opt-in integration tests)
 python -m pytest tests/ -q -m "not slow" --ignore=tests/integration
 
-# Full-platform hermetic E2E suite
+# Full-platform hermetic E2E and benchmark suite
 python -m pytest tests/integration/test_full_platform_e2e.py -q
 
 # Skill registry & tool catalog manifest parity
@@ -195,8 +189,10 @@ cd frontend && npm run lint && npx tsc --noEmit --incremental false && npm run b
   - [ARCHITECTURE.md](ARCHITECTURE.md) — Unified architecture, runtime lifecycles, and subsystem boundaries
   - [docs/OPERATIONAL_GUIDE.md](docs/OPERATIONAL_GUIDE.md) — Deployment, auth, scope enforcement, and incident workflows
   - [docs/security.md](docs/security.md) & [docs/security_audit.md](docs/security_audit.md) — Verified security controls and hardening log
-  - [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) & [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) — Milestone tags (`phase/0-green`–`phase/7-green`) and roadmap
+  - [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) & [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) — Milestone tags (`phase/0-green`–`phase/8-green`) and roadmap
   - [docs/MIGRATION_BASELINE.md](docs/MIGRATION_BASELINE.md) — Phase 0 baseline measurements and upstream commit pins
+  - [AGENT_SKILLS_GUIDE.md](AGENT_SKILLS_GUIDE.md) — Skill registry architecture and command routing
+  - [KALI_SETUP.md](KALI_SETUP.md) — Kali Linux toolchain setup and environment verification
   - [detections/README.md](detections/README.md) — Isolated Sigma, Suricata, ATT&CK, MISP, and host-triage rules
 
 ---

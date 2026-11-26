@@ -1,49 +1,49 @@
-# إعداد عميل MCP (Model Context Protocol) — مرحلة E
+# MCP (Model Context Protocol) Client Setup — Phase E
 
-## نظرة عامة
+## Overview
 
-يُنفّذ HunterAI عميل MCP حقيقي باستخدام مكتبة Python 표준 فقط (بدون تبعات خارجية)، عبر النقل **stdio** (عملية محلية تتواصل عبر stdin/stdout) وبروتوكول **JSON-RPC 2.0**.
+HunterAI implements a native MCP client using only the Python standard library (zero external dependencies), communicating over **stdio** transport (a local subprocess over stdin/stdout) using **JSON-RPC 2.0**.
 
-العميل مدمج مع سجل الأدوات المركب (`core/tool_registry.py`) والمنسق (`core/coordinator.py`) بحيث تظهر أدوات خوادم MCP كأدوات منفذة محكومة بالإذن والنطاق.
+The client integrates with the unified tool registry (`core/tool_registry.py`) and coordinator (`core/coordinator.py`), exposing MCP server tools as governed executable tools subject to permission and scope checks.
 
-## الملفات
+## Files
 
-| الملف | الدور |
+| File | Role |
 |---|---|
-| `core/mcp_config.py` | schema إعداد خوادم MCP (Pydantic) |
-| `core/mcp_client.py` | عميل MCP (stdio، initialize، tools/list، tools/call، الإلغاء، إعادة اتصال) |
-| `core/mcp_manager.py` (داخل mcp_client) | `MCPClientManager` لإدارة خوادم متعددة مع namespaces |
-| `config/mcp.example.json` | مثال إعداد (بدون أسرار حقيقية) |
-| `tests/test_mcp_client.py` | اختبارات وحدة (محاكاة، لا أنظمة خارجية) |
+| `core/mcp_config.py` | MCP server configuration schema (Pydantic) |
+| `core/mcp_client.py` | MCP client (stdio, `initialize`, `tools/list`, `tools/call`, cancellation, reconnection) |
+| `core/mcp_manager.py` (inside `mcp_client`) | `MCPClientManager` for managing multiple namespaced servers |
+| `config/mcp.example.json` | Example configuration (no real secrets) |
+| `tests/test_mcp_client.py` | Unit tests (mocked, no external systems) |
 
-##架构
+## Architecture
 
 ```
-تكوين خادم MCP  →  MCPClientManager  →  MCPClient (ل_each خادم)
-                                                        ↓
-                                              tools/list  (اكتشاف الأدوات)
-                                                        ↓
-                                              tools/call  (تنفيذ أداة مع نطاق + إذن)
-                                                        ↓
-                                              سجل تدقيق + ToolRegistry
+MCP Server Config  →  MCPClientManager  →  MCPClient (per server)
+                                                    ↓
+                                          tools/list  (tool discovery)
+                                                    ↓
+                                          tools/call  (tool execution with scope + approval)
+                                                    ↓
+                                          Audit Log + ToolRegistry
 ```
 
-## التشغيل (إعداد محلي)
+## Setup (Local)
 
-1. ثبت خادم MCP مرغوب، مثال نظام ملفات محلي:
+1. Install the desired MCP server, for example the local filesystem server:
    ```bash
    npm install -g @modelcontextprotocol/server-filesystem
    ```
-2. عدل `config/mcp.example.json` وحدد `command` و `args` للخادم.
-3. للمصادقة، ضع التوكن في متغير بيئة وأشر إليه عبر `auth_token_env` (لا تُكتب التوكن في ملف الإعداد):
+2. Edit `config/mcp.example.json` and configure `command` and `args` for the server.
+3. For authentication, store the token in an environment variable and reference it via `auth_token_env` (never write raw tokens into config files):
    ```json
    { "auth_token_env": "GITHUB_PERSONAL_ACCESS_TOKEN" }
    ```
-   ثم:
+   Then:
    ```bash
    export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
    ```
-4. حمّل الإعداد في التطبيق:
+4. Load the configuration in your application:
    ```python
    from core.mcp_config import load_mcp_config_from_file
    from core.mcp_client import MCPClientManager
@@ -53,14 +53,14 @@
    await manager.connect_all()
    ```
 
-## الأمان
+## Security
 
-- مخرجات خوادم MCP تُعامل كبيانات غير موثوقة (لا تُقيّم ككود).
-- الأدوات عالية المخاطرة (`risk_level: high/critical`) تتطلب موافقة بشرية عبر `ToolRegistry.approval_handler`.
-- الخوادم الشبكية تخضع لسياسة النطاق (`ScopeEnforcer`) قبل أي استدعاء.
-- لا أسرار خام في ملفات الإعداد أو السجلات.
+- Outputs from MCP servers are treated as untrusted data and never evaluated as code.
+- High-risk tools (`risk_level: high/critical`) require human approval via `ToolRegistry.approval_handler`.
+- Network-backed servers are validated against scope policy (`ScopeEnforcer`) before any invocation.
+- No raw secrets are stored in configuration files or logs.
 
-## القيود
+## Limitations
 
-- النقل الشبكي (HTTP/SSE) موثق في الإعداد ولكن تنفيذه يُترك للإنتاج عند توفر `mcp` SDK الرسمي.
-- اختبارات الوحدة تستخدم محاكاة؛ للاختبار ضد خادم حقيقي استخدم بيئة معزولة.
+- Network transport (HTTP/SSE) is documented in the configuration schema, while production implementation is deferred until the official `mcp` SDK is adopted.
+- Unit tests use mocks; test against a live server in an isolated environment.

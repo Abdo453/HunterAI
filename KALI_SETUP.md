@@ -1,6 +1,6 @@
 # PentestAI Unified — Kali VM + Windows Ollama Setup
 
-## الـ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────┐     ┌──────────────────────────────────────┐
@@ -17,47 +17,46 @@
 
 ---
 
-## STEP 1 — Windows: تفعيل Ollama على الشبكة
+## STEP 1 — Windows: Expose Ollama on the Network
 
-بـ default، Ollama بيسمع على `127.0.0.1` بس.
-لازم نخليه يسمع على `0.0.0.0` عشان الـ VM يوصله.
+By default, Ollama binds only to `127.0.0.1`. Bind it to `0.0.0.0` so the Kali VM can reach it.
 
-### الطريقة (Windows):
+### PowerShell (Windows)
 
-افتح **PowerShell as Administrator**:
+Open **PowerShell as Administrator**:
 
 ```powershell
-# إضافة متغير البيئة
+# Set the environment variable
 [System.Environment]::SetEnvironmentVariable("OLLAMA_HOST", "0.0.0.0:11434", "Machine")
 
-# إعادة تشغيل Ollama service
+# Restart the Ollama service
 Stop-Process -Name "ollama" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 Start-Process "ollama" -ArgumentList "serve"
 ```
 
-### أو يدوياً:
-1. ابحث في Windows عن **"Edit system environment variables"**
-2. أضف متغير جديد:
+### Manual Configuration
+1. Search Windows for **"Edit system environment variables"**.
+2. Add a new system variable:
    - **Name**: `OLLAMA_HOST`
    - **Value**: `0.0.0.0:11434`
-3. أعد تشغيل Ollama
+3. Restart Ollama.
 
-### التحقق:
+### Verify
 ```powershell
-# من Windows
+# From Windows
 curl http://localhost:11434/api/tags
 
-# من Kali VM (استبدل IP)
+# From Kali VM (replace IP)
 curl http://192.168.x.x:11434/api/tags
 ```
 
 ---
 
-## STEP 2 — Windows: الـ Firewall
+## STEP 2 — Windows: Firewall
 
 ```powershell
-# السماح بـ Ollama عبر الـ Firewall
+# Allow inbound Ollama traffic through Windows Firewall
 New-NetFirewallRule -DisplayName "Ollama AI Port" `
     -Direction Inbound `
     -Protocol TCP `
@@ -67,86 +66,86 @@ New-NetFirewallRule -DisplayName "Ollama AI Port" `
 
 ---
 
-## STEP 3 — الحصول على الـ Windows IP داخل Kali VM
+## STEP 3 — Find the Windows Host IP from Kali VM
 
 ```bash
-# من Kali
+# From Kali
 ip route | grep default
-# مثال: default via 192.168.72.1 dev eth0
-#        ↑ هذا هو IP الـ Windows Host
+# Example: default via 192.168.72.1 dev eth0
+#          ↑ Windows Host IP
 ```
 
-**IPs شائعة:**
-| نوع الـ VM | Windows IP داخل Kali |
-|------------|---------------------|
-| VMware NAT | `192.168.72.1` أو `192.168.x.1` |
+**Common host IPs:**
+| VM Network Type | Windows IP inside Kali |
+|-----------------|------------------------|
+| VMware NAT | `192.168.72.1` or `192.168.x.1` |
 | VirtualBox NAT | `10.0.2.2` |
 | VMware Host-Only | `192.168.x.1` |
-| Bridged | نفس شبكة الـ router |
+| Bridged | Same subnet as the router |
 
 ---
 
-## STEP 4 — Kali: تثبيت وتشغيل
+## STEP 4 — Kali: Install and Run
 
 ```bash
-# نسخ المشروع لـ Kali (من Windows share أو git)
-# إذا عندك shared folder:
+# Copy the project to Kali (via shared folder or git)
+# If using a VMware shared folder:
 cp -r /mnt/hgfs/Agant/PentestAI-Unified/ ~/pentestai/
 cd ~/pentestai
 
-# أو استخدم Python HTTP server من Windows:
-# على Windows: python -m http.server 8888 --directory E:\Agant
-# على Kali: wget http://192.168.x.x:8888/PentestAI-Unified.zip
+# Or serve it from Windows with Python HTTP server:
+# On Windows: python -m http.server 8888 --directory E:\Agant
+# On Kali: wget http://192.168.x.x:8888/PentestAI-Unified.zip
 
-# تثبيت كل شيء
+# Run full installation
 chmod +x setup_kali.sh
 sudo ./setup_kali.sh
 ```
 
 ---
 
-## STEP 5 — تحديث .env يدوياً (لو السكربت ما اشتغلش)
+## STEP 5 — Update `.env` Manually (if the setup script did not apply it)
 
 ```bash
 nano .env
 ```
 
-عدّل:
+Edit:
 ```
 OLLAMA_HOST=http://192.168.72.1:11434
 ```
 
-(استبدل `192.168.72.1` بـ IP الـ Windows الفعلي)
+(Replace `192.168.72.1` with the actual Windows host IP.)
 
 ---
 
-## STEP 6 — اختبار الاتصال
+## STEP 6 — Test the Connection
 
 ```bash
 source venv/bin/activate
 python3 test_connection.py
 ```
 
-### فحص الأدوات من نفس بيئة Kali
+### Verify Toolchain Inside Kali
 
 ```bash
 python3 scripts/verify_kali_toolchain.py --strict
 ```
 
-هذا الفحص لا يتصل بأي موقع؛ يشغّل فقط `--version` أو `--help` لكل أداة ويخرج تقرير JSON مرتبًا. إذا كانت أداة مطلوبة مفقودة أو لا تعمل، ينتهي بكود خطأ بدل أن يبدأ الـAgent بفحص ناقص.
+This check contacts no external targets; it runs `--version` or `--help` on each tool and outputs a structured JSON report. If a required tool is missing or fails, it exits with a non-zero status code rather than allowing the agent to start with an incomplete toolchain.
 
-### التحقق من Agent + Burp + Browser قبل أي موقع
+### Verify Agent + Burp + Browser Before Scanning a Target
 
-شغّل Burp Suite مع Proxy listener على `127.0.0.1:8080`، ثم استخدم الوضع الصارم:
+Start Burp Suite with a Proxy listener on `127.0.0.1:8080`, then run strict mode:
 
 ```bash
 python3 main.py -t https://your-authorized-target.example \
   --authorized --proxy http://127.0.0.1:8080 --require-burp-browser
 ```
 
-هذا الوضع لا يبدأ أي مرحلة تتصل بالموقع إلا إذا تحقّق من: اتصال Proxy الخاص بـBurp، تشغيل HunterAI Gateway محليًا، وإطلاق Playwright مع إعداد نفس الـProxy. نتيجة الفحص تحفظ في `00_integration/agent_burp_browser.json` داخل artifacts الخاصة بالجلسة.
+This mode blocks any target-facing phase unless it confirms Burp proxy connectivity, a running local HunterAI Gateway, and Playwright launching with the same proxy configured. Check results are saved to `00_integration/agent_burp_browser.json` under the session artifacts directory.
 
-المتوقع:
+Expected output:
 ```
 [*] Testing Ollama at: http://192.168.72.1:11434
 [+] Connected! Models found: 3
@@ -159,65 +158,65 @@ python3 main.py -t https://your-authorized-target.example \
 
 ---
 
-## STEP 7 — تشغيل PentestAI
+## STEP 7 — Run PentestAI
 
 ```bash
 source venv/bin/activate
 
 # Web UI
 python3 main.py
-# ثم افتح في Kali: http://localhost:7070
+# Then open in Kali: http://localhost:7070
 
-# أو CLI مباشر
+# Or run CLI directly
 python3 main.py --cli
 
-# أو scan مباشر
+# Or run a direct scan
 python3 main.py -t 192.168.1.100 --mode full
 ```
 
 ---
 
-## استكشاف الأخطاء
+## Troubleshooting
 
-### مشكلة: "Cannot connect to Ollama"
+### Issue: "Cannot connect to Ollama"
 ```bash
-# تحقق من الـ IP
+# Check default gateway IP
 ip route | grep default
 
-# اختبار مباشر
+# Test directly
 curl http://[WINDOWS_IP]:11434/api/tags
 
-# لو فاشل، تحقق من الـ Firewall على Windows
+# If it fails, check Windows Firewall rules
 ```
 
-### مشكلة: "Connection refused"
+### Issue: "Connection refused"
 ```powershell
-# على Windows — تحقق إن Ollama شغال
+# On Windows — verify Ollama is listening
 netstat -an | findstr 11434
-# لازم تشوف: TCP 0.0.0.0:11434 LISTENING
+# Expected: TCP 0.0.0.0:11434 LISTENING
 ```
 
-### مشكلة: Ollama بيسمع على 127.0.0.1 بس
+### Issue: Ollama listens only on `127.0.0.1`
 ```powershell
-# أوقف Ollama
+# Stop Ollama
 Stop-Process -Name "ollama" -Force
-# شغّل مع explicit host
+# Start with explicit host binding
 $env:OLLAMA_HOST = "0.0.0.0:11434"
 ollama serve
 ```
 
 ---
 
-## الـ Network Modes
+## Network Modes
 
-### VMware NAT (الأسهل):
-- Windows IP من Kali: `192.168.72.1` (أو `192.168.x.1`)
+### VMware NAT (Easiest)
+- Windows IP from Kali: `192.168.72.1` (or `192.168.x.1`)
 - Ollama URL: `http://192.168.72.1:11434`
 
-### VirtualBox NAT:
-- Windows IP من Kali: `10.0.2.2`
+### VirtualBox NAT
+- Windows IP from Kali: `10.0.2.2`
 - Ollama URL: `http://10.0.2.2:11434`
 
-### Bridged (الأفضل للـ pentest):
-- كل الأجهزة على نفس الشبكة
-- Windows IP: نفس IP الجهاز الفعلي على الشبكة
+### Bridged (Best for pentesting)
+- All hosts share the same network segment.
+- Windows IP: the host machine's LAN IP address.
