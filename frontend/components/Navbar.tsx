@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Play,
@@ -17,12 +17,22 @@ import {
   Search,
   Activity,
   ShieldCheck,
+  Bookmark,
+  ChevronDown,
+  Globe,
+  Server,
 } from "lucide-react";
 import {
   ServiceConnectivity,
   usePlatform,
   validateScanTarget,
 } from "@/lib/platform-context";
+import {
+  TARGET_PRESETS,
+  TargetPreset,
+  getPresetCategoryBadgeClasses,
+  getPresetDescription,
+} from "@/lib/target-presets";
 import { useTheme } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
 
@@ -93,6 +103,11 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
 
   const [targetInput, setTargetInput] = useState<string>(targetDomain || "");
   const [validationError, setValidationError] = useState<string>("");
+  const [presetsOpen, setPresetsOpen] = useState<boolean>(false);
+
+  const presetsContainerRef = useRef<HTMLDivElement>(null);
+  const presetsBtnRef = useRef<HTMLButtonElement>(null);
+  const targetInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (selectedEngagement?.target) {
@@ -100,6 +115,37 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
       setValidationError("");
     }
   }, [selectedEngagement]);
+
+  useEffect(() => {
+    if (!presetsOpen) return;
+    const onPointerDown = (ev: MouseEvent) => {
+      if (
+        presetsContainerRef.current &&
+        !presetsContainerRef.current.contains(ev.target as Node)
+      ) {
+        setPresetsOpen(false);
+      }
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        setPresetsOpen(false);
+        presetsBtnRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [presetsOpen]);
+
+  const handleSelectPreset = (preset: TargetPreset) => {
+    setTargetInput(preset.target);
+    setValidationError("");
+    setPresetsOpen(false);
+    targetInputRef.current?.focus();
+  };
 
   useEffect(() => {
     const onKeyDown = (ev: KeyboardEvent) => {
@@ -179,7 +225,10 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
         </div>
 
         {/* Workspace Selector + Target Launcher */}
-        <div className="flex-1 min-w-[240px] max-w-2xl flex flex-col gap-1 order-3 lg:order-1 w-full lg:w-auto">
+        <div
+          ref={presetsContainerRef}
+          className="relative flex-1 min-w-[240px] max-w-2xl flex flex-col gap-1 order-3 lg:order-1 w-full lg:w-auto"
+        >
           <form onSubmit={handleSubmit} className="flex flex-wrap sm:flex-nowrap items-center gap-2">
             <label htmlFor="engagement-selector" className="sr-only">
               {t("nav.engagementLabel")}
@@ -191,7 +240,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
                 void selectEngagement(e.target.value);
               }}
               aria-label={t("nav.engagementLabel")}
-              className="min-h-[44px] lg:min-h-0 lg:h-9 px-2.5 rounded-md bg-elevated border border-border-subtle text-xs text-ink-primary max-w-[190px] truncate shrink-0"
+              className="min-h-[44px] lg:min-h-0 lg:h-9 px-2.5 rounded-md bg-elevated border border-border-subtle text-xs text-ink-primary max-w-[165px] sm:max-w-[190px] truncate shrink-0"
             >
               <option value="">{t("nav.allEngagements")}</option>
               {engagements.map((eng, idx) => (
@@ -206,9 +255,11 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
                 {t("nav.targetPlaceholder", "Target domain (e.g. example.com)")}
               </label>
               <input
+                ref={targetInputRef}
                 id="scan-target-input"
                 type="text"
                 dir="ltr"
+                list="target-example-presets"
                 placeholder={t("nav.targetPlaceholder", "Target domain (e.g. example.com)")}
                 value={targetInput}
                 onChange={(e) => {
@@ -218,7 +269,37 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
                 aria-invalid={Boolean(validationError)}
                 className="ltr-isolate w-full min-h-[44px] lg:min-h-0 lg:h-9 px-3 rounded-md bg-inset border border-border-subtle text-sm font-mono text-ink-primary placeholder:text-ink-muted focus:border-sentinel-primary transition-colors"
               />
+              <datalist id="target-example-presets">
+                {TARGET_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.target}>
+                    {`${preset.label} — ${getPresetDescription(preset, lang)}`}
+                  </option>
+                ))}
+              </datalist>
             </div>
+
+            <button
+              ref={presetsBtnRef}
+              type="button"
+              data-testid="navbar-target-presets-btn"
+              onClick={() => setPresetsOpen((prev) => !prev)}
+              aria-expanded={presetsOpen}
+              aria-controls="navbar-target-presets-popover"
+              aria-label={t("nav.presetsAriaLabel")}
+              className={`min-h-[44px] lg:min-h-0 lg:h-9 px-2.5 rounded-md border text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0 ${
+                presetsOpen
+                  ? "border-sentinel-primary bg-[var(--accent-primary-bg)] text-sentinel-primary"
+                  : "border-border-subtle bg-elevated hover:border-border-strong text-ink-primary"
+              }`}
+            >
+              <Bookmark className="w-3.5 h-3.5 text-sentinel-primary shrink-0" />
+              <span>{t("nav.presetsBtn")}</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-ink-muted transition-transform ${
+                  presetsOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
 
             <button
               type="submit"
@@ -238,6 +319,97 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
               )}
             </button>
           </form>
+
+          {presetsOpen && (
+            <div
+              id="navbar-target-presets-popover"
+              role="region"
+              aria-label={t("nav.presetsTitle")}
+              className="absolute top-full start-0 end-0 sm:end-auto sm:w-[460px] max-w-[calc(100vw-1.5rem)] mt-1.5 z-50 rounded-lg border border-border-strong bg-surface shadow-sentinelMd p-3 space-y-2.5 max-h-[70vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between gap-2 pb-2 border-b border-border-subtle">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-ink-primary truncate">
+                    {t("nav.presetsTitle")}
+                  </div>
+                  <div className="text-[11px] text-ink-muted truncate">
+                    {t("nav.presetsSubtitle")}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPresetsOpen(false)}
+                  aria-label={t("common.close")}
+                  className="h-7 w-7 rounded border border-border-subtle bg-elevated hover:border-border-strong text-ink-muted hover:text-ink-primary flex items-center justify-center shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {(["public_demo", "local_lab"] as const).map((categoryKey) => {
+                const items = TARGET_PRESETS.filter((p) => p.category === categoryKey);
+                const isPublic = categoryKey === "public_demo";
+                return (
+                  <div key={categoryKey} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-ink-secondary px-0.5">
+                      <span className="flex items-center gap-1.5">
+                        {isPublic ? (
+                          <Globe className="w-3.5 h-3.5 text-sentinel-primary shrink-0" />
+                        ) : (
+                          <Server className="w-3.5 h-3.5 text-sentinel-warning shrink-0" />
+                        )}
+                        <span>
+                          {isPublic ? t("targets.presetGroupPublic") : t("targets.presetGroupLocal")}
+                        </span>
+                      </span>
+                      <span className="font-mono text-[10px] text-ink-muted tabular-nums">
+                        {items.length}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {items.map((preset) => {
+                        const isActive = targetInput.trim() === preset.target;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => handleSelectPreset(preset)}
+                            className={`w-full text-start p-2 rounded-md border transition-colors flex flex-col gap-1 ${
+                              isActive
+                                ? "border-sentinel-primary bg-[var(--accent-primary-bg)]"
+                                : "border-border-subtle bg-elevated/60 hover:bg-elevated hover:border-border-strong"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <span className="text-xs font-semibold text-ink-primary truncate">
+                                {preset.label}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-mono border shrink-0 ${getPresetCategoryBadgeClasses(
+                                  preset.category
+                                )}`}
+                              >
+                                {isPublic
+                                  ? t("targets.presetBadgePublic")
+                                  : t("targets.presetBadgeLab")}
+                              </span>
+                            </div>
+                            <span className="ltr-isolate font-mono text-[11px] text-sentinel-primary truncate block">
+                              {preset.target}
+                            </span>
+                            <span className="text-[11px] text-ink-muted line-clamp-1">
+                              {getPresetDescription(preset, lang)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {validationError && (
             <div

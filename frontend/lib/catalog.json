@@ -204,7 +204,9 @@
       "phaseJavascript": "تحليل JS",
       "phaseVerification": "التحقق",
       "phaseAdjudication": "التحكيم",
-      "phaseReport": "التقرير"
+      "phaseReport": "التقرير",
+      "presetsHeading": "أهداف تدريب ومختبرات سريعة (نقرة واحدة)",
+      "presetsHint": "بيئات فحص مصرح بها ومختبرات محلية جاهزة"
     },
     "approvals": {
       "title": "بوابة الموافقات الحية",
@@ -248,7 +250,13 @@
       "inScopeBadge": "ضمن القائمة",
       "outScopeBadge": "مستثنى",
       "localhostBlocked": "الإطلاق المباشر لجميع الأهداف مفعّل (نطاقات عامة، Localhost، والشبكات المحلية)",
-      "emptyTargets": "لم يتم تسجيل أهداف مصرح بها بعد."
+      "emptyTargets": "لم يتم تسجيل أهداف مصرح بها بعد.",
+      "quickFillTitle": "تعبئة سريعة من الأهداف التدريبية والمختبرات",
+      "quickFillHint": "يملأ الاسم والرابط والنطاق المصرح به تلقائياً",
+      "presetGroupPublic": "أهداف تدريب عامة مصرح بها",
+      "presetGroupLocal": "مختبرات وحاويات محلية",
+      "presetBadgePublic": "عام",
+      "presetBadgeLab": "مختبر"
     },
     "redteam": {
       "title": "مركز قيادة Red Team وقوائم الفحص",
@@ -552,7 +560,11 @@
       "collapseSidebar": "طي الشريط الجانبي",
       "expandSidebar": "توسيع الشريط الجانبي",
       "commandPalette": "البحث السريع (Ctrl+K)",
-      "activeRun": "تشغيل نشط"
+      "activeRun": "تشغيل نشط",
+      "presetsBtn": "أمثلة",
+      "presetsAriaLabel": "اختيار هدف تدريبي أو مختبر جاهز",
+      "presetsTitle": "أهداف الفحص التدريبية والمختبرات",
+      "presetsSubtitle": "انقر لتعبئة حقل الهدف فوراً"
     },
     "routes": {
       "overview": "القيادة والأهداف",
@@ -871,7 +883,9 @@
       "phaseJavascript": "JavaScript",
       "phaseVerification": "Verification",
       "phaseAdjudication": "Adjudication",
-      "phaseReport": "Report"
+      "phaseReport": "Report",
+      "presetsHeading": "1-Click Practice & Lab Targets",
+      "presetsHint": "Authorized public demos and local containers"
     },
     "approvals": {
       "title": "Live Policy Approvals",
@@ -915,7 +929,13 @@
       "inScopeBadge": "Listed",
       "outScopeBadge": "Excluded",
       "localhostBlocked": "Direct Target Dispatch Enabled (Public, Localhost, LAN & Custom Labs)",
-      "emptyTargets": "No authorized targets registered yet."
+      "emptyTargets": "No authorized targets registered yet.",
+      "quickFillTitle": "Quick-Fill Authorized Practice & Lab Presets",
+      "quickFillHint": "Auto-fills project name, URL, and in-scope domains",
+      "presetGroupPublic": "Public Authorized Practice Targets",
+      "presetGroupLocal": "Local & Container Labs",
+      "presetBadgePublic": "Public",
+      "presetBadgeLab": "Lab"
     },
     "redteam": {
       "title": "Red Team Cockpit & Security Checklists",
@@ -1219,7 +1239,11 @@
       "collapseSidebar": "Collapse sidebar",
       "expandSidebar": "Expand sidebar",
       "commandPalette": "Command Palette (Ctrl+K)",
-      "activeRun": "Active Run"
+      "activeRun": "Active Run",
+      "presetsBtn": "Presets",
+      "presetsAriaLabel": "Choose an example practice or local lab target",
+      "presetsTitle": "Practice & Lab Target Presets",
+      "presetsSubtitle": "Click any target to populate the launcher"
     },
     "routes": {
       "overview": "Command Overview",

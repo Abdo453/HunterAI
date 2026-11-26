@@ -17,12 +17,14 @@ import {
 import StatsCards from "@/components/StatsCards";
 import ApprovalsPanel from "@/components/ApprovalsPanel";
 import LiveConsole from "@/components/LiveConsole";
+import TargetPresetStrip from "@/components/TargetPresetStrip";
 import {
   MissionLaunchInput,
   RunRecord,
   usePlatform,
   validateScanTarget,
 } from "@/lib/platform-context";
+import { TargetPreset } from "@/lib/target-presets";
 import { useI18n } from "@/lib/i18n";
 
 interface BudgetSnapshot {
@@ -246,6 +248,7 @@ export default function OverviewPage() {
               id="overview-target"
               type="text"
               dir="ltr"
+              list="target-example-presets"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder={t("runs.targetPlaceholder")}
@@ -360,6 +363,18 @@ export default function OverviewPage() {
             </>
           )}
         </form>
+
+        <TargetPresetStrip
+          testId="overview-target-presets"
+          heading={t("runs.presetsHeading")}
+          subtitle={t("runs.presetsHint")}
+          activeTarget={target}
+          onSelect={(preset: TargetPreset) => {
+            setTarget(preset.target);
+            if (launchError) setLaunchError("");
+            if (launchFeedback) setLaunchFeedback("");
+          }}
+        />
 
         {launchError && (
           <div role="alert" className="px-3 py-2 rounded bg-[var(--accent-danger-bg)] border border-[var(--accent-danger)]/40 text-sentinel-danger text-xs flex items-center gap-2">

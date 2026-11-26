@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { usePlatform } from "@/lib/platform-context";
 import { useI18n } from "@/lib/i18n";
+import TargetPresetStrip from "@/components/TargetPresetStrip";
+import { TargetPreset } from "@/lib/target-presets";
 
 interface ChecklistItem {
   item_id: string;
@@ -258,6 +260,21 @@ export default function OperationsPage() {
             <h2 className="text-sm font-semibold text-ink-primary">{t("targets.title")}</h2>
           </div>
 
+          <TargetPresetStrip
+            testId="operations-target-presets"
+            heading={t("targets.quickFillTitle")}
+            subtitle={t("targets.quickFillHint")}
+            activeTarget={targetUrl}
+            onSelect={(preset: TargetPreset) => {
+              setTargetName(preset.label);
+              setTargetUrl(preset.target);
+              setInScopeCsv(preset.inScope.join(", "));
+              setOutScopeCsv("");
+              setTargetMsg("");
+              setTargetMsgError(false);
+            }}
+          />
+
           <form onSubmit={handleSaveTarget} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
             <input
               type="text"
@@ -269,6 +286,7 @@ export default function OperationsPage() {
             <input
               type="text"
               dir="ltr"
+              list="target-example-presets"
               required
               value={targetUrl}
               onChange={(e) => setTargetUrl(e.target.value)}
