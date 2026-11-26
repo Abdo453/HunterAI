@@ -22,14 +22,17 @@ from rest_framework.views import APIView
 
 from core.copilot_service import (
     CopilotService,
+    classify_host_security,
     collect_live_context,
     detect_live_providers,
     evaluate_action_policy,
+    extract_target_host,
     is_tcp_reachable,
 )
 from core.llm_router import get_llm_router
 from core.platform_store import get_platform_store, new_id
-from core.scope_engine import INVIOLABLE_IPV4_SUBNETS, normalize_ip_literal
+from core.scope_engine import normalize_ip_literal
+from core.security_mode import web_governance_enforced
 from hunter_backend.apps.common import (
     call_ai,
     django_err,
@@ -374,7 +377,7 @@ def _evaluate_chat_command(
     in_scope: List[str],
     out_of_scope: List[str],
 ) -> Tuple[bool, str, str]:
-    if not in_scope:
+    if not in_scope and web_governance_enforced():
         return False, "BLOCKED_SCOPE", "No authorized target scope configured (empty scope fails closed)."
     if _SHELL_META_CHAT_RE.search(cmd):
         return False, "BLOCKED_INVARIANT", "Shell metacharacters are forbidden in executed commands."
@@ -389,12 +392,10 @@ def _evaluate_chat_command(
         return False, "BLOCKED_INVARIANT", f"Shell tool '{tool_name}' is prohibited."
     targets = _extract_targets_from_tokens(tokens) or ([effective_target] if effective_target else [""])
     for tgt in targets:
-        host = (urlparse(tgt).hostname or tgt).strip().lower() if "://" in tgt else tgt.strip().lower().split("/", 1)[0].split(":", 1)[0]
-        ip_obj = normalize_ip_literal(host) if host and not (host.isdigit() and int(host) <= 65535) else None
-        if host in {"169.254.169.254", "metadata.google.internal", "localhost"} or (
-            ip_obj is not None and (str(ip_obj) == "169.254.169.254" or (isinstance(ip_obj, ipaddress.IPv4Address) and ip_obj in INVIOLABLE_IPV4_SUBNETS[1]))
-        ):
-            return False, "BLOCKED_INVARIANT", f"Forbidden internal/metadata target '{host}'."
+        host = extract_target_host(tgt)
+        category, sec_reason = classify_host_security(host)
+        if category == "non_overridable":
+            return False, "BLOCKED_INVARIANT", sec_reason or f"Forbidden internal/metadata target '{host}'."
         pol = evaluate_action_policy(
             action_type="CLI_TOOL",
             target=tgt,

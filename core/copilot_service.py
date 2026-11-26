@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -24,7 +25,7 @@ import shlex
 import socket
 import time
 from pathlib import Path
-from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, Iterable, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -35,27 +36,65 @@ from core.gateway.risk_classifier import RiskClassifier
 from core.gateway.schemas import ActionProposal, RiskTier
 from core.platform_store import PlatformStore, get_platform_store, new_id, redact_text
 from core.scope_engine import (
-    HARD_BLOCKED_HOSTS,
-    INVIOLABLE_IPV4_SUBNETS,
-    INVIOLABLE_IPV6_SUBNETS,
     ScopePolicy,
     StrictScopeEngine,
     normalize_ip_literal,
 )
 from core.scope_guard import ScopeGuard
-from core.security_mode import unrestricted_mode
+from core.security_mode import unrestricted_mode, web_governance_enforced
 
 logger = logging.getLogger("hunter_ai.copilot_service")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _ATTACHMENTS_DIR = _REPO_ROOT / "data" / "copilot_attachments"
 
+_TRUTHY_ENV = frozenset({"1", "true", "yes", "on", "enabled", "unrestricted"})
+
+NON_OVERRIDABLE_BLOCKED_HOSTS = frozenset({
+    "metadata.google.internal",
+    "metadata.internal",
+    "instance-data",
+    "0.0.0.0",
+})
+NON_OVERRIDABLE_METADATA_IPS = frozenset({
+    "100.100.100.200",
+    "fd00:ec2::254",
+})
+LOOPBACK_HOSTNAMES = frozenset({
+    "localhost",
+    "localhost.localdomain",
+})
+NON_OVERRIDABLE_IPV4_SUBNETS = (
+    ipaddress.IPv4Network("0.0.0.0/8"),
+    ipaddress.IPv4Network("169.254.0.0/16"),
+    ipaddress.IPv4Network("224.0.0.0/4"),
+    ipaddress.IPv4Network("240.0.0.0/4"),
+    ipaddress.IPv4Network("255.255.255.255/32"),
+)
+NON_OVERRIDABLE_IPV6_SUBNETS = (
+    ipaddress.IPv6Network("::/128"),
+    ipaddress.IPv6Network("fe80::/10"),
+    ipaddress.IPv6Network("ff00::/8"),
+)
+PRIVATE_LAB_IPV4_SUBNETS = (
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+    ipaddress.IPv4Network("100.64.0.0/10"),
+)
+PRIVATE_LAB_IPV6_SUBNETS = (
+    ipaddress.IPv6Network("fc00::/7"),
+)
+_DISALLOWED_URL_SCHEME_PREFIX_RE = re.compile(
+    r"^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d+(?:[/?#]|$))"
+)
+
 _TOOL_NAMES_RE = re.compile(
     r"\b(nmap|masscan|rustscan|subfinder|amass|httpx|katana|nuclei|ffuf|sqlmap|dalfox|arjun|gobuster|dirsearch|nikto|wpscan|hydra|gitleaks|whatweb)\b",
     re.IGNORECASE,
 )
 _URL_OR_HOST_RE = re.compile(
-    r"(https?://[^\s'\"<>]+|\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d{1,5})?(?:/[^\s'\"<>]*)?|\b\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?)",
+    r"(https?://[^\s'\"<>]+|\blocalhost(?::\d{1,5})?(?:/[^\s'\"<>]*)?\b|\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d{1,5})?(?:/[^\s'\"<>]*)?|\b\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?)",
     re.IGNORECASE,
 )
 _ACTION_INTENT_RE = re.compile(
@@ -97,22 +136,321 @@ def wrap_untrusted_data(source: str, item_id: str, content: str, max_chars: int 
     )
 
 
+def is_localhost_lab_enabled() -> bool:
+    """Return True when HUNTER_ALLOW_LOCALHOST_SCOPE is explicitly enabled."""
+    return (os.getenv("HUNTER_ALLOW_LOCALHOST_SCOPE") or "").strip().lower() in _TRUTHY_ENV
+
+
+def is_private_lab_enabled() -> bool:
+    """Return True when HUNTER_ALLOW_PRIVATE_LAB_SCOPE is explicitly enabled."""
+    return (os.getenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE") or "").strip().lower() in _TRUTHY_ENV
+
+
+def extract_target_host(target: str) -> str:
+    """Extract normalized lowercase hostname or IP literal without port or trailing dot."""
+    clean = (target or "").strip().lower()
+    if not clean:
+        return ""
+    if "://" in clean:
+        try:
+            parsed = urlparse(clean)
+            raw_host = parsed.hostname or ""
+        except ValueError:
+            return ""
+        return raw_host.strip().strip("[]").rstrip(".").lower()
+
+    auth = clean.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+    if "@" in auth:
+        auth = auth.rsplit("@", 1)[1]
+    if normalize_ip_literal(auth) is not None:
+        return auth.strip().strip("[]").rstrip(".").lower()
+    if auth.startswith("["):
+        end = auth.find("]")
+        if end != -1:
+            return auth[1:end].rstrip(".").lower()
+        return auth.lstrip("[").rstrip(".").lower()
+    if auth.count(":") == 1:
+        host_part, port_part = auth.split(":", 1)
+        if port_part.isdigit() or not port_part:
+            return host_part.rstrip(".").lower()
+    return auth.rstrip(".").lower()
+
+
+def check_target_scheme_and_syntax(target: str) -> Optional[str]:
+    """Reject empty targets, control characters, malformed authorities, and non-HTTP(S) schemes."""
+    raw = (target or "").strip()
+    if not raw:
+        return "Target is empty"
+    if any(ord(ch) < 32 for ch in raw):
+        return "Target contains control characters"
+    if raw.startswith("//"):
+        return "Blocked scheme-relative URL"
+    lower = raw.lower()
+    if "://" in raw:
+        scheme = raw.split("://", 1)[0].lower()
+        if scheme not in {"http", "https"}:
+            return f"Unsupported or unsafe URL scheme {scheme!r}; only http/https allowed"
+        try:
+            parsed = urlparse(raw)
+            _ = parsed.port
+        except ValueError:
+            return "Target URL specifies an invalid port"
+        netloc = parsed.netloc or ""
+        if "\\" in netloc or any(ch.isspace() for ch in netloc):
+            return "Target URL authority contains disallowed whitespace or backslash"
+        if not (parsed.hostname or "").strip():
+            return "Target URL has no valid hostname"
+    elif _DISALLOWED_URL_SCHEME_PREFIX_RE.match(lower):
+        scheme = lower.split(":", 1)[0]
+        return f"Unsupported or unsafe URL scheme {scheme!r}; only http/https allowed"
+    elif any(ch.isspace() for ch in raw):
+        return "Target contains disallowed whitespace"
+    return None
+
+
+def classify_host_security(host: str) -> Tuple[str, Optional[str]]:
+    """Classify *host* as 'non_overridable', 'loopback', 'private_lab', or 'public'."""
+    clean = (host or "").strip().strip("[]").rstrip(".").lower()
+    if not clean:
+        return "non_overridable", "Target host is empty"
+
+    if (
+        clean in NON_OVERRIDABLE_BLOCKED_HOSTS
+        or clean.endswith(".metadata.google.internal")
+        or clean.endswith(".metadata.internal")
+    ):
+        return (
+            "non_overridable",
+            f"SECURITY INVARIANT: Host '{clean}' is a non-overridable internal/metadata service.",
+        )
+
+    if clean in LOOPBACK_HOSTNAMES or clean.endswith(".localhost"):
+        return (
+            "loopback",
+            f"SECURITY INVARIANT: Host '{clean}' is a restricted loopback destination.",
+        )
+
+    ip_obj = normalize_ip_literal(clean)
+    if ip_obj is not None:
+        raw_ip_str = str(ip_obj).lower()
+        norm_ip = (
+            ip_obj.ipv4_mapped
+            if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped is not None
+            else ip_obj
+        )
+        norm_ip_str = str(norm_ip).lower()
+        if raw_ip_str in NON_OVERRIDABLE_METADATA_IPS or norm_ip_str in NON_OVERRIDABLE_METADATA_IPS:
+            return (
+                "non_overridable",
+                f"SECURITY INVARIANT: IP {clean} is a non-overridable cloud metadata address.",
+            )
+        if isinstance(norm_ip, ipaddress.IPv4Address):
+            for blk in NON_OVERRIDABLE_IPV4_SUBNETS:
+                if norm_ip in blk:
+                    return (
+                        "non_overridable",
+                        f"SECURITY INVARIANT: IP {clean} belongs to non-overridable subnet {blk}.",
+                    )
+            if norm_ip.is_loopback:
+                return (
+                    "loopback",
+                    f"SECURITY INVARIANT: IP {clean} belongs to loopback subnet 127.0.0.0/8.",
+                )
+            for blk in PRIVATE_LAB_IPV4_SUBNETS:
+                if norm_ip in blk:
+                    return (
+                        "private_lab",
+                        f"SECURITY INVARIANT: IP {clean} belongs to private/internal subnet {blk}.",
+                    )
+        elif isinstance(norm_ip, ipaddress.IPv6Address):
+            for blk in NON_OVERRIDABLE_IPV6_SUBNETS:
+                if norm_ip in blk:
+                    return (
+                        "non_overridable",
+                        f"SECURITY INVARIANT: IPv6 {clean} belongs to non-overridable subnet {blk}.",
+                    )
+            if norm_ip.is_loopback:
+                return (
+                    "loopback",
+                    f"SECURITY INVARIANT: IPv6 {clean} belongs to loopback ::1/128.",
+                )
+            for blk in PRIVATE_LAB_IPV6_SUBNETS:
+                if norm_ip in blk:
+                    return (
+                        "private_lab",
+                        f"SECURITY INVARIANT: IPv6 {clean} belongs to internal/private subnet {blk}.",
+                    )
+
+    return "public", None
+
+
+def is_loopback_host(host: str) -> bool:
+    """Return True if *host* represents a loopback hostname or IP literal."""
+    return classify_host_security(host)[0] == "loopback"
+
+
+def is_explicit_lab_loopback(host: str, in_scope_list: Iterable[str]) -> bool:
+    """Allow loopback ONLY when HUNTER_ALLOW_LOCALHOST_SCOPE is enabled AND loopback is in scope."""
+    if not is_localhost_lab_enabled():
+        return False
+    entries = list(in_scope_list or [])
+    if not entries:
+        return False
+    if classify_host_security(host)[0] != "loopback":
+        return False
+    target_ip = normalize_ip_literal((host or "").strip().strip("[]").rstrip(".").lower())
+    norm_target_ip = (
+        target_ip.ipv4_mapped
+        if isinstance(target_ip, ipaddress.IPv6Address) and target_ip.ipv4_mapped is not None
+        else target_ip
+    )
+    for entry in entries:
+        raw_entry = str(entry or "").strip()
+        if not raw_entry or raw_entry == "*":
+            continue
+        if "://" in raw_entry:
+            entry_host = extract_target_host(raw_entry)
+        elif "/" in raw_entry:
+            try:
+                net = ipaddress.ip_network(raw_entry.strip("[]"), strict=False)
+                if (
+                    norm_target_ip is not None
+                    and net.version == norm_target_ip.version
+                    and (
+                        (net.version == 4 and net.subnet_of(ipaddress.IPv4Network("127.0.0.0/8")))
+                        or (net.version == 6 and net.subnet_of(ipaddress.IPv6Network("::1/128")))
+                    )
+                    and norm_target_ip in net
+                ):
+                    return True
+            except ValueError:
+                pass
+            continue
+        else:
+            entry_host = extract_target_host(raw_entry)
+        if is_loopback_host(entry_host):
+            return True
+    return False
+
+
+def is_explicit_lab_private(host: str, in_scope_list: Iterable[str]) -> bool:
+    """Allow private RFC1918/lab IP ONLY when HUNTER_ALLOW_PRIVATE_LAB_SCOPE=1 AND explicitly in scope."""
+    if not is_private_lab_enabled():
+        return False
+    entries = list(in_scope_list or [])
+    if not entries:
+        return False
+    if classify_host_security(host)[0] != "private_lab":
+        return False
+    target_ip = normalize_ip_literal((host or "").strip().strip("[]").rstrip(".").lower())
+    if target_ip is None:
+        return False
+    norm_ip = (
+        target_ip.ipv4_mapped
+        if isinstance(target_ip, ipaddress.IPv6Address) and target_ip.ipv4_mapped is not None
+        else target_ip
+    )
+    allowed_priv_nets = PRIVATE_LAB_IPV4_SUBNETS if norm_ip.version == 4 else PRIVATE_LAB_IPV6_SUBNETS
+    for entry in entries:
+        raw_entry = str(entry or "").strip()
+        if not raw_entry or raw_entry == "*":
+            continue
+        if "://" in raw_entry:
+            raw_entry = extract_target_host(raw_entry)
+        if "/" in raw_entry:
+            try:
+                net = ipaddress.ip_network(raw_entry.strip("[]"), strict=False)
+                if (
+                    net.version == norm_ip.version
+                    and any(net.subnet_of(priv) for priv in allowed_priv_nets)
+                    and norm_ip in net
+                ):
+                    return True
+            except ValueError:
+                pass
+            continue
+        entry_ip = normalize_ip_literal(extract_target_host(raw_entry))
+        if entry_ip is not None:
+            norm_entry = (
+                entry_ip.ipv4_mapped
+                if isinstance(entry_ip, ipaddress.IPv6Address) and entry_ip.ipv4_mapped is not None
+                else entry_ip
+            )
+            if norm_entry == norm_ip:
+                return True
+    return False
+
+
+def split_out_of_scope_rules(
+    out_list: Iterable[str],
+) -> Tuple[List[str], List[Tuple[str, str]]]:
+    """Separate host/CIDR out-of-scope rules from URL/path-specific exclusions (e.g. */logout)."""
+    host_rules: List[str] = []
+    path_rules: List[Tuple[str, str]] = []
+    for raw_entry in out_list or []:
+        entry = str(raw_entry or "").strip()
+        if not entry:
+            continue
+        try:
+            ipaddress.ip_network(entry.strip("[]"), strict=False)
+            host_rules.append(entry)
+            continue
+        except ValueError:
+            pass
+        if entry.startswith("/"):
+            path_rules.append(("", entry.split("?", 1)[0]))
+            continue
+        if "/" in entry:
+            parsed = urlparse(entry if "://" in entry else f"http://{entry}")
+            e_host = (parsed.hostname or "").strip().strip("[]").rstrip(".").lower()
+            e_path = (parsed.path or "").strip()
+            if e_path and e_path != "/":
+                path_rules.append((e_host, e_path))
+                continue
+        host_rules.append(entry)
+    return host_rules, path_rules
+
+
+def matches_path_exclusions(target: str, host: str, path_rules: List[Tuple[str, str]]) -> Optional[str]:
+    """Return an exclusion reason if *target* matches any host/path exclusion rule."""
+    if not path_rules:
+        return None
+    if "://" in target:
+        raw_path = urlparse(target).path or "/"
+    elif "/" in target:
+        raw_path = "/" + target.split("/", 1)[1].split("?", 1)[0].split("#", 1)[0]
+    else:
+        return None
+    req_path = raw_path.rstrip("/") or "/"
+    norm_host = host.strip().strip("[]").rstrip(".").lower()
+    for excl_host, excl_path in path_rules:
+        if excl_host and excl_host != "*" and excl_host != norm_host:
+            continue
+        norm_excl = excl_path.rstrip("/") or "/"
+        if req_path == norm_excl or req_path.startswith(f"{norm_excl}/"):
+            return f"Target path {raw_path!r} matches Out-of-Scope rule {excl_path!r}"
+    return None
+
+
 class _StrictScopeGuardAdapter:
-    """Adapter bridging core.scope_guard.ScopeGuard + StrictScopeEngine to PolicyEngine."""
+    """Adapter bridging unified scope/SSRF invariants and ScopeGuard rules to PolicyEngine."""
 
     def __init__(self, in_scope: List[str], out_of_scope: List[str], allow_active_tests: bool = True):
         clean_in_scope = [str(s).strip() for s in (in_scope or []) if str(s).strip()]
         clean_out_of_scope = [str(s).strip() for s in (out_of_scope or []) if str(s).strip()]
-        self._guard = ScopeGuard(in_scope=clean_in_scope, out_of_scope=clean_out_of_scope)
+        host_out, path_exclusions = split_out_of_scope_rules(clean_out_of_scope)
+        self._guard = ScopeGuard(in_scope=clean_in_scope, out_of_scope=host_out)
         self._strict_engine = StrictScopeEngine(
-            ScopePolicy(allowed_targets=clean_in_scope, excluded_targets=clean_out_of_scope, fail_closed=True)
+            ScopePolicy(allowed_targets=clean_in_scope, excluded_targets=host_out, fail_closed=True)
         )
         self._in_scope = clean_in_scope
         self._out_of_scope = clean_out_of_scope
+        self._host_out_of_scope = host_out
+        self._path_exclusions = path_exclusions
         self.rule = ScopeRule(
             target=clean_in_scope[0] if clean_in_scope else "",
             allowed_domains=clean_in_scope,
-            excluded_paths=[],
+            excluded_paths=[p for _h, p in path_exclusions],
             allow_active_tests=allow_active_tests,
             mode=ScopeMode.ACTIVE if allow_active_tests else ScopeMode.PASSIVE,
         )
@@ -121,86 +459,79 @@ class _StrictScopeGuardAdapter:
         self.rule = rule
 
     def evaluate_scope_decision(self, target: str, action: str = "passive_analysis"):
-        import ipaddress
         from core.gateway.policy_engine import _ScopeDecision
 
-        if not target or not target.strip():
+        raw_target = (target or "").strip()
+        if not raw_target:
             return _ScopeDecision(allowed=False, reason="Target is empty")
 
-        clean = target.strip().lower()
-        parsed = urlparse(clean if "://" in clean else f"http://{clean}")
-        host = (parsed.hostname or clean.split("/")[0].split(":")[0]).lower()
+        syntax_err = check_target_scheme_and_syntax(raw_target)
+        if syntax_err:
+            return _ScopeDecision(allowed=False, reason=syntax_err)
 
-        if host in HARD_BLOCKED_HOSTS:
+        host = extract_target_host(raw_target)
+        category, sec_reason = classify_host_security(host)
+        if category == "non_overridable":
             return _ScopeDecision(
                 allowed=False,
-                reason=f"SECURITY INVARIANT: Host '{host}' is an internal/metadata service and is strictly forbidden.",
+                reason=sec_reason or f"SECURITY INVARIANT: Host '{host}' is strictly forbidden.",
             )
 
-        # Check IP literals against inviolable subnets (cloud metadata is never allowlistable;
-        # loopback requires an explicit literal-IP allowlist in in_scope).
+        path_err = matches_path_exclusions(raw_target, host, self._path_exclusions)
+        if path_err:
+            return _ScopeDecision(allowed=False, reason=path_err)
+
         target_ip = normalize_ip_literal(host)
-        explicit_ip = target_ip is not None and any(
-            normalize_ip_literal(item) == target_ip for item in self._in_scope
-        )
+        ip_candidates: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]] = []
         if target_ip is not None:
-            norm_ip = (
-                target_ip.ipv4_mapped
-                if isinstance(target_ip, ipaddress.IPv6Address) and target_ip.ipv4_mapped is not None
-                else target_ip
+            ip_candidates.append(target_ip)
+            if isinstance(target_ip, ipaddress.IPv6Address) and target_ip.ipv4_mapped is not None:
+                ip_candidates.append(target_ip.ipv4_mapped)
+
+        # Explicit Out-of-Scope exclusions are ALWAYS honored, including under HUNTER_WEB_UNRESTRICTED=1.
+        for cand in ip_candidates:
+            for net in self._guard.out_of_scope_subnets:
+                if cand.version == net.version and cand in net:
+                    return _ScopeDecision(allowed=False, reason=f"Target IP {host} is in Out-of-Scope subnet: {net}")
+        for pat in self._guard.out_of_scope_patterns:
+            if pat.search(host):
+                return _ScopeDecision(allowed=False, reason=f"Target {host} matches Out-of-Scope rule")
+
+        # When web governance is explicitly disabled (HUNTER_WEB_UNRESTRICTED=1), allow public
+        # and local/private lab targets without failing closed on missing engagement scope.
+        if not web_governance_enforced():
+            return _ScopeDecision(
+                allowed=True,
+                reason="Web unrestricted mode: target permitted outside non-overridable invariants and out_of_scope exclusions.",
             )
-            if isinstance(norm_ip, ipaddress.IPv4Address):
-                # Metadata link-local 169.254.0.0/16 is never overridable
-                if norm_ip in INVIOLABLE_IPV4_SUBNETS[1]:
-                    return _ScopeDecision(
-                        allowed=False,
-                        reason=f"SECURITY INVARIANT: IP {host} belongs to inviolable link-local/metadata subnet.",
-                    )
-                if not explicit_ip:
-                    for blk in INVIOLABLE_IPV4_SUBNETS:
-                        if norm_ip in blk:
-                            return _ScopeDecision(
-                                allowed=False,
-                                reason=f"SECURITY INVARIANT: IP {host} belongs to inviolable subnet {blk}.",
-                            )
-            elif isinstance(norm_ip, ipaddress.IPv6Address) and not explicit_ip:
-                for blk in INVIOLABLE_IPV6_SUBNETS:
-                    if norm_ip in blk:
-                        return _ScopeDecision(
-                            allowed=False,
-                            reason=f"SECURITY INVARIANT: IPv6 {host} belongs to inviolable subnet {blk}.",
-                        )
 
-        if not explicit_ip:
-            inv_ok, inv_reason = self._strict_engine.check_inviolable(host)
-            if not inv_ok:
-                return _ScopeDecision(allowed=False, reason=inv_reason)
+        # Under governed web mode, loopback and private lab targets require explicit opt-in + scope entry.
+        if category == "loopback" and not is_explicit_lab_loopback(host, self._in_scope):
+            return _ScopeDecision(
+                allowed=False,
+                reason=sec_reason or f"SECURITY INVARIANT: Loopback target '{host}' requires HUNTER_ALLOW_LOCALHOST_SCOPE=1 and explicit scope entry.",
+            )
+        if category == "private_lab" and not is_explicit_lab_private(host, self._in_scope):
+            return _ScopeDecision(
+                allowed=False,
+                reason=sec_reason or f"SECURITY INVARIANT: Private lab target '{host}' requires HUNTER_ALLOW_PRIVATE_LAB_SCOPE=1 and explicit IP/CIDR scope entry.",
+            )
 
-        # Fail closed when no authorized in-scope rules are configured
+        # Fail closed when no authorized in-scope rules are configured.
         if not self._guard.in_scope_patterns and not self._guard.in_scope_subnets:
             return _ScopeDecision(
                 allowed=False,
                 reason="No authorized target scope configured (empty in_scope fails closed). Configure an engagement scope first.",
             )
 
-        # Check ScopeGuard rules when governed mode is active
-        if not unrestricted_mode():
-            allowed, reason = self._guard.is_in_scope(target)
-            return _ScopeDecision(allowed=allowed, reason=reason)
-
-        # Explicit blacklist check (always honored when out_of_scope configured)
-        for pat in self._guard.out_of_scope_patterns:
-            if pat.search(host):
-                return _ScopeDecision(allowed=False, reason=f"Target {host} matches Out-of-Scope rule")
-        if target_ip is not None and target_ip.version == 4:
-            for net in self._guard.out_of_scope_subnets:
-                if target_ip in net:
-                    return _ScopeDecision(allowed=False, reason=f"Target IP {host} is in Out-of-Scope subnet: {net}")
-
-        # Explicit allowlist check (in_scope is guaranteed non-empty here)
+        # Explicit allowlist check (supports domains, wildcards, IPv4, IPv6, and CIDRs).
         matched = any(p.search(host) for p in self._guard.in_scope_patterns)
-        if not matched and target_ip is not None and target_ip.version == 4:
-            matched = any(target_ip in net for net in self._guard.in_scope_subnets)
+        if not matched and ip_candidates:
+            matched = any(
+                cand.version == net.version and cand in net
+                for cand in ip_candidates
+                for net in self._guard.in_scope_subnets
+            )
         if not matched:
             return _ScopeDecision(allowed=False, reason=f"Target {host} is outside authorized engagement scope")
 

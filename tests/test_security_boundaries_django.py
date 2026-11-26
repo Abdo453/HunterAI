@@ -351,3 +351,381 @@ def test_approval_decide_unmocked_gateway_and_scope_boundaries(isolated_platform
     assert miss_body["decision"] == "approved"
     assert miss_body["execution"]["blocked"] is False
     assert miss_body["execution"]["executed"] is False
+
+
+def _start_local_lab_http_server():
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+
+    class _LabHandler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            return
+
+        def do_GET(self):
+            body = b'{"lab":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _LabHandler)
+    port = srv.server_address[1]
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    return srv, port, thread
+
+
+def test_localhost_lab_override_allows_localhost_while_blocking_metadata(isolated_platform_client, monkeypatch):
+    from core.copilot_service import evaluate_action_policy
+
+    monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
+    monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+
+    srv, port, thread = _start_local_lab_http_server()
+    try:
+        # 1. Default fail-closed rejects localhost even when in scope
+        assert (
+            isolated_platform_client.post(
+                "/api/platform/engagements",
+                json={"name": "Blocked Localhost", "target": f"http://localhost:{port}", "in_scope": ["localhost"]},
+            ).status_code
+            == 403
+        )
+        assert (
+            isolated_platform_client.post(
+                "/api/burp/repeater/send",
+                json={"url": f"http://localhost:{port}/", "method": "GET", "scope": ["localhost"]},
+            ).status_code
+            == 403
+        )
+
+        # 2. With HUNTER_ALLOW_LOCALHOST_SCOPE=1 + explicit 'localhost' in scope -> allowed
+        monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
+        eng = isolated_platform_client.post(
+            "/api/platform/engagements",
+            json={
+                "name": "Localhost Lab",
+                "target": f"http://localhost:{port}",
+                "in_scope": ["localhost"],
+                "set_active": True,
+            },
+        )
+        assert eng.status_code == 201, eng.text
+
+        run_r = isolated_platform_client.post(
+            "/api/platform/runs/start",
+            json={"kind": "pipeline", "target": f"http://localhost:{port}", "engagement_id": eng.json()["engagement_id"]},
+        )
+        assert run_r.status_code == 200, run_r.text
+        isolated_platform_client.post(f"/api/platform/runs/{run_r.json()['run_id']}/stop")
+
+        rep_ok = isolated_platform_client.post(
+            "/api/burp/repeater/send",
+            json={"url": f"http://localhost:{port}/health", "method": "GET", "scope": ["localhost"]},
+        )
+        assert rep_ok.status_code == 200, rep_ok.text
+        assert rep_ok.json()["status_code"] == 200
+
+        chk = isolated_platform_client.post(
+            "/api/scope/check",
+            json={"target": f"http://localhost:{port}/api", "in_scope": ["localhost"]},
+        )
+        assert chk.status_code == 200
+        assert chk.json()["allowed"] is True
+
+        pol_ok = evaluate_action_policy(
+            action_type="CLI_TOOL",
+            target=f"http://localhost:{port}",
+            tool_name="nmap",
+            in_scope=["localhost"],
+        )
+        assert pol_ok["allowed"] is True
+
+        # Unscoped localhost.localdomain or wildcard '*' must still stay 403
+        assert (
+            isolated_platform_client.post(
+                "/api/burp/repeater/send",
+                json={"url": f"http://localhost.localdomain:{port}/", "method": "GET", "scope": ["localhost"]},
+            ).status_code
+            == 403
+        )
+        assert (
+            isolated_platform_client.post(
+                "/api/burp/repeater/send",
+                json={"url": f"http://localhost:{port}/", "method": "GET", "scope": ["*"]},
+            ).status_code
+            == 403
+        )
+
+        # 3. Non-overridable metadata/link-local/scheme/shell/rebind remain strictly 403
+        non_overridable_urls = [
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://metadata.internal/latest/",
+            "http://instance-data/latest/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::ffff:169.254.169.254]/latest/meta-data/",
+            "http://2852039166/latest/meta-data/",
+            "http://0xa9fea9fe/latest/meta-data/",
+            "http://100.100.100.200/latest/meta-data/",
+            "http://[fd00:ec2::254]/latest/meta-data/",
+            "http://[fe80::1]/",
+            "http://0.0.0.0:8000/",
+            "http://224.0.0.1/",
+            "http://240.0.0.1/",
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:6379/_INFO",
+            "ftp://example.com/archive.tar.gz",
+            "javascript:alert(1)",
+        ]
+        for bad_url in non_overridable_urls:
+            r_bad = isolated_platform_client.post(
+                "/api/burp/repeater/send",
+                json={
+                    "url": bad_url,
+                    "method": "GET",
+                    "scope": [
+                        "localhost",
+                        "metadata.google.internal",
+                        "metadata.internal",
+                        "instance-data",
+                        "169.254.169.254",
+                        "100.100.100.200",
+                        "fd00:ec2::254",
+                        "0.0.0.0",
+                    ],
+                },
+            )
+            assert r_bad.status_code == 403, f"Expected 403 for {bad_url}, got {r_bad.status_code}: {r_bad.text}"
+
+        assert (
+            isolated_platform_client.post(
+                "/api/run-tool",
+                json={"command": "nmap localhost; id", "scope": ["localhost"]},
+            ).status_code
+            == 403
+        )
+
+        # DNS rebind from domain to 127.0.0.1 or 169.254.169.254 must stay 403
+        for rebind_ip in ("127.0.0.1", "169.254.169.254"):
+            monkeypatch.setattr(
+                socket,
+                "getaddrinfo",
+                lambda host, p, *a, _ip=rebind_ip, **kw: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (_ip, p))],
+            )
+            rebind_r = isolated_platform_client.post(
+                "/api/burp/repeater/send",
+                json={"url": "https://rebind.example.com/api", "method": "GET", "scope": ["example.com", "*.example.com", "localhost"]},
+            )
+            assert rebind_r.status_code == 403, f"DNS rebind to {rebind_ip} should return 403"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=3.0)
+
+
+def test_private_lab_scope_override_explicit_ip_and_cidr(isolated_platform_client, monkeypatch):
+    from core.copilot_service import evaluate_action_policy
+
+    monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
+    monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+
+    # 1. Default fail-closed blocks private lab targets even when listed in scope
+    assert (
+        isolated_platform_client.post(
+            "/api/platform/engagements",
+            json={"name": "Blocked LAN", "target": "http://192.168.1.50:8080", "in_scope": ["192.168.1.50"]},
+        ).status_code
+        == 403
+    )
+
+    # 2. Enable HUNTER_ALLOW_PRIVATE_LAB_SCOPE=1 -> explicit IP & explicit CIDR allowed; unscoped IP still 403
+    monkeypatch.setenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", "1")
+
+    eng_ip = isolated_platform_client.post(
+        "/api/platform/engagements",
+        json={
+            "name": "LAN Single Host",
+            "target": "http://192.168.1.50:8080",
+            "in_scope": ["192.168.1.50"],
+            "set_active": True,
+        },
+    )
+    assert eng_ip.status_code == 201, eng_ip.text
+
+    eng_cidr = isolated_platform_client.post(
+        "/api/platform/engagements",
+        json={
+            "name": "VPN Subnet Lab",
+            "target": "http://10.10.10.5:3000",
+            "in_scope": ["10.10.10.0/24"],
+        },
+    )
+    assert eng_cidr.status_code == 201, eng_cidr.text
+
+    chk_cidr = isolated_platform_client.post(
+        "/api/scope/check",
+        json={"target": "http://10.10.10.5:3000/api", "in_scope": ["10.10.10.0/24"]},
+    )
+    assert chk_cidr.status_code == 200
+    assert chk_cidr.json()["allowed"] is True
+
+    pol_cidr = evaluate_action_policy(
+        action_type="CLI_TOOL",
+        target="http://10.10.10.5:3000",
+        tool_name="nmap",
+        in_scope=["10.10.10.0/24"],
+    )
+    assert pol_cidr["allowed"] is True
+
+    # Unscoped private IP (192.168.1.99), wildcard '*', supernet '0.0.0.0/0', and loopback stay 403
+    for bad_payload in (
+        {"name": "Unscoped LAN", "target": "http://192.168.1.99:8080", "in_scope": ["192.168.1.50"]},
+        {"name": "Wildcard LAN", "target": "http://192.168.1.50:8080", "in_scope": ["*"]},
+        {"name": "Supernet LAN", "target": "http://192.168.1.50:8080", "in_scope": ["0.0.0.0/0"]},
+        {"name": "Loopback Not Opted", "target": "http://127.0.0.1:8080", "in_scope": ["127.0.0.1"]},
+        {"name": "Meta IP", "target": "http://169.254.169.254/latest", "in_scope": ["169.254.169.254"]},
+        {"name": "Alibaba Meta", "target": "http://100.100.100.200/latest", "in_scope": ["100.64.0.0/10", "100.100.100.200"]},
+        {"name": "EC2 IPv6 Meta", "target": "http://[fd00:ec2::254]/latest", "in_scope": ["fd00:ec2::254"]},
+    ):
+        r_bad = isolated_platform_client.post("/api/platform/engagements", json=bad_payload)
+        assert r_bad.status_code == 403, f"Expected 403 for {bad_payload}, got {r_bad.status_code}: {r_bad.text}"
+
+    # DNS rebind from domain to private IP stays 403
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, p, *a, **kw: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.50", p))],
+    )
+    rebind_priv = isolated_platform_client.post(
+        "/api/burp/repeater/send",
+        json={"url": "https://rebind.example.com/api", "method": "GET", "scope": ["example.com", "192.168.1.50"]},
+    )
+    assert rebind_priv.status_code == 403
+
+
+def test_web_unrestricted_mode_allows_public_and_labs_keeps_metadata_403(isolated_platform_client, monkeypatch):
+    import hunter_backend.apps.arsenal_api as arsenal_api
+
+    monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
+    monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
+    monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
+    assert web_governance_enforced() is False
+
+    async def _fake_run(cmd, timeout_s=60.0):
+        return {"command": " ".join(cmd), "stdout": "ok", "stderr": "", "returncode": 0}
+
+    monkeypatch.setattr(arsenal_api, "run_command_no_shell", _fake_run)
+
+    srv, port, thread = _start_local_lab_http_server()
+    try:
+        # 1. Arbitrary public domain and local/private labs work with zero prior engagement scope
+        run_pub = isolated_platform_client.post(
+            "/api/platform/runs/start",
+            json={"kind": "pipeline", "target": "https://arbitrary-public.example"},
+        )
+        assert run_pub.status_code == 200, run_pub.text
+        isolated_platform_client.post(f"/api/platform/runs/{run_pub.json()['run_id']}/stop")
+
+        rep_loop = isolated_platform_client.post(
+            "/api/burp/repeater/send",
+            json={"url": f"http://localhost:{port}/lab", "method": "GET"},
+        )
+        assert rep_loop.status_code == 200, rep_loop.text
+        assert rep_loop.json()["status_code"] == 200
+
+        eng_priv = isolated_platform_client.post(
+            "/api/platform/engagements",
+            json={"name": "Unrestricted LAN", "target": "http://192.168.1.50:8080"},
+        )
+        assert eng_priv.status_code == 201, eng_priv.text
+
+        chk_priv = isolated_platform_client.post(
+            "/api/scope/check",
+            json={"target": "http://10.10.10.5:3000"},
+        )
+        assert chk_priv.status_code == 200
+        assert chk_priv.json()["allowed"] is True
+
+        tool_ok = isolated_platform_client.post(
+            "/api/run-tool",
+            json={"command": "nmap 192.168.1.50"},
+        )
+        assert tool_ok.status_code == 200, tool_ok.text
+
+        # 2. Explicit out_of_scope exclusions are STILL honored
+        assert (
+            isolated_platform_client.post(
+                "/api/burp/repeater/send",
+                json={
+                    "url": "https://blocked.example.com/api",
+                    "method": "GET",
+                    "out_of_scope": ["blocked.example.com"],
+                },
+            ).status_code
+            == 403
+        )
+        assert (
+            isolated_platform_client.post(
+                "/api/burp/repeater/send",
+                json={
+                    "url": f"http://127.0.0.1:{port}/logout",
+                    "method": "GET",
+                    "out_of_scope": ["*/logout"],
+                },
+            ).status_code
+            == 403
+        )
+
+        # 3. Non-overridable Cloud Metadata, link-local, 0.0.0.0, schemes, shell metachars, and DNS rebind MUST stay 403
+        still_blocked = [
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[::ffff:169.254.169.254]/latest/meta-data/",
+            "http://2852039166/latest/meta-data/",
+            "http://0xa9fea9fe/latest/meta-data/",
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://metadata.internal/latest/",
+            "http://instance-data/",
+            "http://100.100.100.200/latest/meta-data/",
+            "http://[fd00:ec2::254]/latest/meta-data/",
+            "http://[fe80::1]/",
+            "http://0.0.0.0:8000/",
+            "http://224.0.0.1/",
+            "http://240.0.0.1/",
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:6379/_INFO",
+            "ftp://example.com/file",
+            "javascript:alert(1)",
+        ]
+        for bad_url in still_blocked:
+            r_rep = isolated_platform_client.post(
+                "/api/burp/repeater/send",
+                json={"url": bad_url, "method": "GET"},
+            )
+            assert r_rep.status_code == 403, f"Unrestricted web failed to block {bad_url}: {r_rep.status_code}"
+
+        assert (
+            isolated_platform_client.post(
+                "/api/run-tool",
+                json={"command": "nmap example.com && whoami"},
+            ).status_code
+            == 403
+        )
+
+        monkeypatch.setattr(
+            socket,
+            "getaddrinfo",
+            lambda host, p, *a, **kw: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", p))],
+        )
+        rebind_meta = isolated_platform_client.post(
+            "/api/burp/repeater/send",
+            json={"url": "https://rebind.example.com/api", "method": "GET"},
+        )
+        assert rebind_meta.status_code == 403
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=3.0)

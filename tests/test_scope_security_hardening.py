@@ -226,3 +226,27 @@ class TestSecurityModeWebGovernance:
     def test_web_governance_stays_enforced_for_falsy_or_empty(self, monkeypatch, falsy):
         monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", falsy)
         assert web_governance_enforced() is True
+
+    def test_strict_scope_adapter_lab_overrides_and_non_overridable_metadata(self, monkeypatch):
+        from core.copilot_service import evaluate_action_policy
+
+        monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
+        monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+        monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
+        monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
+
+        # Default denies localhost & private IP even when present in in_scope
+        assert evaluate_action_policy(action_type="CLI_TOOL", target="http://localhost:3000", in_scope=["localhost"])["allowed"] is False
+        assert evaluate_action_policy(action_type="CLI_TOOL", target="http://192.168.1.50:8080", in_scope=["192.168.1.50"])["allowed"] is False
+
+        # HUNTER_ALLOW_LOCALHOST_SCOPE=1 allows explicit localhost, keeps metadata blocked
+        monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
+        assert evaluate_action_policy(action_type="CLI_TOOL", target="http://localhost:3000", in_scope=["localhost"])["allowed"] is True
+        assert evaluate_action_policy(action_type="CLI_TOOL", target="http://metadata.google.internal/", in_scope=["metadata.google.internal", "localhost"])["allowed"] is False
+
+        # HUNTER_ALLOW_PRIVATE_LAB_SCOPE=1 allows explicit RFC1918 IP/CIDR, keeps metadata & unscoped private IPs blocked
+        monkeypatch.setenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", "1")
+        assert evaluate_action_policy(action_type="CLI_TOOL", target="http://10.10.10.5:8080", in_scope=["10.10.10.0/24"])["allowed"] is True
+        assert evaluate_action_policy(action_type="CLI_TOOL", target="http://192.168.1.99:8080", in_scope=["10.10.10.0/24"])["allowed"] is False
+        assert evaluate_action_policy(action_type="CLI_TOOL", target="http://100.100.100.200/latest", in_scope=["100.64.0.0/10"])["allowed"] is False
+        assert evaluate_action_policy(action_type="CLI_TOOL", target="fd00:ec2::254", in_scope=["fd00:ec2::254"])["allowed"] is False

@@ -447,3 +447,66 @@ async def test_whitenoise_serves_static_assets() -> None:
         r_monaco = await client.get("/static/vendor/monaco/vs/loader.js")
         assert r_monaco.status_code == 200
         assert len(r_monaco.content) > 0
+
+
+def test_pentest_cli_lab_flags_and_env_application(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pentest
+
+    env_keys = (
+        "HUNTER_WEB_UNRESTRICTED",
+        "HUNTER_ALLOW_LOCALHOST_SCOPE",
+        "HUNTER_ALLOW_PRIVATE_LAB_SCOPE",
+        "ARTEX_ALLOW_LOCAL_SCAN",
+    )
+    saved_env = {k: os.environ.get(k) for k in env_keys}
+    parser = pentest.build_parser()
+
+    try:
+        for sub in ("artex", "pro", "unified", "web", "ui", "opencode", "opencode-ui"):
+            for k in env_keys:
+                os.environ.pop(k, None)
+
+            # Default: fail-closed, no overrides set
+            ns_default = parser.parse_args([sub, "example.com", "--no-browser"])
+            assert ns_default.allow_local_labs is False
+            assert ns_default.unrestricted_web is False
+            assert pentest._apply_web_lab_env_flags(ns_default) == {}
+            for k in env_keys:
+                assert k not in os.environ
+
+            # --allow-local-labs: sets local/private/Artex flags without HUNTER_WEB_UNRESTRICTED
+            ns_labs = parser.parse_args([sub, "192.168.1.50", "--allow-local-labs", "--no-browser"])
+            assert ns_labs.allow_local_labs is True
+            assert ns_labs.unrestricted_web is False
+            applied_labs = pentest._apply_web_lab_env_flags(ns_labs)
+            assert applied_labs == {
+                "HUNTER_ALLOW_LOCALHOST_SCOPE": "1",
+                "HUNTER_ALLOW_PRIVATE_LAB_SCOPE": "1",
+                "ARTEX_ALLOW_LOCAL_SCAN": "1",
+            }
+            assert "HUNTER_WEB_UNRESTRICTED" not in os.environ
+            assert os.environ["HUNTER_ALLOW_LOCALHOST_SCOPE"] == "1"
+            assert os.environ["HUNTER_ALLOW_PRIVATE_LAB_SCOPE"] == "1"
+            assert os.environ["ARTEX_ALLOW_LOCAL_SCAN"] == "1"
+
+            for k in env_keys:
+                os.environ.pop(k, None)
+
+            # --unrestricted-web: sets HUNTER_WEB_UNRESTRICTED=1 plus local/private/Artex flags
+            ns_unr = parser.parse_args([sub, "--unrestricted-web", "--no-browser"])
+            assert ns_unr.unrestricted_web is True
+            applied_unr = pentest._apply_web_lab_env_flags(ns_unr)
+            assert applied_unr == {
+                "HUNTER_WEB_UNRESTRICTED": "1",
+                "HUNTER_ALLOW_LOCALHOST_SCOPE": "1",
+                "HUNTER_ALLOW_PRIVATE_LAB_SCOPE": "1",
+                "ARTEX_ALLOW_LOCAL_SCAN": "1",
+            }
+            for k in env_keys:
+                assert os.environ[k] == "1"
+    finally:
+        for k, prev in saved_env.items():
+            if prev is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = prev

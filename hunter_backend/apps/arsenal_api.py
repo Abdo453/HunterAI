@@ -22,7 +22,6 @@ from pydantic import BaseModel, Field
 from rest_framework.views import APIView
 
 from core.copilot_service import (
-    _StrictScopeGuardAdapter,
     detect_live_providers,
     evaluate_action_policy,
     is_tcp_reachable,
@@ -38,7 +37,6 @@ from core.policy.red_team import (
 )
 from core.run_control import GLOBAL_RUN_CONTROLLER
 from core.sandbox import LocalSandbox
-from core.scope_guard import ScopeGuard
 from hunter_backend.apps.common import (
     await_sync,
     call_ai,
@@ -441,17 +439,15 @@ class ControlTargetsSaveView(APIView):
             return drf_validation_response(verr)
         assert req is not None
         in_scope = req.in_scope or [req.url]
-        policy = evaluate_action_policy(
-            action_type="TARGET_SAVE",
-            target=req.url,
-            tool_name="scope_guard",
-            in_scope=in_scope,
+        ok_tgt, reason_tgt, policy = validate_scan_target(
+            req.url,
+            scope=in_scope,
             out_of_scope=req.out_of_scope,
-            allow_active_tests=True,
+            action_type="TARGET_SAVE",
         )
-        if not policy.get("allowed"):
+        if not ok_tgt:
             return err_json(
-                str(policy.get("reason") or "Target blocked by ScopeGuard"),
+                str(reason_tgt or policy.get("reason") or "Target blocked by ScopeGuard"),
                 status=403,
                 extra={"policy": policy},
             )
@@ -935,21 +931,25 @@ class ScopeCheckCanonicalView(APIView):
         if not target:
             return err_json("target is required", status=400)
 
-        in_scope = data.get("in_scope") if data.get("in_scope") is not None else data.get("scope")
-        out_of_scope = data.get("out_of_scope")
-        sg = ScopeGuard(
-            in_scope=in_scope if isinstance(in_scope, list) else ([in_scope] if in_scope else _SCOPE_STATE["in_scope"]),
-            out_of_scope=out_of_scope if isinstance(out_of_scope, list) else _SCOPE_STATE["out_of_scope"],
+        raw_in = data.get("in_scope") if data.get("in_scope") is not None else data.get("scope")
+        raw_out = data.get("out_of_scope")
+        eff_in = (
+            raw_in
+            if isinstance(raw_in, list)
+            else ([raw_in] if raw_in else _SCOPE_STATE["in_scope"])
         )
-        allowed_sg, reason_sg = sg.is_allowed(target)
-        policy = evaluate_action_policy(
+        eff_out = (
+            raw_out
+            if isinstance(raw_out, list)
+            else ([raw_out] if raw_out else _SCOPE_STATE["out_of_scope"])
+        )
+        allowed, reason, policy = validate_scan_target(
+            target,
+            scope=eff_in,
+            out_of_scope=eff_out,
+            engagement_id=data.get("engagement_id"),
             action_type="scope_check",
-            target=target,
-            in_scope=sg.in_scope or None,
-            out_of_scope=sg.out_of_scope or None,
         )
-        allowed = bool(allowed_sg and policy.get("allowed", False))
-        reason = policy.get("reason") or reason_sg or ""
         return ok_json(
             {
                 "target": target,

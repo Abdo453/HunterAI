@@ -25,6 +25,7 @@ from core.copilot_service import (
 from core.evidence_store import EvidenceStore
 from core.platform_store import get_platform_store
 from core.run_control import GLOBAL_RUN_CONTROLLER
+from core.security_mode import web_governance_enforced
 from hunter_backend.apps.common import (
     await_sync,
     django_err,
@@ -593,7 +594,7 @@ class _ApprovalScopeGuardAdapter:
                 action=action,
                 reason="Target is empty.",
             )
-        if not self._in_scope:
+        if not self._in_scope and web_governance_enforced():
             return ScopeDecision(
                 allowed=False,
                 mode=ScopeMode.BLOCKED,
@@ -654,7 +655,7 @@ def _validate_approval_scope_precheck(
     out_of_scope: List[str],
 ) -> Dict[str, Any]:
     """Fail-closed scope/SSRF/risk validation before persisting an approval decision."""
-    if not in_scope:
+    if not in_scope and web_governance_enforced():
         return {
             "allowed": False,
             "status": "BLOCKED_SCOPE",

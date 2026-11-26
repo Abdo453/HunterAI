@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import ipaddress
 import json
 import logging
 import os
@@ -23,14 +22,18 @@ from rest_framework.response import Response
 
 from core.copilot_service import (
     _StrictScopeGuardAdapter,
+    check_target_scheme_and_syntax,
+    classify_host_security,
     evaluate_action_policy,
+    extract_target_host,
+    is_explicit_lab_loopback,
+    is_explicit_lab_private,
+    is_loopback_host,
+    matches_path_exclusions,
+    split_out_of_scope_rules,
 )
-from core.scope_engine import (
-    HARD_BLOCKED_HOSTS,
-    INVIOLABLE_IPV4_SUBNETS,
-    normalize_ip_literal,
-)
-from core.scope_guard import ScopeGuard
+from core.scope_engine import normalize_ip_literal
+from core.security_mode import web_governance_enforced
 from hunter_backend.runtime import (
     BASE_DIR,
     check_target_policy,
@@ -282,96 +285,99 @@ def validate_skill_name(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _is_forbidden_ip_or_host(host: str) -> Optional[str]:
-    clean = (host or "").strip().strip("[]").lower()
-    if not clean:
-        return "Target host is empty"
-    if clean in HARD_BLOCKED_HOSTS:
-        return f"Host {clean!r} is strictly forbidden (internal/metadata host)"
-
-    ip_norm = normalize_ip_literal(clean) or clean
-    try:
-        addr = ipaddress.ip_address(ip_norm)
-        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
-            addr = addr.ipv4_mapped
-        if (
-            addr.is_loopback
-            or addr.is_private
-            or addr.is_link_local
-            or addr.is_multicast
-            or addr.is_unspecified
-            or addr.is_reserved
-        ):
-            return f"IP address {addr} belongs to a forbidden non-public/internal subnet"
-        if isinstance(addr, ipaddress.IPv4Address):
-            for subnet in INVIOLABLE_IPV4_SUBNETS:
-                if addr in subnet:
-                    return f"IP address {addr} belongs to inviolable subnet {subnet}"
-    except ValueError:
-        pass
+def _is_forbidden_ip_or_host(
+    host: str,
+    *,
+    allow_loopback: bool = False,
+    allow_private_lab: bool = False,
+) -> Optional[str]:
+    category, reason = classify_host_security(host)
+    if category == "non_overridable":
+        return reason
+    if category == "loopback" and not allow_loopback:
+        return reason
+    if category == "private_lab" and not allow_private_lab:
+        return reason
     return None
 
 
 def _is_loopback_host(host: str) -> bool:
-    clean = (host or "").strip().strip("[]").lower()
-    if clean in {"localhost", "127.0.0.1", "::1"}:
-        return True
-    ip_norm = normalize_ip_literal(clean) or clean
-    try:
-        addr = ipaddress.ip_address(ip_norm)
-        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
-            addr = addr.ipv4_mapped
-        return bool(addr.is_loopback)
-    except ValueError:
-        return False
+    return is_loopback_host(host)
 
 
 def _is_explicit_lab_loopback(host: str, in_scope_list: List[str]) -> bool:
     """Allow loopback ONLY when HUNTER_ALLOW_LOCALHOST_SCOPE=1 AND explicitly in scope."""
-    if os.environ.get("HUNTER_ALLOW_LOCALHOST_SCOPE") != "1" or not in_scope_list:
-        return False
-    if not _is_loopback_host(host):
-        return False
-    for entry in in_scope_list:
-        raw_entry = (entry or "").strip()
-        if not raw_entry or raw_entry == "*":
-            continue
-        parsed_entry = urlparse(raw_entry) if "://" in raw_entry else urlparse(f"http://{raw_entry}")
-        entry_host = (parsed_entry.hostname or "").strip().strip("[]").lower()
-        if _is_loopback_host(entry_host):
-            return True
-    return False
+    return is_explicit_lab_loopback(host, in_scope_list)
+
+
+def _is_explicit_lab_private(host: str, in_scope_list: List[str]) -> bool:
+    """Allow private RFC1918/lab IP ONLY when HUNTER_ALLOW_PRIVATE_LAB_SCOPE=1 AND explicitly in scope."""
+    return is_explicit_lab_private(host, in_scope_list)
 
 
 def split_out_of_scope_exclusions(
     out_list: Iterable[str],
 ) -> Tuple[List[str], List[Tuple[str, str]]]:
     """Separate host/CIDR out-of-scope rules from URL/path-specific exclusions (e.g. */logout)."""
-    host_rules: List[str] = []
-    path_rules: List[Tuple[str, str]] = []
-    for raw_entry in out_list or []:
-        entry = str(raw_entry or "").strip()
-        if not entry:
+    return split_out_of_scope_rules(out_list)
+
+
+def _check_dns_resolution_safety(
+    host: str,
+    port: int,
+    in_list: List[str],
+    *,
+    lab_loopback_ok: bool,
+    lab_private_ok: bool,
+    unrestricted_web: bool,
+) -> Optional[Tuple[bool, str, Dict[str, Any]]]:
+    """Resolve *host* via DNS and reject non-overridable or unauthorized internal IPs."""
+    if not host or normalize_ip_literal(host) is not None:
+        return None
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return None
+    for info in infos:
+        if not info or len(info) < 5 or not info[4]:
             continue
-        # Preserve CIDR subnets like 10.0.0.0/8 as host/network rules
-        try:
-            ipaddress.ip_network(entry, strict=False)
-            host_rules.append(entry)
-            continue
-        except ValueError:
-            pass
-        if entry.startswith("/"):
-            path_rules.append(("", entry.split("?", 1)[0]))
-            continue
-        if "/" in entry:
-            parsed = urlparse(entry if "://" in entry else f"http://{entry}")
-            e_host = (parsed.hostname or "").strip().strip("[]").lower()
-            e_path = (parsed.path or "").strip()
-            if e_path and e_path != "/":
-                path_rules.append((e_host, e_path))
-                continue
-        host_rules.append(entry)
-    return host_rules, path_rules
+        resolved_ip = str(info[4][0])
+        res_cat, res_reason = classify_host_security(resolved_ip)
+        if res_cat == "non_overridable":
+            return (
+                False,
+                f"Resolved target IP blocked ({res_reason})",
+                {"status": "BLOCKED_SSRF_DNS"},
+            )
+        if not unrestricted_web:
+            if res_cat == "loopback" and not (
+                lab_loopback_ok and _is_explicit_lab_loopback(resolved_ip, in_list)
+            ):
+                return (
+                    False,
+                    f"Resolved target IP blocked ({res_reason})",
+                    {"status": "BLOCKED_SSRF_DNS"},
+                )
+            if res_cat == "private_lab" and not (
+                lab_private_ok and _is_explicit_lab_private(resolved_ip, in_list)
+            ):
+                return (
+                    False,
+                    f"Resolved target IP blocked ({res_reason})",
+                    {"status": "BLOCKED_SSRF_DNS"},
+                )
+    return None
+
+
+def _check_path_exclusions(
+    raw_target_or_path: str,
+    host: str,
+    path_exclusions: List[Tuple[str, str]],
+) -> Optional[Tuple[bool, str, Dict[str, Any]]]:
+    reason = matches_path_exclusions(raw_target_or_path, host, path_exclusions)
+    if reason:
+        return False, reason, {"status": "BLOCKED_OUT_OF_SCOPE_PATH"}
+    return None
 
 
 def validate_http_url_ssrf_and_scope(
@@ -387,6 +393,11 @@ def validate_http_url_ssrf_and_scope(
     if not raw:
         return False, "URL is required", {"status": "BLOCKED_INVALID_URL"}
 
+    syntax_err = check_target_scheme_and_syntax(raw)
+    if syntax_err:
+        status = "BLOCKED_SCHEME" if "scheme" in syntax_err.lower() else "BLOCKED_INVALID_URL"
+        return False, syntax_err, {"status": status}
+
     parsed = urlparse(raw)
     if parsed.scheme.lower() not in {"http", "https"}:
         return (
@@ -399,43 +410,35 @@ def validate_http_url_ssrf_and_scope(
         out_of_scope=out_of_scope,
         engagement_id=engagement_id,
     )
-    host = parsed.hostname or ""
+    host = extract_target_host(raw)
     host_out_list, path_exclusions = split_out_of_scope_exclusions(out_list)
-    req_path = (parsed.path or "/").rstrip("/") or "/"
-    for excl_host, excl_path in path_exclusions:
-        if excl_host and excl_host != host.strip().strip("[]").lower():
-            continue
-        norm_excl = excl_path.rstrip("/") or "/"
-        if req_path == norm_excl or req_path.startswith(f"{norm_excl}/"):
-            return (
-                False,
-                f"Target path {parsed.path!r} matches Out-of-Scope rule {excl_path!r}",
-                {"status": "BLOCKED_OUT_OF_SCOPE_PATH"},
-            )
+    path_hit = _check_path_exclusions(raw, host, path_exclusions)
+    if path_hit is not None:
+        return path_hit
 
+    unrestricted_web = not web_governance_enforced()
     lab_loopback_ok = _is_explicit_lab_loopback(host, in_list)
-    ip_reason = _is_forbidden_ip_or_host(host)
-    if ip_reason and not lab_loopback_ok:
+    lab_private_ok = _is_explicit_lab_private(host, in_list)
+    ip_reason = _is_forbidden_ip_or_host(
+        host,
+        allow_loopback=(unrestricted_web or lab_loopback_ok),
+        allow_private_lab=(unrestricted_web or lab_private_ok),
+    )
+    if ip_reason:
         return False, ip_reason, {"status": "BLOCKED_SSRF"}
 
-    # Best-effort DNS resolution check so external aliases resolving to 127.0.0.1 / 169.254.169.254 are stopped.
-    try:
-        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
-        for info in infos:
-            resolved_ip = info[4][0]
-            dns_reason = _is_forbidden_ip_or_host(resolved_ip)
-            if dns_reason and not (lab_loopback_ok and _is_explicit_lab_loopback(resolved_ip, in_list)):
-                return (
-                    False,
-                    f"Resolved target IP blocked ({dns_reason})",
-                    {"status": "BLOCKED_SSRF_DNS"},
-                )
-    except OSError:
-        # Unresolvable hostnames (e.g. unit-test targets) still pass DNS step to ScopeGuard.
-        pass
+    dns_port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
+    dns_hit = _check_dns_resolution_safety(
+        host,
+        dns_port,
+        in_list,
+        lab_loopback_ok=lab_loopback_ok,
+        lab_private_ok=lab_private_ok,
+        unrestricted_web=unrestricted_web,
+    )
+    if dns_hit is not None:
+        return dns_hit
 
-    sg = ScopeGuard(in_scope=in_list or None, out_of_scope=host_out_list or None)
-    allowed_sg, reason_sg = sg.is_allowed(raw)
     policy_target = (
         f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
         if action_type in {"repeater_send", "burp_repeater_send", "browser_explore"}
@@ -448,8 +451,8 @@ def validate_http_url_ssrf_and_scope(
         out_of_scope=host_out_list or None,
     )
 
-    if not (allowed_sg and policy.get("allowed", False)):
-        reason = policy.get("reason") or reason_sg or "Target blocked by ScopeGuard"
+    if not policy.get("allowed", False):
+        reason = policy.get("reason") or "Target blocked by ScopeGuard"
         return False, reason, policy
     return True, "Allowed", policy
 
@@ -476,20 +479,50 @@ def validate_scan_target(
             action_type=action_type,
         )
 
+    syntax_err = check_target_scheme_and_syntax(clean)
+    if syntax_err:
+        status = "BLOCKED_SCHEME" if "scheme" in syntax_err.lower() else "BLOCKED_INVALID_URL"
+        return False, syntax_err, {"status": status}
+
     in_list, out_list = resolve_effective_scope(
         scope=scope,
         out_of_scope=out_of_scope,
         engagement_id=engagement_id,
     )
-    ip_reason = _is_forbidden_ip_or_host(clean)
-    if ip_reason and not _is_explicit_lab_loopback(clean, in_list):
+    host = extract_target_host(clean)
+    host_out_list, path_exclusions = split_out_of_scope_exclusions(out_list)
+    if "/" in clean:
+        path_hit = _check_path_exclusions(clean, host, path_exclusions)
+        if path_hit is not None:
+            return path_hit
+
+    unrestricted_web = not web_governance_enforced()
+    lab_loopback_ok = _is_explicit_lab_loopback(host, in_list)
+    lab_private_ok = _is_explicit_lab_private(host, in_list)
+    ip_reason = _is_forbidden_ip_or_host(
+        host,
+        allow_loopback=(unrestricted_web or lab_loopback_ok),
+        allow_private_lab=(unrestricted_web or lab_private_ok),
+    )
+    if ip_reason:
         return False, ip_reason, {"status": "BLOCKED_SSRF"}
+
+    dns_hit = _check_dns_resolution_safety(
+        host,
+        80,
+        in_list,
+        lab_loopback_ok=lab_loopback_ok,
+        lab_private_ok=lab_private_ok,
+        unrestricted_web=unrestricted_web,
+    )
+    if dns_hit is not None:
+        return dns_hit
 
     policy = check_target_policy(
         clean,
         action_type=action_type,
         scope=in_list or None,
-        out_of_scope=out_list or None,
+        out_of_scope=host_out_list or None,
         engagement_id=engagement_id,
     )
     if not policy.get("allowed", False):

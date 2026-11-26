@@ -633,16 +633,27 @@ async def start_platform_run(
     if not clean_target and kind != "engine":
         raise ValueError("target is required")
 
-    policy = check_target_policy(
-        clean_target or prompt,
-        action_type=f"platform_{kind}",
-        tool_name=engine if kind == "engine" else kind,
-        scope=scope,
-        out_of_scope=out_of_scope,
-        engagement_id=engagement_id,
-    )
-    if clean_target and not policy.get("allowed", False):
-        raise PermissionError(policy.get("reason", "Target blocked by ScopeGuard policy"))
+    if clean_target:
+        from hunter_backend.apps.common import validate_scan_target
+
+        ok_tgt, reason_tgt, _policy_tgt = validate_scan_target(
+            clean_target,
+            scope=scope,
+            out_of_scope=out_of_scope,
+            engagement_id=engagement_id,
+            action_type=f"platform_{kind}",
+        )
+        if not ok_tgt:
+            raise PermissionError(reason_tgt or "Target blocked by ScopeGuard policy")
+    else:
+        policy = check_target_policy(
+            prompt,
+            action_type=f"platform_{kind}",
+            tool_name=engine if kind == "engine" else kind,
+            scope=scope,
+            out_of_scope=out_of_scope,
+            engagement_id=engagement_id,
+        )
 
     run_id = new_id("run")
     reg = register_managed_run(
