@@ -279,11 +279,30 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 	}
 	srv := NewAPIServer(newStubDB(t, state), 0)
 	handler := srv.Handler()
+	authHeader := "Bearer " + srv.APIToken()
+
+	// Unauthenticated POST /api/v1/scan must fail closed with 401
+	unauthReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+	unauthRec := httptest.NewRecorder()
+	handler.ServeHTTP(unauthRec, unauthReq)
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated POST /api/v1/scan: expected 401, got %d", unauthRec.Code)
+	}
+
+	// Wrong bearer token must fail closed with 401
+	badTokReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+	badTokReq.Header.Set("Authorization", "Bearer wrong-token-value")
+	badTokRec := httptest.NewRecorder()
+	handler.ServeHTTP(badTokRec, badTokReq)
+	if badTokRec.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong bearer token POST /api/v1/scan: expected 401, got %d", badTokRec.Code)
+	}
 
 	// Reject unsupported methods and echo CORS only for allowed Origin
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch} {
 		req := httptest.NewRequest(method, "/api/v1/scan", nil)
 		req.Header.Set("Origin", "http://127.0.0.1:3000")
+		req.Header.Set("Authorization", authHeader)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
@@ -312,6 +331,7 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 	}
 	for _, body := range badInputs {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(body))
+		req.Header.Set("Authorization", authHeader)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -324,6 +344,7 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 		"169.254.169.254",
 		"http://169.254.169.254/latest/meta-data/",
 		"[::ffff:169.254.169.254]",
+		"[64:ff9b::169.254.169.254]",
 		"2852039166",
 		"0xa9fea9fe",
 		"metadata.google.internal",
@@ -338,6 +359,8 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 		"localhost",
 		"http://localhost:3000",
 		"::1",
+		"[::ffff:127.0.0.1]",
+		"[fc00::1]",
 		"2130706433",
 		"0x7f000001",
 		"10.0.0.1",
@@ -345,14 +368,14 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 		"172.16.0.5",
 	}
 
-	// Default mode (ARTEX_ALLOW_LOCAL_SCAN unset): local/private pentest targets and *.local are allowed,
-	// while non-overridable cloud metadata, link-local, and 0.0.0.0 remain 403.
-	t.Run("default allows local and private targets while blocking cloud metadata", func(t *testing.T) {
+	// Default mode (ARTEX_ALLOW_LOCAL_SCAN unset): fails closed for BOTH private/loopback IPv4/IPv6 and cloud metadata
+	t.Run("default fails closed on private/loopback and cloud metadata", func(t *testing.T) {
 		t.Setenv("ARTEX_ALLOW_LOCAL_SCAN", "")
 
-		for _, target := range hardBlockedTargets {
+		for _, target := range append(append([]string(nil), localAndPrivateTargets...), hardBlockedTargets...) {
 			payload := `{"target":"` + target + `"}`
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
+			req.Header.Set("Authorization", authHeader)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			if rec.Code != http.StatusForbidden {
@@ -360,56 +383,56 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 			}
 		}
 
-		allowedByDefault := append([]string{"app.local", "http://my-lab.local:3000"}, localAndPrivateTargets...)
-		for _, target := range allowedByDefault {
+		pubReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+		pubReq.Header.Set("Authorization", authHeader)
+		pubRec := httptest.NewRecorder()
+		handler.ServeHTTP(pubRec, pubReq)
+		if pubRec.Code != http.StatusAccepted {
+			t.Fatalf("example.com default mode expected 202, got %d (body: %s)", pubRec.Code, pubRec.Body.String())
+		}
+		select {
+		case <-scanDispatched:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("expected public scan goroutine to invoke orchestrator")
+		}
+	})
+
+	// Explicit test override flag (ARTEX_ALLOW_LOCAL_SCAN=1) allows loopback/private targets while STILL blocking cloud metadata
+	t.Run("explicit ARTEX_ALLOW_LOCAL_SCAN=1 allows local labs while blocking cloud metadata", func(t *testing.T) {
+		t.Setenv("ARTEX_ALLOW_LOCAL_SCAN", "1")
+
+		for _, target := range hardBlockedTargets {
 			payload := `{"target":"` + target + `"}`
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
+			req.Header.Set("Authorization", authHeader)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("POST /api/v1/scan (%s) with ARTEX_ALLOW_LOCAL_SCAN=1: expected 403, got %d (body: %s)", target, rec.Code, rec.Body.String())
+			}
+		}
+
+		for _, target := range localAndPrivateTargets {
+			payload := `{"target":"` + target + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
+			req.Header.Set("Authorization", authHeader)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			if rec.Code != http.StatusAccepted {
-				t.Fatalf("POST /api/v1/scan (%s) default mode: expected 202, got %d (body: %s)", target, rec.Code, rec.Body.String())
+				t.Fatalf("POST /api/v1/scan (%s) with ARTEX_ALLOW_LOCAL_SCAN=1: expected 202, got %d (body: %s)", target, rec.Code, rec.Body.String())
 			}
 			select {
 			case <-scanDispatched:
 			case <-time.After(2 * time.Second):
-				t.Fatalf("expected default-mode scan goroutine to invoke orchestrator for %s", target)
+				t.Fatalf("expected opt-in local scan goroutine to invoke orchestrator for %s", target)
 			}
 		}
 	})
 
-	// Explicit strict cloud-safe mode (ARTEX_ALLOW_LOCAL_SCAN=0/false/no/off) blocks local/private targets and metadata 403
-	for _, optOutVal := range []string{"0", "false", "no", "off"} {
-		optOutVal := optOutVal
-		t.Run("ARTEX_ALLOW_LOCAL_SCAN="+optOutVal+" blocks local/private and cloud metadata", func(t *testing.T) {
-			t.Setenv("ARTEX_ALLOW_LOCAL_SCAN", optOutVal)
-
-			for _, target := range append(append([]string(nil), localAndPrivateTargets...), hardBlockedTargets...) {
-				payload := `{"target":"` + target + `"}`
-				req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
-				rec := httptest.NewRecorder()
-				handler.ServeHTTP(rec, req)
-				if rec.Code != http.StatusForbidden {
-					t.Fatalf("POST /api/v1/scan (%s) with ARTEX_ALLOW_LOCAL_SCAN=%s: expected 403, got %d (body: %s)", target, optOutVal, rec.Code, rec.Body.String())
-				}
-			}
-
-			pubReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
-			pubRec := httptest.NewRecorder()
-			handler.ServeHTTP(pubRec, pubReq)
-			if pubRec.Code != http.StatusAccepted {
-				t.Fatalf("example.com with ARTEX_ALLOW_LOCAL_SCAN=%s expected 202, got %d (body: %s)", optOutVal, pubRec.Code, pubRec.Body.String())
-			}
-			select {
-			case <-scanDispatched:
-			case <-time.After(2 * time.Second):
-				t.Fatalf("expected public scan goroutine to invoke orchestrator with ARTEX_ALLOW_LOCAL_SCAN=%s", optOutVal)
-			}
-		})
-	}
-
 	// Reject scan when DB is nil instead of panicking in background goroutine
 	nilSrv := NewAPIServer(nil, 0)
 	nilReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+	nilReq.Header.Set("Authorization", "Bearer "+nilSrv.APIToken())
 	nilRec := httptest.NewRecorder()
 	nilSrv.Handler().ServeHTTP(nilRec, nilReq)
 	if nilRec.Code != http.StatusServiceUnavailable {
@@ -418,6 +441,7 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 
 	// Accept valid POST /api/v1/scan
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":" example.com "}`))
+	req.Header.Set("Authorization", authHeader)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
@@ -519,6 +543,9 @@ func TestNilDBSafety(t *testing.T) {
 
 	for _, ep := range endpoints {
 		req := httptest.NewRequest(http.MethodGet, ep, nil)
+		if ep != "/api/v1/health" {
+			req.Header.Set("Authorization", "Bearer "+srv.APIToken())
+		}
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
@@ -557,6 +584,7 @@ func TestEmptySliceSerialization(t *testing.T) {
 
 	for _, ep := range listEndpoints {
 		req := httptest.NewRequest(http.MethodGet, ep, nil)
+		req.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
@@ -586,6 +614,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 		}
 		srv := NewAPIServer(newStubDB(t, state), 0)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/engagements", nil)
+		req.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 
@@ -621,6 +650,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 		}
 		srv := NewAPIServer(newStubDB(t, state), 0)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/assets?target=api&engagement_id=eng-99", nil)
+		req.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 
@@ -662,6 +692,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 		}
 		srv := NewAPIServer(newStubDB(t, state), 0)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/findings?engagement_id=eng-99", nil)
+		req.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 
@@ -707,6 +738,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 
 		// Tasks
 		reqTasks := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?engagement_id=eng-99", nil)
+		reqTasks.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		recTasks := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(recTasks, reqTasks)
 		if recTasks.Code != http.StatusOK {
@@ -719,6 +751,7 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 
 		// Audit
 		reqAudit := httptest.NewRequest(http.MethodGet, "/api/v1/audit?engagement_id=eng-99", nil)
+		reqAudit.Header.Set("Authorization", "Bearer "+srv.APIToken())
 		recAudit := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(recAudit, reqAudit)
 		if recAudit.Code != http.StatusOK {
@@ -748,4 +781,141 @@ func TestSchemaAlignedQueriesAndFilters(t *testing.T) {
 func fmtError(v interface{}) string {
 	s, _ := v.(string)
 	return s
+}
+
+func TestBindAddrAndAuthAndSSLHardening(t *testing.T) {
+	t.Run("default bind address is loopback 127.0.0.1 and respects ARTEX_BIND_ADDR", func(t *testing.T) {
+		t.Setenv("ARTEX_BIND_ADDR", "")
+		srv := NewAPIServer(nil, 7071)
+		if got := srv.ResolveBindAddr(); got != "127.0.0.1:7071" {
+			t.Fatalf("expected default loopback bind 127.0.0.1:7071, got %q", got)
+		}
+
+		t.Setenv("ARTEX_BIND_ADDR", "127.0.0.1:9099")
+		if got := srv.ResolveBindAddr(); got != "127.0.0.1:9099" {
+			t.Fatalf("expected custom ARTEX_BIND_ADDR 127.0.0.1:9099, got %q", got)
+		}
+	})
+
+	t.Run("accepts HUNTER_API_TOKEN and ARTEX_API_TOKEN via Bearer and X-Hunter-Token", func(t *testing.T) {
+		t.Setenv("ARTEX_API_TOKEN", "")
+		t.Setenv("HUNTER_API_TOKEN", "test-hunter-secret-token-32bytes-minimum")
+		state := &stubDriverState{
+			queryHandler: func(query string, _ []driver.NamedValue) (driver.Rows, error) {
+				if strings.Contains(query, "INSERT INTO engagements") {
+					return nil, errors.New("stop stub background scan")
+				}
+				return &stubRows{}, nil
+			},
+		}
+		srv := NewAPIServer(newStubDB(t, state), 7071)
+		handler := srv.Handler()
+
+		req1 := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+		req1.Header.Set("Authorization", "Bearer test-hunter-secret-token-32bytes-minimum")
+		rec1 := httptest.NewRecorder()
+		handler.ServeHTTP(rec1, req1)
+		if rec1.Code != http.StatusAccepted {
+			t.Fatalf("HUNTER_API_TOKEN Bearer expected 202, got %d", rec1.Code)
+		}
+
+		t.Setenv("ARTEX_API_TOKEN", "artex-dedicated-token-override")
+		req2 := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+		req2.Header.Set("X-Hunter-Token", "artex-dedicated-token-override")
+		rec2 := httptest.NewRecorder()
+		handler.ServeHTTP(rec2, req2)
+		if rec2.Code != http.StatusAccepted {
+			t.Fatalf("ARTEX_API_TOKEN X-Hunter-Token expected 202, got %d", rec2.Code)
+		}
+
+		// Old HUNTER_API_TOKEN must fail when ARTEX_API_TOKEN overrides it
+		req3 := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+		req3.Header.Set("Authorization", "Bearer test-hunter-secret-token-32bytes-minimum")
+		rec3 := httptest.NewRecorder()
+		handler.ServeHTTP(rec3, req3)
+		if rec3.Code != http.StatusUnauthorized {
+			t.Fatalf("overridden token expected 401, got %d", rec3.Code)
+		}
+	})
+
+	t.Run("read endpoints require bearer auth while /api/v1/health stays open", func(t *testing.T) {
+		state := &stubDriverState{
+			queryHandler: func(query string, _ []driver.NamedValue) (driver.Rows, error) {
+				if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(query)), "SELECT COUNT(*)") {
+					return &stubRows{cols: []string{"count"}, data: [][]driver.Value{{int64(0)}}}, nil
+				}
+				return &stubRows{}, nil
+			},
+		}
+		srv := NewAPIServer(newStubDB(t, state), 7071)
+		handler := srv.Handler()
+
+		// Health stays publicly readable without bearer token
+		healthReq := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+		healthRec := httptest.NewRecorder()
+		handler.ServeHTTP(healthRec, healthReq)
+		if healthRec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/health without auth expected 200, got %d", healthRec.Code)
+		}
+
+		// All data/state read routes fail closed 401 without valid bearer token
+		protectedReads := []string{
+			"/api/v1/stats",
+			"/api/v1/engagements",
+			"/api/v1/assets",
+			"/api/v1/findings",
+			"/api/v1/tasks",
+			"/api/v1/audit",
+		}
+		for _, ep := range protectedReads {
+			unauthReq := httptest.NewRequest(http.MethodGet, ep, nil)
+			unauthRec := httptest.NewRecorder()
+			handler.ServeHTTP(unauthRec, unauthReq)
+			if unauthRec.Code != http.StatusUnauthorized {
+				t.Fatalf("unauthenticated GET %s expected 401, got %d", ep, unauthRec.Code)
+			}
+
+			authReq := httptest.NewRequest(http.MethodGet, ep, nil)
+			authReq.Header.Set("Authorization", "Bearer "+srv.APIToken())
+			authRec := httptest.NewRecorder()
+			handler.ServeHTTP(authRec, authReq)
+			if authRec.Code != http.StatusOK {
+				t.Fatalf("authenticated GET %s expected 200, got %d (body=%s)", ep, authRec.Code, authRec.Body.String())
+			}
+		}
+	})
+
+	t.Run("wildcard origin in ARTEX_ALLOWED_ORIGINS is ignored", func(t *testing.T) {
+		t.Setenv("ARTEX_ALLOWED_ORIGINS", "*, null")
+		srv := NewAPIServer(nil, 7071)
+		req := httptest.NewRequest(http.MethodOptions, "/api/v1/scan", nil)
+		req.Header.Set("Origin", "https://evil.example.com")
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 when wildcard configured, got %d", rec.Code)
+		}
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Fatalf("must never echo wildcard ACAO, got %q", got)
+		}
+	})
+
+	t.Run("database ResolveSSLMode defaults safely and validates input", func(t *testing.T) {
+		t.Setenv("ARTEX_DB_SSLMODE", "")
+		modeLocal, err := database.ResolveSSLMode("127.0.0.1", "")
+		if err != nil || modeLocal != "disable" {
+			t.Fatalf("loopback default sslmode expected disable, got %q err=%v", modeLocal, err)
+		}
+		modeRemote, err := database.ResolveSSLMode("db.internal.example.com", "")
+		if err != nil || modeRemote != "require" {
+			t.Fatalf("remote default sslmode expected require, got %q err=%v", modeRemote, err)
+		}
+		modeExplicit, err := database.ResolveSSLMode("127.0.0.1", "verify-full")
+		if err != nil || modeExplicit != "verify-full" {
+			t.Fatalf("explicit verify-full failed: got %q err=%v", modeExplicit, err)
+		}
+		if _, err := database.ResolveSSLMode("127.0.0.1", "invalid_mode"); err == nil {
+			t.Fatalf("expected error for invalid sslmode")
+		}
+	})
 }

@@ -47,8 +47,10 @@ from hunter_backend.apps.common import (
     read_env_file,
     run_command_no_shell,
     validate_model,
+    validate_subprocess_command,
     write_env_file,
 )
+from hunter_backend.auth import get_request_auth
 from hunter_backend.runtime import (
     BASE_DIR,
     DATA_DIR,
@@ -329,18 +331,46 @@ async def copilot_chat_stream_view(request: HttpRequest) -> StreamingHttpRespons
 
 
 _BASH_FENCE_RE = re.compile(r"```(?:bash|sh|shell|zsh)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
-_SHELL_META_CHAT_RE = re.compile(r"[;&|`$<>]|&&|\|\||\$\(")
-_FORBIDDEN_CHAT_TOOLS = {"sh", "bash", "zsh", "dash", "cmd", "powershell", "pwsh", "nc", "ncat", "socat"}
+_SHELL_META_CHAT_RE = re.compile(r"[;&|`$<>()\n\r\x00]|&&|\|\||\$\(")
+_FORBIDDEN_CHAT_TOOLS = {
+    "sh",
+    "bash",
+    "zsh",
+    "dash",
+    "ksh",
+    "csh",
+    "fish",
+    "cmd",
+    "powershell",
+    "pwsh",
+    "nc",
+    "ncat",
+    "netcat",
+    "socat",
+    "python",
+    "python2",
+    "python3",
+    "py",
+    "node",
+    "nodejs",
+    "deno",
+    "bun",
+    "curl",
+    "wget",
+    "perl",
+    "ruby",
+    "php",
+}
 _DOMAIN_TOKEN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
 _LOCAL_EXTS = {".py", ".js", ".ts", ".txt", ".json", ".yaml", ".yml", ".md", ".xml", ".csv", ".log"}
 
 
-def _parse_bool_flag(raw: Any, default: bool = True) -> bool:
+def _parse_bool_flag(raw: Any, default: bool = False) -> bool:
     if isinstance(raw, bool):
         return raw
     if raw is None:
         return default
-    return str(raw).strip().lower() not in {"0", "false", "no", "off"}
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _extract_chat_commands(text: str) -> List[str]:
@@ -441,7 +471,7 @@ def _evaluate_chat_command(
 
 @require_http_methods(["POST"])
 async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
-    """POST /api/chat: compatibility AI chat + fail-closed governed bash execution."""
+    """POST /api/chat: AI chat with fail-closed approval-queue gating (never auto-executes LLM bash blocks)."""
     data, err = parse_json_body(request)
     if err is not None:
         return err
@@ -451,8 +481,8 @@ async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
 
     provider = str(data.get("provider") or "").strip() or None
     model = str(data.get("model") or "").strip() or None
-    allow_exec = _parse_bool_flag(data.get("allow_exec"), True)
-    authorized = _parse_bool_flag(data.get("authorized"), True)
+    allow_exec = _parse_bool_flag(data.get("allow_exec"), False)
+    authorized = _parse_bool_flag(data.get("authorized"), False)
     target = str(data.get("target") or "").strip()
     engagement_id = data.get("engagement_id")
     run_id = data.get("run_id")
@@ -474,6 +504,7 @@ async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
     commands = _extract_chat_commands(reply)
     executed_results: List[Dict[str, Any]] = []
     blocked_results: List[Dict[str, Any]] = []
+    queued_approvals: List[Dict[str, Any]] = []
     terminal_parts: List[str] = []
 
     if allow_exec and authorized and commands:
@@ -489,19 +520,31 @@ async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
                 terminal_parts.append(f"[!] BLOCKED ({status}): {cmd} — {reason}")
                 continue
             try:
-                res = await run_command_no_shell(cmd, timeout_s=60.0)
-                executed_results.append(
-                    {
-                        "command": cmd,
-                        "stdout": res.get("stdout", ""),
-                        "stderr": res.get("stderr", ""),
-                        "exit_code": res.get("returncode", 0),
-                    }
-                )
-                terminal_parts.append(f"$ {cmd}\n{res.get('stdout', '')}{res.get('stderr', '')}")
+                validated_tokens = validate_subprocess_command(cmd)
             except (PermissionError, ValueError) as exc:
                 blocked_results.append({"command": cmd, "status": "BLOCKED_INVARIANT", "reason": str(exc)})
                 terminal_parts.append(f"[!] BLOCKED: {cmd} — {exc}")
+                continue
+
+            # NEVER auto-execute LLM-generated bash blocks; route to explicit HITL approval queue.
+            tool_name = validated_tokens[0]
+            cmd_args = " ".join(validated_tokens[1:])
+            apr = store.create_approval(
+                action_type="RUN_TOOL",
+                target=eff_target or (validated_tokens[-1] if len(validated_tokens) > 1 else ""),
+                tool_name=tool_name,
+                command_args=cmd_args,
+                risk_tier="TIER_2_PROBE",
+                rationale="LLM-proposed command via /api/chat requires explicit operator approval",
+                payload={"source": "legacy_api_chat", "proposed_command": cmd},
+                engagement_id=engagement_id,
+                run_id=run_id,
+                scope=in_scope,
+            )
+            queued_approvals.append(apr)
+            terminal_parts.append(
+                f"[?] APPROVAL_REQUIRED ({apr['approval_id']}): {cmd} queued for operator decision"
+            )
 
     resolved_provider = provider or os.getenv("HUNTER_DEFAULT_PROVIDER", "auto")
     resolved_model = model or DEFAULT_MODELS.get(resolved_provider, os.getenv("HUNTER_DEFAULT_MODEL", "auto"))
@@ -513,8 +556,10 @@ async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
             "model": resolved_model,
             "model_used": resolved_model,
             "allow_exec": allow_exec,
+            "authorized": authorized,
             "executed": executed_results,
             "commands": executed_results,
+            "queued_approvals": queued_approvals,
             "blocked": blocked_results,
             "terminal_output": "\n".join(terminal_parts),
             "context_summary": {
@@ -616,10 +661,61 @@ class SettingsGetView(APIView):
         )
 
 
+def _validate_ollama_host_url(raw_url: str) -> Tuple[bool, str]:
+    """Validate OLLAMA_HOST URL against SSRF, scheme injection, and metadata targets."""
+    cleaned = (raw_url or "").strip()
+    if not cleaned:
+        return False, "ollama_host must not be empty"
+    if any(ch in cleaned for ch in ("\r", "\n", "\x00", " ", "\t")):
+        return False, "ollama_host contains disallowed whitespace or control characters"
+    parsed = urlparse(cleaned)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in {"http", "https"}:
+        return False, f"Invalid ollama_host scheme {scheme!r}; only http/https allowed"
+    if parsed.username or parsed.password or not parsed.hostname:
+        return False, "Invalid ollama_host authority"
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        return False, "ollama_host must not include path, query, or fragment"
+    try:
+        port = parsed.port
+    except ValueError:
+        return False, "Invalid ollama_host port"
+    if port is not None and not (1 <= port <= 65535):
+        return False, "ollama_host port out of range"
+
+    host = parsed.hostname.strip().rstrip(".").lower()
+    category, reason = classify_host_security(host)
+    if category == "non_overridable":
+        return False, f"ollama_host blocked ({reason})"
+
+    allow_remote = os.environ.get("HUNTER_ALLOW_REMOTE_OLLAMA", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if category != "loopback" and not allow_remote:
+        return (
+            False,
+            "ollama_host must target loopback (127.0.0.1/localhost/::1) unless HUNTER_ALLOW_REMOTE_OLLAMA=1",
+        )
+    return True, "Allowed"
+
+
 class SettingsSaveView(APIView):
-    """POST /api/settings/save: update allowlisted provider keys/models in .env."""
+    """POST /api/settings/save: operator-tier update of allowlisted provider keys/models in .env."""
 
     def post(self, request: Any) -> Any:
+        auth_ctx = get_request_auth(request)
+        if not auth_ctx.authenticated:
+            return err_json("Authentication required", status=401, extra={"ok": False})
+        if not auth_ctx.is_user_tier:
+            return err_json(
+                "Operator userTier authentication required to modify settings",
+                status=403,
+                extra={"ok": False, "error": "operator_tier_required"},
+            )
+
         data, err = parse_json_body(request)
         if err is not None:
             return err_json("Invalid JSON payload", status=400, extra={"ok": False})
@@ -656,7 +752,15 @@ class SettingsSaveView(APIView):
         if "default_model" in data and str(data["default_model"]).strip():
             updates["HUNTER_DEFAULT_MODEL"] = str(data["default_model"]).strip()
         if "ollama_host" in data and str(data["ollama_host"]).strip():
-            updates["OLLAMA_HOST"] = str(data["ollama_host"]).strip()
+            raw_ollama = str(data["ollama_host"]).strip()
+            ok_host, reason_host = _validate_ollama_host_url(raw_ollama)
+            if not ok_host:
+                return err_json(
+                    reason_host,
+                    status=400,
+                    extra={"ok": False, "error": "invalid_ollama_host"},
+                )
+            updates["OLLAMA_HOST"] = raw_ollama.rstrip("/")
 
         if updates:
             write_env_file(updates)

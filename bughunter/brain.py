@@ -84,7 +84,10 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from tools.prompt_safety import delimit_untrusted
+try:
+    from tools.prompt_safety import delimit_untrusted
+except ModuleNotFoundError:
+    from bughunter.tools.prompt_safety import delimit_untrusted
 
 try:
     import ollama as _ollama_lib
@@ -2226,7 +2229,7 @@ NEXT ACTION: <one concrete action>
         "nmap":         "brew install nmap",
         "secretfinder": "git clone https://github.com/m4ll0k/SecretFinder.git ~/tools/SecretFinder",
         "jwt_tool":     "git clone https://github.com/ticarpi/jwt_tool.git ~/jwt_tool",
-        "drupalgeddon2": 'mkdir -p "./tools" && curl -sL https://raw.githubusercontent.com/pimps/CVE-2018-7600/master/drupa7-CVE-2018-7600.py -o "./tools/drupalgeddon2.py"',
+        "drupalgeddon2": "curl -sL https://raw.githubusercontent.com/pimps/CVE-2018-7600/master/drupa7-CVE-2018-7600.py -o ./tools/drupalgeddon2.py",
     }
     _TOOL_ALIASES: dict = {
         "kr": "kiterunner",
@@ -2236,8 +2239,8 @@ NEXT ACTION: <one concrete action>
     }
 
     @staticmethod
-    def _gowitness_install_command() -> str | None:
-        """Install gowitness v3 from official prebuilt binaries."""
+    def _gowitness_install_command() -> list[str] | None:
+        """Install gowitness v3 from official prebuilt binaries (argv-safe, no shell)."""
         version = "3.1.1"
         system_name = platform.system().lower()
         machine = platform.machine().lower()
@@ -2256,74 +2259,97 @@ NEXT ACTION: <one concrete action>
             return None
 
         target = os.path.expanduser("~/go/bin/gowitness")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
         url = f"https://github.com/sensepost/gowitness/releases/download/{version}/gowitness-{version}-{suffix}"
-        return f'mkdir -p "{os.path.dirname(target)}" && curl -fsSL "{url}" -o "{target}" && chmod +x "{target}"'
+        return ["curl", "-fsSL", url, "-o", target]
 
-    def _tool_install_command(self, tool_name: str) -> str | None:
+    def _tool_install_command(self, tool_name: str) -> str | list[str] | None:
         """Return an install command, including special cases that need runtime detection."""
         if tool_name.lower() == "gowitness":
             return self._gowitness_install_command()
+        if tool_name.lower() == "drupalgeddon2":
+            os.makedirs("./tools", exist_ok=True)
         return self._TOOL_INSTALL.get(tool_name.lower())
 
-    _EXPLOIT_ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "TERM")
+    _EXPLOIT_ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "TERM", "SYSTEMROOT")
+    _SHELL_META_TOKENS = ("&&", "||", ";", "|", "&", "`", "$(", "${", ">", "<", "\n", "\r", "\x00")
 
-    def run_command(self, cmd: str, timeout: int = 120, cwd: str = None,
+    def run_command(self, cmd: str | list[str], timeout: int = 120, cwd: str = None,
                     require_confirmation: bool = True) -> tuple[int, str, str]:
         """
-        Execute a shell command and return (returncode, stdout, stderr).
-        Stdout/stderr are capped at 8K each to avoid flooding context.
+        Execute a command strictly without a shell (``shell=False``) and return (returncode, stdout, stderr).
+        Stdout/stderr are capped at 8K / 2K each to avoid flooding context.
 
         require_confirmation=True (default): the operator must type the
-        exact command back at an interactive TTY before it runs — the same
-        pattern tools/spray_orchestrator.sh uses for credential sprays.
-        This is the ONLY real gate for LLM-proposed commands; the denylist
-        in _sanitize_exploit_command is defense in depth, not sufficient on
-        its own (see SECURITY-REVIEW-2026-08-22.md finding #1). Only pass
+        exact command back at an interactive TTY before it runs. Only pass
         require_confirmation=False for commands that were never derived
         from LLM output or target-controlled content.
         """
+        import shlex as _shlex
         import subprocess as _sp
+
+        if isinstance(cmd, (list, tuple)):
+            argv = [str(part) for part in cmd if str(part) != ""]
+            display_cmd = _shlex.join(argv) if argv else ""
+        elif isinstance(cmd, str):
+            display_cmd = cmd.strip()
+            for tok in self._SHELL_META_TOKENS:
+                if tok in display_cmd:
+                    return (2, "", f"Refused: shell metacharacter {tok!r} is forbidden (shell=False enforced).")
+            try:
+                argv = _shlex.split(display_cmd)
+            except ValueError as exc:
+                return (2, "", f"Refused: malformed command quoting: {exc}")
+        else:
+            return (2, "", "Refused: command must be a string or argv list.")
+
+        if not argv:
+            return (2, "", "Refused: empty command.")
+
+        for arg in argv:
+            for tok in self._SHELL_META_TOKENS:
+                if tok in arg:
+                    return (2, "", f"Refused: shell metacharacter {tok!r} is forbidden in argv token.")
 
         if require_confirmation:
             if not sys.stdin.isatty():
                 return (2, "", "Refused: command confirmation requires an interactive "
                               "terminal, not piped/automated input.")
-            print(f"\n[Exploit] Proposed command:\n  {cmd}\n")
+            print(f"\n[Exploit] Proposed command:\n  {display_cmd}\n")
             typed = input("Type the command exactly to confirm, or anything else to refuse: ")
-            if typed != cmd:
+            if typed != display_cmd:
                 return (2, "", "Refused: typed confirmation did not match the proposed command.")
+
+        expanded_argv = [
+            os.path.expanduser(part) if part.startswith("~/") else part
+            for part in argv
+        ]
 
         # Minimal explicit environment — the full os.environ carries every
         # configured LLM provider API key (ANTHROPIC_API_KEY, OPENAI_API_KEY,
         # etc.); an executed command must never inherit those implicitly.
         child_env = {k: os.environ[k] for k in self._EXPLOIT_ENV_ALLOWLIST if k in os.environ}
-        child_env["PATH"] = f"{os.path.expanduser('~/go/bin')}:{child_env.get('PATH', '')}"
+        path_sep = os.pathsep
+        existing_path = child_env.get("PATH", "")
+        go_bin_dir = os.path.expanduser("~/go/bin")
+        child_env["PATH"] = f"{go_bin_dir}{path_sep}{existing_path}" if existing_path else go_bin_dir
 
-        proc = None
         try:
-            proc = _sp.Popen(
-                cmd, shell=True, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True,
-                cwd=cwd, start_new_session=True, env=child_env,
+            completed = _sp.run(
+                expanded_argv,
+                shell=False,
+                stdout=_sp.PIPE,
+                stderr=_sp.PIPE,
+                text=True,
+                cwd=cwd,
+                env=child_env,
+                timeout=timeout,
             )
-            stdout, stderr = proc.communicate(timeout=timeout)
-            return proc.returncode, stdout[:8000], stderr[:2000]
-        except _sp.TimeoutExpired:
-            stdout = ""
-            stderr = ""
-            if proc is not None:
-                try:
-                    os.killpg(proc.pid, signal.SIGTERM)
-                except Exception:
-                    pass
-                try:
-                    stdout, stderr = proc.communicate(timeout=3)
-                except _sp.TimeoutExpired:
-                    try:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except Exception:
-                        pass
-                    stdout, stderr = proc.communicate()
-            return -1, stdout[:8000], f"Command timed out after {timeout}s\n{stderr[:1800]}"
+            return completed.returncode, (completed.stdout or "")[:8000], (completed.stderr or "")[:2000]
+        except _sp.TimeoutExpired as exc:
+            stdout_raw = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+            stderr_raw = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+            return -1, stdout_raw[:8000], f"Command timed out after {timeout}s\n{stderr_raw[:1800]}"
         except Exception as exc:
             return -1, "", str(exc)
 
@@ -2358,6 +2384,10 @@ NEXT ACTION: <one concrete action>
         # LLM output or target-controlled content — safe to run unattended.
         rc, out, err = self.run_command(cmd, timeout=300, require_confirmation=False)
         if rc == 0:
+            if resolved == "gowitness":
+                gw_target = os.path.expanduser("~/go/bin/gowitness")
+                if os.path.isfile(gw_target):
+                    os.chmod(gw_target, 0o755)
             print(f"{GREEN}[Brain] '{resolved}' installed OK{NC}")
             return True
         print(f"{YELLOW}[Brain] Install failed (rc={rc}): {err[:200]}{NC}")

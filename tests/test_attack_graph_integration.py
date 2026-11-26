@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import httpx
 
 from core.brain.autonomous_brain import AutonomousBrain
-from hunter_backend.asgi import application
+from hunter_backend.testing import make_async_client
 
 
 def test_autonomous_brain_attack_graph_attached():
@@ -21,8 +21,7 @@ def test_autonomous_brain_attack_graph_attached():
 
 @pytest.mark.asyncio
 async def test_rest_api_attack_graph_snapshot():
-    transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+    async with make_async_client() as client:
         res = await client.get("/api/attack_graph/snapshot")
         assert res.status_code == 200
         data = res.json()
@@ -62,8 +61,7 @@ async def test_rest_api_attack_graph_snapshot_normalizes_dict_nodes_and_edges(mo
 
     monkeypatch.setattr(asg.AttackSurfaceGraph, "__init__", _populated_init)
 
-    transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+    async with make_async_client() as client:
         res = await client.get("/api/attack_graph/snapshot")
         assert res.status_code == 200
         data = res.json()
@@ -76,8 +74,7 @@ async def test_rest_api_attack_graph_snapshot_normalizes_dict_nodes_and_edges(mo
 
 @pytest.mark.asyncio
 async def test_rest_api_multi_agent_analyze():
-    transport = httpx.ASGITransport(app=application)
-    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+    async with make_async_client() as client:
         payload = {"target": "testcorp.local"}
         res = await client.post("/api/multi_agent/analyze", json=payload)
         assert res.status_code == 200

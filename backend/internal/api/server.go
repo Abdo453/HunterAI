@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,14 +29,89 @@ type APIServer struct {
 	db           *database.DB
 	orchestrator *agent.Orchestrator
 	port         int
+	apiToken     string
+}
+
+func generateRandomToken() string {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		panic(fmt.Sprintf("failed to generate CSPRNG API token: %v", err))
+	}
+	return hex.EncodeToString(buf)
+}
+
+func resolveConfiguredToken(fallback string) string {
+	if t := strings.TrimSpace(os.Getenv("ARTEX_API_TOKEN")); t != "" {
+		return t
+	}
+	if t := strings.TrimSpace(os.Getenv("HUNTER_API_TOKEN")); t != "" {
+		return t
+	}
+	return strings.TrimSpace(fallback)
 }
 
 // NewAPIServer constructs an APIServer bound to the provided database handle and TCP port.
 func NewAPIServer(db *database.DB, port int) *APIServer {
+	tok := resolveConfiguredToken("")
+	if tok == "" {
+		tok = generateRandomToken()
+	}
 	return &APIServer{
 		db:           db,
 		orchestrator: agent.NewOrchestrator(db),
 		port:         port,
+		apiToken:     tok,
+	}
+}
+
+// APIToken returns the active local bearer token enforced on mutation/scan endpoints.
+func (s *APIServer) APIToken() string {
+	return resolveConfiguredToken(s.apiToken)
+}
+
+// ResolveBindAddr returns the bind address (defaulting to loopback 127.0.0.1:<port>, configurable via ARTEX_BIND_ADDR).
+func (s *APIServer) ResolveBindAddr() string {
+	if raw := strings.TrimSpace(os.Getenv("ARTEX_BIND_ADDR")); raw != "" {
+		if strings.Contains(raw, ":") {
+			return raw
+		}
+		return net.JoinHostPort(raw, strconv.Itoa(s.port))
+	}
+	return fmt.Sprintf("127.0.0.1:%d", s.port)
+}
+
+func constantTimeTokenEqual(provided, expected string) bool {
+	if provided == "" || expected == "" {
+		return false
+	}
+	pBytes := []byte(provided)
+	eBytes := []byte(expected)
+	if len(pBytes) != len(eBytes) {
+		return false
+	}
+	return subtle.ConstantTimeCompare(pBytes, eBytes) == 1
+}
+
+func extractBearerToken(r *http.Request) string {
+	if hdr := strings.TrimSpace(r.Header.Get("Authorization")); hdr != "" {
+		parts := strings.SplitN(hdr, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return strings.TrimSpace(parts[1])
+		}
+		return ""
+	}
+	return strings.TrimSpace(r.Header.Get("X-Hunter-Token"))
+}
+
+func (s *APIServer) requireBearerAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		expected := s.APIToken()
+		provided := extractBearerToken(r)
+		if !constantTimeTokenEqual(provided, expected) {
+			writeJSONError(w, http.StatusUnauthorized, "Valid Authorization: Bearer or X-Hunter-Token required")
+			return
+		}
+		next(w, r)
 	}
 }
 
@@ -46,11 +124,14 @@ var defaultAllowedCORSOrigins = []string{
 
 func normalizeOrigin(origin string) string {
 	trimmed := strings.TrimSpace(origin)
-	if trimmed == "" {
+	if trimmed == "" || trimmed == "*" || strings.EqualFold(trimmed, "null") {
 		return ""
 	}
 	u, err := url.Parse(trimmed)
 	if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return ""
+	}
+	if strings.Contains(u.Host, "*") {
 		return ""
 	}
 	if u.Path != "" && u.Path != "/" {
@@ -103,7 +184,7 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 			if allowed {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Hunter-Token")
 			}
 		}
 		if r.Method == http.MethodOptions {
@@ -123,20 +204,20 @@ func (s *APIServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/v1/health", enableCORS(s.handleHealth))
-	mux.HandleFunc("/api/v1/stats", enableCORS(s.handleStats))
-	mux.HandleFunc("/api/v1/engagements", enableCORS(s.handleEngagements))
-	mux.HandleFunc("/api/v1/assets", enableCORS(s.handleAssets))
-	mux.HandleFunc("/api/v1/findings", enableCORS(s.handleFindings))
-	mux.HandleFunc("/api/v1/tasks", enableCORS(s.handleTasks))
-	mux.HandleFunc("/api/v1/audit", enableCORS(s.handleAudit))
-	mux.HandleFunc("/api/v1/scan", enableCORS(s.handleScan))
+	mux.HandleFunc("/api/v1/stats", enableCORS(s.requireBearerAuth(s.handleStats)))
+	mux.HandleFunc("/api/v1/engagements", enableCORS(s.requireBearerAuth(s.handleEngagements)))
+	mux.HandleFunc("/api/v1/assets", enableCORS(s.requireBearerAuth(s.handleAssets)))
+	mux.HandleFunc("/api/v1/findings", enableCORS(s.requireBearerAuth(s.handleFindings)))
+	mux.HandleFunc("/api/v1/tasks", enableCORS(s.requireBearerAuth(s.handleTasks)))
+	mux.HandleFunc("/api/v1/audit", enableCORS(s.requireBearerAuth(s.handleAudit)))
+	mux.HandleFunc("/api/v1/scan", enableCORS(s.requireBearerAuth(s.handleScan)))
 
 	return mux
 }
 
-// Start begins serving the ARTEX-Pro REST API on the configured port.
+// Start begins serving the ARTEX-Pro REST API on the configured loopback/ARTEX_BIND_ADDR address.
 func (s *APIServer) Start() error {
-	addr := fmt.Sprintf("0.0.0.0:%d", s.port)
+	addr := s.ResolveBindAddr()
 	log.Printf("[API] ARTEX-Pro REST API Server listening on http://%s", addr)
 	srv := &http.Server{
 		Addr:              addr,
@@ -589,10 +670,10 @@ func (s *APIServer) handleAudit(w http.ResponseWriter, r *http.Request) {
 func allowLocalScanEnabled() bool {
 	val := strings.ToLower(strings.TrimSpace(os.Getenv("ARTEX_ALLOW_LOCAL_SCAN")))
 	switch val {
-	case "0", "false", "no", "off":
-		return false
-	default:
+	case "1", "true", "yes", "on":
 		return true
+	default:
+		return false
 	}
 }
 
@@ -754,10 +835,20 @@ func classifyTargetAddr(addr netip.Addr, allowLocal bool) (int, string) {
 		if _, isMeta := hardBlockedMetadataHosts[strings.ToLower(addr.String())]; isMeta {
 			return http.StatusForbidden, fmt.Sprintf("Target IP %s is a non-overridable cloud metadata address", addr)
 		}
+		// Block NAT64 well-known prefix 64:ff9b::/96 wrapping IPv4 private/metadata addresses
+		b16 := addr.As16()
+		if b16[0] == 0x00 && b16[1] == 0x64 && b16[2] == 0xff && b16[3] == 0x9b &&
+			b16[4] == 0 && b16[5] == 0 && b16[6] == 0 && b16[7] == 0 &&
+			b16[8] == 0 && b16[9] == 0 && b16[10] == 0 && b16[11] == 0 {
+			embedded := netip.AddrFrom4([4]byte{b16[12], b16[13], b16[14], b16[15]})
+			if st, rsn := classifyTargetAddr(embedded, allowLocal); st != 0 {
+				return st, rsn
+			}
+		}
 	}
 
 	if !allowLocal && (addr.IsLoopback() || addr.IsPrivate()) {
-		return http.StatusForbidden, fmt.Sprintf("Target IP %s is a private or loopback destination (ARTEX_ALLOW_LOCAL_SCAN disabled; unset or set ARTEX_ALLOW_LOCAL_SCAN=1 for local labs)", addr)
+		return http.StatusForbidden, fmt.Sprintf("Target IP %s is a private or loopback destination (set ARTEX_ALLOW_LOCAL_SCAN=1 for explicit local lab testing)", addr)
 	}
 	return 0, ""
 }

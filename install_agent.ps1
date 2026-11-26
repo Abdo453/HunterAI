@@ -128,7 +128,9 @@ if ($KaliTools) {
     } else {
         $Wsl = Get-Command wsl -ErrorAction SilentlyContinue
         if ($Wsl) {
-            & wsl bash -c "cd /mnt/e/Agant/PentestAI-Unified && bash install_tools_kali.sh"
+            $WslRoot = (& wsl wslpath -a ($Root -replace '\\', '/')).Trim()
+            if (-not $WslRoot) { Fail "Failed to resolve WSL path for workspace root: $Root" }
+            & wsl bash -c 'cd "$1" && bash install_tools_kali.sh' -- "$WslRoot"
             if ($LASTEXITCODE -eq 0) { Ok "Kali tools installed via WSL" }
             else { Warnm "kali install script exited non-zero - check its output" }
         } else {

@@ -17,6 +17,24 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hunter_backend.settings")
 django.setup()
 
 
+def get_test_auth_headers(
+    *,
+    tier: str = "userTier",
+    token: Optional[str] = None,
+) -> dict[str, str]:
+    """Build explicit test-only Authorization headers using the active local auth token."""
+    from hunter_backend.auth import TOKEN_TIER, USER_TIER, get_or_create_api_token, issue_session_token
+
+    if token is not None:
+        return {"Authorization": f"Bearer {token}"}
+    if tier == TOKEN_TIER:
+        signed = issue_session_token(principal="test-agent", tier=TOKEN_TIER)
+        return {"Authorization": f"Bearer {signed}"}
+    if tier == USER_TIER:
+        return {"Authorization": f"Bearer {get_or_create_api_token()}"}
+    raise ValueError(f"Unsupported test auth tier: {tier!r}")
+
+
 class ASGISyncClient:
     """Synchronous HTTP client driving ``hunter_backend.asgi.application`` over ASGI."""
 
@@ -28,6 +46,9 @@ class ASGISyncClient:
         follow_redirects: bool = False,
         timeout: float = 30.0,
         raise_app_exceptions: bool = True,
+        authenticated: bool = True,
+        api_token: Optional[str] = None,
+        auth_tier: str = "userTier",
     ) -> None:
         if app is None:
             from hunter_backend.asgi import application
@@ -38,6 +59,9 @@ class ASGISyncClient:
         self.follow_redirects = follow_redirects
         self.timeout = timeout
         self.raise_app_exceptions = raise_app_exceptions
+        self.authenticated = authenticated
+        self.api_token = api_token
+        self.auth_tier = auth_tier
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self._client: Optional[httpx.AsyncClient] = None
@@ -145,6 +169,14 @@ class ASGISyncClient:
 
     def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         assert self._client is not None
+        if self.authenticated:
+            headers = dict(kwargs.get("headers") or {})
+            lower_keys = {k.lower() for k in headers}
+            if "authorization" not in lower_keys and "x-hunter-token" not in lower_keys:
+                headers.update(
+                    get_test_auth_headers(tier=self.auth_tier, token=self.api_token)
+                )
+                kwargs["headers"] = headers
         return self._run(self._client.request(method, url, **kwargs))
 
     def get(self, url: str, **kwargs: Any) -> httpx.Response:
@@ -171,13 +203,20 @@ def make_async_client(
     base_url: str = "http://127.0.0.1:8000",
     follow_redirects: bool = False,
     timeout: float = 30.0,
+    authenticated: bool = True,
+    api_token: Optional[str] = None,
+    auth_tier: str = "userTier",
 ) -> httpx.AsyncClient:
     """Create an ``httpx.AsyncClient`` bound to ``hunter_backend.asgi.application``."""
     from hunter_backend.asgi import application
 
+    default_headers = (
+        get_test_auth_headers(tier=auth_tier, token=api_token) if authenticated else {}
+    )
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=application),
         base_url=base_url,
         follow_redirects=follow_redirects,
         timeout=timeout,
+        headers=default_headers,
     )

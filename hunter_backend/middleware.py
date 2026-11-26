@@ -1,8 +1,10 @@
-"""Async-capable Django 5.2 middlewares for CSP, static assets, and API CSRF guard."""
+"""Async-capable Django 5.2 middlewares for CSP, local auth, static assets, and API CSRF guard."""
 
 from __future__ import annotations
 
 import asyncio
+import logging
+import re
 from typing import Any, Callable
 from urllib.parse import urlparse
 
@@ -15,12 +17,78 @@ from django.utils.crypto import constant_time_compare
 from django.utils.decorators import sync_and_async_middleware
 from whitenoise.middleware import WhiteNoiseMiddleware
 
+from hunter_backend.auth import (
+    ANONYMOUS_AUTH,
+    LOGIN_GUARD,
+    USER_TIER,
+    authenticate_request,
+    extract_client_ip,
+)
+
+logger = logging.getLogger("hunter_backend.middleware")
+
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _MULTIPART_ALLOWED_PATHS = {"/api/copilot/attachments"}
 _BLOCKED_NOCORS_CONTENT_TYPES = {
     "text/plain",
     "application/x-www-form-urlencoded",
 }
+
+# Unauthenticated read-only paths (strictly GET/HEAD/OPTIONS)
+_PUBLIC_READ_PATHS = {
+    "/",
+    "/chat",
+    "/command",
+    "/opencode",
+    "/api/health",
+    "/api/csrf",
+    "/api/platform/artex/health",
+}
+# Auth login exchange endpoint validates credentials itself
+_PUBLIC_AUTH_EXCHANGE_PATHS = {
+    "/api/auth/session",
+}
+
+# Operator-only privileged mutation paths requiring authenticated userTier
+_USER_TIER_EXACT_PATHS = {
+    "/api/settings/save",
+    "/api/control/settings",
+    "/api/control/redteam-policy/issue",
+    "/api/control/redteam-policy/revoke",
+    "/api/editor/file/save",
+    "/api/editor/file/create",
+    "/api/opencode/skill-file/save",
+    "/api/auth/revoke",
+}
+_USER_TIER_PATH_REGEXES = (
+    re.compile(r"^/api/platform/approvals/[^/]+/decide/?$"),
+)
+
+
+def _normalized_path(request: Any) -> str:
+    raw = str(getattr(request, "path_info", "") or "/")
+    stripped = raw.rstrip("/")
+    return stripped or "/"
+
+
+def _is_public_route(request: Any) -> bool:
+    path = _normalized_path(request)
+    if request.method in _SAFE_METHODS:
+        if path in _PUBLIC_READ_PATHS or path.startswith("/static/"):
+            return True
+    if request.method == "POST" and path in _PUBLIC_AUTH_EXCHANGE_PATHS:
+        return True
+    return False
+
+
+def _requires_user_tier(request: Any) -> bool:
+    if request.method not in _MUTATING_METHODS:
+        return False
+    path = _normalized_path(request)
+    if path in _USER_TIER_EXACT_PATHS:
+        return True
+    return any(rx.match(path) for rx in _USER_TIER_PATH_REGEXES)
 
 
 def _origin_matches_trusted(origin: str, request: Any) -> bool:
@@ -49,7 +117,8 @@ def _origin_matches_trusted(origin: str, request: Any) -> bool:
             and parsed.netloc
             and parsed.netloc.lower() == req_host.lower()
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug("Origin parsing failed for %r: %s", origin, exc)
         return False
 
 
@@ -66,8 +135,109 @@ def _has_valid_csrf_header(request: Any) -> bool:
         if len(header_token) == len(csrf_cookie) and constant_time_compare(header_token, csrf_cookie):
             return True
         return _does_token_match(header_token, csrf_cookie)
-    except Exception:
+    except Exception as exc:
+        logger.debug("CSRF token verification failed: %s", exc)
         return False
+
+
+def _has_valid_bearer_auth(request: Any) -> bool:
+    attached = getattr(request, "hunter_auth", None)
+    if attached is not None:
+        return bool(attached.authenticated and attached.is_bearer)
+    ctx, _supplied = authenticate_request(request)
+    return bool(ctx.authenticated and ctx.is_bearer)
+
+
+def _check_local_auth(request: Any) -> JsonResponse | None:
+    """Authenticate caller, enforce LoginGuard rate-limiting, and check tier boundaries."""
+    if request.method == "OPTIONS":
+        request.hunter_auth = ANONYMOUS_AUTH
+        return None
+
+    client_ip = extract_client_ip(request)
+    blocked, retry_after = LOGIN_GUARD.is_blocked(client_ip)
+    if blocked and not _is_public_route(request):
+        resp = JsonResponse(
+            {
+                "detail": "Too many failed authentication attempts. Try again later.",
+                "error": "auth_rate_limited",
+                "retry_after": retry_after,
+            },
+            status=429,
+        )
+        resp["Retry-After"] = str(retry_after)
+        return resp
+
+    auth_ctx, creds_supplied = authenticate_request(request)
+    request.hunter_auth = auth_ctx
+
+    if creds_supplied and not auth_ctx.authenticated:
+        locked, lock_retry = LOGIN_GUARD.record_failure(client_ip)
+        if locked:
+            resp = JsonResponse(
+                {
+                    "detail": "Too many failed authentication attempts. Account locked temporarily.",
+                    "error": "auth_rate_limited",
+                    "retry_after": lock_retry,
+                },
+                status=429,
+            )
+            resp["Retry-After"] = str(lock_retry)
+            return resp
+        return JsonResponse(
+            {"detail": "Invalid authentication credentials.", "error": "auth_invalid"},
+            status=401,
+        )
+
+    if auth_ctx.authenticated:
+        LOGIN_GUARD.record_success(client_ip)
+
+    if _is_public_route(request):
+        return None
+
+    if not auth_ctx.authenticated:
+        # Preserve explicit 403 for cross-site / evil-Origin / no-cors browser mutation attempts
+        if request.method in _MUTATING_METHODS:
+            origin = request.META.get("HTTP_ORIGIN")
+            sec_fetch_site = (request.META.get("HTTP_SEC_FETCH_SITE") or "").strip().lower()
+            raw_ct = request.META.get("CONTENT_TYPE", "")
+            content_type = raw_ct.split(";", 1)[0].strip().lower()
+            if origin is not None and not _origin_matches_trusted(origin, request):
+                return JsonResponse(
+                    {"detail": "Untrusted Origin rejected.", "error": "csrf_origin_rejected"},
+                    status=403,
+                )
+            if sec_fetch_site == "cross-site":
+                return JsonResponse(
+                    {"detail": "Cross-site mutation rejected.", "error": "csrf_cross_site"},
+                    status=403,
+                )
+            if content_type in _BLOCKED_NOCORS_CONTENT_TYPES:
+                return JsonResponse(
+                    {
+                        "detail": "Simple form/text Content-Type is rejected to prevent no-cors CSRF; use application/json.",
+                        "error": "csrf_content_type_rejected",
+                    },
+                    status=403,
+                )
+        return JsonResponse(
+            {
+                "detail": "Authentication required. Supply Authorization: Bearer <token> or valid session.",
+                "error": "auth_required",
+            },
+            status=401,
+        )
+
+    if _requires_user_tier(request) and auth_ctx.tier != USER_TIER:
+        return JsonResponse(
+            {
+                "detail": "Operator userTier authentication is required for this endpoint.",
+                "error": "operator_tier_required",
+            },
+            status=403,
+        )
+
+    return None
 
 
 def _check_mutation_security(request: Any) -> JsonResponse | None:
@@ -101,7 +271,7 @@ def _check_mutation_security(request: Any) -> JsonResponse | None:
     raw_ct = request.META.get("CONTENT_TYPE", "")
     content_type = raw_ct.split(";", 1)[0].strip().lower()
 
-    # Block browser no-cors / HTML form content types unless a verified CSRF token is present.
+    # Block browser no-cors / HTML form content types on all mutations.
     if content_type in _BLOCKED_NOCORS_CONTENT_TYPES:
         return JsonResponse(
             {
@@ -120,35 +290,64 @@ def _check_mutation_security(request: Any) -> JsonResponse | None:
                 },
                 status=403,
             )
+
+    has_valid_bearer = _has_valid_bearer_auth(request)
+    if has_valid_bearer:
         return None
 
-    # Empty-body mutations (e.g., /api/platform/runs/<id>/pause) are allowed for trusted
-    # same-origin / non-cross-site browser calls (already origin + Sec-Fetch-Site checked)
-    # and local CLI/test clients.
-    try:
-        body_len = len(request.body)
-    except Exception:
-        body_len = int(request.META.get("CONTENT_LENGTH") or 0)
-
-    if body_len == 0 and not content_type:
-        if origin is not None and request.COOKIES and not csrf_valid and not _origin_matches_trusted(origin, request):
+    # Allow /api/auth/session login exchange with trusted Origin (or direct local CLI token exchange)
+    if _normalized_path(request) in _PUBLIC_AUTH_EXCHANGE_PATHS:
+        if origin is not None and not _origin_matches_trusted(origin, request):
             return JsonResponse(
-                {"detail": "CSRF validation failed.", "error": "csrf_failed"},
+                {"detail": "Untrusted Origin rejected.", "error": "csrf_origin_rejected"},
                 status=403,
             )
         return None
 
-    # Browser requests (Origin present) carrying a payload must use application/json or valid CSRF token.
-    if origin is not None and content_type != "application/json" and not csrf_valid:
+    # Non-bearer state-changing requests MUST provide a trusted Origin AND valid X-CSRFToken
+    # (closes JSON POST CSRF bypass and missing-Origin browser bypass).
+    if origin is None or not _origin_matches_trusted(origin, request):
         return JsonResponse(
             {
-                "detail": "Mutating browser requests must send application/json or valid X-CSRFToken.",
-                "error": "csrf_json_required",
+                "detail": "Trusted Origin header is required for non-bearer state-changing requests.",
+                "error": "csrf_origin_required",
+            },
+            status=403,
+        )
+
+    if not csrf_valid:
+        return JsonResponse(
+            {
+                "detail": "Valid X-CSRFToken header matching csrftoken cookie is required for non-bearer mutations.",
+                "error": "csrf_token_required",
             },
             status=403,
         )
 
     return None
+
+
+@sync_and_async_middleware
+def LocalAuthMiddleware(get_response: Callable[..., Any]) -> Callable[..., Any]:
+    """Authenticate requests via local bearer token or signed session cookie."""
+    if iscoroutinefunction(get_response):
+
+        async def middleware(request: Any) -> Any:
+            blocked = _check_local_auth(request)
+            if blocked is not None:
+                return blocked
+            return await get_response(request)
+
+        markcoroutinefunction(middleware)
+        return middleware
+
+    def middleware(request: Any) -> Any:
+        blocked = _check_local_auth(request)
+        if blocked is not None:
+            return blocked
+        return get_response(request)
+
+    return middleware
 
 
 @sync_and_async_middleware

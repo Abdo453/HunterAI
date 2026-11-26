@@ -8,7 +8,7 @@ import httpx
 from evaluation.benchmark_runner import BenchmarkRunner
 from evaluation.scenarios.bola_scenario import BOLAMultiTenantScenario
 from evaluation.scenarios.sqli_scenario import BlindSQLiScenario
-from hunter_backend.asgi import application
+from hunter_backend.testing import make_async_client
 
 
 class TestEvaluationBenchmark:
@@ -40,8 +40,7 @@ class TestEvaluationBenchmark:
 
     @pytest.mark.asyncio
     async def test_rest_api_reasoning_investigate(self):
-        transport = httpx.ASGITransport(app=application)
-        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+        async with make_async_client() as client:
             payload = {"target": "target.enterprise.local"}
             res = await client.post("/api/reasoning/investigate", json=payload)
             assert res.status_code == 200
@@ -52,8 +51,7 @@ class TestEvaluationBenchmark:
 
     @pytest.mark.asyncio
     async def test_rest_api_evaluation_benchmark(self):
-        transport = httpx.ASGITransport(app=application)
-        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
+        async with make_async_client() as client:
             res = await client.get("/api/evaluation/benchmark")
             assert res.status_code == 200
             data = res.json()

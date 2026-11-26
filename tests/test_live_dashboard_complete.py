@@ -139,7 +139,7 @@ def _start_ephemeral_server(db_path: Path):
     deadline = time.time() + 15.0
     while time.time() < deadline:
         try:
-            r = httpx.get(f"{base_url}/api/platform/context", timeout=1.0)
+            r = httpx.get(f"{base_url}/api/health", timeout=1.0)
             if r.status_code == 200:
                 break
         except Exception:
@@ -176,7 +176,14 @@ def live_client():
     db_path = Path(tmp_dir.name) / "platform_test.sqlite3"
     base_url, cleanup = _start_ephemeral_server(db_path)
     try:
-        with httpx.Client(base_url=base_url, timeout=15.0, follow_redirects=False) as client:
+        from hunter_backend.testing import get_test_auth_headers
+
+        with httpx.Client(
+            base_url=base_url,
+            timeout=15.0,
+            follow_redirects=False,
+            headers=get_test_auth_headers(),
+        ) as client:
             yield client
     finally:
         cleanup()
@@ -220,8 +227,15 @@ def test_live_dashboard_control_api_endpoints(live_client: httpx.Client):
 
 
 def _run_standalone_cli(base_url: str) -> int:
+    from hunter_backend.testing import get_test_auth_headers
+
     all_passed = True
-    with httpx.Client(base_url=base_url, timeout=10.0, follow_redirects=False) as client:
+    with httpx.Client(
+        base_url=base_url,
+        timeout=10.0,
+        follow_redirects=False,
+        headers=get_test_auth_headers(),
+    ) as client:
         for route, expected in ROUTES_TO_CHECK:
             resp = client.get(route)
             ok = resp.status_code == expected

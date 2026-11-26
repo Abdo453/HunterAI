@@ -280,11 +280,10 @@ def test_hunter_agent_manager_e2e_mission(tmp_path):
 
 def test_fastapi_hunter_endpoints():
     async def _run():
-        from hunter_backend.asgi import application
+        from hunter_backend.testing import make_async_client
         from httpx import ASGITransport, AsyncClient
 
-        transport = ASGITransport(app=application)
-        async with AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as ac:
+        async with make_async_client() as ac:
             # 1. List contracts
             r_contracts = await ac.get("/api/hunter/contracts")
             assert r_contracts.status_code == 200

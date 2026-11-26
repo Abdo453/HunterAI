@@ -30,6 +30,7 @@ from core.platform_store import (
     get_platform_store,
     new_id,
     redact_payload,
+    verify_proposal_digest,
 )
 from core.run_control import GLOBAL_RUN_CONTROLLER
 
@@ -974,16 +975,23 @@ def control_managed_run_sync(run_id: str, action: str) -> bool:
     return _run_sync_action()
 
 
+_ALLOWED_APPROVAL_RUN_KINDS = frozenset({"pipeline", "recon", "scan", "mission", "engine"})
+_ALLOWED_APPROVAL_RUN_MODES = frozenset({"full", "recon", "quick", "passive", "active", "web", "vuln"})
+
+
 async def execute_approved_action(
     approval: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Execute or dispatch an approved HITL action and emit telemetry."""
+    """Execute or dispatch a digest-verified approved HITL action and emit telemetry."""
+    if not verify_proposal_digest(approval):
+        raise PermissionError("Approval proposal_digest verification failed; refusing execution")
+
     store = ensure_platform_wiring()
-    action_type = approval.get("action_type", "")
-    target = approval.get("target", "")
+    action_type = str(approval.get("action_type") or "")
+    target = str(approval.get("target") or "")
     run_id = approval.get("run_id")
     engagement_id = approval.get("engagement_id")
-    payload = approval.get("payload") or {}
+    payload = approval.get("payload") if isinstance(approval.get("payload"), dict) else {}
 
     result: Dict[str, Any] = {
         "executed": True,
@@ -992,11 +1000,21 @@ async def execute_approved_action(
         "approval_id": approval.get("approval_id"),
     }
     if action_type in {"platform_run", "scan", "mission", "pipeline"} and target:
+        kind = str(payload.get("kind") or "pipeline").strip().lower()
+        mode = str(payload.get("mode") or "full").strip().lower()
+        if kind not in _ALLOWED_APPROVAL_RUN_KINDS:
+            raise PermissionError(
+                f"Disallowed approval payload kind {kind!r}; allowed: {sorted(_ALLOWED_APPROVAL_RUN_KINDS)}"
+            )
+        if mode not in _ALLOWED_APPROVAL_RUN_MODES:
+            raise PermissionError(
+                f"Disallowed approval payload mode {mode!r}; allowed: {sorted(_ALLOWED_APPROVAL_RUN_MODES)}"
+            )
         started = await start_platform_run(
-            kind=str(payload.get("kind") or "pipeline"),
+            kind=kind,
             target=target,
             engagement_id=engagement_id,
-            mode=str(payload.get("mode") or "full"),
+            mode=mode,
         )
         result["run_id"] = started.get("run_id")
     store.append_event(
@@ -1157,10 +1175,13 @@ def get_go_client() -> httpx.AsyncClient:
     """Return the shared httpx.AsyncClient used for Go Core (:7071) proxy & telemetry."""
     global _GO_CLIENT
     if _GO_CLIENT is None or _GO_CLIENT.is_closed:
+        from hunter_backend.auth import get_or_create_api_token
+
         _GO_CLIENT = httpx.AsyncClient(
             base_url=ARTEX_BASE_URL,
             timeout=httpx.Timeout(connect=2.5, read=20.0, write=10.0, pool=5.0),
             follow_redirects=False,
+            headers={"Authorization": f"Bearer {get_or_create_api_token()}"},
         )
     return _GO_CLIENT
 
