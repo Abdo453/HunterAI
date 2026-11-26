@@ -970,7 +970,14 @@ async def artex_go_proxy_view(request: HttpRequest, path: str) -> HttpResponse:
     if not _is_safe_proxy_subpath(clean_path):
         return django_err("Invalid proxy subpath", status=400)
 
-    target_path = f"/api/{clean_path}" if not clean_path.startswith("api/") else f"/{clean_path}"
+    if clean_path.startswith("api/v1/"):
+        target_path = f"/{clean_path}"
+    elif clean_path.startswith("v1/"):
+        target_path = f"/api/{clean_path}"
+    elif clean_path.startswith("api/"):
+        target_path = f"/api/v1/{clean_path[4:]}"
+    else:
+        target_path = f"/api/v1/{clean_path}"
     query = request.META.get("QUERY_STRING", "")
     url_path = f"{target_path}?{query}" if query else target_path
 

@@ -406,6 +406,14 @@ async def test_security_hardening_ssrf_scope_paths_subprocess_and_secret(
         r_proxy = await client.get("/api/platform/artex/v1/health")
         assert r_proxy.status_code == 200
         assert r_proxy.json()["mocked"] is True
+        assert r_proxy.json()["path"] == "/api/v1/health"
+        r_stats = await client.get("/api/platform/artex/stats")
+        assert r_stats.status_code == 200
+        assert r_stats.json()["path"] == "/api/v1/stats"
+        r_health_on = await client.get("/api/platform/artex/health")
+        assert r_health_on.status_code == 200
+        assert r_health_on.json()["online"] is True
+        assert r_health_on.json()["health"]["path"] == "/api/v1/health"
         await rt_mod._GO_CLIENT.aclose()
         rt_mod._GO_CLIENT = None
 

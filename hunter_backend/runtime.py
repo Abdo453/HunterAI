@@ -948,10 +948,10 @@ async def probe_artex_health() -> Dict[str, Any]:
     """Probe Go Core backend health without raising on offline daemon."""
     try:
         client = get_go_client()
-        resp = await client.get("/health", timeout=2.0)
+        resp = await client.get("/api/v1/health", timeout=2.0)
         body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"raw": resp.text}
         return {
-            "online": resp.status_code < 500,
+            "online": resp.status_code < 400,
             "status_code": resp.status_code,
             "url": ARTEX_BASE_URL,
             "health": body,
