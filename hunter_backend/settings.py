@@ -84,13 +84,9 @@ CSRF_COOKIE_NAME = "csrftoken"
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Lax"
 
-WS_ALLOWED_ORIGINS = {
-    "http://127.0.0.1:3000",
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-}
+WS_ALLOWED_ORIGINS = set(_TRUSTED_ORIGINS)
 
+_CSP_CONNECT_EXTRA = " ".join(_EXTRA_ORIGINS)
 CSP_POLICY = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
@@ -99,8 +95,8 @@ CSP_POLICY = (
     "img-src 'self' data: blob:; "
     "worker-src 'self' blob:; "
     "connect-src 'self' ws: wss: http://127.0.0.1:8000 http://localhost:8000 "
-    "http://127.0.0.1:3000 http://localhost:3000; "
-    "frame-ancestors 'self'; "
+    f"http://127.0.0.1:3000 http://localhost:3000 {_CSP_CONNECT_EXTRA}; ".replace(" ;", ";")
+    + "frame-ancestors 'self'; "
     "base-uri 'self'; "
     "object-src 'none'"
 )
