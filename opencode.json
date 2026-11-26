@@ -14,19 +14,19 @@
     },
     "filesystem": {
       "type": "local",
-      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-filesystem", "E:\\Agant\\PentestAI-Unified"],
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem@2025.3.28", "."],
       "enabled": true,
       "timeout": 60000
     },
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
-      "enabled": true
+      "enabled": false
     },
     "gh_grep": {
       "type": "remote",
       "url": "https://mcp.grep.app",
-      "enabled": true
+      "enabled": false
     },
     "semgrep": {
       "type": "local",
@@ -35,12 +35,12 @@
     },
     "azure-mcp": {
       "type": "local",
-      "command": ["cmd", "/c", "npx", "-y", "@azure/mcp@latest", "server", "start"],
+      "command": ["npx", "-y", "@azure/mcp@0.5.8", "server", "start"],
       "enabled": false
     },
     "github-mcp": {
       "type": "local",
-      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-github"],
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github@2025.4.8"],
       "environment": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
       },

@@ -19,7 +19,10 @@ urlpatterns = [
     path("chat", compat.chat_redirect_view),
     path("command", compat.command_redirect_view),
     path("opencode", compat.opencode_redirect_view),
-    # CSRF + Unified Platform Hub (/api/platform/*)
+    # Health + Auth Session + CSRF + Unified Platform Hub (/api/platform/*)
+    path("api/health", platform_api.HealthView.as_view()),
+    path("api/auth/session", platform_api.AuthSessionView.as_view()),
+    path("api/auth/revoke", platform_api.AuthRevokeView.as_view()),
     path("api/csrf", platform_api.CsrfTokenView.as_view()),
     path("api/platform/context", platform_api.PlatformContextView.as_view()),
     path("api/platform/overview", platform_api.platform_overview_view),

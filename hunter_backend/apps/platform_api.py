@@ -23,7 +23,7 @@ from core.copilot_service import (
     is_tcp_reachable,
 )
 from core.evidence_store import EvidenceStore
-from core.platform_store import get_platform_store
+from core.platform_store import get_platform_store, verify_proposal_digest
 from core.run_control import GLOBAL_RUN_CONTROLLER
 from core.security_mode import web_governance_enforced
 from hunter_backend.apps.common import (
@@ -41,6 +41,17 @@ from hunter_backend.apps.common import (
     validate_http_url_ssrf_and_scope,
     validate_model,
     validate_scan_target,
+)
+from hunter_backend.auth import (
+    LOGIN_GUARD,
+    SESSION_COOKIE_NAME,
+    USER_TIER,
+    extract_client_ip,
+    get_or_create_api_token,
+    get_request_auth,
+    issue_session_token,
+    revoke_all_sessions,
+    verify_bearer_token,
 )
 from hunter_backend.runtime import (
     ARTEX_BASE_URL,
@@ -141,6 +152,94 @@ def _find_findings_for_engagement(target: str) -> List[Dict[str, Any]]:
         return list(all_rows)
     except Exception:
         return []
+
+
+class HealthView(APIView):
+    """GET /api/health: public unauthenticated liveness check."""
+
+    def get(self, request: Any) -> Any:
+        return ok_json(
+            {
+                "status": "ok",
+                "service": "hunter-ai-django-asgi",
+                "backend": "django-asgi",
+                "timestamp": time.time(),
+            }
+        )
+
+
+class AuthSessionView(APIView):
+    """POST /api/auth/session: exchange local operator token for HttpOnly signed session cookie."""
+
+    def post(self, request: Any) -> Any:
+        client_ip = extract_client_ip(request)
+        blocked, retry_after = LOGIN_GUARD.is_blocked(client_ip)
+        if blocked:
+            resp = err_json(
+                "Too many failed authentication attempts.",
+                status=429,
+                extra={"error": "auth_rate_limited", "retry_after": retry_after},
+            )
+            resp["Retry-After"] = str(retry_after)
+            return resp
+
+        data, err = parse_json_body(request)
+        if err is not None:
+            return err_json("Invalid JSON body", status=400)
+
+        auth_ctx = get_request_auth(request)
+        if not auth_ctx.authenticated:
+            supplied_token = str(data.get("token") or "").strip()
+            verified = verify_bearer_token(supplied_token) if supplied_token else None
+            if verified is None:
+                locked, lock_retry = LOGIN_GUARD.record_failure(client_ip)
+                if locked:
+                    resp = err_json(
+                        "Too many failed authentication attempts.",
+                        status=429,
+                        extra={"error": "auth_rate_limited", "retry_after": lock_retry},
+                    )
+                    resp["Retry-After"] = str(lock_retry)
+                    return resp
+                return err_json("Invalid operator token", status=401, extra={"error": "auth_invalid"})
+            auth_ctx = verified
+
+        LOGIN_GUARD.record_success(client_ip)
+        signed = issue_session_token(principal=auth_ctx.principal, tier=auth_ctx.tier)
+        csrf_token = get_token(request)
+        resp = ok_json(
+            {
+                "ok": True,
+                "principal": auth_ctx.principal,
+                "tier": auth_ctx.tier,
+                "sgn": auth_ctx.sgn,
+                "csrfToken": csrf_token,
+            }
+        )
+        resp.set_cookie(
+            SESSION_COOKIE_NAME,
+            signed,
+            httponly=True,
+            samesite="Lax",
+            secure=bool(request.is_secure()),
+            path="/",
+        )
+        return resp
+
+
+class AuthRevokeView(APIView):
+    """POST /api/auth/revoke: bump session generation (sgn) to revoke all active sessions."""
+
+    def post(self, request: Any) -> Any:
+        auth_ctx = get_request_auth(request)
+        if not auth_ctx.is_user_tier:
+            return err_json(
+                "Operator userTier authentication required",
+                status=403,
+                extra={"error": "operator_tier_required"},
+            )
+        new_sgn = revoke_all_sessions()
+        return ok_json({"ok": True, "revoked": True, "sgn": new_sgn})
 
 
 class CsrfTokenView(APIView):
@@ -750,6 +849,16 @@ async def platform_approval_decide_view(
     request: HttpRequest, approval_id: str
 ) -> JsonResponse:
     """POST /api/platform/approvals/<approval_id>/decide."""
+    auth_ctx = get_request_auth(request)
+    if not auth_ctx.authenticated:
+        return django_err("Authentication required", status=401, extra={"error": "auth_required"})
+    if not auth_ctx.is_user_tier:
+        return django_err(
+            "Operator userTier authentication is required to decide approvals.",
+            status=403,
+            extra={"error": "operator_tier_required"},
+        )
+
     data, err = parse_json_body(request)
     if err is not None:
         return err
@@ -766,6 +875,9 @@ async def platform_approval_decide_view(
     else:
         return django_err("decision must be 'approved' or 'rejected'", status=400)
 
+    # Bind decided_by strictly to authenticated caller identity (never trust caller-supplied spoofing)
+    verified_decider = f"{auth_ctx.principal} ({auth_ctx.auth_method})"
+
     store = ensure_platform_wiring()
     existing = store.get_approval(approval_id)
     if not existing:
@@ -779,6 +891,26 @@ async def platform_approval_decide_view(
     in_scope: List[str] = []
     out_of_scope: List[str] = []
     if decision == "approved":
+        if not verify_proposal_digest(existing):
+            rejected = store.decide_approval(
+                approval_id,
+                "rejected",
+                decided_by="integrity_guard",
+                note="Blocked: proposal_digest mismatch indicates approval tampering.",
+            )
+            store.append_event(
+                "approval.tamper_rejected",
+                run_id=existing.get("run_id"),
+                engagement_id=existing.get("engagement_id"),
+                source="integrity_guard",
+                payload={"approval_id": approval_id, "reason": "proposal_digest_mismatch"},
+            )
+            return django_err(
+                "Approval proposal_digest verification failed; execution blocked.",
+                status=403,
+                extra={"error": "proposal_digest_mismatch", "approval": rejected},
+            )
+
         eng = (
             store.get_engagement(existing["engagement_id"])
             if existing.get("engagement_id")
@@ -810,7 +942,7 @@ async def platform_approval_decide_view(
     updated = store.decide_approval(
         approval_id,
         decision,
-        decided_by=req.decided_by,
+        decided_by=verified_decider,
         note=req.note,
     )
     if updated is None:
@@ -1045,6 +1177,8 @@ async def artex_go_proxy_view(request: HttpRequest, path: str) -> HttpResponse:
         for k, v in request.headers.items()
         if k.lower() not in _HOP_BY_HOP_HEADERS and not k.lower().startswith("cookie")
     }
+    if "authorization" not in {k.lower() for k in fwd_headers}:
+        fwd_headers["Authorization"] = f"Bearer {get_or_create_api_token()}"
     body = request.body if request.method in {"POST", "PUT", "PATCH"} else b""
 
     try:

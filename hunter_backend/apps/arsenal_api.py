@@ -51,9 +51,12 @@ from hunter_backend.apps.common import (
     parse_query_int,
     run_command_no_shell,
     safe_resolve_path,
+    validate_allowed_binary,
     validate_http_url_ssrf_and_scope,
     validate_model,
+    validate_proxy_url,
     validate_scan_target,
+    validate_subprocess_command,
 )
 from hunter_backend.runtime import (
     BASE_DIR,
@@ -346,9 +349,12 @@ async def control_tools_test_view(request: HttpRequest) -> JsonResponse:
     if verr is not None:
         return verr
     assert req is not None
-    tool_name = Path(req.tool_name.strip()).name
-    if not tool_name or not tool_name.replace("-", "").replace("_", "").isalnum():
-        return django_err("Invalid tool name", status=400)
+    try:
+        tool_name = validate_allowed_binary(req.tool_name.strip())
+    except PermissionError as exc:
+        return django_err(str(exc), status=403)
+    except ValueError as exc:
+        return django_err(str(exc), status=400)
     res = await run_command_no_shell([tool_name, "--version"], timeout_s=10.0)
     return django_json(
         {
@@ -899,8 +905,20 @@ class SandboxRunView(APIView):
         if verr is not None:
             return drf_validation_response(verr)
         assert req is not None
+        try:
+            validated_cmd = validate_subprocess_command(req.command)
+        except PermissionError as exc:
+            return err_json(str(exc), status=403)
+        except ValueError as exc:
+            return err_json(str(exc), status=400)
         sb = LocalSandbox()
-        res = sb.run(req.command, timeout_s=req.timeout_s, max_output_bytes=req.max_output_bytes)
+        res = await_sync(
+            sb.run(
+                validated_cmd,
+                timeout_s=req.timeout_s,
+                max_output_bytes=req.max_output_bytes,
+            )
+        )
         return ok_json(res.__dict__ if hasattr(res, "__dict__") else {"result": res})
 
 
@@ -1236,8 +1254,34 @@ async def burp_repeater_send_view(request: HttpRequest) -> JsonResponse:
         return django_err(reason, status=403, extra={"policy": policy, "status": "BLOCKED_SCOPE"})
 
     proxy_url: Optional[str] = None
-    if data.get("use_proxy"):
-        proxy_url = str(data.get("proxy") or "http://127.0.0.1:8080")
+    if data.get("use_proxy") or data.get("proxy"):
+        raw_proxy = str(data.get("proxy") or "").strip()
+        if raw_proxy:
+            proxy_ok, proxy_reason = validate_proxy_url(raw_proxy)
+            if not proxy_ok:
+                return django_err(
+                    proxy_reason,
+                    status=403,
+                    extra={"status": "BLOCKED_PROXY"},
+                )
+            proxy_url = raw_proxy
+        else:
+            default_burp = os.environ.get("HUNTER_BURP_PROXY_URL", "").strip()
+            if default_burp:
+                proxy_ok, proxy_reason = validate_proxy_url(default_burp)
+                if not proxy_ok:
+                    return django_err(
+                        proxy_reason,
+                        status=403,
+                        extra={"status": "BLOCKED_PROXY"},
+                    )
+                proxy_url = default_burp
+            else:
+                return django_err(
+                    "Outbound proxy requires an allowlisted proxy URL (configure HUNTER_ALLOWED_PROXIES / HUNTER_BURP_PROXY_URL).",
+                    status=403,
+                    extra={"status": "BLOCKED_PROXY"},
+                )
     t0 = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=False, trust_env=False, proxy=proxy_url) as client:
@@ -1429,9 +1473,12 @@ class ArsenalToolDetailView(APIView):
             return err_json(str(exc), status=404)
 
 
+_TOOL_SHELL_META_RE = re.compile(r"[;&|`$<>()\n\r\x00]|&&|\|\||\$\(")
+
+
 @require_http_methods(["POST"])
 async def arsenal_run_view(request: HttpRequest) -> JsonResponse:
-    """POST /api/arsenal/run — strict ScopeGuard + no-shell subprocess or DynamicToolAgent fallback."""
+    """POST /api/arsenal/run — strict ScopeGuard + allowlisted no-shell subprocess."""
     data, err = parse_json_body(request)
     if err is not None:
         return err
@@ -1439,6 +1486,31 @@ async def arsenal_run_view(request: HttpRequest) -> JsonResponse:
     target = str(data.get("target") or "").strip()
     if not tool:
         return django_err("tool is required", status=400)
+    try:
+        allowed_tool = validate_allowed_binary(tool)
+    except PermissionError as exc:
+        return django_err(str(exc), status=403, extra={"blocked": True, "status": "blocked"})
+    except ValueError as exc:
+        return django_err(str(exc), status=400)
+
+    raw_args = data.get("args")
+    if raw_args is not None and not isinstance(raw_args, list):
+        return django_err("args must be a list of strings", status=400)
+    args = [str(a) for a in (raw_args or [])]
+    if target and _TOOL_SHELL_META_RE.search(target):
+        return django_err(
+            "Shell metacharacters are forbidden.",
+            status=403,
+            extra={"blocked": True, "status": "blocked"},
+        )
+    for item in args:
+        if _TOOL_SHELL_META_RE.search(item):
+            return django_err(
+                "Shell metacharacters are forbidden.",
+                status=403,
+                extra={"blocked": True, "status": "blocked"},
+            )
+
     ok, reason, policy = validate_scan_target(
         target,
         scope=data.get("scope") or data.get("in_scope"),
@@ -1451,9 +1523,14 @@ async def arsenal_run_view(request: HttpRequest) -> JsonResponse:
     if data.get("force_fallback"):
         from core.arsenal.tool_agent_factory import TargetContext, ToolAgentFactory
 
-        agent = ToolAgentFactory().get_agent(tool)
+        agent = ToolAgentFactory().get_agent(allowed_tool)
         if agent is not None:
-            ctx = TargetContext(target=target, proxy=data.get("proxy"))
+            proxy_val = data.get("proxy")
+            if proxy_val:
+                p_ok, p_reason = validate_proxy_url(str(proxy_val))
+                if not p_ok:
+                    return django_err(p_reason, status=403, extra={"status": "BLOCKED_PROXY"})
+            ctx = TargetContext(target=target, proxy=proxy_val)
             res = await asyncio.to_thread(
                 agent.execute,
                 target,
@@ -1464,38 +1541,46 @@ async def arsenal_run_view(request: HttpRequest) -> JsonResponse:
             raw_payload = dataclasses.asdict(res) if dataclasses.is_dataclass(res) else dict(vars(res) if not isinstance(res, dict) else res)
             payload = json.loads(json.dumps(raw_payload, default=str))
             success = bool(payload.get("success", payload.get("exit_code", 0) == 0))
-            return django_json({"ok": True, "success": success, "tool": tool, **payload})
-    args = data.get("args") if isinstance(data.get("args"), list) else []
-    cmd = [Path(tool).name, *[str(a) for a in args]]
+            return django_json({"ok": True, "success": success, "tool": allowed_tool, **payload})
+    cmd = [allowed_tool, *args]
     if target and target not in cmd:
         cmd.append(target)
     try:
-        res = await run_command_no_shell(cmd, timeout_s=float(data.get("timeout_s") or 60.0))
-        return django_json({"ok": res["returncode"] == 0, "tool": tool, **res})
+        validated_cmd = validate_subprocess_command(cmd)
+        res = await run_command_no_shell(validated_cmd, timeout_s=float(data.get("timeout_s") or 60.0))
+        return django_json({"ok": res["returncode"] == 0, "tool": allowed_tool, **res})
     except PermissionError as exc:
-        return django_err(str(exc), status=403)
-
-
-_TOOL_SHELL_META_RE = re.compile(r"[;&|`$<>]|&&|\|\||\$\(")
+        return django_err(str(exc), status=403, extra={"blocked": True, "status": "blocked"})
+    except ValueError as exc:
+        return django_err(str(exc), status=400)
 
 
 @require_http_methods(["POST"])
 async def run_tool_view(request: HttpRequest) -> JsonResponse:
-    """POST /api/run-tool — fail-closed ScopeGuard + shell-free execution."""
+    """POST /api/run-tool — fail-closed ScopeGuard + binary allowlist + shell-free execution."""
     data, err = parse_json_body(request)
     if err is not None:
         return err
-    raw_command = str(data.get("command") or data.get("cmd") or "").strip()
+    raw_cmd_field = data.get("command") if data.get("command") is not None else data.get("cmd")
     tool = str(data.get("tool") or "").strip()
     target = str(data.get("target") or "").strip()
     raw_args = data.get("args", "")
-    args_str = (
-        " ".join(str(x).strip() for x in raw_args if str(x).strip())
-        if isinstance(raw_args, list)
-        else str(raw_args or "").strip()
-    )
 
-    if raw_command:
+    if isinstance(raw_cmd_field, list):
+        tokens = [str(item) for item in raw_cmd_field if str(item) != ""]
+        if not tokens:
+            return django_err("command is required", status=400)
+        for item in tokens:
+            if _TOOL_SHELL_META_RE.search(item):
+                return django_err(
+                    "Shell metacharacters are forbidden.",
+                    status=403,
+                    extra={"blocked": True, "status": "blocked"},
+                )
+        cmd_arg: Union[str, List[str]] = tokens
+        eff_tool = tokens[0]
+    elif isinstance(raw_cmd_field, str) and raw_cmd_field.strip():
+        raw_command = raw_cmd_field.strip()
         if _TOOL_SHELL_META_RE.search(raw_command):
             return django_err(
                 "Shell metacharacters are forbidden.",
@@ -1508,28 +1593,47 @@ async def run_tool_view(request: HttpRequest) -> JsonResponse:
             return django_err(f"Malformed command quoting: {exc}", status=400)
         if not tokens:
             return django_err("command is required", status=400)
-        cmd_arg: Union[str, List[str]] = tokens
-        eff_tool = Path(tokens[0]).name
+        cmd_arg = tokens
+        eff_tool = tokens[0]
     elif tool and target:
-        if _TOOL_SHELL_META_RE.search(args_str) or _TOOL_SHELL_META_RE.search(target):
-            return django_err(
-                "Shell metacharacters are forbidden.",
-                status=403,
-                extra={"blocked": True, "status": "blocked"},
-            )
-        try:
-            arg_tokens = shlex.split(args_str) if args_str else []
-        except ValueError as exc:
-            return django_err(f"Malformed args quoting: {exc}", status=400)
-        cmd_arg = [Path(tool).name, target, *arg_tokens]
-        eff_tool = Path(tool).name
+        if isinstance(raw_args, list):
+            arg_tokens = [str(x) for x in raw_args if str(x) != ""]
+        else:
+            args_str = str(raw_args or "").strip()
+            if _TOOL_SHELL_META_RE.search(args_str):
+                return django_err(
+                    "Shell metacharacters are forbidden.",
+                    status=403,
+                    extra={"blocked": True, "status": "blocked"},
+                )
+            try:
+                arg_tokens = shlex.split(args_str) if args_str else []
+            except ValueError as exc:
+                return django_err(f"Malformed args quoting: {exc}", status=400)
+        for item in [tool, target, *arg_tokens]:
+            if _TOOL_SHELL_META_RE.search(item):
+                return django_err(
+                    "Shell metacharacters are forbidden.",
+                    status=403,
+                    extra={"blocked": True, "status": "blocked"},
+                )
+        cmd_arg = [tool, target, *arg_tokens]
+        eff_tool = tool
     else:
         return django_err("command or (tool and target) is required", status=400)
 
+    try:
+        validated_cmd = validate_subprocess_command(cmd_arg)
+    except PermissionError as exc:
+        return django_err(str(exc), status=403, extra={"blocked": True, "status": "blocked"})
+    except ValueError as exc:
+        return django_err(str(exc), status=400)
+    eff_tool = validated_cmd[0]
+
     # Extract target from command tokens when omitted
     check_targets: List[str] = [target] if target else []
-    if not check_targets and isinstance(cmd_arg, list):
-        for tok in cmd_arg[1:]:
+    if not check_targets:
+        for tok in validated_cmd[1:]:
             if tok.startswith("-"):
                 continue
             cand = tok.strip("'\",;")
@@ -1562,7 +1666,7 @@ async def run_tool_view(request: HttpRequest) -> JsonResponse:
             )
 
     try:
-        res = await run_command_no_shell(cmd_arg, timeout_s=float(data.get("timeout_s") or 60.0))
+        res = await run_command_no_shell(validated_cmd, timeout_s=float(data.get("timeout_s") or 60.0))
         rc = int(res.get("returncode", 1))
         stdout = str(res.get("stdout") or "")
         return django_json(

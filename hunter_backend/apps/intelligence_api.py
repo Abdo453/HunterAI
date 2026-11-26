@@ -54,12 +54,8 @@ SKILLS_ROOTS = [
 ]
 EDITOR_ALLOWED_ROOTS = [
     BASE_DIR / "skills",
-    BASE_DIR / "agents",
-    BASE_DIR / "core",
-    BASE_DIR / "scripts",
-    BASE_DIR / "tools",
-    BASE_DIR / "bughunter",
     BASE_DIR / "data" / "reports",
+    BASE_DIR / "scratch",
 ]
 
 
@@ -1514,16 +1510,21 @@ class WordlistsRootsView(APIView):
 
 
 def _resolve_editor_path(raw_path: str, *, must_exist: bool = False) -> Path:
+    """Resolve an editor path strictly inside non-code EDITOR_ALLOWED_ROOTS via is_relative_to."""
     cleaned = (raw_path or "").strip()
-    norm = cleaned.replace("\\", "/").lstrip("/")
-    root_names = {r.name for r in EDITOR_ALLOWED_ROOTS}
-    top = norm.split("/", 1)[0] if norm else ""
-    if top in root_names or norm.startswith("data/reports"):
+    if not cleaned:
+        raise PermissionError("Invalid or empty editor path")
+    allowed_resolved = [r.resolve() for r in EDITOR_ALLOWED_ROOTS]
+    candidate_input = Path(cleaned)
+    if candidate_input.is_absolute():
+        cand = safe_resolve_path(cleaned, allowed_resolved, must_exist=must_exist)
+    else:
         cand = safe_resolve_path(cleaned, [BASE_DIR], must_exist=must_exist)
-        if any(cand.is_relative_to(r.resolve()) for r in EDITOR_ALLOWED_ROOTS):
-            return cand
-        raise PermissionError("Path escapes allowed workspace directory")
-    return safe_resolve_path(cleaned, EDITOR_ALLOWED_ROOTS, must_exist=must_exist)
+    if not any(cand.is_relative_to(root) for root in allowed_resolved):
+        raise PermissionError(
+            "Editor access is restricted strictly to skills/, data/reports/, and scratch/"
+        )
+    return cand
 
 
 class EditorTreeView(APIView):

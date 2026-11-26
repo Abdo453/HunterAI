@@ -10,7 +10,10 @@ High-performance local REST bridge (127.0.0.1:8085) connecting Burp Suite to Hun
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
+import os
+import secrets
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional
@@ -34,6 +37,10 @@ from core.burp_gateway.event_stream import BurpLiveEventStream
 logger = logging.getLogger("hunter_ai.burp_gateway")
 
 
+_LOOPBACK_BIND_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_BURP_GW_PUBLIC_PATHS = frozenset({"/health", "/status"})
+
+
 class BurpGateway:
     """RESTful local bridge for bidirectional Burp Suite cooperation"""
 
@@ -45,9 +52,33 @@ class BurpGateway:
         on_traffic_cb: Optional[Callable] = None,
         task_executor_fn: Optional[Callable[[BurpTask], Any]] = None,
         scope_engine: Optional[Any] = None,
+        api_token: Optional[str] = None,
+        require_auth: Optional[bool] = None,
     ):
-        self.host = host
+        clean_host = (host or "127.0.0.1").strip()
+        allow_remote = os.environ.get("HUNTER_BURP_GATEWAY_ALLOW_REMOTE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if clean_host.lower() not in _LOOPBACK_BIND_HOSTS and not allow_remote:
+            raise ValueError(
+                f"BurpGateway refuses non-loopback bind {clean_host!r}; "
+                "bind 127.0.0.1 or set HUNTER_BURP_GATEWAY_ALLOW_REMOTE=1"
+            )
+        self.host = clean_host
         self.port = port
+
+        resolved_token = (
+            (api_token or "").strip()
+            or (os.environ.get("HUNTER_BURP_GATEWAY_TOKEN") or "").strip()
+            or (os.environ.get("HUNTER_API_TOKEN") or "").strip()
+        )
+        if require_auth is True and not resolved_token:
+            resolved_token = secrets.token_hex(32)
+        self.api_token: Optional[str] = resolved_token or None
+        self.require_auth: bool = bool(self.api_token) if require_auth is None else bool(require_auth)
         self.capture_store = capture_store or CaptureStore("target_gateway")
         self.on_traffic_cb = on_traffic_cb
         self.task_queue = TaskQueue(executor_fn=task_executor_fn)
@@ -106,7 +137,49 @@ class BurpGateway:
 
         self.app = FastAPI(title="HunterAI Burp Suite Gateway Bridge", docs_url=None, redoc_url=None)
         self._server = None
+        self._setup_auth_middleware()
         self._setup_routes()
+
+    def _active_auth_token(self) -> Optional[str]:
+        if self.api_token:
+            return self.api_token
+        env_tok = (
+            (os.environ.get("HUNTER_BURP_GATEWAY_TOKEN") or "").strip()
+            or (os.environ.get("HUNTER_API_TOKEN") or "").strip()
+        )
+        return env_tok or None
+
+    def _setup_auth_middleware(self) -> None:
+        @self.app.middleware("http")
+        async def _verify_gateway_token(request: Request, call_next: Callable):
+            expected = self._active_auth_token()
+            if not expected and not self.require_auth:
+                return await call_next(request)
+            path = (request.url.path or "/").rstrip("/") or "/"
+            if request.method in {"GET", "HEAD"} and path in _BURP_GW_PUBLIC_PATHS:
+                return await call_next(request)
+            if not expected:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "unauthorized", "detail": "Gateway auth token not configured"},
+                )
+            provided = (request.headers.get("x-hunter-token") or "").strip()
+            if not provided:
+                auth_hdr = (request.headers.get("authorization") or "").strip()
+                parts = auth_hdr.split(None, 1)
+                if len(parts) == 2 and parts[0].lower() == "bearer":
+                    provided = parts[1].strip()
+            if not provided or not hmac.compare_digest(
+                provided.encode("utf-8"), expected.encode("utf-8")
+            ):
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": "unauthorized",
+                        "detail": "Valid X-Hunter-Token or Authorization: Bearer token required",
+                    },
+                )
+            return await call_next(request)
 
     def set_scope(self, include: Optional[List[str]] = None, exclude: Optional[List[str]] = None):
         """Programmatically updates active scope filters and recompiles scope engine"""
@@ -746,6 +819,10 @@ class BurpGateway:
         self.capture_store.record_finding(finding)
 
     async def start(self):
+        if not self._active_auth_token():
+            self.api_token = secrets.token_hex(32)
+            self.require_auth = True
+            logger.info("[GATEWAY] Generated CSPRNG local bearer token for BurpGateway authentication.")
         await self.task_queue.start()
         # ── حماية السلوك اللطيف: لو المنفذ مشغول يبقى الـ gateway قائم
         #    بنفس الخدمة الأصلية — لا تعيد الـ bind وتكسر الـ process ──

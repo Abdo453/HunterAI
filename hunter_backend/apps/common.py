@@ -46,7 +46,154 @@ TModel = TypeVar("TModel", bound=BaseModel)
 
 SECTION_ALLOWLIST_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 SKILL_NAME_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
-_SHELL_META_TOKENS = ("&&", "||", ";", "|", "`", "$(", "${", ">", "<", "\n", "\r")
+_SHELL_META_TOKENS = (
+    "&&",
+    "||",
+    ";",
+    "|",
+    "&",
+    "`",
+    "$(",
+    "${",
+    "$",
+    "(",
+    ")",
+    ">",
+    "<",
+    "\n",
+    "\r",
+    "\x00",
+)
+_PYTHON_BIN_RE = re.compile(r"^python(\d+(\.\d+)*)?w?$")
+_FORBIDDEN_SUBPROCESS_BINARIES = frozenset(
+    {
+        "python",
+        "python2",
+        "python3",
+        "py",
+        "node",
+        "nodejs",
+        "deno",
+        "bun",
+        "sh",
+        "bash",
+        "zsh",
+        "dash",
+        "ksh",
+        "csh",
+        "tcsh",
+        "fish",
+        "cmd",
+        "powershell",
+        "pwsh",
+        "curl",
+        "wget",
+        "nc",
+        "ncat",
+        "netcat",
+        "socat",
+        "perl",
+        "ruby",
+        "php",
+        "lua",
+        "awk",
+        "gawk",
+        "sed",
+        "env",
+        "xargs",
+        "find",
+        "sudo",
+        "su",
+        "chmod",
+        "chown",
+        "rm",
+        "dd",
+        "mkfs",
+        "eval",
+        "exec",
+    }
+)
+_BASE_ALLOWED_SECURITY_BINARIES = frozenset(
+    {
+        "nmap",
+        "masscan",
+        "naabu",
+        "subfinder",
+        "assetfinder",
+        "amass",
+        "dnsx",
+        "httpx",
+        "nuclei",
+        "katana",
+        "gau",
+        "waybackurls",
+        "ffuf",
+        "gobuster",
+        "feroxbuster",
+        "dirsearch",
+        "wfuzz",
+        "nikto",
+        "sqlmap",
+        "dalfox",
+        "arjun",
+        "paramspider",
+        "whatweb",
+        "wafw00f",
+        "whois",
+        "dig",
+        "host",
+        "nslookup",
+        "sslscan",
+        "testssl",
+        "sslyze",
+        "trufflehog",
+        "gitleaks",
+        "noseyparker",
+        "semgrep",
+        "wpscan",
+        "droopescan",
+        "hydra",
+        "john",
+        "hashcat",
+        "jwt_tool",
+        "subjack",
+        "subzy",
+        "dnsreaper",
+        "byp4xx",
+        "kiterunner",
+        "kr",
+        "cdncheck",
+        "interactsh-client",
+        "jsluice",
+        "qsreplace",
+        "anew",
+        "gf",
+        "theharvester",
+        "enum4linux-ng",
+        "smbclient",
+        "crackmapexec",
+        "netexec",
+        "searchsploit",
+        "msfconsole",
+        "tshark",
+        "tcpdump",
+        "openssl",
+        "radare2",
+        "r2",
+        "objdump",
+        "readelf",
+        "strings",
+        "jadx",
+        "apktool",
+        "frida",
+        "objection",
+        "scoutsuite",
+        "prowler",
+        "trivy",
+        "syft",
+        "grype",
+    }
+)
 _BLOCKED_SENSITIVE_FILENAMES = {
     ".env",
     ".env.local",
@@ -58,6 +205,8 @@ _BLOCKED_SENSITIVE_FILENAMES = {
     "authorization_grant.json",
     ".policy_secret",
     ".django_secret",
+    ".api_token",
+    ".session_gen",
     "secrets.json",
 }
 _SECRET_MASK_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
@@ -539,17 +688,57 @@ def validate_scan_target(
 
 
 # ---------------------------------------------------------------------------
-# Shell-Free Subprocess Execution
+# Shell-Free Subprocess Execution & Proxy Validation
 # ---------------------------------------------------------------------------
 
 
-async def run_command_no_shell(
-    command: str | List[str],
-    *,
-    timeout_s: float = 60.0,
-    cwd: Optional[Path] = None,
-) -> Dict[str, Any]:
-    """Execute a command strictly via ``asyncio.create_subprocess_exec`` (no shell)."""
+def get_allowed_subprocess_binaries() -> frozenset[str]:
+    """Return the strict allowlist of security-tool binaries permitted for subprocess execution."""
+    allowed = set(_BASE_ALLOWED_SECURITY_BINARIES)
+    try:
+        from core.arsenal.kali_catalog import KALI_TOOL_CATALOG
+
+        for name, defn in KALI_TOOL_CATALOG.items():
+            for raw in (name, getattr(defn, "binary_name", "")):
+                norm = Path(str(raw or "").strip()).name.lower().removesuffix(".exe")
+                if norm and norm not in _FORBIDDEN_SUBPROCESS_BINARIES and not _PYTHON_BIN_RE.match(norm):
+                    allowed.add(norm)
+    except Exception as exc:
+        logger.debug("Using base allowed subprocess binaries (catalog unavailable): %s", exc)
+    return frozenset(b for b in allowed if b not in _FORBIDDEN_SUBPROCESS_BINARIES and not _PYTHON_BIN_RE.match(b))
+
+
+def normalize_binary_name(raw_binary: str) -> str:
+    """Return normalized lowercase executable basename stripped of common Windows extensions."""
+    cleaned = str(raw_binary or "").strip()
+    base = Path(cleaned).name.lower()
+    for ext in (".exe", ".bat", ".cmd", ".com", ".ps1", ".sh"):
+        if base.endswith(ext):
+            base = base[: -len(ext)]
+            break
+    return base
+
+
+def validate_allowed_binary(raw_binary: str) -> str:
+    """Enforce strict binary allowlist and reject interpreters/shells/downloaders."""
+    raw = str(raw_binary or "").strip()
+    if not raw:
+        raise ValueError("Empty executable name")
+    for tok in _SHELL_META_TOKENS:
+        if tok in raw:
+            raise PermissionError(f"Shell operator {tok!r} is forbidden in executable name")
+    if "/" in raw or "\\" in raw:
+        raise PermissionError(f"Direct path execution {raw!r} is forbidden; use an allowlisted binary name")
+    norm = normalize_binary_name(raw)
+    if not norm or norm in _FORBIDDEN_SUBPROCESS_BINARIES or _PYTHON_BIN_RE.match(norm):
+        raise PermissionError(f"Binary {norm or raw!r} is prohibited by subprocess security policy")
+    if norm not in get_allowed_subprocess_binaries():
+        raise PermissionError(f"Binary {norm!r} is not on the security tool allowlist")
+    return norm
+
+
+def validate_subprocess_command(command: str | List[str]) -> List[str]:
+    """Validate str or list command against shell metacharacters and strict binary allowlist."""
     if isinstance(command, str):
         raw = command.strip()
         if not raw:
@@ -560,15 +749,96 @@ async def run_command_no_shell(
         tokens = shlex.split(raw, posix=(os.name != "nt"))
     elif isinstance(command, list):
         tokens = [str(item) for item in command if str(item) != ""]
+        if not tokens:
+            raise ValueError("No command arguments parsed")
+        for item in tokens:
+            for tok in _SHELL_META_TOKENS:
+                if tok in item:
+                    raise PermissionError(
+                        f"Shell operator {tok!r} is forbidden in subprocess argument"
+                    )
     else:
         raise ValueError("command must be a string or list of arguments")
 
     if not tokens:
         raise ValueError("No command arguments parsed")
 
+    allowed_bin = validate_allowed_binary(tokens[0])
+    for item in tokens[1:]:
+        for tok in _SHELL_META_TOKENS:
+            if tok in item:
+                raise PermissionError(f"Shell operator {tok!r} is forbidden in subprocess argument")
+
+    return [allowed_bin, *tokens[1:]]
+
+
+def validate_proxy_url(raw_proxy: str) -> Tuple[bool, str]:
+    """Validate an outbound HTTP(S) proxy URL and block internal/metadata/non-http(s) proxies."""
+    raw = (raw_proxy or "").strip()
+    if not raw:
+        return False, "Proxy URL is empty"
+    if any(ch in raw for ch in ("\r", "\n", "\x00", " ", "\t")):
+        return False, "Proxy URL contains disallowed whitespace or control characters"
+
+    parsed = urlparse(raw)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in {"http", "https"}:
+        return False, f"Disallowed proxy scheme {scheme!r}; only http and https proxies are permitted"
+    if not parsed.netloc or not parsed.hostname:
+        return False, "Proxy URL must include a valid host"
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        return False, "Proxy URL must not include path, query, or fragment components"
+    try:
+        port = parsed.port
+    except ValueError:
+        return False, "Invalid proxy port"
+    if port is not None and not (1 <= port <= 65535):
+        return False, "Proxy port out of range"
+
+    host = parsed.hostname.strip().rstrip(".").lower()
+    explicit_allowed = {
+        item.strip().rstrip("/").lower()
+        for item in os.environ.get("HUNTER_ALLOWED_PROXIES", "").split(",")
+        if item.strip()
+    }
+    normalized = f"{scheme}://{host}:{port}" if port else f"{scheme}://{host}"
+
+    category, reason = classify_host_security(host)
+    if category == "non_overridable":
+        return False, f"Proxy host blocked ({reason})"
+
+    if normalized in explicit_allowed:
+        return True, "Allowed by HUNTER_ALLOWED_PROXIES"
+
+    if category in {"loopback", "private_lab"}:
+        return False, f"Internal/loopback proxy host {host!r} is blocked unless listed in HUNTER_ALLOWED_PROXIES"
+
+    # Reject DNS rebinding to internal/metadata/loopback IPs
+    if normalize_ip_literal(host) is None:
+        try:
+            infos = socket.getaddrinfo(host, port or (443 if scheme == "https" else 80), proto=socket.IPPROTO_TCP)
+            for info in infos:
+                if info and len(info) >= 5 and info[4]:
+                    ip_str = str(info[4][0])
+                    ip_cat, ip_reason = classify_host_security(ip_str)
+                    if ip_cat in {"non_overridable", "loopback", "private_lab"}:
+                        return False, f"Proxy host resolves to blocked internal IP ({ip_reason})"
+        except OSError as exc:
+            logger.debug("Proxy DNS pre-check skipped for %r: %s", host, exc)
+
+    return True, "Allowed"
+
+
+async def run_command_no_shell(
+    command: str | List[str],
+    *,
+    timeout_s: float = 60.0,
+    cwd: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Execute an allowlisted security tool strictly via ``asyncio.create_subprocess_exec`` (no shell)."""
+    tokens = validate_subprocess_command(command)
+
     exe = shutil.which(tokens[0])
-    if exe is None and Path(tokens[0]).is_file():
-        exe = tokens[0]
     if exe is None:
         return {
             "returncode": 127,
@@ -589,8 +859,8 @@ async def run_command_no_shell(
     except asyncio.TimeoutError:
         try:
             proc.kill()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to kill timed-out subprocess: %s", exc)
         return {
             "returncode": -1,
             "stdout": "",

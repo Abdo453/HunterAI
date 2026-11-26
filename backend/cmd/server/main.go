@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"artex-pro/internal/agent"
@@ -14,23 +16,49 @@ import (
 	"artex-pro/internal/database"
 )
 
+func envOrDefault(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func envIntOrDefault(key string, fallback int) int {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return fallback
+}
+
 func main() {
 	target := flag.String("target", "", "Target domain to assess (e.g. example.com)")
 	serverMode := flag.Bool("server", false, "Run in HTTP API Server daemon mode")
-	port := flag.Int("port", 7071, "HTTP API server port")
-	dbHost := flag.String("db-host", "127.0.0.1", "PostgreSQL host")
-	dbPort := flag.Int("db-port", 5432, "PostgreSQL port")
-	dbUser := flag.String("db-user", "artex", "PostgreSQL user")
-	dbPass := flag.String("db-pass", "artex123", "PostgreSQL password")
-	dbName := flag.String("db-name", "artex_pro", "PostgreSQL database name")
+	port := flag.Int("port", envIntOrDefault("ARTEX_PORT", 7071), "HTTP API server port")
+	bindAddr := flag.String("bind", strings.TrimSpace(os.Getenv("ARTEX_BIND_ADDR")), "HTTP API bind address (default 127.0.0.1:<port>)")
+	dbHost := flag.String("db-host", envOrDefault("ARTEX_DB_HOST", "127.0.0.1"), "PostgreSQL host")
+	dbPort := flag.Int("db-port", envIntOrDefault("ARTEX_DB_PORT", 5432), "PostgreSQL port")
+	dbUser := flag.String("db-user", envOrDefault("ARTEX_DB_USER", "artex"), "PostgreSQL user")
+	dbPass := flag.String("db-pass", os.Getenv("ARTEX_DB_PASSWORD"), "PostgreSQL password (or set ARTEX_DB_PASSWORD)")
+	dbName := flag.String("db-name", envOrDefault("ARTEX_DB_NAME", "artex_pro"), "PostgreSQL database name")
+	dbSSLMode := flag.String("db-sslmode", strings.TrimSpace(os.Getenv("ARTEX_DB_SSLMODE")), "PostgreSQL sslmode (disable|allow|prefer|require|verify-ca|verify-full)")
 	flag.Parse()
+
+	if strings.TrimSpace(*bindAddr) != "" {
+		_ = os.Setenv("ARTEX_BIND_ADDR", strings.TrimSpace(*bindAddr))
+	}
+
+	if strings.TrimSpace(*dbPass) == "" && strings.ToLower(strings.TrimSpace(os.Getenv("ARTEX_DB_ALLOW_EMPTY_PASSWORD"))) != "1" {
+		log.Fatalf("[-] Database password is required: pass -db-pass or set ARTEX_DB_PASSWORD (no insecure default password).")
+	}
 
 	fmt.Println("==================================================================")
 	fmt.Println("  ⚡ ARTEX-Pro Go High-Concurrency Autonomous Core Engine")
 	fmt.Println("==================================================================")
 
 	// 1. Connect to PostgreSQL
-	db, err := database.Connect(*dbHost, *dbPort, *dbUser, *dbPass, *dbName)
+	db, err := database.ConnectWithSSLMode(*dbHost, *dbPort, *dbUser, *dbPass, *dbName, *dbSSLMode)
 	if err != nil {
 		log.Fatalf("[-] Database connection failed: %v", err)
 	}

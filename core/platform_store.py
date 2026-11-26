@@ -11,6 +11,8 @@ touching disk.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -88,6 +90,54 @@ def new_id(prefix: str) -> str:
     """Generate a canonical prefixed identifier."""
     clean = re.sub(r"[^a-z0-9_]", "", prefix.lower()) or "id"
     return f"{clean}_{uuid.uuid4().hex[:12]}"
+
+
+def compute_proposal_digest(
+    *,
+    action_type: str,
+    tool_name: str,
+    target: str,
+    raw_command_args: str,
+    engagement_id: Optional[str],
+    scope: Optional[Iterable[str]] = None,
+) -> str:
+    """Compute immutable SHA-256 digest over canonical JSON of an approval proposal."""
+    normalized_scope = sorted(
+        {str(item).strip() for item in (scope or ()) if str(item).strip()}
+    )
+    canonical_payload = {
+        "action_type": str(action_type or ""),
+        "tool_name": str(tool_name or ""),
+        "target": str(target or ""),
+        "raw_command_args": str(raw_command_args or ""),
+        "engagement_id": str(engagement_id or ""),
+        "scope": normalized_scope,
+    }
+    canonical_json = json.dumps(
+        canonical_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+def verify_proposal_digest(approval: Dict[str, Any]) -> bool:
+    """Verify an approval record's immutable SHA-256 ``proposal_digest`` in constant time."""
+    if not isinstance(approval, dict):
+        return False
+    stored = str(approval.get("proposal_digest") or "").strip()
+    if len(stored) != 64:
+        return False
+    expected = compute_proposal_digest(
+        action_type=str(approval.get("action_type") or ""),
+        tool_name=str(approval.get("tool_name") or ""),
+        target=str(approval.get("target") or ""),
+        raw_command_args=str(approval.get("command_args") or ""),
+        engagement_id=approval.get("engagement_id"),
+        scope=approval.get("scope_snapshot") or [],
+    )
+    return hmac.compare_digest(stored.encode("ascii"), expected.encode("ascii"))
 
 
 def redact_text(text: str) -> str:
@@ -291,6 +341,10 @@ class PlatformStore:
                     target TEXT NOT NULL DEFAULT '',
                     tool_name TEXT NOT NULL DEFAULT '',
                     command_args TEXT NOT NULL DEFAULT '',
+                    display_target TEXT NOT NULL DEFAULT '',
+                    display_command_args TEXT NOT NULL DEFAULT '',
+                    proposal_digest TEXT NOT NULL DEFAULT '',
+                    scope_snapshot_json TEXT NOT NULL DEFAULT '[]',
                     risk_tier TEXT NOT NULL DEFAULT 'TIER_2_PROBE',
                     rationale TEXT NOT NULL DEFAULT '',
                     payload_json TEXT NOT NULL DEFAULT '{}',
@@ -337,6 +391,18 @@ class PlatformStore:
                 """
             )
             now = time.time()
+            existing_cols = {
+                row["name"]
+                for row in cur.execute("PRAGMA table_info(approvals)").fetchall()
+            }
+            for col_name, ddl in (
+                ("display_target", "ALTER TABLE approvals ADD COLUMN display_target TEXT NOT NULL DEFAULT ''"),
+                ("display_command_args", "ALTER TABLE approvals ADD COLUMN display_command_args TEXT NOT NULL DEFAULT ''"),
+                ("proposal_digest", "ALTER TABLE approvals ADD COLUMN proposal_digest TEXT NOT NULL DEFAULT ''"),
+                ("scope_snapshot_json", "ALTER TABLE approvals ADD COLUMN scope_snapshot_json TEXT NOT NULL DEFAULT '[]'"),
+            ):
+                if col_name not in existing_cols:
+                    cur.execute(ddl)
             cur.execute(
                 "INSERT OR IGNORE INTO context (id, active_engagement_id, active_run_id, active_conversation_id, extra_json, updated_at) VALUES (1, NULL, NULL, NULL, '{}', ?)",
                 (now,),
@@ -1127,6 +1193,13 @@ class PlatformStore:
     # ── Approvals ─────────────────────────────────────────────────────────────
 
     def _row_to_approval(self, row: sqlite3.Row) -> Dict[str, Any]:
+        keys = set(row.keys())
+        display_target = row["display_target"] if "display_target" in keys and row["display_target"] else redact_text(row["target"])
+        display_cmd = (
+            row["display_command_args"]
+            if "display_command_args" in keys and row["display_command_args"]
+            else redact_text(row["command_args"])
+        )
         return {
             "approval_id": row["approval_id"],
             "engagement_id": row["engagement_id"],
@@ -1139,6 +1212,10 @@ class PlatformStore:
             "target": row["target"],
             "tool_name": row["tool_name"],
             "command_args": row["command_args"],
+            "display_target": display_target,
+            "display_command_args": display_cmd,
+            "proposal_digest": row["proposal_digest"] if "proposal_digest" in keys else "",
+            "scope_snapshot": _json_loads(row["scope_snapshot_json"], []) if "scope_snapshot_json" in keys else [],
             "risk_tier": row["risk_tier"],
             "rationale": row["rationale"],
             "payload": _json_loads(row["payload_json"], {}),
@@ -1169,18 +1246,44 @@ class PlatformStore:
         tool_exec_id: Optional[str] = None,
         ttl_seconds: float = 3600.0,
         approval_id: Optional[str] = None,
+        scope: Optional[Iterable[str]] = None,
     ) -> Dict[str, Any]:
         now = time.time()
         aid = approval_id or new_id("apr")
         expires_at = now + max(60.0, float(ttl_seconds)) if ttl_seconds else None
+        raw_target = str(target or "")
+        raw_cmd_args = str(command_args or "")
+        display_target = redact_text(raw_target)
+        display_cmd_args = redact_text(raw_cmd_args)
+
+        if scope is not None:
+            scope_snapshot = sorted({str(s).strip() for s in scope if str(s).strip()})
+        elif engagement_id:
+            eng = self.get_engagement(engagement_id)
+            scope_snapshot = sorted(
+                {str(s).strip() for s in ((eng or {}).get("in_scope") or []) if str(s).strip()}
+            )
+        else:
+            scope_snapshot = []
+
+        proposal_digest = compute_proposal_digest(
+            action_type=action_type,
+            tool_name=tool_name,
+            target=raw_target,
+            raw_command_args=raw_cmd_args,
+            engagement_id=engagement_id,
+            scope=scope_snapshot,
+        )
+
         with self._lock:
             self._conn.execute(
                 """
                 INSERT INTO approvals (
                     approval_id, engagement_id, run_id, conversation_id, task_id, agent_id, tool_exec_id,
-                    action_type, target, tool_name, command_args, risk_tier, rationale, payload_json,
+                    action_type, target, tool_name, command_args, display_target, display_command_args,
+                    proposal_digest, scope_snapshot_json, risk_tier, rationale, payload_json,
                     status, decision_note, decided_by, decided_at, expires_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', '', NULL, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', '', NULL, ?, ?, ?)
                 """,
                 (
                     aid,
@@ -1191,9 +1294,13 @@ class PlatformStore:
                     agent_id,
                     tool_exec_id,
                     action_type,
-                    redact_text(target),
+                    raw_target,
                     tool_name,
-                    redact_text(command_args),
+                    raw_cmd_args,
+                    display_target,
+                    display_cmd_args,
+                    proposal_digest,
+                    _json_dumps(scope_snapshot, redact=False),
                     risk_tier,
                     redact_text(rationale),
                     _json_dumps(payload or {}),
@@ -1214,12 +1321,19 @@ class PlatformStore:
             agent_id=agent_id,
             tool_exec_id=tool_exec_id,
             source="policy_gate",
-            payload={"approval_id": aid, "action_type": action_type, "target": rec["target"], "tool_name": tool_name, "risk_tier": risk_tier},
+            payload={
+                "approval_id": aid,
+                "action_type": action_type,
+                "target": rec["display_target"],
+                "tool_name": tool_name,
+                "risk_tier": risk_tier,
+                "proposal_digest": proposal_digest,
+            },
         )
         self.add_notification(
             kind="approval_required",
             title=f"Approval required: {action_type}",
-            message=f"{tool_name or action_type} on {rec['target'] or 'workspace'} ({risk_tier})",
+            message=f"{tool_name or action_type} on {rec['display_target'] or 'workspace'} ({risk_tier})",
             severity="warning",
             ref_kind="approval",
             ref_id=aid,

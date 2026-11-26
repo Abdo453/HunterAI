@@ -13,6 +13,7 @@ from django.conf import settings
 
 from core.run_control import GLOBAL_RUN_CONTROLLER
 from hunter_backend.apps.common import call_ai
+from hunter_backend.auth import ANONYMOUS_AUTH, AuthContext, authenticate_headers
 from hunter_backend.runtime import (
     EVENT_BUS,
     _ACTIVE_MASTER_MISSIONS,
@@ -32,10 +33,10 @@ def _extract_headers(scope: Dict[str, Any]) -> Dict[str, str]:
     return headers
 
 
-def is_ws_origin_allowed(origin: Optional[str]) -> bool:
-    """Enforce WS allowlist while permitting non-browser CLI/test clients with absent Origin."""
+def is_ws_origin_allowed(origin: Optional[str], *, has_valid_bearer: bool = False) -> bool:
+    """Enforce fail-closed WS Origin allowlist; missing Origin requires valid bearer auth."""
     if origin is None:
-        return True
+        return bool(has_valid_bearer)
     cleaned = origin.strip().rstrip("/").lower()
     if not cleaned or cleaned == "null":
         return False
@@ -55,10 +56,13 @@ class WSConnection:
         scope: Dict[str, Any],
         receive: Callable[..., Any],
         send: Callable[..., Any],
+        *,
+        auth: AuthContext = ANONYMOUS_AUTH,
     ) -> None:
         self.scope = scope
         self._receive = receive
         self._send = send
+        self.auth = auth
         self.closed = False
         self.query = parse_qs(
             (scope.get("query_string") or b"").decode("utf-8", errors="replace")
@@ -160,6 +164,16 @@ async def _handle_ws_platform(ws: WSConnection) -> None:
                     if action == "ping":
                         await ws.send_json({"type": "pong"})
                     elif action in {"pause", "resume", "stop"} and cmd.get("run_id"):
+                        if not ws.auth.is_user_tier:
+                            await ws.send_json(
+                                {
+                                    "type": "error",
+                                    "error": "operator_tier_required",
+                                    "detail": "Operator authentication is required for run control actions.",
+                                }
+                            )
+                            recv_task = asyncio.create_task(ws.receive_raw())
+                            continue
                         rid = str(cmd["run_id"])
                         ok = False
                         if action == "pause":
@@ -309,16 +323,23 @@ async def websocket_application(
     receive: Callable[..., Any],
     send: Callable[..., Any],
 ) -> None:
-    """Pure ASGI WebSocket dispatcher enforcing CSWSH Origin checks."""
+    """Pure ASGI WebSocket dispatcher enforcing fail-closed CSWSH Origin & bearer checks."""
     headers = _extract_headers(scope)
+    auth_ctx, creds_supplied = authenticate_headers(headers)
+    if creds_supplied and not auth_ctx.authenticated:
+        logger.warning("Rejected WebSocket upgrade with invalid credentials")
+        await send({"type": "websocket.close", "code": 4401})
+        return
+
     origin = headers.get("origin")
-    if not is_ws_origin_allowed(origin):
-        logger.warning("Rejected WebSocket upgrade with untrusted Origin: %r", origin)
+    has_valid_bearer = bool(auth_ctx.authenticated and auth_ctx.is_bearer)
+    if not is_ws_origin_allowed(origin, has_valid_bearer=has_valid_bearer):
+        logger.warning("Rejected WebSocket upgrade with missing/untrusted Origin: %r", origin)
         await send({"type": "websocket.close", "code": 4403})
         return
 
     path = (scope.get("path") or "").rstrip("/") or "/"
-    ws = WSConnection(scope, receive, send)
+    ws = WSConnection(scope, receive, send, auth=auth_ctx)
 
     if path == "/ws/platform":
         await _handle_ws_platform(ws)

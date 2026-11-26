@@ -51,7 +51,21 @@ MIDDLEWARE = [
     "hunter_backend.middleware.SecurityHeadersMiddleware",
     "hunter_backend.middleware.AsyncWhiteNoiseMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "hunter_backend.middleware.LocalAuthMiddleware",
     "hunter_backend.middleware.ApiCsrfAndJsonGuardMiddleware",
+]
+
+# Local authentication & trusted proxy configuration
+HUNTER_SESSION_COOKIE_NAME = "hunter_session"
+HUNTER_API_TOKEN = get_or_create_secret(
+    "HUNTER_API_TOKEN",
+    "data/root_controller/.api_token",
+    nbytes=32,
+)
+TRUSTED_PROXIES = [
+    p.strip()
+    for p in os.environ.get("HUNTERAI_TRUSTED_PROXIES", "").split(",")
+    if p.strip()
 ]
 
 ROOT_URLCONF = "hunter_backend.urls"
@@ -76,7 +90,7 @@ _TRUSTED_ORIGINS = list(dict.fromkeys([*_LOCAL_ORIGINS, *_EXTRA_ORIGINS]))
 CORS_ALLOWED_ORIGINS = _TRUSTED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(
-    dict.fromkeys([*default_headers, "last-event-id", "x-csrftoken"])
+    dict.fromkeys([*default_headers, "last-event-id", "x-csrftoken", "x-hunter-token"])
 )
 
 CSRF_TRUSTED_ORIGINS = _TRUSTED_ORIGINS
@@ -89,8 +103,8 @@ WS_ALLOWED_ORIGINS = set(_TRUSTED_ORIGINS)
 _CSP_CONNECT_EXTRA = " ".join(_EXTRA_ORIGINS)
 CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
-    "style-src 'self' 'unsafe-inline'; "
+    "script-src 'self' blob:; "
+    "style-src 'self'; "
     "font-src 'self' data:; "
     "img-src 'self' data: blob:; "
     "worker-src 'self' blob:; "
