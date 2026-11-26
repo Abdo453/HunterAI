@@ -810,3 +810,253 @@ def test_06_optional_live_ollama_status(e2e_stack: E2EStack) -> None:
     resp = httpx.get("http://127.0.0.1:11434/api/tags", timeout=3.0)
     assert resp.status_code == 200
     assert "models" in resp.json()
+
+
+_EXAMPLE_TARGET_PRESETS: tuple[tuple[str, str, str], ...] = (
+    ("http://testphp.vulnweb.com", "Acunetix TestPHP", "testphp.vulnweb.com"),
+    ("http://testhtml5.vulnweb.com", "Acunetix TestHTML5", "testhtml5.vulnweb.com"),
+    ("https://juice-shop.herokuapp.com", "OWASP Juice Shop Online", "juice-shop.herokuapp.com"),
+    ("https://demo.testfire.net", "Altoro Mutual", "demo.testfire.net"),
+    ("https://example.com", "Example.com Baseline", "example.com"),
+    ("http://127.0.0.1:3001", "Local Juice Shop (:3001)", "127.0.0.1, 127.0.0.1:3001"),
+    ("http://127.0.0.1:8080", "Local DVWA / Burp Lab (:8080)", "127.0.0.1, 127.0.0.1:8080"),
+    ("http://localhost:8081", "Local WebGoat / Docker (:8081)", "localhost, localhost:8081"),
+)
+
+
+def _wait_ui_ready_with_overview(page: Page, url: str) -> None:
+    """Navigate to *url* and wait until both React hydration and /api/platform/overview settle."""
+    with page.expect_response(
+        lambda r: "/api/platform/overview" in r.url and r.request.method == "GET",
+        timeout=20000,
+    ):
+        _wait_ui_ready(page, url)
+    page.wait_for_timeout(150)
+
+
+def _assert_no_horizontal_overflow(page: Page, context_label: str) -> None:
+    """Assert documentElement does not overflow horizontally."""
+    overflow = page.evaluate(
+        "() => document.documentElement.scrollWidth > document.documentElement.clientWidth"
+    )
+    assert overflow is False, f"Horizontal overflow detected ({context_label})"
+
+
+def test_07_example_test_sites_presets_and_launch(
+    e2e_stack: E2EStack,
+    e2e_page: tuple[Page, PageDiagnostics],
+) -> None:
+    """Verify all 3 Example Practice & Local Lab preset surfaces, RTL/theme toggles, workspace save, and run launch."""
+    page, diag = e2e_page
+    expected_urls = [url for url, _label, _scope in _EXAMPLE_TARGET_PRESETS]
+
+    # 1. Overview (`/`) preset strip & Navbar datalist + popover on desktop (1440x900)
+    _wait_ui_ready_with_overview(page, f"{e2e_stack.ui_base}/")
+    _assert_no_horizontal_overflow(page, "desktop / EN+Dark")
+
+    overview_presets = page.locator('[data-testid="overview-target-presets"]')
+    overview_presets.wait_for(state="visible", timeout=10000)
+    overview_text = overview_presets.inner_text()
+    for preset_url in expected_urls:
+        assert preset_url in overview_text, f"Missing preset {preset_url!r} in overview preset strip"
+        assert (
+            overview_presets.locator("button", has_text=preset_url).count() == 1
+        ), f"Expected exactly 1 overview pill for {preset_url!r}"
+
+    # Clicking testphp and :3001 pills populates #overview-target directly
+    overview_target = page.locator("#overview-target")
+    testphp_pill = overview_presets.locator("button", has_text="http://testphp.vulnweb.com")
+    local_3001_pill = overview_presets.locator("button", has_text="http://127.0.0.1:3001")
+
+    testphp_pill.click()
+    assert overview_target.input_value() == "http://testphp.vulnweb.com"
+    assert testphp_pill.get_attribute("aria-pressed") == "true"
+
+    local_3001_pill.click()
+    assert overview_target.input_value() == "http://127.0.0.1:3001"
+    assert local_3001_pill.get_attribute("aria-pressed") == "true"
+    assert testphp_pill.get_attribute("aria-pressed") == "false"
+
+    # Verify #target-example-presets datalist contains >= 8 preset URLs
+    datalist_values = page.evaluate(
+        "() => Array.from(document.querySelectorAll('#target-example-presets option'))"
+        ".map(o => o.getAttribute('value') || '')"
+    )
+    assert len(datalist_values) >= 8, f"Expected >= 8 datalist options, got {datalist_values!r}"
+    for preset_url in expected_urls:
+        assert preset_url in datalist_values, f"Missing {preset_url!r} in #target-example-presets"
+
+    # Navbar preset popover on desktop (1440x900)
+    presets_btn = page.locator('[data-testid="navbar-target-presets-btn"]')
+    popover = page.locator("#navbar-target-presets-popover")
+    nav_input = page.locator("#scan-target-input")
+
+    presets_btn.click()
+    popover.wait_for(state="visible", timeout=5000)
+    assert presets_btn.get_attribute("aria-expanded") == "true"
+    _assert_no_horizontal_overflow(page, "desktop / navbar popover open")
+    popover_box = popover.bounding_box()
+    assert popover_box is not None
+    assert popover_box["x"] >= 0 and popover_box["x"] + popover_box["width"] <= 1441, popover_box
+    popover_text = popover.inner_text()
+    for preset_url in expected_urls:
+        assert preset_url in popover_text, f"Missing {preset_url!r} in navbar popover"
+
+    popover.locator("button", has_text="http://testphp.vulnweb.com").click()
+    popover.wait_for(state="hidden", timeout=5000)
+    assert presets_btn.get_attribute("aria-expanded") == "false"
+    assert nav_input.input_value() == "http://testphp.vulnweb.com"
+
+    # 2. Mobile (390x844) overflow & Navbar popover selection check
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.wait_for_timeout(200)
+    _assert_no_horizontal_overflow(page, "mobile 390x844 / popover closed")
+
+    presets_btn.click()
+    popover.wait_for(state="visible", timeout=5000)
+    _assert_no_horizontal_overflow(page, "mobile 390x844 / navbar popover open")
+    mobile_popover_box = popover.bounding_box()
+    assert mobile_popover_box is not None
+    assert (
+        mobile_popover_box["x"] >= 0
+        and mobile_popover_box["x"] + mobile_popover_box["width"] <= 391
+    ), mobile_popover_box
+
+    popover.locator("button", has_text="http://127.0.0.1:3001").click()
+    popover.wait_for(state="hidden", timeout=5000)
+    assert nav_input.input_value() == "http://127.0.0.1:3001"
+
+    # Restore desktop viewport
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.wait_for_timeout(200)
+
+    # 3. Overview preset pill -> Launch Full Assessment -> Managed Runs Pause & Stop cleanly
+    testphp_pill.click()
+    assert overview_target.input_value() == "http://testphp.vulnweb.com"
+    mission_form = page.locator("form").filter(has=overview_target)
+    page.wait_for_function(
+        "() => { const form = document.querySelector('#overview-target')?.closest('form'); "
+        "const btn = form?.querySelector('button[type=\"submit\"]'); return Boolean(btn && !btn.disabled); }",
+        timeout=5000,
+    )
+    with page.expect_response(
+        lambda r: "/api/platform/runs/start" in r.url and r.request.method == "POST",
+        timeout=10000,
+    ) as start_resp_info:
+        mission_form.locator('button[type="submit"]').click()
+    assert start_resp_info.value.status in (200, 201), start_resp_info.value.text()
+    start_payload = start_resp_info.value.json()
+    assert start_payload.get("run", {}).get("target") == "http://testphp.vulnweb.com", start_payload
+
+    run_row = page.locator("table tbody tr", has_text="http://testphp.vulnweb.com").first
+    run_row.wait_for(state="visible", timeout=15000)
+
+    pause_btn = run_row.locator('button[title="Pause"]')
+    pause_btn.wait_for(state="visible", timeout=8000)
+    pause_btn.click()
+    resume_btn = run_row.locator('button[title="Resume"]')
+    resume_btn.wait_for(state="visible", timeout=8000)
+    stop_btn = run_row.locator('button[title="Stop"]')
+    stop_btn.wait_for(state="visible", timeout=8000)
+    stop_btn.click()
+    stop_btn.wait_for(state="hidden", timeout=8000)
+    run_row.locator("span", has_text="stopped").wait_for(state="visible", timeout=8000)
+    page.wait_for_timeout(250)
+
+    save_verification_screenshot(page, "10_example_test_sites_overview.png")
+
+    # 4. Arabic (AR RTL) + Light mode toggle cleanly on `/` and `/operations`
+    page.locator('button[title="Switch Theme"]').click()
+    page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'light'")
+    page.locator('button[title="Switch Language"]').click()
+    page.wait_for_function(
+        "() => document.documentElement.getAttribute('lang') === 'ar' && "
+        "document.documentElement.getAttribute('dir') === 'rtl'"
+    )
+    _assert_no_horizontal_overflow(page, "desktop / AR+Light")
+    overview_presets.wait_for(state="visible", timeout=5000)
+    assert (
+        overview_presets.evaluate(
+            "el => { const u = el.querySelector('.ltr-isolate'); return u ? getComputedStyle(u).direction : null; }"
+        )
+        == "ltr"
+    )
+
+    presets_btn.click()
+    popover.wait_for(state="visible", timeout=5000)
+    _assert_no_horizontal_overflow(page, "desktop / AR+Light navbar popover open")
+    page.keyboard.press("Escape")
+    popover.wait_for(state="hidden", timeout=5000)
+
+    # 5. Navigate to `/operations`, verify AR+Light RTL presets, click :8080 preset, toggle EN+Dark, save (201)
+    _wait_ui_ready_with_overview(page, f"{e2e_stack.ui_base}/operations")
+    page.wait_for_function(
+        "() => document.documentElement.getAttribute('data-theme') === 'light' && "
+        "document.documentElement.getAttribute('lang') === 'ar' && "
+        "document.documentElement.getAttribute('dir') === 'rtl'",
+        timeout=10000,
+    )
+    _assert_no_horizontal_overflow(page, "desktop /operations AR+Light")
+
+    ops_presets = page.locator('[data-testid="operations-target-presets"]')
+    ops_presets.wait_for(state="visible", timeout=10000)
+    ops_text = ops_presets.inner_text()
+    for preset_url in expected_urls:
+        assert preset_url in ops_text, f"Missing preset {preset_url!r} in operations preset strip"
+    assert (
+        ops_presets.evaluate(
+            "el => { const u = el.querySelector('.ltr-isolate'); return u ? getComputedStyle(u).direction : null; }"
+        )
+        == "ltr"
+    )
+
+    ops_presets.locator("button", has_text="http://127.0.0.1:8080").click()
+
+    ops_section = page.locator("section").filter(has=ops_presets)
+    target_form = ops_section.locator("form")
+    project_name_input = target_form.locator("input").nth(0)
+    primary_url_input = target_form.locator('input[list="target-example-presets"]')
+    in_scope_input = target_form.locator("input").nth(2)
+
+    assert project_name_input.input_value() == "Local DVWA / Burp Lab (:8080)"
+    assert primary_url_input.input_value() == "http://127.0.0.1:8080"
+    assert in_scope_input.input_value() == "127.0.0.1, 127.0.0.1:8080"
+
+    # Toggle back to EN + Dark on `/operations` and submit Save Authorized Target
+    page.locator("header button[title]").filter(has_text="EN").click()
+    page.wait_for_function(
+        "() => document.documentElement.getAttribute('lang') === 'en' && "
+        "document.documentElement.getAttribute('dir') === 'ltr'"
+    )
+    page.locator('button[title="Switch Theme"]').click()
+    page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'dark'")
+    _assert_no_horizontal_overflow(page, "desktop /operations EN+Dark")
+
+    assert project_name_input.input_value() == "Local DVWA / Burp Lab (:8080)"
+    assert primary_url_input.input_value() == "http://127.0.0.1:8080"
+    assert in_scope_input.input_value() == "127.0.0.1, 127.0.0.1:8080"
+
+    with page.expect_response(
+        lambda r: "/api/platform/engagements" in r.url and r.request.method == "POST",
+        timeout=15000,
+    ) as eng_resp_info:
+        page.get_by_role("button", name="Save Authorized Target").click()
+
+    assert eng_resp_info.value.status == 201, eng_resp_info.value.text()
+    created_eng = eng_resp_info.value.json().get("engagement", {})
+    assert created_eng.get("target") == "http://127.0.0.1:8080", created_eng
+    assert created_eng.get("in_scope") == ["127.0.0.1", "127.0.0.1:8080"], created_eng
+
+    page.locator("span.text-sentinel-success", has_text="Save").wait_for(
+        state="visible", timeout=10000
+    )
+    workspace_card = (
+        ops_section.locator(
+            "div.border-t.border-border-subtle div.font-semibold",
+            has_text="Local DVWA / Burp Lab (:8080)",
+        )
+        .first
+    )
+    workspace_card.wait_for(state="visible", timeout=10000)
+
+    diag.assert_clean()
