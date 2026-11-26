@@ -25,11 +25,46 @@ from hunter_backend.testing import ASGISyncClient
 
 
 def test_fail_closed_web_governance_under_unrestricted_cli(monkeypatch):
+    import hunter_backend.apps.arsenal_api as arsenal_api
+
     monkeypatch.setenv("HUNTER_UNRESTRICTED", "1")
     monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
-    assert web_governance_enforced() is True
+    assert web_governance_enforced() is False
 
+    async def _fake_run(cmd, timeout_s=60.0):
+        return {"command": " ".join(cmd), "stdout": "ok", "stderr": "", "returncode": 0}
+
+    monkeypatch.setattr(arsenal_api, "run_command_no_shell", _fake_run)
+
+    # Default explicit-target mode still enforces non-overridable metadata SSRF
+    # while permitting arbitrary websites, local labs, private ranges, and ?url= query params.
     with ASGISyncClient() as client:
+        assert (
+            client.post(
+                "/api/platform/engagements",
+                json={"name": "BadMeta", "target": "http://169.254.169.254/latest"},
+            ).status_code
+            == 403
+        )
+        for explicit_tgt in (
+            "https://any-site.com",
+            "http://target.com/?url=http://169.254.169.254",
+            "http://localhost:3001",
+            "http://127.0.0.1:8080",
+            "http://192.168.1.50",
+            "http://10.10.10.5",
+            "https://enhanced-target.local",
+        ):
+            chk = client.post("/api/scope/check", json={"target": explicit_tgt})
+            assert chk.status_code == 200, explicit_tgt
+            assert chk.json()["allowed"] is True, (explicit_tgt, chk.json())
+
+        assert client.post("/api/run-tool", json={"command": "nmap 192.168.1.50"}).status_code == 200
+        assert client.post("/api/run-tool", json={"command": "nmap localhost:3001"}).status_code == 200
+
+        # Explicit opt-in strict governance (HUNTER_WEB_UNRESTRICTED=0) restores fail-closed 403
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
+        assert web_governance_enforced() is True
         for ep, payload in (
             ("/api/platform/engagements", {"name": "Bad", "target": "http://169.254.169.254/latest"}),
             ("/api/platform/runs/start", {"kind": "pipeline", "target": "https://unscoped.example.org"}),
@@ -43,30 +78,38 @@ def test_fail_closed_web_governance_under_unrestricted_cli(monkeypatch):
 
 def test_ssrf_metadata_private_scheme_and_dns_rebind_blocked(monkeypatch):
     monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
+    monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
-    blocked_urls = [
+    non_overridable_urls = [
         "http://169.254.169.254/latest/meta-data/",
         "http://[::ffff:169.254.169.254]/latest/meta-data/",
         "http://2852039166/latest/meta-data/",
         "http://0xa9fea9fe/latest/meta-data/",
         "http://metadata.google.internal/computeMetadata/v1/",
+        "http://metadata.internal/latest/",
+        "http://instance-data/",
         "http://100.100.100.200/latest/meta-data/",
-        "http://10.0.0.1/admin",
-        "http://172.16.10.2/",
-        "http://192.168.1.1/",
-        "http://127.0.0.1:8000/",
-        "http://[::1]:8000/",
-        "http://localhost:8000/",
+        "http://[fd00:ec2::254]/latest/meta-data/",
+        "http://[fe80::1]/",
+        "http://0.0.0.0:8000/",
         "file:///etc/passwd",
         "gopher://127.0.0.1:6379/_INFO",
+        "javascript:alert(1)",
     ]
     with ASGISyncClient() as client:
-        for url in blocked_urls:
+        # Non-overridable Cloud Metadata & unsafe schemes stay strictly 403 even in default mode
+        for url in non_overridable_urls:
             r = client.post(
                 "/api/burp/repeater/send",
                 json={"url": url, "method": "GET", "scope": ["169.254.169.254", "localhost", "127.0.0.1", "10.0.0.1"]},
             )
             assert r.status_code == 403, f"SSRF not blocked for {url}: {r.status_code} {r.text}"
+
+        # Destination host is target.com; metadata literal inside query param must remain ALLOWED
+        q_chk = client.post("/api/scope/check", json={"target": "http://target.com/?url=http://169.254.169.254"})
+        assert q_chk.status_code == 200
+        assert q_chk.json()["allowed"] is True
 
         # Raw HTTP Repeater request targeting metadata IP via Host header must also fail 403
         raw_meta = client.post(
@@ -78,7 +121,7 @@ def test_ssrf_metadata_private_scheme_and_dns_rebind_blocked(monkeypatch):
         )
         assert raw_meta.status_code == 403
 
-        # DNS rebinding to loopback/metadata IP must be blocked even if domain is in scope
+        # DNS rebinding to metadata IP must stay blocked even if domain is in scope
         def _fake_getaddrinfo(host, port, *args, **kwargs):
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 80))]
 
@@ -88,6 +131,22 @@ def test_ssrf_metadata_private_scheme_and_dns_rebind_blocked(monkeypatch):
             json={"url": "https://rebind.example.com/api", "method": "GET", "scope": ["example.com", "*.example.com"]},
         )
         assert rebind.status_code == 403
+
+        # Under explicit governed opt-in (HUNTER_WEB_UNRESTRICTED=0), private/loopback targets are also 403
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
+        for governed_url in (
+            "http://10.0.0.1/admin",
+            "http://172.16.10.2/",
+            "http://192.168.1.1/",
+            "http://127.0.0.1:8000/",
+            "http://[::1]:8000/",
+            "http://localhost:8000/",
+        ):
+            rg = client.post(
+                "/api/burp/repeater/send",
+                json={"url": governed_url, "method": "GET", "scope": ["localhost", "127.0.0.1", "10.0.0.1"]},
+            )
+            assert rg.status_code == 403, f"Governed SSRF not blocked for {governed_url}: {rg.status_code}"
 
 
 def test_path_traversal_ads_trailing_dot_and_proxy_subpath_blocked():
@@ -252,8 +311,7 @@ def test_approval_decide_unmocked_gateway_and_scope_boundaries(isolated_platform
 
     store = ps.get_platform_store()
 
-    # 1. Explicit lab engagement for 127.0.0.1
-    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
+    # 1. Explicit engagement for 127.0.0.1 and example.com
     eng_resp = isolated_platform_client.post(
         "/api/platform/engagements",
         json={
@@ -267,7 +325,57 @@ def test_approval_decide_unmocked_gateway_and_scope_boundaries(isolated_platform
     assert eng_resp.status_code == 201, eng_resp.text
     eid = eng_resp.json()["engagement_id"]
 
-    # 2. SSRF metadata, RFC1918, excluded path, and unscoped approvals fail 403 BEFORE 'approved' is persisted
+    # 1b. Default explicit-target mode allows unscoped/out-of-scope targets, while blocking metadata & shell injection
+    py_tool = "python" if shutil.which("python") else ("python3" if shutil.which("python3") else Path(sys.executable).name)
+    meta_apr = store.create_approval(
+        action_type="RUN_TOOL",
+        target="http://169.254.169.254/latest/meta-data/",
+        tool_name=py_tool,
+        command_args="-V",
+        engagement_id=None,
+        rationale="Metadata blocked in default mode",
+    )
+    assert (
+        isolated_platform_client.post(
+            f"/api/platform/approvals/{meta_apr['approval_id']}/decide",
+            json={"decision": "approved"},
+        ).status_code
+        == 403
+    )
+    inj_apr = store.create_approval(
+        action_type="RUN_TOOL",
+        target="https://example.com/api",
+        tool_name=py_tool,
+        command_args="-V && whoami",
+        engagement_id=None,
+        rationale="Shell injection blocked in default mode",
+    )
+    assert (
+        isolated_platform_client.post(
+            f"/api/platform/approvals/{inj_apr['approval_id']}/decide",
+            json={"decision": "approved"},
+        ).status_code
+        == 403
+    )
+    default_unscoped_apr = store.create_approval(
+        action_type="RUN_TOOL",
+        target="https://any-site.com/api",
+        tool_name=py_tool,
+        command_args="-V",
+        engagement_id=None,
+        rationale="Explicit target allowed without prior scope by default",
+    )
+    def_res = isolated_platform_client.post(
+        f"/api/platform/approvals/{default_unscoped_apr['approval_id']}/decide",
+        json={"decision": "approved"},
+    )
+    assert def_res.status_code == 200, def_res.text
+    assert def_res.json()["execution"]["executed"] is True
+
+    # 2. Under strict web governance (HUNTER_WEB_UNRESTRICTED=0), SSRF metadata, RFC1918, excluded path,
+    #    and unscoped approvals fail 403 BEFORE 'approved' is persisted
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
+    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
     for label, case_eid, tgt, cmd in (
         ("metadata", eid, "http://169.254.169.254/latest/meta-data/", "http://169.254.169.254/latest/meta-data/"),
         ("rfc1918", eid, "http://10.0.0.1/admin", "http://10.0.0.1/admin"),
@@ -292,7 +400,7 @@ def test_approval_decide_unmocked_gateway_and_scope_boundaries(isolated_platform
         assert persisted is not None
         assert persisted["status"] == "rejected"
 
-    # 3. With HUNTER_ALLOW_LOCALHOST_SCOPE disabled, loopback approval fails 403 before approval persists
+    # 3. With HUNTER_ALLOW_LOCALHOST_SCOPE disabled under governed mode, loopback approval fails 403 before approval persists
     monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
     loop_apr = store.create_approval(
         action_type="RUN_TOOL",
@@ -311,7 +419,6 @@ def test_approval_decide_unmocked_gateway_and_scope_boundaries(isolated_platform
 
     # 4. With HUNTER_ALLOW_LOCALHOST_SCOPE=1, un-mocked GovernedToolGateway executes real command without HTTP 500
     monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
-    py_tool = "python" if shutil.which("python") else ("python3" if shutil.which("python3") else Path(sys.executable).name)
     ok_apr = store.create_approval(
         action_type="RUN_TOOL",
         target="http://127.0.0.1:8080/api/item",
@@ -381,7 +488,7 @@ def test_localhost_lab_override_allows_localhost_while_blocking_metadata(isolate
 
     monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
     monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
-    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
 
     srv, port, thread = _start_local_lab_http_server()
     try:
@@ -530,7 +637,7 @@ def test_private_lab_scope_override_explicit_ip_and_cidr(isolated_platform_clien
 
     monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
     monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
-    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
 
     # 1. Default fail-closed blocks private lab targets even when listed in scope
     assert (
@@ -612,7 +719,7 @@ def test_web_unrestricted_mode_allows_public_and_labs_keeps_metadata_403(isolate
     monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
     monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
     monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
-    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
     assert web_governance_enforced() is False
 
     async def _fake_run(cmd, timeout_s=60.0):
@@ -622,13 +729,35 @@ def test_web_unrestricted_mode_allows_public_and_labs_keeps_metadata_403(isolate
 
     srv, port, thread = _start_local_lab_http_server()
     try:
-        # 1. Arbitrary public domain and local/private labs work with zero prior engagement scope
-        run_pub = isolated_platform_client.post(
-            "/api/platform/runs/start",
-            json={"kind": "pipeline", "target": "https://arbitrary-public.example"},
+        # 1. Default explicit-target mode allows arbitrary public websites, .local, localhost,
+        #    private lab ranges, and ?url= query payloads even with zero engagement or active restrictive scope
+        eng_restrict = isolated_platform_client.post(
+            "/api/platform/engagements",
+            json={
+                "name": "Restrictive Workspace",
+                "target": "https://primary.example",
+                "in_scope": ["primary.example"],
+                "out_of_scope": ["blocked.example.com", "*/logout"],
+                "set_active": True,
+            },
         )
-        assert run_pub.status_code == 200, run_pub.text
-        isolated_platform_client.post(f"/api/platform/runs/{run_pub.json()['run_id']}/stop")
+        assert eng_restrict.status_code == 201
+
+        for tgt in (
+            "https://any-site.com",
+            "https://enhanced-target.local",
+            "http://target.com/?url=http://169.254.169.254",
+            "http://localhost:3001",
+            f"http://127.0.0.1:{port}",
+            "http://192.168.1.50:8080",
+            "http://10.10.10.5:3000",
+        ):
+            run_pub = isolated_platform_client.post(
+                "/api/platform/runs/start",
+                json={"kind": "pipeline", "target": tgt},
+            )
+            assert run_pub.status_code == 200, (tgt, run_pub.text)
+            isolated_platform_client.post(f"/api/platform/runs/{run_pub.json()['run_id']}/stop")
 
         rep_loop = isolated_platform_client.post(
             "/api/burp/repeater/send",
@@ -636,6 +765,17 @@ def test_web_unrestricted_mode_allows_public_and_labs_keeps_metadata_403(isolate
         )
         assert rep_loop.status_code == 200, rep_loop.text
         assert rep_loop.json()["status_code"] == 200
+
+        # Explicit out_of_scope on engagement or payload does NOT block explicit target in default mode
+        rep_logout = isolated_platform_client.post(
+            "/api/burp/repeater/send",
+            json={
+                "url": f"http://127.0.0.1:{port}/logout",
+                "method": "GET",
+                "out_of_scope": ["blocked.example.com", "*/logout"],
+            },
+        )
+        assert rep_logout.status_code == 200, rep_logout.text
 
         eng_priv = isolated_platform_client.post(
             "/api/platform/engagements",
@@ -645,7 +785,7 @@ def test_web_unrestricted_mode_allows_public_and_labs_keeps_metadata_403(isolate
 
         chk_priv = isolated_platform_client.post(
             "/api/scope/check",
-            json={"target": "http://10.10.10.5:3000"},
+            json={"target": "http://10.10.10.5:3000", "out_of_scope": ["10.10.10.5"]},
         )
         assert chk_priv.status_code == 200
         assert chk_priv.json()["allowed"] is True
@@ -656,31 +796,11 @@ def test_web_unrestricted_mode_allows_public_and_labs_keeps_metadata_403(isolate
         )
         assert tool_ok.status_code == 200, tool_ok.text
 
-        # 2. Explicit out_of_scope exclusions are STILL honored
-        assert (
-            isolated_platform_client.post(
-                "/api/burp/repeater/send",
-                json={
-                    "url": "https://blocked.example.com/api",
-                    "method": "GET",
-                    "out_of_scope": ["blocked.example.com"],
-                },
-            ).status_code
-            == 403
-        )
-        assert (
-            isolated_platform_client.post(
-                "/api/burp/repeater/send",
-                json={
-                    "url": f"http://127.0.0.1:{port}/logout",
-                    "method": "GET",
-                    "out_of_scope": ["*/logout"],
-                },
-            ).status_code
-            == 403
-        )
+        # Explicit HUNTER_WEB_UNRESTRICTED=1 behaves identically
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
+        assert web_governance_enforced() is False
 
-        # 3. Non-overridable Cloud Metadata, link-local, 0.0.0.0, schemes, shell metachars, and DNS rebind MUST stay 403
+        # 2. Non-overridable Cloud Metadata, link-local, 0.0.0.0, schemes, shell metachars, and DNS rebind MUST stay 403
         still_blocked = [
             "http://169.254.169.254/latest/meta-data/",
             "http://[::ffff:169.254.169.254]/latest/meta-data/",

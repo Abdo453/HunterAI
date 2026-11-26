@@ -65,15 +65,16 @@ def test_omni_hunter_web_phase_with_browser_enabled():
 
 # ── 3. Web UI /api/browser/browse API Endpoint Test ──────────────────────────
 
-def test_api_browser_browse_endpoint():
-    """Verify Django/ASGI /api/browser/browse enforces ScopeGuard and triggers exploration."""
+def test_api_browser_browse_endpoint(monkeypatch):
+    """Verify Django/ASGI /api/browser/browse allows explicit URLs by default and enforces ScopeGuard when opted in."""
     with ASGISyncClient() as client:
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
         unscoped = client.post("/api/browser/browse", json={"url": "https://api.test.local"})
         assert unscoped.status_code == 403
+        monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
         payload = {
             "url": "https://api.test.local",
-            "scope": ["api.test.local"],
             "visible": False,
             "canary": "test_canary_payload",
         }

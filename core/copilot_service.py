@@ -477,6 +477,15 @@ class _StrictScopeGuardAdapter:
                 reason=sec_reason or f"SECURITY INVARIANT: Host '{host}' is strictly forbidden.",
             )
 
+        # Default owner pentest mode (web_governance_enforced() == False): allow any explicit
+        # website, .local, localhost, or private LAN/VPN target with zero in_scope/out_of_scope
+        # gating while strictly preserving Cloud Metadata/link-local SSRF and scheme blocks.
+        if not web_governance_enforced():
+            return _ScopeDecision(
+                allowed=True,
+                reason="Web unrestricted mode: explicit target permitted (non-overridable SSRF/scheme invariants enforced).",
+            )
+
         path_err = matches_path_exclusions(raw_target, host, self._path_exclusions)
         if path_err:
             return _ScopeDecision(allowed=False, reason=path_err)
@@ -488,7 +497,7 @@ class _StrictScopeGuardAdapter:
             if isinstance(target_ip, ipaddress.IPv6Address) and target_ip.ipv4_mapped is not None:
                 ip_candidates.append(target_ip.ipv4_mapped)
 
-        # Explicit Out-of-Scope exclusions are ALWAYS honored, including under HUNTER_WEB_UNRESTRICTED=1.
+        # Explicit Out-of-Scope exclusions apply when strict web governance is enabled.
         for cand in ip_candidates:
             for net in self._guard.out_of_scope_subnets:
                 if cand.version == net.version and cand in net:
@@ -496,14 +505,6 @@ class _StrictScopeGuardAdapter:
         for pat in self._guard.out_of_scope_patterns:
             if pat.search(host):
                 return _ScopeDecision(allowed=False, reason=f"Target {host} matches Out-of-Scope rule")
-
-        # When web governance is explicitly disabled (HUNTER_WEB_UNRESTRICTED=1), allow public
-        # and local/private lab targets without failing closed on missing engagement scope.
-        if not web_governance_enforced():
-            return _ScopeDecision(
-                allowed=True,
-                reason="Web unrestricted mode: target permitted outside non-overridable invariants and out_of_scope exclusions.",
-            )
 
         # Under governed web mode, loopback and private lab targets require explicit opt-in + scope entry.
         if category == "loopback" and not is_explicit_lab_loopback(host, self._in_scope):
@@ -541,6 +542,16 @@ class _StrictScopeGuardAdapter:
 def _validate_target_token(target: str) -> Optional[str]:
     """Ensure a target token does not contain shell injection metacharacters."""
     if not target:
+        return None
+    stripped = target.lstrip()
+    if stripped.lower().startswith(("http://", "https://")):
+        pre_query, _sep, query = stripped.partition("?")
+        for ch in (";", "&&", "||", "|", "`", "$(", "${", ">", "<", "&", "\n", "\r", "\x00"):
+            if ch in pre_query:
+                return f"Unsafe character {ch!r} in target"
+        for ch in (";", "&&", "||", "|", "`", "$(", "${", ">", "<", "\n", "\r", "\x00"):
+            if ch in query:
+                return f"Unsafe character {ch!r} in target"
         return None
     for ch in (";", "&&", "||", "|", "`", "$(", "${", ">", "<", "&", "\n", "\r", "\x00"):
         if ch in target:

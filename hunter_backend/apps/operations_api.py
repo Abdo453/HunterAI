@@ -394,7 +394,7 @@ async def engines_run_view(request: HttpRequest) -> JsonResponse:
         )
         if not ok:
             return django_err(reason, status=403, extra={"policy": policy, "status": "BLOCKED_SCOPE"})
-        if req.in_scope or req.out_of_scope:
+        if (req.in_scope or req.out_of_scope) and web_governance_enforced():
             try:
                 guard = ScopeGuard(
                     in_scope=req.in_scope or [req.target],
@@ -402,14 +402,17 @@ async def engines_run_view(request: HttpRequest) -> JsonResponse:
                 )
             except Exception as exc:
                 return django_err(f"Invalid scope: {exc}", status=400)
-    elif req.in_scope or req.out_of_scope:
-        try:
-            guard = ScopeGuard(
-                in_scope=req.in_scope,
-                out_of_scope=req.out_of_scope,
-            )
-        except Exception as exc:
-            return django_err(f"Invalid scope: {exc}", status=400)
+    elif (req.in_scope or req.out_of_scope):
+        from core.security_mode import web_governance_enforced
+
+        if web_governance_enforced():
+            try:
+                guard = ScopeGuard(
+                    in_scope=req.in_scope,
+                    out_of_scope=req.out_of_scope,
+                )
+            except Exception as exc:
+                return django_err(f"Invalid scope: {exc}", status=400)
 
     worker = EngineWorker(cfg, scope_guard=guard)
     task = AgentTask(target=req.target, mode="engine", extra={"prompt": req.prompt})

@@ -81,15 +81,16 @@ def test_api_arsenal_tool_detail(client):
     assert data["mcp_schema"]["name"] == "kali_subfinder"
 
 
-def test_api_arsenal_run_tool(client):
-    """Verify interactive execution of a tool via DynamicToolAgent (requires explicit scope)."""
+def test_api_arsenal_run_tool(client, monkeypatch):
+    """Verify interactive execution of a tool via DynamicToolAgent (unrestricted explicit targets + opt-in scope)."""
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
     unscoped = client.post("/api/arsenal/run", json={"tool": "katana", "target": "http://example.com"})
     assert unscoped.status_code == 403
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
     payload = {
         "tool": "katana",
         "target": "http://example.com",
-        "scope": ["example.com"],
         "force_fallback": True,
         "thinking": True,
     }

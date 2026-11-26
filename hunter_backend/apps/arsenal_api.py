@@ -24,6 +24,7 @@ from rest_framework.views import APIView
 from core.copilot_service import (
     detect_live_providers,
     evaluate_action_policy,
+    extract_target_host,
     is_tcp_reachable,
     wrap_untrusted_data,
 )
@@ -37,6 +38,7 @@ from core.policy.red_team import (
 )
 from core.run_control import GLOBAL_RUN_CONTROLLER
 from core.sandbox import LocalSandbox
+from core.security_mode import web_governance_enforced
 from hunter_backend.apps.common import (
     await_sync,
     call_ai,
@@ -971,6 +973,9 @@ class ScopeEnforcePhaseGView(APIView):
         target = str(data.get("target") or "").strip()
         if not target:
             return err_json("target is required", status=400)
+        if not web_governance_enforced():
+            allowed, reason, _pol = validate_scan_target(target, action_type="scope_enforce")
+            return ok_json({"target": target, "allowed": allowed, "reason": reason})
         enforcer = get_scope_enforcer()
         allowed, reason = enforcer.enforce_target(target)
         return ok_json({"target": target, "allowed": allowed, "reason": reason})
@@ -1528,7 +1533,14 @@ async def run_tool_view(request: HttpRequest) -> JsonResponse:
             if tok.startswith("-"):
                 continue
             cand = tok.strip("'\",;")
-            if "://" in cand or "." in cand or cand.lower() == "localhost":
+            host_cand = extract_target_host(cand)
+            if (
+                "://" in cand
+                or "." in cand
+                or ":" in cand
+                or host_cand in {"localhost", "localhost.localdomain"}
+                or (cand.isdigit() and int(cand) > 65535)
+            ):
                 check_targets.append(cand)
                 break
     if not check_targets:

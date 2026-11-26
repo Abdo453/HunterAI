@@ -49,13 +49,21 @@ def set_unrestricted(enabled: bool) -> None:
 
 
 def web_governance_enforced() -> bool:
-    """Return True when web/API gateways must enforce fail-closed governance.
+    """Return True ONLY when strict web/API scope governance is explicitly enabled.
 
-    Defaults to True so HTTP/WebSocket gateways always enforce scope, SSRF,
-    and policy boundaries unless ``HUNTER_WEB_UNRESTRICTED`` is explicitly
-    set to a truthy value (``1/true/yes/on/enabled/unrestricted``).
+    Defaults to False (operator-selected explicit websites and lab targets are
+    permitted without ``in_scope``/``out_of_scope`` scope gating, while
+    non-overridable Cloud Metadata/link-local SSRF, dangerous schemes, shell
+    metacharacters, traversal, and CSRF/Origin checks remain enforced).
+
+    Set ``HUNTER_WEB_UNRESTRICTED`` to an explicit falsy/governed value
+    (``0/false/no/off/disabled/governed/restricted``) to opt into fail-closed
+    engagement/``in_scope``/``out_of_scope`` web scope governance.
     """
     value = os.getenv(_WEB_UNRESTRICTED_ENV_VAR)
     if value is None:
-        return True
-    return value.strip().lower() not in _TRUTHY
+        return False
+    clean = value.strip().lower()
+    if not clean:
+        return False
+    return clean in _FALSY

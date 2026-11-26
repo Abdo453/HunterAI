@@ -17,10 +17,11 @@ from django.views.decorators.http import require_GET, require_http_methods
 from rest_framework.views import APIView
 
 import hunter_backend.runtime as rt
-from core.copilot_service import evaluate_action_policy
+from core.copilot_service import _StrictScopeGuardAdapter, evaluate_action_policy
 from core.gateway.schemas import ActionProposal
 from core.http_analyzer import HTTPTrafficAnalyzer
 from core.platform_store import new_id
+from core.security_mode import web_governance_enforced
 from hunter_backend.apps.common import (
     await_sync,
     call_ai,
@@ -344,9 +345,12 @@ async def gateway_execute_view(request: HttpRequest) -> JsonResponse:
         from tools.tool_manager import ToolManager
 
         allowed = list(data.get("scope") or data.get("in_scope") or [])
-        if not allowed and target and "localhost" not in target and "169.254" not in target and "127.0.0.1" not in target:
-            allowed = [target]
-        guard = AgentScopeGuard(ScopeRule(target=target or "target.local", allowed_domains=allowed, allow_active_tests=True))
+        if web_governance_enforced():
+            if not allowed and target and "localhost" not in target and "169.254" not in target and "127.0.0.1" not in target:
+                allowed = [target]
+            guard = AgentScopeGuard(ScopeRule(target=target or "target.local", allowed_domains=allowed, allow_active_tests=True))
+        else:
+            guard = _StrictScopeGuardAdapter(in_scope=allowed, out_of_scope=[], allow_active_tests=True)
         gw = GovernedToolGateway(policy_engine=PolicyEngine(scope_guard=guard), tool_manager=ToolManager())
         prop = ActionProposal(
             target=target,

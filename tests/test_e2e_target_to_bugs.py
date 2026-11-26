@@ -228,16 +228,17 @@ def test_end_to_end_target_to_confirmed_bugs_pipeline(vuln_lab_server, isolated_
     base_url, port, handler_cls = vuln_lab_server
     client, tmp_path, reports_dir, sessions_dir, ev_store = isolated_lab_env
 
-    # 1. Verify default fail-closed SSRF guard rejects loopback before lab opt-in
+    # 1. Verify default explicit-target mode allows local labs while blocking Cloud Metadata SSRF,
+    #    and strict opt-in governance (HUNTER_WEB_UNRESTRICTED=0) rejects un-opted loopback.
     monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
     blocked_eng = client.post(
         "/api/platform/engagements",
         json={"name": "BlockedLab", "target": base_url, "in_scope": ["127.0.0.1"]},
     )
     assert blocked_eng.status_code == 403
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
-    # Enable explicit local lab loopback ONLY (metadata & RFC1918 remain strictly 403)
-    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
     meta_blocked = client.post(
         "/api/platform/engagements",
         json={"name": "MetaBlocked", "target": "http://169.254.169.254", "in_scope": ["169.254.169.254"]},
@@ -349,7 +350,15 @@ def test_end_to_end_target_to_confirmed_bugs_pipeline(vuln_lab_server, isolated_
     assert r_redirect.json()["status_code"] == 302
     assert r_redirect.json()["headers"].get("location") == "https://evil.example/phish"
 
-    # Out-of-scope /logout and metadata SSRF are blocked BEFORE touching server
+    # Metadata SSRF is ALWAYS blocked; under strict web governance /logout out_of_scope is also blocked
+    r_meta = client.post(
+        "/api/burp/repeater/send",
+        json={"url": "http://169.254.169.254/latest/meta-data/", "method": "GET", "engagement_id": eng_id},
+    )
+    assert r_meta.status_code == 403
+
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
+    monkeypatch.setenv("HUNTER_ALLOW_LOCALHOST_SCOPE", "1")
     r_logout = client.post(
         "/api/burp/repeater/send",
         json={
@@ -362,12 +371,8 @@ def test_end_to_end_target_to_confirmed_bugs_pipeline(vuln_lab_server, isolated_
     )
     assert r_logout.status_code == 403
     assert handler_cls.logout_hits == []
-
-    r_meta = client.post(
-        "/api/burp/repeater/send",
-        json={"url": "http://169.254.169.254/latest/meta-data/", "method": "GET", "engagement_id": eng_id},
-    )
-    assert r_meta.status_code == 403
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+    monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
 
     # 5. Differential analysis + Evidence Court FP filtering & confirmation
     diff = DifferentialAnalyzer().compare_responses(

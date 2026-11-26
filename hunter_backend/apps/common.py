@@ -405,18 +405,22 @@ def validate_http_url_ssrf_and_scope(
             f"Unsupported or unsafe URL scheme {parsed.scheme!r}; only http/https allowed",
             {"status": "BLOCKED_SCHEME"},
         )
-    in_list, out_list = resolve_effective_scope(
-        scope=scope,
-        out_of_scope=out_of_scope,
-        engagement_id=engagement_id,
-    )
     host = extract_target_host(raw)
-    host_out_list, path_exclusions = split_out_of_scope_exclusions(out_list)
-    path_hit = _check_path_exclusions(raw, host, path_exclusions)
-    if path_hit is not None:
-        return path_hit
-
     unrestricted_web = not web_governance_enforced()
+    if unrestricted_web:
+        in_list, out_list = [], []
+        host_out_list, path_exclusions = [], []
+    else:
+        in_list, out_list = resolve_effective_scope(
+            scope=scope,
+            out_of_scope=out_of_scope,
+            engagement_id=engagement_id,
+        )
+        host_out_list, path_exclusions = split_out_of_scope_exclusions(out_list)
+        path_hit = _check_path_exclusions(raw, host, path_exclusions)
+        if path_hit is not None:
+            return path_hit
+
     lab_loopback_ok = _is_explicit_lab_loopback(host, in_list)
     lab_private_ok = _is_explicit_lab_private(host, in_list)
     ip_reason = _is_forbidden_ip_or_host(
@@ -484,19 +488,23 @@ def validate_scan_target(
         status = "BLOCKED_SCHEME" if "scheme" in syntax_err.lower() else "BLOCKED_INVALID_URL"
         return False, syntax_err, {"status": status}
 
-    in_list, out_list = resolve_effective_scope(
-        scope=scope,
-        out_of_scope=out_of_scope,
-        engagement_id=engagement_id,
-    )
     host = extract_target_host(clean)
-    host_out_list, path_exclusions = split_out_of_scope_exclusions(out_list)
-    if "/" in clean:
-        path_hit = _check_path_exclusions(clean, host, path_exclusions)
-        if path_hit is not None:
-            return path_hit
-
     unrestricted_web = not web_governance_enforced()
+    if unrestricted_web:
+        in_list, out_list = [], []
+        host_out_list, path_exclusions = [], []
+    else:
+        in_list, out_list = resolve_effective_scope(
+            scope=scope,
+            out_of_scope=out_of_scope,
+            engagement_id=engagement_id,
+        )
+        host_out_list, path_exclusions = split_out_of_scope_exclusions(out_list)
+        if "/" in clean:
+            path_hit = _check_path_exclusions(clean, host, path_exclusions)
+            if path_hit is not None:
+                return path_hit
+
     lab_loopback_ok = _is_explicit_lab_loopback(host, in_list)
     lab_private_ok = _is_explicit_lab_private(host, in_list)
     ip_reason = _is_forbidden_ip_or_host(

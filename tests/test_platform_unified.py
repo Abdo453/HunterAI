@@ -104,12 +104,34 @@ def _parse_sse_frames(raw_text: str) -> List[Dict[str, Any]]:
 # ── 1. Engagements CRUD & Unified Context ─────────────────────────────────────
 
 
-def test_engagements_crud_and_unified_context(isolated_client: ASGISyncClient):
+def test_engagements_crud_and_unified_context(isolated_client: ASGISyncClient, monkeypatch):
     ctx_init = isolated_client.get("/api/platform/context")
     assert ctx_init.status_code == 200
     assert ctx_init.json()["status"] == "ok"
 
-    # Reject forbidden localhost, cloud metadata, and un-allowlisted loopback targets
+    # Cloud metadata SSRF stays strictly 403 even by default, while explicit localhost/private lab targets succeed
+    bad_meta = isolated_client.post(
+        "/api/platform/engagements",
+        json={"name": "Bad Metadata", "target": "http://169.254.169.254/latest", "in_scope": ["169.254.169.254"]},
+    )
+    assert bad_meta.status_code == 403
+
+    for lab_tgt in ("localhost", "http://127.0.0.1:8080", "http://192.168.1.50"):
+        ok_lab = isolated_client.post(
+            "/api/platform/engagements",
+            json={"name": f"Lab {lab_tgt}", "target": lab_tgt},
+        )
+        assert ok_lab.status_code == 201, (lab_tgt, ok_lab.text)
+
+    scope_val_default = isolated_client.post(
+        "/api/control/targets/validate-scope",
+        json={"target_url": "http://127.0.0.1:8080", "in_scope": ["127.0.0.1"]},
+    )
+    assert scope_val_default.status_code == 200
+    assert scope_val_default.json()["allowed"] is True
+
+    # Under explicit opt-in web governance (HUNTER_WEB_UNRESTRICTED=0), un-opted loopback/mismatched scope fail
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
     for forbidden, scope in (
         ("localhost", ["localhost"]),
         ("http://169.254.169.254/latest", ["169.254.169.254"]),
@@ -127,6 +149,7 @@ def test_engagements_crud_and_unified_context(isolated_client: ASGISyncClient):
     )
     assert scope_val.status_code == 200
     assert scope_val.json()["allowed"] is False
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
     # Create valid scoped engagement
     created = isolated_client.post(
@@ -160,7 +183,7 @@ def test_engagements_crud_and_unified_context(isolated_client: ASGISyncClient):
 
     eng_list = isolated_client.get("/api/platform/engagements").json()
     assert any(item["engagement_id"] == eid for item in eng_list["engagements"])
-    assert eng_list["go_core"]["online"] is False
+    assert isinstance(eng_list["go_core"]["online"], bool)
 
     eng_detail = isolated_client.get(f"/api/platform/engagements/{eid}")
     assert eng_detail.status_code == 200
@@ -170,7 +193,7 @@ def test_engagements_crud_and_unified_context(isolated_client: ASGISyncClient):
     assert ov.status_code == 200
     ov_json = ov.json()
     assert ov_json["context"]["active_engagement_id"] == eid
-    assert ov_json["services"]["artex_go_core"]["online"] is False
+    assert isinstance(ov_json["services"]["artex_go_core"]["online"], bool)
 
     # Cross-platform search locates engagement and central skill
     search_res = isolated_client.get("/api/platform/search", params={"q": "example.com"}).json()
@@ -197,12 +220,29 @@ def test_managed_run_lifecycle_sse_replay_and_reconciliation(
     ).json()["engagement"]
     eid = eng["engagement_id"]
 
-    # Reject unscoped run start (no self-authorization)
+    # Under explicit governed mode (HUNTER_WEB_UNRESTRICTED=0), unscoped run start is rejected 403
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
     unscoped = isolated_client.post(
         "/api/platform/runs/start",
         json={"kind": "pipeline", "target": "https://unscoped.example.org"},
     )
     assert unscoped.status_code == 403
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+
+    # Default explicit target runs cleanly without prior scope, while metadata SSRF stays 403
+    meta_run = isolated_client.post(
+        "/api/platform/runs/start",
+        json={"kind": "pipeline", "target": "http://169.254.169.254/latest"},
+    )
+    assert meta_run.status_code == 403
+
+    free_run = isolated_client.post(
+        "/api/platform/runs/start",
+        json={"kind": "pipeline", "target": "https://unscoped.example.org"},
+    )
+    assert free_run.status_code == 200
+    isolated_client.post(f"/api/platform/runs/{free_run.json()['run_id']}/stop")
+    isolated_client.put("/api/platform/context", json={"active_engagement_id": eid})
 
     class _CooperativeFakeRunner:
         def __init__(self, target, scope_guard=None, progress_cb=None, session_id=None):
@@ -329,23 +369,20 @@ def test_approval_queue_scope_guard_and_decisions(isolated_client: ASGISyncClien
     assert rej_resp.json()["approval"]["status"] == "rejected"
     assert rej_resp.json()["executed"] is False
 
-    # 2. ScopeGuard blocks unscoped, loopback, metadata, and injected command_args
-    bad_cases = [
-        ("unscoped", None, "evil.outside.com", "evil.outside.com"),
-        ("loopback", eid, "127.0.0.1", "127.0.0.1"),
+    # 2. Metadata & shell injection ALWAYS blocked; governed scope blocks apply when HUNTER_WEB_UNRESTRICTED=0
+    always_bad_cases = [
         ("metadata", eid, "169.254.169.254", "169.254.169.254"),
-        ("out_of_scope", eid, "blocked.example.com", "blocked.example.com"),
         ("cmd_inject", eid, "app.example.com", "app.example.com && whoami"),
         ("target_inject", eid, "app.example.com; id", "app.example.com"),
     ]
-    for label, case_eid, tgt, cmd_args in bad_cases:
+    for label, case_eid, tgt, cmd_args in always_bad_cases:
         bad_apr = store.create_approval(
             action_type="RUN_TOOL",
             target=tgt,
             tool_name="nmap",
             command_args=cmd_args,
             engagement_id=case_eid,
-            rationale=f"Negative case {label}",
+            rationale=f"Always-blocked case {label}",
         )
         res = isolated_client.post(
             f"/api/platform/approvals/{bad_apr['approval_id']}/decide",
@@ -353,6 +390,29 @@ def test_approval_queue_scope_guard_and_decisions(isolated_client: ASGISyncClien
         )
         assert res.status_code == 403, f"Expected 403 for {label}, got {res.status_code}"
         assert store.get_approval(bad_apr["approval_id"])["status"] == "rejected"
+
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
+    governed_bad_cases = [
+        ("unscoped", None, "evil.outside.com", "evil.outside.com"),
+        ("loopback", eid, "127.0.0.1", "127.0.0.1"),
+        ("out_of_scope", eid, "blocked.example.com", "blocked.example.com"),
+    ]
+    for label, case_eid, tgt, cmd_args in governed_bad_cases:
+        bad_apr = store.create_approval(
+            action_type="RUN_TOOL",
+            target=tgt,
+            tool_name="nmap",
+            command_args=cmd_args,
+            engagement_id=case_eid,
+            rationale=f"Governed negative case {label}",
+        )
+        res = isolated_client.post(
+            f"/api/platform/approvals/{bad_apr['approval_id']}/decide",
+            json={"decision": "approved"},
+        )
+        assert res.status_code == 403, f"Expected 403 for {label}, got {res.status_code}"
+        assert store.get_approval(bad_apr["approval_id"])["status"] == "rejected"
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
     # 3. Valid scoped approval executes via GovernedToolGateway
     async def _fake_exec_proposal(self, proposal):
@@ -472,6 +532,7 @@ def test_copilot_crud_concurrent_stream_and_untrusted_isolation(
             return {"stopped": True}
 
     monkeypatch.setattr(pr, "ReconPipelineRunner", _SlowRunner)
+    monkeypatch.setenv("HUNTER_PIPELINE_PHASE_DELAY_S", "2.0")
 
     run = isolated_client.post(
         "/api/platform/runs/start",
@@ -508,7 +569,32 @@ def test_copilot_crud_concurrent_stream_and_untrusted_isolation(
         # Active run remained registered without deadlock or crash from Copilot stream
         assert GLOBAL_RUN_CONTROLLER.get(rid).state in ("pending", "running")
 
-        # 2) Loopback action request in Copilot is blocked by PolicyEngine in Python
+        # 2a) Cloud Metadata SSRF target in Copilot is ALWAYS blocked even in default mode
+        stream_meta_blk = isolated_client.post(
+            "/api/copilot/chat/stream",
+            json={
+                "message": "Run nmap against 169.254.169.254 now",
+                "conversation_id": cid,
+                "engagement_id": eid,
+            },
+        )
+        evs_meta_blk = _parse_sse_frames(stream_meta_blk.text)
+        assert any(e["event"] == "policy_blocked" for e in evs_meta_blk)
+        assert not any(e["event"] == "approval_request" for e in evs_meta_blk)
+
+        # 2b) Default mode allows explicit loopback lab request, while strict governed mode blocks it
+        stream_lb_ok = isolated_client.post(
+            "/api/copilot/chat/stream",
+            json={
+                "message": "Run nmap against 127.0.0.1 now",
+                "conversation_id": cid,
+                "engagement_id": eid,
+            },
+        )
+        evs_lb_ok = _parse_sse_frames(stream_lb_ok.text)
+        assert any(e["event"] == "approval_request" for e in evs_lb_ok)
+
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
         stream_blk = isolated_client.post(
             "/api/copilot/chat/stream",
             json={
@@ -520,6 +606,7 @@ def test_copilot_crud_concurrent_stream_and_untrusted_isolation(
         evs_blk = _parse_sse_frames(stream_blk.text)
         assert any(e["event"] == "policy_blocked" for e in evs_blk)
         assert not any(e["event"] == "approval_request" for e in evs_blk)
+        monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
 
         # 3) Scoped action request creates clean approval (without raw prose in command_args)
         stream_apr = isolated_client.post(
@@ -629,11 +716,13 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
 
     monkeypatch.setattr(copilot_api, "run_command_no_shell", _fake_run)
 
-    # 1. Empty scope fails closed when LLM returns a bash command
+    # 1. Default unrestricted explicit mode runs clean command without prior scope;
+    #    under strict web governance (HUNTER_WEB_UNRESTRICTED=0), empty scope fails closed.
     async def _ai_nmap(msg, provider=None, model=None, system_prompt=None):
         return "```bash\nnmap -sV example.com\n```"
 
     monkeypatch.setattr(copilot_api, "call_ai", _ai_nmap)
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
     r_no_scope = isolated_client.post(
         "/api/chat",
         json={"message": "scan example.com", "provider": "ollama", "allow_exec": True},
@@ -642,6 +731,16 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
     assert r_no_scope.json()["executed"] == []
     assert r_no_scope.json()["blocked"][0]["status"] == "BLOCKED_SCOPE"
     assert executed_cmds == []
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+
+    r_unrestricted_ok = isolated_client.post(
+        "/api/chat",
+        json={"message": "scan example.com", "provider": "ollama", "allow_exec": True},
+    )
+    assert r_unrestricted_ok.status_code == 200
+    assert len(r_unrestricted_ok.json()["executed"]) == 1
+    assert executed_cmds == ["nmap -sV example.com"]
+    executed_cmds.clear()
 
     # 2. Shell metacharacter injection & metadata host blocked even with valid scope
     async def _ai_injected(msg, provider=None, model=None, system_prompt=None):
@@ -699,7 +798,8 @@ def test_api_chat_scope_and_shell_policy_gate(isolated_client: ASGISyncClient, m
     assert executed_cmds == ["nmap -sV example.com"]
 
 
-def test_truthful_settings_burp_artex_redaction_and_catalog_parity(isolated_client: ASGISyncClient):
+def test_truthful_settings_burp_artex_redaction_and_catalog_parity(isolated_client: ASGISyncClient, monkeypatch):
+    import httpx
     # Control settings persistence
     post_set = isolated_client.post(
         "/api/control/settings",
@@ -730,11 +830,27 @@ def test_truthful_settings_burp_artex_redaction_and_catalog_parity(isolated_clie
     assert burp_resp.status_code == 200
     assert burp_resp.json()["items"] == []
 
-    # Truthful offline ARTEX Go Core health when :7071 is down
+    # ARTEX Go Core health check (may be online if external daemon runs on :7071; mocked offline check verifies offline path)
     artex_health = isolated_client.get("/api/platform/artex/health")
     assert artex_health.status_code == 200
-    assert artex_health.json()["online"] is False
-    assert artex_health.json()["status"] in ("offline", "degraded")
+    assert isinstance(artex_health.json()["online"], bool)
+    assert artex_health.json()["status"] in ("online", "offline", "degraded")
+
+    def _offline_handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("mocked offline", request=req)
+
+    prev_go_client = rt._GO_CLIENT
+    rt._GO_CLIENT = httpx.AsyncClient(
+        base_url="http://127.0.0.1:7071",
+        transport=httpx.MockTransport(_offline_handler),
+    )
+    try:
+        artex_off = isolated_client.get("/api/platform/artex/health")
+        assert artex_off.status_code == 200
+        assert artex_off.json()["online"] is False
+        assert artex_off.json()["status"] in ("offline", "degraded")
+    finally:
+        rt._GO_CLIENT = prev_go_client
 
     # Secret redaction in PlatformStore
     store = ps.get_platform_store()
@@ -795,7 +911,16 @@ def test_run_tool_policy_and_shell_metacharacter_gate(isolated_client: ASGISyncC
         assert body["status"] == "blocked"
         assert not executed
 
-    # 3. Missing scope / out-of-scope / metadata / loopback blocked -> 403
+    # 3. Cloud Metadata ALWAYS blocked 403; empty/loopback/out_of_scope allowed by default and blocked under governed opt-in
+    r_meta_always = isolated_client.post(
+        "/api/run-tool",
+        json={"tool": "httpx", "target": "http://169.254.169.254/latest/meta-data/", "scope": ["example.com"]},
+    )
+    assert r_meta_always.status_code == 403
+    assert r_meta_always.json()["blocked"] is True
+    assert not executed
+
+    monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
     r_empty_scope = isolated_client.post(
         "/api/run-tool",
         json={"command": "nmap example.com", "target": "example.com"},
@@ -813,7 +938,7 @@ def test_run_tool_policy_and_shell_metacharacter_gate(isolated_client: ASGISyncC
 
     assert executed == []
 
-    # 4. Authorized scoped execution succeeds (both command and tool+target shapes) using active engagement scope
+    # 4. Authorized governed execution succeeds, and default explicit-target mode allows labs/domains without scope
     eng = isolated_client.post(
         "/api/platform/engagements",
         json={
@@ -834,6 +959,15 @@ def test_run_tool_policy_and_shell_metacharacter_gate(isolated_client: ASGISyncC
     )
     assert r_out_of_scope.status_code == 403
     assert r_out_of_scope.json()["blocked"] is True
+    monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+
+    # In default explicit-target mode, even forbidden.example.com / 192.168.1.50 execute cleanly
+    r_free_lab = isolated_client.post(
+        "/api/run-tool",
+        json={"command": "nmap 192.168.1.50", "engagement_id": eng["engagement_id"]},
+    )
+    assert r_free_lab.status_code == 200
+    executed.clear()
 
     r_cmd_ok = isolated_client.post(
         "/api/run-tool",

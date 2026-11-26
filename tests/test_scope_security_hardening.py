@@ -207,27 +207,31 @@ class TestScopeEnginePathNormalizationAndSSRF:
 
 
 class TestSecurityModeWebGovernance:
-    def test_web_governance_enforced_by_default_even_when_cli_unrestricted(self, monkeypatch):
+    def test_web_governance_defaults_false_for_explicit_targets_even_when_cli_governed(self, monkeypatch):
         monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
         monkeypatch.delenv("HUNTER_UNRESTRICTED", raising=False)
         assert unrestricted_mode() is True
-        assert web_governance_enforced() is True
+        assert web_governance_enforced() is False
+
+        monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
+        assert unrestricted_mode() is False
+        assert web_governance_enforced() is False
 
         set_unrestricted(True)
         assert unrestricted_mode() is True
-        assert web_governance_enforced() is True
-
-    @pytest.mark.parametrize("truthy", ["1", "true", "TRUE", "yes", "on"])
-    def test_web_governance_respects_explicit_hunter_web_unrestricted(self, monkeypatch, truthy):
-        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", truthy)
         assert web_governance_enforced() is False
 
-    @pytest.mark.parametrize("falsy", ["0", "false", "no", "off", ""])
-    def test_web_governance_stays_enforced_for_falsy_or_empty(self, monkeypatch, falsy):
+    @pytest.mark.parametrize("truthy_or_empty", ["1", "true", "TRUE", "yes", "on", ""])
+    def test_web_governance_stays_disabled_for_truthy_or_empty(self, monkeypatch, truthy_or_empty):
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", truthy_or_empty)
+        assert web_governance_enforced() is False
+
+    @pytest.mark.parametrize("falsy", ["0", "false", "FALSE", "no", "off", "disabled", "governed", "restricted"])
+    def test_web_governance_enforced_only_on_explicit_opt_in_falsy(self, monkeypatch, falsy):
         monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", falsy)
         assert web_governance_enforced() is True
 
-    def test_strict_scope_adapter_lab_overrides_and_non_overridable_metadata(self, monkeypatch):
+    def test_strict_scope_adapter_default_unrestricted_and_governed_lab_overrides(self, monkeypatch):
         from core.copilot_service import evaluate_action_policy
 
         monkeypatch.setenv("HUNTER_UNRESTRICTED", "0")
@@ -235,7 +239,45 @@ class TestSecurityModeWebGovernance:
         monkeypatch.delenv("HUNTER_ALLOW_LOCALHOST_SCOPE", raising=False)
         monkeypatch.delenv("HUNTER_ALLOW_PRIVATE_LAB_SCOPE", raising=False)
 
-        # Default denies localhost & private IP even when present in in_scope
+        # 1. Default explicit-target mode allows websites, .local, localhost, and private lab targets
+        # even with no engagement scope or differing scope/out_of_scope entries, plus ?url= query params
+        for allowed_target in (
+            "https://any-site.com",
+            "http://target.com/?url=http://169.254.169.254",
+            "http://localhost:3001",
+            "http://127.0.0.1:8080",
+            "http://192.168.1.50:8080",
+            "http://10.10.10.5:3000",
+            "https://enhanced-target.local",
+        ):
+            assert (
+                evaluate_action_policy(
+                    action_type="CLI_TOOL",
+                    target=allowed_target,
+                    in_scope=["other.example"],
+                    out_of_scope=["any-site.com"],
+                )["allowed"]
+                is True
+            ), allowed_target
+
+        # Cloud metadata, link-local, 0.0.0.0, unsafe schemes, and shell metachars stay strictly blocked
+        for blocked_target in (
+            "http://169.254.169.254/latest/meta-data/",
+            "http://metadata.google.internal/",
+            "http://100.100.100.200/latest",
+            "fd00:ec2::254",
+            "http://0.0.0.0:8000/",
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:6379/_INFO",
+            "example.com; id",
+        ):
+            assert (
+                evaluate_action_policy(action_type="CLI_TOOL", target=blocked_target)["allowed"]
+                is False
+            ), blocked_target
+
+        # 2. Explicit governed opt-in (HUNTER_WEB_UNRESTRICTED=0) restores strict scope/lab gating
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
         assert evaluate_action_policy(action_type="CLI_TOOL", target="http://localhost:3000", in_scope=["localhost"])["allowed"] is False
         assert evaluate_action_policy(action_type="CLI_TOOL", target="http://192.168.1.50:8080", in_scope=["192.168.1.50"])["allowed"] is False
 

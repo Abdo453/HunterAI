@@ -340,28 +340,47 @@ async def test_security_hardening_ssrf_scope_paths_subprocess_and_secret(
     )
 
     async with _make_asgi_client() as client:
-        # 1. SSRF + ScopeGuard on /api/burp/repeater/send
+        # 1. Non-overridable Cloud Metadata & scheme SSRF remain blocked by default,
+        #    while explicit governed mode (HUNTER_WEB_UNRESTRICTED=0) also blocks unscoped/local targets.
         for blocked_url in (
-            "http://127.0.0.1:8080/admin",
             "http://169.254.169.254/latest/meta-data/",
-            "http://localhost:8000/api/settings",
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://100.100.100.200/latest/meta-data/",
+            "http://[fd00:ec2::254]/latest/meta-data/",
             "file:///etc/passwd",
             "gopher://127.0.0.1:6379/_INFO",
-            "https://unconfigured.example/test",
         ):
             r = await client.post("/api/burp/repeater/send", json={"url": blocked_url})
             assert r.status_code == 403, f"Expected 403 for {blocked_url}, got {r.status_code}"
 
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "0")
+        for governed_blocked_url in (
+            "http://127.0.0.1:8080/admin",
+            "http://localhost:8000/api/settings",
+            "https://unconfigured.example/test",
+        ):
+            r_gov = await client.post("/api/burp/repeater/send", json={"url": governed_blocked_url})
+            assert r_gov.status_code == 403, f"Expected governed 403 for {governed_blocked_url}, got {r_gov.status_code}"
+        monkeypatch.delenv("HUNTER_WEB_UNRESTRICTED", raising=False)
+
         # 2. Scope collision resolved: canonical /api/scope/check vs Phase G /api/scope/enforce
         r_chk = await client.post(
             "/api/scope/check",
-            json={"target": "https://api.example.com", "in_scope": ["example.com"]},
+            json={"target": "https://any-site.com"},
         )
         assert r_chk.status_code == 200
         assert r_chk.json()["allowed"] is True
 
-        r_enf = await client.post("/api/scope/enforce", json={"target": "example.com"})
+        r_chk_local = await client.post(
+            "/api/scope/check",
+            json={"target": "http://localhost:3001"},
+        )
+        assert r_chk_local.status_code == 200
+        assert r_chk_local.json()["allowed"] is True
+
+        r_enf = await client.post("/api/scope/enforce", json={"target": "http://192.168.1.50:8080"})
         assert r_enf.status_code == 200
+        assert r_enf.json()["allowed"] is True
 
         # 3. Persisted policy secret (no hardcoded fallback)
         r_issue = await client.post(
