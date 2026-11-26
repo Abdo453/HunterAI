@@ -2,7 +2,7 @@
 """
 PentestAI Unified — Entry Point
 
-  python main.py              -> Web UI  http://localhost:7070
+  python main.py              -> Web UI  http://localhost:8000
   python main.py --cli        -> CLI
   python main.py -t 192.168.1.1 --mode full  -> direct scan
 """
@@ -33,7 +33,7 @@ def main():
     p.add_argument("--browser-type", choices=["firefox", "chromium", "webkit"], default=os.getenv("BROWSER_TYPE", "firefox"), help="Headless browser engine (default: firefox)")
     p.add_argument("--firefox", dest="browser_type", action="store_const", const="firefox", help="Force Firefox browser engine (recommended for Kali Linux)")
     p.add_argument("--chromium", "--chrome", dest="browser_type", action="store_const", const="chromium", help="Use Chromium browser engine")
-    p.add_argument("--port", type=int, default=int(os.getenv("WEB_PORT","7070")))
+    p.add_argument("--port", type=int, default=int(os.getenv("WEB_PORT", "8000")))
     p.add_argument("--host", default=os.getenv("WEB_HOST", "127.0.0.1"), help="Host to bind Web UI")
     # Keep the dashboard local by default. This does not affect Burp Suite or
     # outbound scan traffic; set WEB_HOST=0.0.0.0 only for remote dashboard access.

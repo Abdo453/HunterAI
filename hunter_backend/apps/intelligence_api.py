@@ -1527,26 +1527,98 @@ def _resolve_editor_path(raw_path: str, *, must_exist: bool = False) -> Path:
     return cand
 
 
+def _build_safe_tree_entries(
+    root: Path,
+    *,
+    max_depth: int = 3,
+    max_entries: int = 500,
+    parent_rel: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Walk *root* recursively up to *max_depth* emitting Studio-compatible directory/file nodes."""
+    entries: List[Dict[str, Any]] = []
+    allowed_resolved = [r.resolve() for r in EDITOR_ALLOWED_ROOTS]
+
+    def _walk(cur_dir: Path, depth: int, cur_parent: Optional[str]) -> None:
+        if depth > max_depth or len(entries) >= max_entries:
+            return
+        try:
+            children = sorted(
+                cur_dir.iterdir(),
+                key=lambda p: (not p.is_dir(), p.name.lower()),
+            )
+        except OSError:
+            return
+        for child in children:
+            if len(entries) >= max_entries:
+                return
+            if child.name.startswith(".") or child.is_symlink():
+                continue
+            try:
+                resolved_child = child.resolve()
+            except OSError:
+                continue
+            if not any(resolved_child.is_relative_to(ar) for ar in allowed_resolved):
+                continue
+            rel = str(resolved_child.relative_to(BASE_DIR.resolve())).replace("\\", "/")
+            is_dir = resolved_child.is_dir()
+            node: Dict[str, Any] = {
+                "name": child.name,
+                "type": "directory" if is_dir else "file",
+                "is_dir": is_dir,
+                "path": rel,
+                "parent": cur_parent,
+            }
+            if not is_dir:
+                node["ext"] = child.suffix.lstrip(".").lower()
+            entries.append(node)
+            if is_dir and depth < max_depth:
+                _walk(resolved_child, depth + 1, rel)
+
+    _walk(root.resolve(), 1, parent_rel)
+    return entries
+
+
 class EditorTreeView(APIView):
     def get(self, request: Any) -> Any:
-        folder = (request.GET.get("folder") or "skills").strip()
+        raw_folder = (request.GET.get("folder") or "").strip()
+        max_depth = parse_query_int(request.GET.get("depth"), 3, min_value=1, max_value=5)
+
+        if not raw_folder:
+            entries: List[Dict[str, Any]] = []
+            for root in EDITOR_ALLOWED_ROOTS:
+                root.mkdir(parents=True, exist_ok=True)
+                rel_root = str(root.resolve().relative_to(BASE_DIR.resolve())).replace("\\", "/")
+                entries.append(
+                    {
+                        "name": root.name,
+                        "type": "directory",
+                        "is_dir": True,
+                        "path": rel_root,
+                        "parent": None,
+                    }
+                )
+                entries.extend(
+                    _build_safe_tree_entries(root, max_depth=max_depth, parent_rel=rel_root)
+                )
+            return ok_json(
+                {
+                    "folder": "workspace",
+                    "roots": [str(r.relative_to(BASE_DIR)).replace("\\", "/") for r in EDITOR_ALLOWED_ROOTS],
+                    "items": entries,
+                    "entries": entries,
+                }
+            )
+
         try:
-            resolved = _resolve_editor_path(folder, must_exist=True)
+            resolved = _resolve_editor_path(raw_folder, must_exist=True)
         except PermissionError as exc:
             return err_json(str(exc), status=403)
         except FileNotFoundError as exc:
             return err_json(str(exc), status=404)
-        entries = [
-            {
-                "name": p.name,
-                "type": "dir" if p.is_dir() else "file",
-                "is_dir": p.is_dir(),
-                "path": str(p.relative_to(BASE_DIR)).replace("\\", "/"),
-            }
-            for p in sorted(resolved.iterdir())
-            if not p.name.startswith(".")
-        ]
-        return ok_json({"folder": folder, "items": entries, "entries": entries})
+
+        parent_rel = str(resolved.relative_to(BASE_DIR.resolve())).replace("\\", "/")
+        entries = _build_safe_tree_entries(resolved, max_depth=max_depth, parent_rel=parent_rel)
+        return ok_json({"folder": raw_folder, "items": entries, "entries": entries})
 
 
 class EditorFileView(APIView):

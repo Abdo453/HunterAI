@@ -328,7 +328,12 @@ def test_managed_run_lifecycle_sse_replay_and_reconciliation(
         reconciled = reconcile_store.reconcile_interrupted_runs(active_run_ids=[])
         assert len(reconciled) == 1
         assert reconciled[0]["run_id"] == stale["run_id"]
-        assert reconciled[0]["status"] == "interrupted"
+        assert reconciled[0]["status"] == "paused"
+        assert reconciled[0]["canonical_status"] == "PAUSED"
+        assert reconciled[0]["recoverable"] is True
+        # Legacy 'interrupted' status filter still returns recoverable paused runs
+        legacy_hits = reconcile_store.list_runs(status="interrupted")
+        assert any(r["run_id"] == stale["run_id"] for r in legacy_hits)
         ev_types = [e["event_type"] for e in reconcile_store.list_events(run_id=stale["run_id"])]
         assert "RUN_INTERRUPTED" in ev_types
         notifs = reconcile_store.list_notifications()

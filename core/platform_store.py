@@ -1,9 +1,15 @@
 """Durable Thread-Safe SQLite WAL Platform State Store.
 
-Persists engagements, runs, ordered replayable events (global & per-run
-monotone sequence numbers), Copilot conversations/messages/attachments,
-human-in-the-loop approvals, active UI/API context, settings, and
-notifications in ``data/platform_state.sqlite3``.
+Persists engagements, runs, Flow->Task->Subtask nodes, checkpoints,
+idempotency keys, cost ledger entries, ordered replayable events (global &
+per-run monotone sequence numbers), Copilot conversations/messages/attachments,
+human-in-the-loop approvals, active UI/API context, settings, and notifications
+in ``data/platform_state.sqlite3``.
+
+Startup crash recovery (recoverable ``PAUSED`` runs, reset in-flight subtasks to
+``QUEUED``, and ``WAITING`` Copilot turns with ``interrupted_run_note``) adapts
+patterns from vxcontrol/pentagi (commit ``cffed9485aa1cca70762cd08a57ac62a80406258``,
+MIT; see ``THIRD_PARTY_LICENSES/PENTAGI_MIT.txt`` and ``NOTICE``).
 
 All stored text and JSON payloads pass through ``redact_payload`` so
 credentials, Bearer/JWT tokens, cookies, and API keys are masked before
@@ -11,6 +17,7 @@ touching disk.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -33,18 +40,26 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DB_PATH = _REPO_ROOT / "data" / "platform_state.sqlite3"
 _UNSET = object()
 
+INTERRUPTED_RUN_NOTE = (
+    "The server restarted before the assistant finished this request, "
+    "so its reply may be incomplete. Send a message to continue."
+)
+
 VALID_APPROVAL_STATUSES = ("pending", "approved", "rejected", "expired")
 VALID_RUN_STATUSES = (
     "pending",
+    "queued",
     "running",
+    "waiting",
     "paused",
     "stopping",
     "stopped",
+    "cancelled",
     "completed",
     "failed",
     "interrupted",
 )
-STALE_ACTIVE_STATUSES = ("pending", "running", "paused", "stopping")
+STALE_ACTIVE_STATUSES = ("pending", "queued", "running", "waiting", "paused", "stopping")
 
 _SECRET_DICT_KEYS = frozenset({
     "password",
@@ -388,6 +403,89 @@ class PlatformStore:
                     created_at REAL NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_notif_created ON notifications(created_at DESC);
+
+                -- Additive Phase 2 canonical runtime tables (existing tables untouched for rollback safety)
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    applied_at REAL NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS task_nodes (
+                    task_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'worker',
+                    status TEXT NOT NULL DEFAULT 'QUEUED',
+                    priority INTEGER NOT NULL DEFAULT 5,
+                    depends_on_json TEXT NOT NULL DEFAULT '[]',
+                    input_json TEXT NOT NULL DEFAULT '{}',
+                    output_json TEXT NOT NULL DEFAULT '{}',
+                    error TEXT NOT NULL DEFAULT '',
+                    recoverable INTEGER NOT NULL DEFAULT 0,
+                    started_at REAL,
+                    finished_at REAL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_task_nodes_run ON task_nodes(run_id, created_at ASC);
+                CREATE INDEX IF NOT EXISTS idx_task_nodes_status ON task_nodes(status);
+
+                CREATE TABLE IF NOT EXISTS subtask_nodes (
+                    subtask_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'QUEUED',
+                    depends_on_json TEXT NOT NULL DEFAULT '[]',
+                    input_json TEXT NOT NULL DEFAULT '{}',
+                    output_json TEXT NOT NULL DEFAULT '{}',
+                    error TEXT NOT NULL DEFAULT '',
+                    attempt INTEGER NOT NULL DEFAULT 0,
+                    started_at REAL,
+                    finished_at REAL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_subtask_nodes_task ON subtask_nodes(task_id, created_at ASC);
+                CREATE INDEX IF NOT EXISTS idx_subtask_nodes_run ON subtask_nodes(run_id, status);
+
+                CREATE TABLE IF NOT EXISTS run_checkpoints (
+                    checkpoint_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    phase TEXT NOT NULL DEFAULT 'INIT',
+                    state_json TEXT NOT NULL DEFAULT '{}',
+                    recoverable INTEGER NOT NULL DEFAULT 1,
+                    reason TEXT NOT NULL DEFAULT '',
+                    created_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_checkpoints_run ON run_checkpoints(run_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS idempotency_keys (
+                    key TEXT PRIMARY KEY,
+                    scope TEXT NOT NULL DEFAULT 'run_start',
+                    run_id TEXT,
+                    response_json TEXT NOT NULL DEFAULT '{}',
+                    created_at REAL NOT NULL,
+                    expires_at REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_idempotency_expires ON idempotency_keys(expires_at);
+
+                CREATE TABLE IF NOT EXISTS cost_ledger (
+                    entry_id TEXT PRIMARY KEY,
+                    run_id TEXT,
+                    task_id TEXT,
+                    engagement_id TEXT,
+                    provider TEXT NOT NULL DEFAULT '',
+                    model TEXT NOT NULL DEFAULT '',
+                    input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL DEFAULT 0,
+                    cost_usd REAL NOT NULL DEFAULT 0.0,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_cost_ledger_run ON cost_ledger(run_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_cost_ledger_eng ON cost_ledger(engagement_id, created_at DESC);
                 """
             )
             now = time.time()
@@ -403,6 +501,10 @@ class PlatformStore:
             ):
                 if col_name not in existing_cols:
                     cur.execute(ddl)
+            cur.execute(
+                "INSERT OR IGNORE INTO schema_migrations (version, name, applied_at) VALUES (1, 'phase2_canonical_runtime_tables', ?)",
+                (now,),
+            )
             cur.execute(
                 "INSERT OR IGNORE INTO context (id, active_engagement_id, active_run_id, active_conversation_id, extra_json, updated_at) VALUES (1, NULL, NULL, NULL, '{}', ?)",
                 (now,),
@@ -597,17 +699,31 @@ class PlatformStore:
     # ── Runs & Startup Reconciliation ─────────────────────────────────────────
 
     def _row_to_run(self, row: sqlite3.Row) -> Dict[str, Any]:
+        from core.runtime.state_machine import to_canonical_status
+
+        meta = _json_loads(row["meta_json"], {})
+        raw_status = str(row["status"] or "pending")
+        try:
+            canon_state, hint = to_canonical_status(raw_status)
+            canon_val = canon_state.value
+            hint_rec = bool(hint.get("recoverable", False))
+        except ValueError:
+            canon_val = raw_status.upper()
+            hint_rec = False
+        recoverable = bool(meta.get("recoverable", hint_rec))
         return {
             "run_id": row["run_id"],
             "engagement_id": row["engagement_id"],
             "kind": row["kind"],
             "target": row["target"],
-            "status": row["status"],
+            "status": raw_status,
+            "canonical_status": str(meta.get("canonical_status") or canon_val),
+            "recoverable": recoverable,
             "current_phase": row["current_phase"],
             "progress": row["progress"],
             "task_id": row["task_id"],
             "agent_id": row["agent_id"],
-            "meta": _json_loads(row["meta_json"], {}),
+            "meta": meta,
             "error": row["error"],
             "started_at": row["started_at"],
             "finished_at": row["finished_at"],
@@ -754,6 +870,8 @@ class PlatformStore:
         active_only: bool = False,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
+        from core.runtime.state_machine import expand_status_filter
+
         clauses: List[str] = []
         params: List[Any] = []
         if kind:
@@ -763,11 +881,20 @@ class PlatformStore:
             clauses.append("engagement_id = ?")
             params.append(engagement_id)
         if status:
-            clauses.append("status = ?")
-            params.append(status)
+            mapped_statuses, match_recoverable_paused = expand_status_filter(status)
+            if mapped_statuses:
+                placeholders = ",".join("?" for _ in mapped_statuses)
+                if match_recoverable_paused:
+                    clauses.append(
+                        f"(LOWER(status) IN ({placeholders}) OR "
+                        f"(LOWER(status) = 'paused' AND (meta_json LIKE '%\"recoverable\": true%' OR meta_json LIKE '%\"legacy_status\": \"interrupted\"%')))"
+                    )
+                else:
+                    clauses.append(f"LOWER(status) IN ({placeholders})")
+                params.extend(mapped_statuses)
         if active_only:
             placeholders = ",".join("?" for _ in STALE_ACTIVE_STATUSES)
-            clauses.append(f"status IN ({placeholders})")
+            clauses.append(f"LOWER(status) IN ({placeholders})")
             params.extend(STALE_ACTIVE_STATUSES)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.append(max(1, min(limit, 500)))
@@ -783,34 +910,148 @@ class PlatformStore:
         active_run_ids: Optional[Iterable[str]] = None,
         reason: str = "Interrupted by process restart before completion",
     ) -> List[Dict[str, Any]]:
-        """Mark stale running/paused/pending runs from prior processes as interrupted."""
+        """PentAGI-pattern startup crash recovery for prior in-flight runs, subtasks, and Copilot turns.
+
+        1. Marks prior in-flight runs as recoverable ``paused`` (canonical ``PAUSED``,
+           ``recoverable=True``) with a persisted ``run_checkpoints`` record (rather than
+           a terminal dead-end ``interrupted``), while keeping legacy ``interrupted`` filter
+           compatibility.
+        2. Resets in-flight ``RUNNING`` subtasks in ``subtask_nodes`` to ``QUEUED`` and
+           in-flight ``task_nodes`` to recoverable ``PAUSED``.
+        3. Marks active Copilot conversations as ``WAITING`` with ``INTERRUPTED_RUN_NOTE``.
+        """
         live_ids: Set[str] = set(active_run_ids or ())
         now = time.time()
         reconciled: List[Dict[str, Any]] = []
+        clean_reason = redact_text(reason)
+
         with self._lock:
             placeholders = ",".join("?" for _ in STALE_ACTIVE_STATUSES)
             rows = self._conn.execute(
-                f"SELECT * FROM runs WHERE status IN ({placeholders})",
+                f"SELECT * FROM runs WHERE LOWER(status) IN ({placeholders})",
                 STALE_ACTIVE_STATUSES,
             ).fetchall()
             for row in rows:
                 rid = row["run_id"]
                 if rid in live_ids:
                     continue
+                old_meta = _json_loads(row["meta_json"], {})
+                # Idempotent: skip runs already reconciled as recoverable paused
+                if str(row["status"] or "").lower() == "paused" and old_meta.get("recoverable") is True:
+                    continue
+                previous_status = str(row["status"] or "running")
+                new_meta = dict(old_meta)
+                new_meta["recoverable"] = True
+                new_meta["canonical_status"] = "PAUSED"
+                new_meta["legacy_status"] = "interrupted"
+                new_meta["previous_status"] = previous_status
+                new_meta["interrupted_reason"] = clean_reason
+                new_meta["interrupted_at"] = now
+
+                cp_id = new_id("chk")
+                new_meta["last_checkpoint_id"] = cp_id
+
                 self._conn.execute(
                     """
                     UPDATE runs
-                    SET status = 'interrupted',
+                    SET status = 'paused',
+                        meta_json = ?,
                         error = CASE WHEN error = '' THEN ? ELSE error END,
-                        finished_at = COALESCE(finished_at, ?),
                         updated_at = ?
                     WHERE run_id = ?
                     """,
-                    (redact_text(reason), now, now, rid),
+                    (_json_dumps(new_meta), clean_reason, now, rid),
+                )
+                self._conn.execute(
+                    """
+                    INSERT INTO run_checkpoints (checkpoint_id, run_id, phase, state_json, recoverable, reason, created_at)
+                    VALUES (?, ?, ?, ?, 1, ?, ?)
+                    """,
+                    (
+                        cp_id,
+                        rid,
+                        str(row["current_phase"] or "INIT"),
+                        _json_dumps(
+                            {
+                                "previous_status": previous_status,
+                                "progress": float(row["progress"] or 0.0),
+                                "target": row["target"],
+                                "kind": row["kind"],
+                            }
+                        ),
+                        clean_reason,
+                        now,
+                    ),
                 )
                 updated = self._conn.execute("SELECT * FROM runs WHERE run_id = ?", (rid,)).fetchone()
                 if updated:
                     reconciled.append(self._row_to_run(updated))
+
+            # Reset in-flight running subtasks -> QUEUED and running task_nodes -> PAUSED (recoverable)
+            sub_rows = self._conn.execute(
+                "SELECT subtask_id, run_id FROM subtask_nodes WHERE LOWER(status) = 'running'"
+            ).fetchall()
+            for srow in sub_rows:
+                if srow["run_id"] in live_ids:
+                    continue
+                self._conn.execute(
+                    "UPDATE subtask_nodes SET status = 'QUEUED', updated_at = ? WHERE subtask_id = ?",
+                    (now, srow["subtask_id"]),
+                )
+
+            task_rows = self._conn.execute(
+                "SELECT task_id, run_id FROM task_nodes WHERE LOWER(status) = 'running'"
+            ).fetchall()
+            for trow in task_rows:
+                if trow["run_id"] in live_ids:
+                    continue
+                self._conn.execute(
+                    "UPDATE task_nodes SET status = 'PAUSED', recoverable = 1, updated_at = ? WHERE task_id = ?",
+                    (now, trow["task_id"]),
+                )
+
+            # Reconcile active Copilot turns -> WAITING + interrupted_run_note
+            conv_rows = self._conn.execute("SELECT * FROM conversations").fetchall()
+            for crow in conv_rows:
+                cmeta = _json_loads(crow["metadata_json"], {})
+                if not isinstance(cmeta, dict):
+                    continue
+                turn_st = str(cmeta.get("turn_status") or cmeta.get("status") or "").strip().lower()
+                is_active_turn = turn_st == "running" or bool(cmeta.get("active_turn"))
+                if not is_active_turn:
+                    continue
+                cid = crow["conversation_id"]
+                cmeta["turn_status"] = "WAITING"
+                cmeta["status"] = "WAITING"
+                cmeta["active_turn"] = False
+                cmeta["interrupted_run_note"] = INTERRUPTED_RUN_NOTE
+                cmeta["interrupted_at"] = now
+                note_written = bool(cmeta.get("interrupted_note_written"))
+                cmeta["interrupted_note_written"] = True
+                self._conn.execute(
+                    "UPDATE conversations SET metadata_json = ?, updated_at = ? WHERE conversation_id = ?",
+                    (_json_dumps(cmeta), now, cid),
+                )
+                if not note_written:
+                    self._conn.execute(
+                        """
+                        INSERT INTO messages (
+                            message_id, conversation_id, role, content, model, mode,
+                            engagement_id, run_id, citations_json, refs_json, approval_id, metadata_json, created_at
+                        ) VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, '[]', '[]', NULL, ?, ?)
+                        """,
+                        (
+                            new_id("msg"),
+                            cid,
+                            INTERRUPTED_RUN_NOTE,
+                            crow["model"] or "",
+                            crow["mode"] or "",
+                            crow["engagement_id"],
+                            crow["run_id"],
+                            _json_dumps({"system_recovery": True, "turn_status": "WAITING"}),
+                            now,
+                        ),
+                    )
             self._conn.commit()
 
         for run in reconciled:
@@ -820,12 +1061,23 @@ class PlatformStore:
                 engagement_id=run.get("engagement_id"),
                 task_id=run.get("task_id"),
                 source="reconciler",
-                payload={"previous_status": "active", "status": "interrupted", "reason": reason},
+                payload={
+                    "previous_status": (run.get("meta") or {}).get("previous_status", "active"),
+                    "status": "paused",
+                    "canonical_status": "PAUSED",
+                    "legacy_status": "interrupted",
+                    "recoverable": True,
+                    "checkpoint_id": (run.get("meta") or {}).get("last_checkpoint_id"),
+                    "reason": clean_reason,
+                },
             )
             self.add_notification(
                 kind="run_interrupted",
-                title=f"Interrupted run reconciled: {run['run_id']}",
-                message=f"Run on {run.get('target') or 'unknown target'} was active during shutdown and marked interrupted.",
+                title=f"Interrupted run paused for recovery: {run['run_id']}",
+                message=(
+                    f"Run on {run.get('target') or 'unknown target'} was active during shutdown "
+                    "and moved to recoverable PAUSED state."
+                ),
                 severity="warning",
                 ref_kind="run",
                 ref_id=run["run_id"],
@@ -1356,8 +1608,9 @@ class PlatformStore:
             self._conn.commit()
             return int(cur.rowcount)
 
-    def get_approval(self, approval_id: str) -> Optional[Dict[str, Any]]:
-        self.expire_stale_approvals()
+    def get_approval(self, approval_id: str, *, expire_stale: bool = False) -> Optional[Dict[str, Any]]:
+        if expire_stale:
+            self.expire_stale_approvals()
         with self._lock:
             row = self._conn.execute("SELECT * FROM approvals WHERE approval_id = ?", (approval_id,)).fetchone()
             return self._row_to_approval(row) if row else None
@@ -1369,8 +1622,11 @@ class PlatformStore:
         engagement_id: Optional[str] = None,
         run_id: Optional[str] = None,
         limit: int = 100,
+        expire_stale: bool = False,
     ) -> List[Dict[str, Any]]:
-        self.expire_stale_approvals()
+        """List approvals (read-only by default so Copilot snapshots never take write locks)."""
+        if expire_stale:
+            self.expire_stale_approvals()
         clauses: List[str] = []
         params: List[Any] = []
         if status and status != "all":
@@ -1570,6 +1826,542 @@ class PlatformStore:
                 (like, like, like, max(1, min(limit, 100))),
             ).fetchall()
             return [self._row_to_conversation(r) for r in rows]
+
+    # ── Phase 2 Canonical Runtime Tables: Migrations, Tasks, Subtasks, Checkpoints, Idempotency, Cost Ledger ──
+
+    def list_schema_migrations(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT version, name, applied_at FROM schema_migrations ORDER BY version ASC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def _row_to_task_node(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "task_id": row["task_id"],
+            "run_id": row["run_id"],
+            "title": row["title"],
+            "role": row["role"],
+            "status": row["status"],
+            "priority": int(row["priority"]),
+            "depends_on": _json_loads(row["depends_on_json"], []),
+            "input": _json_loads(row["input_json"], {}),
+            "output": _json_loads(row["output_json"], {}),
+            "error": row["error"],
+            "recoverable": bool(row["recoverable"]),
+            "started_at": row["started_at"],
+            "finished_at": row["finished_at"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    def upsert_task_node(
+        self,
+        *,
+        task_id: str,
+        run_id: str,
+        title: str,
+        role: str = "worker",
+        status: str = "QUEUED",
+        priority: int = 5,
+        depends_on: Optional[List[str]] = None,
+        input_data: Optional[Dict[str, Any]] = None,
+        output_data: Optional[Dict[str, Any]] = None,
+        error: str = "",
+        recoverable: bool = False,
+        started_at: Optional[float] = None,
+        finished_at: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        now = time.time()
+        clean_title = redact_text(title)[:300]
+        clean_error = redact_text(error)[:1000] if error else ""
+        with self._lock:
+            existing = self._conn.execute(
+                "SELECT * FROM task_nodes WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if existing:
+                old_in = _json_loads(existing["input_json"], {})
+                if input_data is not None:
+                    old_in.update(redact_payload(input_data))
+                old_out = _json_loads(existing["output_json"], {})
+                if output_data is not None:
+                    old_out.update(redact_payload(output_data))
+                deps = depends_on if depends_on is not None else _json_loads(existing["depends_on_json"], [])
+                self._conn.execute(
+                    """
+                    UPDATE task_nodes
+                    SET title = ?, role = ?, status = ?, priority = ?, depends_on_json = ?,
+                        input_json = ?, output_json = ?, error = ?, recoverable = ?,
+                        started_at = COALESCE(?, started_at),
+                        finished_at = COALESCE(?, finished_at),
+                        updated_at = ?
+                    WHERE task_id = ?
+                    """,
+                    (
+                        clean_title or existing["title"],
+                        role or existing["role"],
+                        status,
+                        int(priority),
+                        _json_dumps(deps),
+                        _json_dumps(old_in, redact=False),
+                        _json_dumps(old_out, redact=False),
+                        clean_error or existing["error"],
+                        1 if recoverable else 0,
+                        started_at,
+                        finished_at,
+                        now,
+                        task_id,
+                    ),
+                )
+            else:
+                self._conn.execute(
+                    """
+                    INSERT INTO task_nodes (
+                        task_id, run_id, title, role, status, priority, depends_on_json,
+                        input_json, output_json, error, recoverable, started_at, finished_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        task_id,
+                        run_id,
+                        clean_title,
+                        role,
+                        status,
+                        int(priority),
+                        _json_dumps(depends_on or []),
+                        _json_dumps(input_data or {}),
+                        _json_dumps(output_data or {}),
+                        clean_error,
+                        1 if recoverable else 0,
+                        started_at,
+                        finished_at,
+                        now,
+                        now,
+                    ),
+                )
+            self._conn.commit()
+            row = self._conn.execute("SELECT * FROM task_nodes WHERE task_id = ?", (task_id,)).fetchone()
+            return self._row_to_task_node(row)
+
+    def get_task_node(self, task_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM task_nodes WHERE task_id = ?", (task_id,)).fetchone()
+            return self._row_to_task_node(row) if row else None
+
+    def list_task_nodes(self, run_id: str) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM task_nodes WHERE run_id = ? ORDER BY created_at ASC", (run_id,)
+            ).fetchall()
+            return [self._row_to_task_node(r) for r in rows]
+
+    def _row_to_subtask_node(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "subtask_id": row["subtask_id"],
+            "task_id": row["task_id"],
+            "run_id": row["run_id"],
+            "title": row["title"],
+            "status": row["status"],
+            "depends_on": _json_loads(row["depends_on_json"], []),
+            "input": _json_loads(row["input_json"], {}),
+            "output": _json_loads(row["output_json"], {}),
+            "error": row["error"],
+            "attempt": int(row["attempt"]),
+            "started_at": row["started_at"],
+            "finished_at": row["finished_at"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    def upsert_subtask_node(
+        self,
+        *,
+        subtask_id: str,
+        task_id: str,
+        run_id: str,
+        title: str,
+        status: str = "QUEUED",
+        depends_on: Optional[List[str]] = None,
+        input_data: Optional[Dict[str, Any]] = None,
+        output_data: Optional[Dict[str, Any]] = None,
+        error: str = "",
+        attempt: int = 0,
+        started_at: Optional[float] = None,
+        finished_at: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        now = time.time()
+        clean_title = redact_text(title)[:300]
+        clean_error = redact_text(error)[:1000] if error else ""
+        with self._lock:
+            existing = self._conn.execute(
+                "SELECT * FROM subtask_nodes WHERE subtask_id = ?", (subtask_id,)
+            ).fetchone()
+            if existing:
+                old_in = _json_loads(existing["input_json"], {})
+                if input_data is not None:
+                    old_in.update(redact_payload(input_data))
+                old_out = _json_loads(existing["output_json"], {})
+                if output_data is not None:
+                    old_out.update(redact_payload(output_data))
+                deps = depends_on if depends_on is not None else _json_loads(existing["depends_on_json"], [])
+                self._conn.execute(
+                    """
+                    UPDATE subtask_nodes
+                    SET title = ?, status = ?, depends_on_json = ?,
+                        input_json = ?, output_json = ?, error = ?, attempt = ?,
+                        started_at = COALESCE(?, started_at),
+                        finished_at = COALESCE(?, finished_at),
+                        updated_at = ?
+                    WHERE subtask_id = ?
+                    """,
+                    (
+                        clean_title or existing["title"],
+                        status,
+                        _json_dumps(deps),
+                        _json_dumps(old_in, redact=False),
+                        _json_dumps(old_out, redact=False),
+                        clean_error or existing["error"],
+                        max(int(attempt), int(existing["attempt"])),
+                        started_at,
+                        finished_at,
+                        now,
+                        subtask_id,
+                    ),
+                )
+            else:
+                self._conn.execute(
+                    """
+                    INSERT INTO subtask_nodes (
+                        subtask_id, task_id, run_id, title, status, depends_on_json,
+                        input_json, output_json, error, attempt, started_at, finished_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        subtask_id,
+                        task_id,
+                        run_id,
+                        clean_title,
+                        status,
+                        _json_dumps(depends_on or []),
+                        _json_dumps(input_data or {}),
+                        _json_dumps(output_data or {}),
+                        clean_error,
+                        int(attempt),
+                        started_at,
+                        finished_at,
+                        now,
+                        now,
+                    ),
+                )
+            self._conn.commit()
+            row = self._conn.execute("SELECT * FROM subtask_nodes WHERE subtask_id = ?", (subtask_id,)).fetchone()
+            return self._row_to_subtask_node(row)
+
+    def list_subtask_nodes(
+        self,
+        *,
+        run_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        clauses: List[str] = []
+        params: List[Any] = []
+        if run_id:
+            clauses.append("run_id = ?")
+            params.append(run_id)
+        if task_id:
+            clauses.append("task_id = ?")
+            params.append(task_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT * FROM subtask_nodes {where} ORDER BY created_at ASC", params
+            ).fetchall()
+            return [self._row_to_subtask_node(r) for r in rows]
+
+    def save_checkpoint(
+        self,
+        *,
+        run_id: str,
+        phase: str,
+        state: Optional[Dict[str, Any]] = None,
+        recoverable: bool = True,
+        reason: str = "",
+        checkpoint_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        cid = checkpoint_id or new_id("chk")
+        now = time.time()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO run_checkpoints (checkpoint_id, run_id, phase, state_json, recoverable, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    cid,
+                    run_id,
+                    str(phase or "INIT"),
+                    _json_dumps(state or {}),
+                    1 if recoverable else 0,
+                    redact_text(reason)[:500],
+                    now,
+                ),
+            )
+            self._conn.commit()
+            row = self._conn.execute(
+                "SELECT * FROM run_checkpoints WHERE checkpoint_id = ?", (cid,)
+            ).fetchone()
+            return {
+                "checkpoint_id": row["checkpoint_id"],
+                "run_id": row["run_id"],
+                "phase": row["phase"],
+                "state": _json_loads(row["state_json"], {}),
+                "recoverable": bool(row["recoverable"]),
+                "reason": row["reason"],
+                "created_at": row["created_at"],
+            }
+
+    def get_latest_checkpoint(self, run_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM run_checkpoints WHERE run_id = ? ORDER BY created_at DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "checkpoint_id": row["checkpoint_id"],
+                "run_id": row["run_id"],
+                "phase": row["phase"],
+                "state": _json_loads(row["state_json"], {}),
+                "recoverable": bool(row["recoverable"]),
+                "reason": row["reason"],
+                "created_at": row["created_at"],
+            }
+
+    def list_checkpoints(self, run_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM run_checkpoints WHERE run_id = ? ORDER BY created_at DESC LIMIT ?",
+                (run_id, max(1, min(limit, 200))),
+            ).fetchall()
+            return [
+                {
+                    "checkpoint_id": r["checkpoint_id"],
+                    "run_id": r["run_id"],
+                    "phase": r["phase"],
+                    "state": _json_loads(r["state_json"], {}),
+                    "recoverable": bool(r["recoverable"]),
+                    "reason": r["reason"],
+                    "created_at": r["created_at"],
+                }
+                for r in rows
+            ]
+
+    def save_idempotency_key(
+        self,
+        *,
+        key: str,
+        scope: str = "run_start",
+        run_id: Optional[str] = None,
+        response: Optional[Dict[str, Any]] = None,
+        ttl_seconds: float = 86400.0,
+    ) -> Dict[str, Any]:
+        now = time.time()
+        expires_at = now + max(1.0, float(ttl_seconds)) if ttl_seconds else None
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO idempotency_keys (key, scope, run_id, response_json, created_at, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    scope = excluded.scope,
+                    run_id = COALESCE(excluded.run_id, idempotency_keys.run_id),
+                    response_json = excluded.response_json,
+                    expires_at = excluded.expires_at
+                """,
+                (key, scope, run_id, _json_dumps(response or {}), now, expires_at),
+            )
+            self._conn.commit()
+            row = self._conn.execute("SELECT * FROM idempotency_keys WHERE key = ?", (key,)).fetchone()
+            return {
+                "key": row["key"],
+                "scope": row["scope"],
+                "run_id": row["run_id"],
+                "response": _json_loads(row["response_json"], {}),
+                "created_at": row["created_at"],
+                "expires_at": row["expires_at"],
+            }
+
+    def get_idempotency_key(self, key: str) -> Optional[Dict[str, Any]]:
+        now = time.time()
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM idempotency_keys WHERE key = ?", (key,)).fetchone()
+            if not row:
+                return None
+            if row["expires_at"] is not None and float(row["expires_at"]) < now:
+                return None
+            return {
+                "key": row["key"],
+                "scope": row["scope"],
+                "run_id": row["run_id"],
+                "response": _json_loads(row["response_json"], {}),
+                "created_at": row["created_at"],
+                "expires_at": row["expires_at"],
+            }
+
+    def record_cost_entry(
+        self,
+        *,
+        provider: str,
+        model: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cost_usd: float = 0.0,
+        run_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        engagement_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        eid = new_id("cost")
+        now = time.time()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO cost_ledger (
+                    entry_id, run_id, task_id, engagement_id, provider, model,
+                    input_tokens, output_tokens, cost_usd, metadata_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    eid,
+                    run_id,
+                    task_id,
+                    engagement_id,
+                    str(provider or ""),
+                    str(model or ""),
+                    max(0, int(input_tokens)),
+                    max(0, int(output_tokens)),
+                    max(0.0, float(cost_usd)),
+                    _json_dumps(metadata or {}),
+                    now,
+                ),
+            )
+            self._conn.commit()
+            row = self._conn.execute("SELECT * FROM cost_ledger WHERE entry_id = ?", (eid,)).fetchone()
+            return {
+                "entry_id": row["entry_id"],
+                "run_id": row["run_id"],
+                "task_id": row["task_id"],
+                "engagement_id": row["engagement_id"],
+                "provider": row["provider"],
+                "model": row["model"],
+                "input_tokens": int(row["input_tokens"]),
+                "output_tokens": int(row["output_tokens"]),
+                "cost_usd": float(row["cost_usd"]),
+                "metadata": _json_loads(row["metadata_json"], {}),
+                "created_at": row["created_at"],
+            }
+
+    def summarize_costs(
+        self,
+        *,
+        run_id: Optional[str] = None,
+        engagement_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        clauses: List[str] = []
+        params: List[Any] = []
+        if run_id:
+            clauses.append("run_id = ?")
+            params.append(run_id)
+        if engagement_id:
+            clauses.append("engagement_id = ?")
+            params.append(engagement_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._lock:
+            row = self._conn.execute(
+                f"""
+                SELECT COUNT(*) AS entries,
+                       COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                       COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                       COALESCE(SUM(cost_usd), 0.0) AS total_cost_usd
+                FROM cost_ledger {where}
+                """,
+                params,
+            ).fetchone()
+            return {
+                "entries": int(row["entries"]),
+                "input_tokens": int(row["input_tokens"]),
+                "output_tokens": int(row["output_tokens"]),
+                "total_cost_usd": round(float(row["total_cost_usd"]), 6),
+            }
+
+    # ── Async to_thread & WithoutCancel Bounded Finalization Helpers ─────────
+
+    async def aget_context(self) -> Dict[str, Any]:
+        return await asyncio.to_thread(self.get_context)
+
+    async def aget_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        return await asyncio.to_thread(self.get_run, run_id)
+
+    async def aupdate_run(self, run_id: str, **fields: Any) -> Optional[Dict[str, Any]]:
+        return await asyncio.to_thread(self.update_run, run_id, **fields)
+
+    async def aupsert_run(self, **kwargs: Any) -> Dict[str, Any]:
+        return await asyncio.to_thread(self.upsert_run, **kwargs)
+
+    async def alist_runs(self, **kwargs: Any) -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self.list_runs, **kwargs)
+
+    async def aappend_event(self, event_type: str, **kwargs: Any) -> Dict[str, Any]:
+        return await asyncio.to_thread(self.append_event, event_type, **kwargs)
+
+    async def alist_events(self, **kwargs: Any) -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self.list_events, **kwargs)
+
+    async def alist_approvals(self, **kwargs: Any) -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self.list_approvals, **kwargs)
+
+    async def aget_approval(self, approval_id: str, *, expire_stale: bool = False) -> Optional[Dict[str, Any]]:
+        return await asyncio.to_thread(self.get_approval, approval_id, expire_stale=expire_stale)
+
+    async def aget_engagement(self, engagement_id: str) -> Optional[Dict[str, Any]]:
+        return await asyncio.to_thread(self.get_engagement, engagement_id)
+
+    async def alist_engagements(self, limit: int = 100) -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self.list_engagements, limit)
+
+    async def alist_notifications(self, **kwargs: Any) -> List[Dict[str, Any]]:
+        return await asyncio.to_thread(self.list_notifications, **kwargs)
+
+    async def alatest_seq(self) -> int:
+        return await asyncio.to_thread(self.latest_seq)
+
+    async def asave_checkpoint(self, **kwargs: Any) -> Dict[str, Any]:
+        return await asyncio.to_thread(self.save_checkpoint, **kwargs)
+
+    async def aget_latest_checkpoint(self, run_id: str) -> Optional[Dict[str, Any]]:
+        return await asyncio.to_thread(self.get_latest_checkpoint, run_id)
+
+    async def finalize_run_without_cancel(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        error: str = "",
+        meta: Optional[Dict[str, Any]] = None,
+        timeout_s: float = 5.0,
+    ) -> Optional[Dict[str, Any]]:
+        """Persist final run status inside a bounded shielded task (WithoutCancel pattern)."""
+        fields: Dict[str, Any] = {"status": status, "finished_at": time.time()}
+        if error:
+            fields["error"] = error
+        if meta:
+            fields["meta"] = meta
+        inner = asyncio.create_task(asyncio.to_thread(self.update_run, run_id, **fields))
+        try:
+            return await asyncio.wait_for(asyncio.shield(inner), timeout=timeout_s)
+        except asyncio.CancelledError:
+            return await asyncio.wait_for(inner, timeout=timeout_s)
 
 
 _GLOBAL_PLATFORM_STORE: Optional[PlatformStore] = None

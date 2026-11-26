@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/platform/runs/<str:run_id>/pause", platform_api.PlatformRunControlView.as_view(action="pause")),
     path("api/platform/runs/<str:run_id>/resume", platform_api.PlatformRunControlView.as_view(action="resume")),
     path("api/platform/runs/<str:run_id>/stop", platform_api.PlatformRunControlView.as_view(action="stop")),
+    path("api/platform/runs/<str:run_id>/recover", platform_api.platform_run_recover_view),
     path("api/platform/stream", platform_api.platform_sse_stream_view),
     path("api/platform/approvals", platform_api.PlatformApprovalsListView.as_view()),
     path("api/platform/approvals/<str:approval_id>/decide", platform_api.platform_approval_decide_view),

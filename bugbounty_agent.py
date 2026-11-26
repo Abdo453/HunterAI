@@ -176,13 +176,18 @@ SSRF_PARAMS = [
 # ============================================================
 
 def require_root():
-    if os.geteuid() != 0:
+    geteuid = getattr(os, "geteuid", None)
+    if geteuid is None:
+        print("[!] Windows detected: POSIX root check (os.geteuid) is not applicable.")
+        return False
+    if geteuid() != 0:
         print("=" * 60)
         print("[✗] خطأ: يجب تشغيل السكربت بصلاحيات الجذر (root) فقط.")
         print("[*] يرجى chạy التشغيل باستخدام sudo:")
         print(f"    sudo python3 {os.path.abspath(__file__)} [الرابط]")
         print("=" * 60)
         sys.exit(1)
+    return True
 
 
 def run_cmd(cmd, description=""):
@@ -200,10 +205,18 @@ def tool_exists(tool_name):
 
 
 # ------------------------------------------------------------------
-# التشغيل الإجباري للروت قبل أي حاجة تانية
+# Helper to run interactive bootstrap only when executed as a script
 # ------------------------------------------------------------------
 
-require_root()
+
+def _bootstrap_runtime():
+    require_root()
+    install_system_dependencies()
+    install_go_tools()
+    install_python_dependencies()
+    ensure_directories()
+    print("\n[✓] اكتمال الإعداد. جميع الأدوات والمكتبات جاهزة.")
+    print("=" * 60 + "\n")
 
 
 # ============================================================
@@ -303,17 +316,8 @@ def ensure_directories():
             print(f"[+] تم إنشاء المجلد: {d}/")
 
 
-# تشغيل التركيب التلقائي (فقط بعد تأكيد الروت)
-install_system_dependencies()
-install_go_tools()
-install_python_dependencies()
-ensure_directories()
-
-print("\n[✓] اكتمال الإعداد. جميع الأدوات والمكتبات جاهزة.")
-print("=" * 60 + "\n")
-
 # ============================================================
-# الجزء الثالث: استيراد المكتبات بعد التأكد من وجودها
+# الجزء الثالث: استيراد المكتبات
 # ============================================================
 
 import requests
@@ -325,7 +329,10 @@ from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from playwright.async_api import async_playwright
+try:
+    from playwright.async_api import async_playwright
+except ImportError:
+    async_playwright = None  # type: ignore[assignment]
 
 console = Console()
 
@@ -636,6 +643,7 @@ class BugBountyAgent:
 
 
 def main():
+    _bootstrap_runtime()
     if len(sys.argv) < 2:
         target = input("أدخل الرابط المستهدف (مثال: https://example.com): ").strip()
     else:

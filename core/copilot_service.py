@@ -48,6 +48,10 @@ logger = logging.getLogger("hunter_ai.copilot_service")
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _ATTACHMENTS_DIR = _REPO_ROOT / "data" / "copilot_attachments"
 
+# Shared canonical attachment limits (reconciled with copilot_api.py & PlatformStore.save_attachment)
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_ATTACHMENT_EXCERPT_CHARS = 8000
+
 _TRUTHY_ENV = frozenset({"1", "true", "yes", "on", "enabled", "unrestricted"})
 
 NON_OVERRIDABLE_BLOCKED_HOSTS = frozenset({
@@ -721,8 +725,8 @@ def collect_live_context(
         next((r for r in runs if r.get("status") in ("running", "paused", "pending")), runs[0] if runs else None)
     )
 
-    # Pending approvals
-    approvals = store.list_approvals(limit=25)
+    # Pending approvals (read-only snapshot — never acquire SQLite write locks during Copilot reads)
+    approvals = store.list_approvals(limit=25, expire_stale=False)
     pending_approvals = [a for a in approvals if a.get("status") == "pending"]
 
     # Evidence & Findings (read-only)
@@ -1221,17 +1225,18 @@ class CopilotService:
         content_type: str = "text/plain",
         conversation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        max_bytes = 2 * 1024 * 1024
-        if len(raw_bytes) > max_bytes:
-            raise ValueError("Attachment exceeds 2MB size limit")
+        if len(raw_bytes) > MAX_ATTACHMENT_BYTES:
+            raise ValueError(f"Attachment exceeds {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB size limit")
         safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename or "attachment.txt").name)[:120] or "attachment.txt"
         aid = new_id("att")
         attach_dir = Path(os.getenv("HUNTER_COPILOT_ATTACHMENTS_DIR") or _ATTACHMENTS_DIR)
         attach_dir.mkdir(parents=True, exist_ok=True)
         dest = attach_dir / f"{aid}_{safe_name}"
-        dest.write_bytes(raw_bytes)
+        from core.persist.atomic_file import atomic_write_bytes
+
+        atomic_write_bytes(dest, raw_bytes)
         digest = hashlib.sha256(raw_bytes).hexdigest()
-        text_preview = raw_bytes[:16384].decode("utf-8", errors="replace")
+        text_preview = raw_bytes[:MAX_ATTACHMENT_EXCERPT_CHARS].decode("utf-8", errors="replace")[:MAX_ATTACHMENT_EXCERPT_CHARS]
         try:
             rel_path = str(dest.relative_to(_REPO_ROOT)).replace("\\", "/")
         except ValueError:
@@ -1282,8 +1287,9 @@ class CopilotService:
         eff_mode = mode or conv.get("mode") or "analyst"
         eff_model = model or conv.get("model") or "auto"
 
-        # Save user message immediately
-        user_msg = self.store.add_message(
+        # Save user message immediately and mark active turn for crash-recovery tracking
+        user_msg = await asyncio.to_thread(
+            self.store.add_message,
             conversation_id=cid,
             role="user",
             content=user_text,
@@ -1292,6 +1298,11 @@ class CopilotService:
             engagement_id=eff_eng_id,
             run_id=eff_run_id,
             metadata={"attachment_ids": list(attachment_ids or [])},
+        )
+        await asyncio.to_thread(
+            self.store.update_conversation,
+            cid,
+            metadata={"turn_status": "running", "active_turn": True, "interrupted_note_written": False},
         )
 
         # Update title from first message if default
@@ -1523,6 +1534,15 @@ class CopilotService:
                     provider_err = err_msg or "Provider returned empty response"
             except Exception as exc:
                 provider_err = str(exc)
+            finally:
+                if not stream_task.done():
+                    stream_task.cancel()
+                    try:
+                        await stream_task
+                    except asyncio.CancelledError:
+                        logger.debug("Copilot LLM stream_task cancelled on cleanup")
+                    except Exception as cancel_exc:
+                        logger.warning("Copilot LLM stream_task cleanup error: %s", cancel_exc)
 
         if is_fallback:
             fallback_text = build_offline_heuristic_response(
@@ -1537,7 +1557,8 @@ class CopilotService:
             yield ("token", {"delta": fallback_text, "conversation_id": cid, "fallback": True})
 
         final_answer = "".join(answer_chunks)
-        assistant_msg = self.store.add_message(
+        assistant_msg = await asyncio.to_thread(
+            self.store.add_message,
             conversation_id=cid,
             role="assistant",
             content=final_answer,
@@ -1554,6 +1575,11 @@ class CopilotService:
                 "fallback": is_fallback,
                 "policy_outcome": policy_outcome,
             },
+        )
+        await asyncio.to_thread(
+            self.store.update_conversation,
+            cid,
+            metadata={"turn_status": "idle", "active_turn": False},
         )
 
         yield ("refs", {"conversation_id": cid, "refs": refs, "citations": citations})

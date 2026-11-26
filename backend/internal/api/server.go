@@ -15,8 +15,11 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -24,12 +27,35 @@ import (
 	"artex-pro/internal/database"
 )
 
+type activeScan struct {
+	ID        string
+	Target    string
+	Status    string
+	StartedAt time.Time
+	cancel    context.CancelFunc
+}
+
+type idempotencyRecord struct {
+	ScanID    string
+	Target    string
+	Status    string
+	CreatedAt time.Time
+}
+
+const idempotencyTTL = time.Hour
+
 // APIServer exposes the ARTEX-Pro HTTP REST API backed by PostgreSQL.
 type APIServer struct {
-	db           *database.DB
-	orchestrator *agent.Orchestrator
-	port         int
-	apiToken     string
+	db             *database.DB
+	orchestrator   *agent.Orchestrator
+	port           int
+	apiToken       string
+	startedAt      time.Time
+	recoveredTasks atomic.Int64
+
+	scansMu     sync.Mutex
+	activeScans map[string]*activeScan
+	idempotency map[string]idempotencyRecord
 }
 
 func generateRandomToken() string {
@@ -38,6 +64,14 @@ func generateRandomToken() string {
 		panic(fmt.Sprintf("failed to generate CSPRNG API token: %v", err))
 	}
 	return hex.EncodeToString(buf)
+}
+
+func generateScanID() string {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("scan-%d", time.Now().UnixNano())
+	}
+	return "scan-" + hex.EncodeToString(buf)
 }
 
 func resolveConfiguredToken(fallback string) string {
@@ -61,6 +95,9 @@ func NewAPIServer(db *database.DB, port int) *APIServer {
 		orchestrator: agent.NewOrchestrator(db),
 		port:         port,
 		apiToken:     tok,
+		startedAt:    time.Now().UTC(),
+		activeScans:  make(map[string]*activeScan),
+		idempotency:  make(map[string]idempotencyRecord),
 	}
 }
 
@@ -184,7 +221,7 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 			if allowed {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Hunter-Token")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Hunter-Token, Idempotency-Key")
 			}
 		}
 		if r.Method == http.MethodOptions {
@@ -211,12 +248,59 @@ func (s *APIServer) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/tasks", enableCORS(s.requireBearerAuth(s.handleTasks)))
 	mux.HandleFunc("/api/v1/audit", enableCORS(s.requireBearerAuth(s.handleAudit)))
 	mux.HandleFunc("/api/v1/scan", enableCORS(s.requireBearerAuth(s.handleScan)))
+	mux.HandleFunc("/api/v1/scan/", enableCORS(s.requireBearerAuth(s.handleScanSubroute)))
 
 	return mux
 }
 
+// RecoverStuckTasks marks tasks left RUNNING from a prior crash as recoverable PAUSED on startup.
+func (s *APIServer) RecoverStuckTasks(ctx context.Context) (int64, error) {
+	if !s.hasDB() {
+		return 0, nil
+	}
+	res, err := s.db.ExecContext(
+		ctx,
+		`UPDATE tasks
+		 SET status = 'PAUSED',
+		     output_summary = COALESCE(output_summary, '{}'::jsonb) || '{"recoverable":true,"reason":"recovered_on_startup"}'::jsonb,
+		     updated_at = CURRENT_TIMESTAMP
+		 WHERE status = 'RUNNING'`,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed recovering stuck running tasks: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	if affected > 0 {
+		s.recoveredTasks.Add(affected)
+		log.Printf("[API] Recovered %d stuck RUNNING task(s) to PAUSED on startup", affected)
+	}
+	return affected, nil
+}
+
+func (s *APIServer) activeScanCount() int {
+	s.scansMu.Lock()
+	defer s.scansMu.Unlock()
+	count := 0
+	for _, sc := range s.activeScans {
+		if sc.Status == "QUEUED" || sc.Status == "RUNNING" {
+			count++
+		}
+	}
+	return count
+}
+
 // Start begins serving the ARTEX-Pro REST API on the configured loopback/ARTEX_BIND_ADDR address.
 func (s *APIServer) Start() error {
+	if s.hasDB() {
+		recCtx, recCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if _, err := s.RecoverStuckTasks(recCtx); err != nil {
+			log.Printf("[API] Startup stuck-task recovery warning: %v", err)
+		}
+		recCancel()
+	}
 	addr := s.ResolveBindAddr()
 	log.Printf("[API] ARTEX-Pro REST API Server listening on http://%s", addr)
 	srv := &http.Server{
@@ -273,8 +357,12 @@ func (s *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]interface{}{
-		"engine":    "ARTEX-Pro Go Core",
-		"timestamp": time.Now().UTC(),
+		"engine":          "ARTEX-Pro Go Core",
+		"timestamp":       time.Now().UTC(),
+		"active_scans":    s.activeScanCount(),
+		"goroutines":      runtime.NumGoroutine(),
+		"uptime_sec":      int64(time.Since(s.startedAt).Seconds()),
+		"recovered_tasks": s.recoveredTasks.Load(),
 	}
 
 	if !s.hasDB() {
@@ -307,11 +395,21 @@ func (s *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	activeScans := s.activeScanCount()
+	goroutines := runtime.NumGoroutine()
+	uptimeSec := int64(time.Since(s.startedAt).Seconds())
+	recovered := s.recoveredTasks.Load()
+
 	if !s.hasDB() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
 			"total_assets":      0,
 			"total_findings":    0,
 			"total_engagements": 0,
+			"active_scans":      activeScans,
+			"goroutines":        goroutines,
+			"uptime_sec":        uptimeSec,
+			"recovered_tasks":   recovered,
+			"database":          "disconnected",
 			"status":            "DEGRADED",
 			"error":             "database unavailable",
 		})
@@ -333,6 +431,11 @@ func (s *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 				"total_assets":      counts[0],
 				"total_findings":    counts[1],
 				"total_engagements": counts[2],
+				"active_scans":      activeScans,
+				"goroutines":        goroutines,
+				"uptime_sec":        uptimeSec,
+				"recovered_tasks":   recovered,
+				"database":          "disconnected",
 				"status":            "DEGRADED",
 				"error":             err.Error(),
 			})
@@ -344,6 +447,11 @@ func (s *APIServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		"total_assets":      counts[0],
 		"total_findings":    counts[1],
 		"total_engagements": counts[2],
+		"active_scans":      activeScans,
+		"goroutines":        goroutines,
+		"uptime_sec":        uptimeSec,
+		"recovered_tasks":   recovered,
+		"database":          "connected",
 		"status":            "ONLINE",
 	})
 }
@@ -484,7 +592,7 @@ func (s *APIServer) handleFindings(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT id, COALESCE(engagement_id::text, ''), COALESCE(target_id::text, ''), title, vuln_class, severity,
 		COALESCE(cvss_score, 0.0), COALESCE(confidence, 0.0),
 		COALESCE(NULLIF(endpoint, ''), evidence, ''), COALESCE(evidence, ''),
-		COALESCE(status, 'CONFIRMED'), created_at
+		COALESCE(status, 'CANDIDATE'), created_at
 		FROM findings`
 	var args []interface{}
 	if engagementID != "" {
@@ -916,7 +1024,8 @@ func (s *APIServer) handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Target string `json:"target"`
+		Target         string `json:"target"`
+		IdempotencyKey string `json:"idempotency_key"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "Invalid target domain")
@@ -933,23 +1042,141 @@ func (s *APIServer) handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	idemKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idemKey == "" {
+		idemKey = strings.TrimSpace(req.IdempotencyKey)
+	}
+
+	now := time.Now().UTC()
+	s.scansMu.Lock()
+	if idemKey != "" {
+		// Evict expired keys opportunistically
+		for k, rec := range s.idempotency {
+			if now.Sub(rec.CreatedAt) > idempotencyTTL {
+				delete(s.idempotency, k)
+			}
+		}
+		if existing, ok := s.idempotency[idemKey]; ok {
+			s.scansMu.Unlock()
+			writeJSON(w, http.StatusAccepted, map[string]interface{}{
+				"status":       existing.Status,
+				"scan_id":      existing.ScanID,
+				"run_id":       existing.ScanID,
+				"target":       existing.Target,
+				"deduplicated": true,
+				"message":      "Duplicate scan request matched existing Idempotency-Key",
+			})
+			return
+		}
+	}
+
+	scanID := generateScanID()
+	scanCtx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	entry := &activeScan{
+		ID:        scanID,
+		Target:    target,
+		Status:    "QUEUED",
+		StartedAt: now,
+		cancel:    cancel,
+	}
+	s.activeScans[scanID] = entry
+	if idemKey != "" {
+		s.idempotency[idemKey] = idempotencyRecord{
+			ScanID:    scanID,
+			Target:    target,
+			Status:    "QUEUED",
+			CreatedAt: now,
+		}
+	}
+	s.scansMu.Unlock()
+
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
-		"status":  "QUEUED",
-		"target":  target,
-		"message": "Autonomous ARTEX-Pro pipeline dispatched in background Goroutine",
+		"status":       "QUEUED",
+		"scan_id":      scanID,
+		"run_id":       scanID,
+		"target":       target,
+		"deduplicated": false,
+		"message":      "Autonomous ARTEX-Pro pipeline dispatched in background Goroutine",
 	})
 
-	// Dispatch background Goroutine with panic recovery
-	go func(t string) {
+	// Dispatch background Goroutine with panic recovery and cancellation tracking
+	go func(id, t string, ctx context.Context, cancelFn context.CancelFunc) {
+		defer cancelFn()
 		defer func() {
 			if rec := recover(); rec != nil {
-				log.Printf("[-] [API] Recovered from background mission panic: %v", rec)
+				log.Printf("[-] [API] Recovered from background mission panic (%s): %v", id, rec)
+				s.scansMu.Lock()
+				if sc, ok := s.activeScans[id]; ok {
+					sc.Status = "FAILED"
+				}
+				s.scansMu.Unlock()
 			}
 		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-		defer cancel()
-		if _, err := s.orchestrator.RunAutonomousMission(ctx, t); err != nil {
-			log.Printf("[-] [API] Background mission failed for %q: %v", t, err)
+
+		s.scansMu.Lock()
+		if sc, ok := s.activeScans[id]; ok {
+			if sc.Status == "CANCELLED" {
+				s.scansMu.Unlock()
+				return
+			}
+			sc.Status = "RUNNING"
 		}
-	}(target)
+		s.scansMu.Unlock()
+
+		_, err := s.orchestrator.RunAutonomousMission(ctx, t)
+		s.scansMu.Lock()
+		if sc, ok := s.activeScans[id]; ok {
+			if sc.Status == "CANCELLED" || ctx.Err() == context.Canceled {
+				sc.Status = "CANCELLED"
+			} else if err != nil {
+				sc.Status = "FAILED"
+			} else {
+				sc.Status = "COMPLETED"
+			}
+		}
+		s.scansMu.Unlock()
+
+		if err != nil && ctx.Err() != context.Canceled {
+			log.Printf("[-] [API] Background mission %s failed for %q: %v", id, t, err)
+		}
+	}(scanID, target, scanCtx, cancel)
+}
+
+func (s *APIServer) handleScanSubroute(w http.ResponseWriter, r *http.Request) {
+	trimmed := strings.TrimPrefix(r.URL.Path, "/api/v1/scan/")
+	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] != "cancel" {
+		writeJSONError(w, http.StatusNotFound, "Unknown scan subroute")
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	scanID := parts[0]
+	s.scansMu.Lock()
+	sc, ok := s.activeScans[scanID]
+	if !ok {
+		s.scansMu.Unlock()
+		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("Scan %q not found", scanID))
+		return
+	}
+	alreadyTerminal := sc.Status == "COMPLETED" || sc.Status == "FAILED" || sc.Status == "CANCELLED"
+	cancelFn := sc.cancel
+	if !alreadyTerminal {
+		sc.Status = "CANCELLED"
+	}
+	finalStatus := sc.Status
+	s.scansMu.Unlock()
+
+	if !alreadyTerminal && cancelFn != nil {
+		cancelFn()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":      true,
+		"scan_id": scanID,
+		"status":  finalStatus,
+	})
 }

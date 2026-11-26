@@ -535,10 +535,22 @@ class PipelineGraphView(APIView):
     def get(self, request: Any) -> Any:
         try:
             from core.reasoning.attack_surface_graph import AttackSurfaceGraph
+            from hunter_backend.runtime import get_burp_gateway
 
-            graph = AttackSurfaceGraph()
-            return ok_json({"graph": graph.to_dict(), "active_pipelines": _active_pipelines})
+            exported: Dict[str, Any] = {}
+            try:
+                gw = get_burp_gateway()
+                if gw is not None and getattr(gw, "attack_surface_graph", None) is not None:
+                    exported = gw.attack_surface_graph.export_graph()
+            except Exception as gw_exc:
+                logger.debug("PipelineGraphView burp gateway graph unavailable: %s", gw_exc)
+
+            if not exported:
+                graph = AttackSurfaceGraph()
+                exported = graph.export_graph()
+            return ok_json({"graph": exported, "active_pipelines": _active_pipelines})
         except Exception as exc:
+            logger.warning("PipelineGraphView failed: %s", exc)
             return ok_json({"graph": {}, "active_pipelines": _active_pipelines, "error": str(exc)})
 
 
@@ -593,8 +605,14 @@ class VramPipelineStatusView(APIView):
         try:
             from core.pipeline.vram_sequential_pipeline import vram_pipeline
 
-            active = getattr(getattr(vram_pipeline, "vram_mgr", None), "active_model", None)
-        except Exception:
+            vram_mgr = getattr(vram_pipeline, "vram_mgr", None)
+            active = getattr(
+                vram_mgr,
+                "currently_loaded_model",
+                getattr(vram_mgr, "active_model", None),
+            )
+        except Exception as exc:
+            logger.debug("VramPipelineStatusView probe failed: %s", exc)
             active = None
         stages = [
             {"id": 1, "name": "Recon"},
@@ -652,13 +670,20 @@ async def hunter_start_view(request: HttpRequest) -> JsonResponse:
                 res = run_fn()
                 if asyncio.iscoroutine(res):
                     await res
-            store.update_run(run_id, status="completed", current_phase="DONE", progress=1.0, finished_at=time.time())
+            await asyncio.to_thread(
+                store.update_run,
+                run_id,
+                status="completed",
+                current_phase="DONE",
+                progress=1.0,
+                finished_at=time.time(),
+            )
         except asyncio.CancelledError:
-            store.update_run(run_id, status="stopped", finished_at=time.time())
+            await store.finalize_run_without_cancel(run_id, status="stopped")
             raise
         except Exception as exc:
             logger.exception("AutonomousHunter %s failed", run_id)
-            store.update_run(run_id, status="failed", error=str(exc), finished_at=time.time())
+            await store.finalize_run_without_cancel(run_id, status="failed", error=str(exc))
 
     task = asyncio.create_task(_run_hunter())
     reg["handle"].task = task
@@ -881,30 +906,103 @@ async def omni_launch_view(request: HttpRequest) -> JsonResponse:
 
 
 class OmniStatusView(APIView):
-    """GET /api/omni/status/<engagement_id>."""
+    """GET /api/omni/status/<engagement_id> — backed by PlatformStore runs & engagement state."""
 
     def get(self, request: Any, engagement_id: str) -> Any:
-        item = _OMNI_RUNS.get(engagement_id)
         store = ensure_platform_wiring()
         eng = store.get_engagement(engagement_id)
-        if not item and not eng:
+        omni_runs = store.list_runs(kind="omni", engagement_id=engagement_id, limit=25)
+        if not omni_runs:
+            omni_runs = store.list_runs(engagement_id=engagement_id, limit=25)
+        direct_run = store.get_run(engagement_id) if not omni_runs else None
+        latest_run = omni_runs[0] if omni_runs else direct_run
+        legacy_mem = _OMNI_RUNS.get(engagement_id)
+
+        if not eng and not latest_run and not legacy_mem:
             return err_json(f"Omni run {engagement_id} not found", status=404)
+
+        run_meta = (latest_run or {}).get("meta") if isinstance((latest_run or {}).get("meta"), dict) else {}
+        findings = list(run_meta.get("discovered_findings") or [])
+        phase = str(
+            (latest_run or {}).get("current_phase")
+            or (legacy_mem or {}).get("current_phase")
+            or "INIT"
+        )
+        status = str(
+            (latest_run or {}).get("status")
+            or (legacy_mem or {}).get("status")
+            or ((eng or {}).get("status") or "unknown")
+        )
+        omni_summary = {
+            "engagement_id": engagement_id,
+            "run_id": (latest_run or {}).get("run_id") or (legacy_mem or {}).get("run_id"),
+            "target": (latest_run or {}).get("target") or (eng or {}).get("target") or (legacy_mem or {}).get("target", ""),
+            "status": status,
+            "canonical_status": (latest_run or {}).get("canonical_status"),
+            "current_phase": phase,
+            "progress": float((latest_run or {}).get("progress") or 0.0),
+            "findings_count": len(findings),
+            "findings": findings,
+        }
         return ok_json(
             {
                 "engagement_id": engagement_id,
-                "current_phase": (item or {}).get("current_phase", "INIT"),
-                "omni": item,
+                "status": status,
+                "current_phase": phase,
+                "progress": omni_summary["progress"],
+                "run": latest_run,
+                "runs": omni_runs,
+                "omni": omni_summary,
                 "engagement": eng,
             }
         )
 
 
 class OmniFindingsView(APIView):
-    """GET /api/omni/findings/<engagement_id>."""
+    """GET /api/omni/findings/<engagement_id> — backed by PlatformStore runs & EvidenceStore."""
 
     def get(self, request: Any, engagement_id: str) -> Any:
-        item = _OMNI_RUNS.get(engagement_id) or {}
-        findings = list(item.get("findings") or [])
+        store = ensure_platform_wiring()
+        runs = store.list_runs(engagement_id=engagement_id, limit=50)
+        direct_run = store.get_run(engagement_id)
+        if direct_run and all(r.get("run_id") != direct_run["run_id"] for r in runs):
+            runs.insert(0, direct_run)
+
+        findings: List[Dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for r in runs:
+            meta = r.get("meta") if isinstance(r.get("meta"), dict) else {}
+            for fd in meta.get("discovered_findings") or []:
+                if not isinstance(fd, dict):
+                    continue
+                key = (str(fd.get("title") or ""), str(fd.get("endpoint") or r.get("target") or ""))
+                if key not in seen:
+                    seen.add(key)
+                    findings.append({**fd, "run_id": r["run_id"], "engagement_id": engagement_id})
+            for ev in GLOBAL_EVIDENCE_STORE.list_evidence(run_id=r["run_id"]):
+                if ev.evidence_type not in {"proof", "anomaly"}:
+                    continue
+                title = str((ev.metadata or {}).get("title") or f"{ev.evidence_type} ({ev.source_tool})")
+                ep = str((ev.metadata or {}).get("target") or r.get("target") or "")
+                key = (title, ep)
+                if key not in seen:
+                    seen.add(key)
+                    findings.append(
+                        {
+                            "id": ev.evidence_id,
+                            "title": title,
+                            "endpoint": ep,
+                            "severity": str((ev.metadata or {}).get("severity") or "INFO"),
+                            "cvss_score": float((ev.metadata or {}).get("cvss_score") or 0.0),
+                            "vuln_class": str((ev.metadata or {}).get("vuln_class") or ev.evidence_type),
+                            "confidence": ev.confidence,
+                            "status": ev.verification_status,
+                            "evidence": ev.sanitized_content[:500],
+                            "run_id": r["run_id"],
+                            "engagement_id": engagement_id,
+                        }
+                    )
+
         return ok_json({"engagement_id": engagement_id, "findings": findings, "count": len(findings)})
 
 

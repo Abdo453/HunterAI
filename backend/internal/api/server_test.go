@@ -919,3 +919,190 @@ func TestBindAddrAndAuthAndSSLHardening(t *testing.T) {
 		}
 	})
 }
+
+func TestPhase2CancelIdempotencyRecoveryAndCandidateDefaults(t *testing.T) {
+	t.Run("Idempotency-Key deduplicates POST /api/v1/scan and spawns only once", func(t *testing.T) {
+		var mu sync.Mutex
+		dispatchCount := 0
+		dispatchedCh := make(chan struct{}, 4)
+
+		state := &stubDriverState{
+			queryHandler: func(query string, _ []driver.NamedValue) (driver.Rows, error) {
+				if strings.Contains(query, "INSERT INTO engagements") {
+					mu.Lock()
+					dispatchCount++
+					mu.Unlock()
+					select {
+					case dispatchedCh <- struct{}{}:
+					default:
+					}
+					return nil, errors.New("stop stub background scan")
+				}
+				return &stubRows{}, nil
+			},
+		}
+		srv := NewAPIServer(newStubDB(t, state), 0)
+		handler := srv.Handler()
+		auth := "Bearer " + srv.APIToken()
+
+		req1 := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+		req1.Header.Set("Authorization", auth)
+		req1.Header.Set("Idempotency-Key", "idem-scan-001")
+		rec1 := httptest.NewRecorder()
+		handler.ServeHTTP(rec1, req1)
+		if rec1.Code != http.StatusAccepted {
+			t.Fatalf("first scan expected 202, got %d (%s)", rec1.Code, rec1.Body.String())
+		}
+		var body1 map[string]interface{}
+		if err := json.Unmarshal(rec1.Body.Bytes(), &body1); err != nil {
+			t.Fatalf("decode body1: %v", err)
+		}
+		scanID1, _ := body1["scan_id"].(string)
+		if scanID1 == "" || body1["deduplicated"] != false {
+			t.Fatalf("unexpected first scan payload: %+v", body1)
+		}
+
+		select {
+		case <-dispatchedCh:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("expected first scan goroutine to run")
+		}
+
+		// Second request with same Idempotency-Key must return exact scan_id without re-spawning
+		req2 := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+		req2.Header.Set("Authorization", auth)
+		req2.Header.Set("Idempotency-Key", "idem-scan-001")
+		rec2 := httptest.NewRecorder()
+		handler.ServeHTTP(rec2, req2)
+		if rec2.Code != http.StatusAccepted {
+			t.Fatalf("duplicate scan expected 202, got %d", rec2.Code)
+		}
+		var body2 map[string]interface{}
+		if err := json.Unmarshal(rec2.Body.Bytes(), &body2); err != nil {
+			t.Fatalf("decode body2: %v", err)
+		}
+		if body2["scan_id"] != scanID1 || body2["deduplicated"] != true {
+			t.Fatalf("expected deduplicated scan_id=%q, got %+v", scanID1, body2)
+		}
+
+		time.Sleep(50 * time.Millisecond)
+		mu.Lock()
+		gotCount := dispatchCount
+		mu.Unlock()
+		if gotCount != 1 {
+			t.Fatalf("expected exactly 1 orchestrator dispatch for deduplicated key, got %d", gotCount)
+		}
+	})
+
+	t.Run("POST /api/v1/scan/{id}/cancel enforces auth and cancels active scan", func(t *testing.T) {
+		started := make(chan struct{}, 1)
+		cancelled := make(chan struct{}, 1)
+		state := &stubDriverState{
+			queryHandler: func(query string, _ []driver.NamedValue) (driver.Rows, error) {
+				if strings.Contains(query, "INSERT INTO engagements") {
+					select {
+					case started <- struct{}{}:
+					default:
+					}
+					// Wait until test triggers cancel or timeout
+					<-cancelled
+					return nil, context.Canceled
+				}
+				return &stubRows{}, nil
+			},
+		}
+		srv := NewAPIServer(newStubDB(t, state), 0)
+		handler := srv.Handler()
+		auth := "Bearer " + srv.APIToken()
+
+		startReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+		startReq.Header.Set("Authorization", auth)
+		startRec := httptest.NewRecorder()
+		handler.ServeHTTP(startRec, startReq)
+		if startRec.Code != http.StatusAccepted {
+			t.Fatalf("start scan expected 202, got %d", startRec.Code)
+		}
+		var startBody map[string]interface{}
+		_ = json.Unmarshal(startRec.Body.Bytes(), &startBody)
+		scanID, _ := startBody["scan_id"].(string)
+
+		select {
+		case <-started:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("background scan did not start")
+		}
+
+		// Unauthenticated cancel must fail closed with 401
+		unauthCancel := httptest.NewRequest(http.MethodPost, "/api/v1/scan/"+scanID+"/cancel", nil)
+		unauthRec := httptest.NewRecorder()
+		handler.ServeHTTP(unauthRec, unauthCancel)
+		if unauthRec.Code != http.StatusUnauthorized {
+			t.Fatalf("unauthenticated cancel expected 401, got %d", unauthRec.Code)
+		}
+
+		// Authenticated cancel succeeds and marks CANCELLED
+		cancelReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan/"+scanID+"/cancel", nil)
+		cancelReq.Header.Set("Authorization", auth)
+		cancelRec := httptest.NewRecorder()
+		handler.ServeHTTP(cancelRec, cancelReq)
+		close(cancelled)
+		if cancelRec.Code != http.StatusOK {
+			t.Fatalf("cancel expected 200, got %d (%s)", cancelRec.Code, cancelRec.Body.String())
+		}
+		var cancelBody map[string]interface{}
+		_ = json.Unmarshal(cancelRec.Body.Bytes(), &cancelBody)
+		if cancelBody["ok"] != true || cancelBody["status"] != "CANCELLED" || cancelBody["scan_id"] != scanID {
+			t.Fatalf("unexpected cancel body: %+v", cancelBody)
+		}
+
+		// Unknown scan returns 404
+		missReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan/scan-missing/cancel", nil)
+		missReq.Header.Set("Authorization", auth)
+		missRec := httptest.NewRecorder()
+		handler.ServeHTTP(missRec, missReq)
+		if missRec.Code != http.StatusNotFound {
+			t.Fatalf("unknown scan cancel expected 404, got %d", missRec.Code)
+		}
+	})
+
+	t.Run("RecoverStuckTasks updates RUNNING tasks to PAUSED and surfaces runtime stats", func(t *testing.T) {
+		state := &stubDriverState{}
+		srv := NewAPIServer(newStubDB(t, state), 0)
+		affected, err := srv.RecoverStuckTasks(context.Background())
+		if err != nil {
+			t.Fatalf("RecoverStuckTasks error: %v", err)
+		}
+		if affected != 1 {
+			t.Fatalf("expected 1 recovered row from stub driver, got %d", affected)
+		}
+		if len(state.execs) == 0 || !strings.Contains(state.execs[0], "SET status = 'PAUSED'") || !strings.Contains(state.execs[0], "WHERE status = 'RUNNING'") {
+			t.Fatalf("unexpected recovery SQL: %+v", state.execs)
+		}
+
+		// Health includes runtime metrics & recovered_tasks
+		hReq := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+		hRec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(hRec, hReq)
+		if hRec.Code != http.StatusOK {
+			t.Fatalf("health expected 200, got %d", hRec.Code)
+		}
+		var hBody map[string]interface{}
+		_ = json.Unmarshal(hRec.Body.Bytes(), &hBody)
+		if hBody["recovered_tasks"] != float64(1) || hBody["goroutines"] == nil || hBody["active_scans"] == nil {
+			t.Fatalf("expected runtime metrics in health body, got %+v", hBody)
+		}
+
+		// Findings SQL defaults status to CANDIDATE (never CONFIRMED)
+		fReq := httptest.NewRequest(http.MethodGet, "/api/v1/findings", nil)
+		fReq.Header.Set("Authorization", "Bearer "+srv.APIToken())
+		fRec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(fRec, fReq)
+		if fRec.Code != http.StatusOK {
+			t.Fatalf("findings expected 200, got %d", fRec.Code)
+		}
+		q, ok := state.lastQuery()
+		if !ok || !strings.Contains(q.query, "COALESCE(status, 'CANDIDATE')") {
+			t.Fatalf("expected findings query to default status to CANDIDATE, got: %s", q.query)
+		}
+	})
+}

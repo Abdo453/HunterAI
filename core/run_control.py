@@ -22,16 +22,35 @@ logger = logging.getLogger(__name__)
 
 
 class RunState:
+    # Legacy statuses (preserved for backward compatibility)
     PENDING = "pending"
     RUNNING = "running"
+    WAITING = "waiting"
     PAUSED = "paused"
     STOPPING = "stopping"
     STOPPED = "stopped"
     COMPLETED = "completed"
     FAILED = "failed"
 
-    ACTIVE = (PENDING, RUNNING, PAUSED, STOPPING)
-    TERMINAL = (COMPLETED, FAILED, STOPPED)
+    # Canonical 7-state constants
+    QUEUED = "QUEUED"
+    CANCELLED = "CANCELLED"
+
+    ACTIVE = (PENDING, QUEUED, RUNNING, WAITING, PAUSED, STOPPING)
+    TERMINAL = (COMPLETED, FAILED, STOPPED, CANCELLED)
+
+    @classmethod
+    def to_canonical(cls, state: str) -> str:
+        from core.runtime.state_machine import to_canonical_status
+
+        canon, _ = to_canonical_status(state)
+        return canon.value
+
+    @classmethod
+    def to_legacy(cls, state: str, *, recoverable: bool = False) -> str:
+        from core.runtime.state_machine import to_legacy_status
+
+        return to_legacy_status(state, recoverable=recoverable)
 
 
 @dataclass
@@ -42,6 +61,7 @@ class RunHandle:
     kind: str                      # mission | pipeline | engine | swarm
     task: Optional[asyncio.Task] = None
     state: str = RunState.PENDING
+    recoverable: bool = False
     created_at: float = field(default_factory=time.time)
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
@@ -50,11 +70,17 @@ class RunHandle:
     meta: Dict[str, Any] = field(default_factory=dict)
     error: str = ""
 
+    @property
+    def canonical_state(self) -> str:
+        return RunState.to_canonical(self.state)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "run_id": self.run_id,
             "kind": self.kind,
             "state": self.state,
+            "canonical_state": self.canonical_state,
+            "recoverable": self.recoverable,
             "created_at": self.created_at,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
@@ -140,13 +166,25 @@ class RunController:
         self._notify(handle)
         return True
 
+    def mark_waiting(self, run_id: str, reason: str = "") -> bool:
+        """Transition a running handle into WAITING (HITL input/approval wait)."""
+        handle = self._runs.get(run_id)
+        if handle is None or handle.state not in (RunState.RUNNING, RunState.PENDING, RunState.QUEUED):
+            return False
+        handle.state = RunState.WAITING
+        if reason:
+            handle.meta["waiting_reason"] = reason
+        self._notify(handle)
+        return True
+
     def resume(self, run_id: str) -> bool:
         handle = self._runs.get(run_id)
-        if handle is None or handle.state != RunState.PAUSED:
+        if handle is None or handle.state not in (RunState.PAUSED, RunState.WAITING):
             return False
         if handle.pause_event:
             handle.pause_event.set()
         handle.state = RunState.RUNNING
+        handle.recoverable = False
         self._notify(handle)
         return True
 
@@ -206,8 +244,8 @@ class RunController:
         if self.on_state_change is not None:
             try:
                 self.on_state_change(handle)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("RunController state-change callback failed for %s: %s", handle.run_id, exc)
 
 
 # نسخة مشتركة للتطبيق (تُحقن في router)

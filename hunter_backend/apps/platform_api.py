@@ -61,6 +61,7 @@ from hunter_backend.runtime import (
     execute_approved_action,
     get_go_client,
     probe_artex_health,
+    recover_platform_run,
     start_platform_run,
 )
 
@@ -113,6 +114,7 @@ class RunStartRequest(BaseModel):
     force_fallback: bool = False
     self_operate: bool = False
     proxy: Optional[str] = None
+    idempotency_key: Optional[str] = None
 
 
 class ApprovalDecideRequest(BaseModel):
@@ -294,23 +296,36 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
     """GET /api/platform/overview: aggregated platform state, providers, runs, and Artex probe."""
     global _TOOLS_CACHE
     store = ensure_platform_wiring()
-    ctx = store.get_context()
-    engagements = store.list_engagements(limit=50)
-    runs = store.list_runs(limit=50)
-    approvals = store.list_approvals(status="pending", limit=50)
-    notifications = store.list_notifications(unread_only=True, limit=30)
-    recent_events = store.list_events(since_seq=max(0, store.latest_seq() - 40), limit=40)
 
-    active_eng = (
-        store.get_engagement(ctx["active_engagement_id"])
-        if ctx.get("active_engagement_id")
-        else None
-    )
-    active_run = (
-        store.get_run(ctx["active_run_id"])
-        if ctx.get("active_run_id")
-        else None
-    )
+    def _load_store_snapshot() -> Dict[str, Any]:
+        ctx_v = store.get_context()
+        engs_v = store.list_engagements(limit=50)
+        runs_v = store.list_runs(limit=50)
+        approvals_v = store.list_approvals(status="pending", limit=50, expire_stale=False)
+        notifs_v = store.list_notifications(unread_only=True, limit=30)
+        latest_v = store.latest_seq()
+        events_v = store.list_events(since_seq=max(0, latest_v - 40), limit=40)
+        active_eng_v = (
+            store.get_engagement(ctx_v["active_engagement_id"])
+            if ctx_v.get("active_engagement_id")
+            else None
+        )
+        active_run_v = (
+            store.get_run(ctx_v["active_run_id"])
+            if ctx_v.get("active_run_id")
+            else None
+        )
+        return {
+            "ctx": ctx_v,
+            "engagements": engs_v,
+            "runs": runs_v,
+            "approvals": approvals_v,
+            "notifications": notifs_v,
+            "recent_events": events_v,
+            "active_eng": active_eng_v,
+            "active_run": active_run_v,
+            "latest_seq": latest_v,
+        }
 
     def _load_tools() -> Any:
         from tools.tool_manager import ToolManager
@@ -321,7 +336,8 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
         try:
             res = await asyncio.to_thread(detect_live_providers)
             return res if isinstance(res, dict) else {}
-        except Exception:
+        except Exception as exc:
+            logger.debug("detect_live_providers failed: %s", exc)
             return {}
 
     async def _safe_tools() -> Any:
@@ -335,16 +351,26 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
             val = res if res is not None else []
             _TOOLS_CACHE = (time.monotonic(), val)
             return val
-        except Exception:
+        except Exception as exc:
+            logger.debug("ToolManager inventory load failed: %s", exc)
             return cached_val or []
 
-    providers, tools, artex = await asyncio.gather(
+    snap, providers, tools, artex = await asyncio.gather(
+        asyncio.to_thread(_load_store_snapshot),
         _safe_providers(),
         _safe_tools(),
         probe_artex_health(),
     )
+    ctx = snap["ctx"]
+    engagements = snap["engagements"]
+    runs = snap["runs"]
+    approvals = snap["approvals"]
+    notifications = snap["notifications"]
+    recent_events = snap["recent_events"]
+    active_eng = snap["active_eng"]
+    active_run = snap["active_run"]
+    latest_seq = snap["latest_seq"]
     prov_dict = providers if isinstance(providers, dict) else {}
-    latest_seq = store.latest_seq()
     services = {
         "artex_go_core": artex,
         "ollama": {
@@ -395,10 +421,10 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
     counts = {
         "engagements": len(engagements),
         "runs": len(runs),
-        "active_runs": sum(1 for r in runs if r.get("status") in {"running", "paused"}),
+        "active_runs": sum(1 for r in runs if r.get("status") in {"running", "paused", "waiting", "pending"}),
         "pending_approvals": len(approvals),
         "unread_notifications": len(notifications),
-        "assets": len(hub_assets) or len(engagements),
+        "assets": len(hub_assets),
         "findings": len(hub_findings),
     }
     return django_json(
@@ -560,6 +586,12 @@ async def platform_run_start_view(request: HttpRequest) -> JsonResponse:
     if verr is not None:
         return verr
     assert req is not None
+    idem_key = (
+        req.idempotency_key
+        or request.META.get("HTTP_IDEMPOTENCY_KEY")
+        or request.headers.get("Idempotency-Key")
+        or None
+    )
     try:
         run = await start_platform_run(
             kind=req.kind,
@@ -576,12 +608,41 @@ async def platform_run_start_view(request: HttpRequest) -> JsonResponse:
             force_fallback=req.force_fallback,
             self_operate=req.self_operate,
             proxy=req.proxy,
+            idempotency_key=str(idem_key).strip() if idem_key else None,
         )
-        return django_json({"ok": True, "run": run, "run_id": run.get("run_id")})
+        return django_json(
+            {
+                "ok": True,
+                "run": run,
+                "run_id": run.get("run_id"),
+                "deduplicated": bool(run.get("deduplicated", False)),
+            }
+        )
     except PermissionError as exc:
         return django_err(str(exc), status=403, extra={"status": "BLOCKED_SCOPE"})
     except ValueError as exc:
         return django_err(str(exc), status=400)
+
+
+@require_http_methods(["POST"])
+async def platform_run_recover_view(request: HttpRequest, run_id: str) -> JsonResponse:
+    """POST /api/platform/runs/<run_id>/recover: resume a PAUSED/recoverable run from checkpoint."""
+    try:
+        run = await recover_platform_run(run_id)
+        return django_json(
+            {
+                "ok": True,
+                "recovered": True,
+                "run_id": run.get("run_id", run_id),
+                "status": run.get("status", "running"),
+                "canonical_status": run.get("canonical_status", "RUNNING"),
+                "run": run,
+            }
+        )
+    except KeyError as exc:
+        return django_err(str(exc), status=404)
+    except ValueError as exc:
+        return django_err(str(exc), status=409)
 
 
 class PlatformRunControlView(APIView):
@@ -652,7 +713,7 @@ async def platform_sse_stream_view(request: HttpRequest) -> StreamingHttpRespons
         q = EVENT_BUS.subscribe()
         last_sent_seq = 0 if since_seq is None else since_seq
         try:
-            backlog = EVENT_BUS.backlog_since(
+            backlog = await EVENT_BUS.abacklog_since(
                 since_seq, run_id=run_id, engagement_id=engagement_id, limit=200
             )
             for ev in backlog:
@@ -879,7 +940,7 @@ async def platform_approval_decide_view(
     verified_decider = f"{auth_ctx.principal} ({auth_ctx.auth_method})"
 
     store = ensure_platform_wiring()
-    existing = store.get_approval(approval_id)
+    existing = await asyncio.to_thread(store.get_approval, approval_id, expire_stale=True)
     if not existing:
         return django_err(f"Approval {approval_id} not found", status=404)
     if existing.get("status") != "pending":
@@ -892,13 +953,15 @@ async def platform_approval_decide_view(
     out_of_scope: List[str] = []
     if decision == "approved":
         if not verify_proposal_digest(existing):
-            rejected = store.decide_approval(
+            rejected = await asyncio.to_thread(
+                store.decide_approval,
                 approval_id,
                 "rejected",
                 decided_by="integrity_guard",
                 note="Blocked: proposal_digest mismatch indicates approval tampering.",
             )
-            store.append_event(
+            await asyncio.to_thread(
+                store.append_event,
                 "approval.tamper_rejected",
                 run_id=existing.get("run_id"),
                 engagement_id=existing.get("engagement_id"),
@@ -912,7 +975,7 @@ async def platform_approval_decide_view(
             )
 
         eng = (
-            store.get_engagement(existing["engagement_id"])
+            await asyncio.to_thread(store.get_engagement, existing["engagement_id"])
             if existing.get("engagement_id")
             else None
         )
@@ -920,13 +983,15 @@ async def platform_approval_decide_view(
         out_of_scope = [str(s).strip() for s in ((eng or {}).get("out_of_scope") or []) if str(s).strip()]
         policy = _validate_approval_scope_precheck(existing, in_scope, out_of_scope)
         if not policy.get("allowed"):
-            rejected = store.decide_approval(
+            rejected = await asyncio.to_thread(
+                store.decide_approval,
                 approval_id,
                 "rejected",
                 decided_by="policy_guard",
                 note=f"Blocked on approval check: {policy.get('reason')}",
             )
-            store.append_event(
+            await asyncio.to_thread(
+                store.append_event,
                 "approval.rejected",
                 run_id=existing.get("run_id"),
                 engagement_id=existing.get("engagement_id"),
@@ -939,7 +1004,8 @@ async def platform_approval_decide_view(
                 extra={"policy": policy, "approval": rejected},
             )
 
-    updated = store.decide_approval(
+    updated = await asyncio.to_thread(
+        store.decide_approval,
         approval_id,
         decision,
         decided_by=verified_decider,
@@ -948,7 +1014,8 @@ async def platform_approval_decide_view(
     if updated is None:
         return django_err(f"Approval {approval_id} not found", status=404)
 
-    store.append_event(
+    await asyncio.to_thread(
+        store.append_event,
         f"approval.{decision}",
         run_id=updated.get("run_id"),
         engagement_id=updated.get("engagement_id"),
@@ -1205,13 +1272,14 @@ async def artex_go_proxy_view(request: HttpRequest, path: str) -> HttpResponse:
             parsed_req = json.loads(body.decode("utf-8", errors="ignore")) if body else {}
             scan_target = str((parsed_req or {}).get("target") or "").strip()
             if scan_target:
-                ensure_platform_wiring().append_event(
+                await asyncio.to_thread(
+                    ensure_platform_wiring().append_event,
                     "artex.scan_dispatched",
                     source="go_core",
                     payload={"target": scan_target, "status": "QUEUED"},
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed logging artex.scan_dispatched event: %s", exc)
 
     resp = HttpResponse(
         upstream.content,

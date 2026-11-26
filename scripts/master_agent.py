@@ -13,6 +13,7 @@ PENTEST-AI UNIFIED — MAXIMUM POWER MASTER ORCHESTRATOR
 
 import sys
 import os
+import re
 import json
 import time
 import subprocess

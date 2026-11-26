@@ -62,7 +62,7 @@ func (v *VulnWorker) Execute(ctx context.Context, engagementID, targetID string,
 	if err == nil {
 		stmt, prepErr := tx.PrepareContext(ctx,
 			`INSERT INTO findings (engagement_id, target_id, title, vuln_class, severity, confidence, cvss_score, endpoint, evidence, poc_details, status)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'TRIAGED')`,
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'CANDIDATE')`,
 		)
 		if prepErr == nil {
 			engParam := sql.NullString{String: engagementID, Valid: engagementID != ""}

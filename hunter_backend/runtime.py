@@ -33,6 +33,8 @@ from core.platform_store import (
     verify_proposal_digest,
 )
 from core.run_control import GLOBAL_RUN_CONTROLLER
+from core.runtime.event_bus import PersistentEventBus
+from core.runtime.orchestrator import RuntimeOrchestrator
 
 logger = logging.getLogger("hunter_backend.runtime")
 
@@ -190,191 +192,21 @@ def check_target_policy(
     )
 
 
-class PlatformEventBus:
-    """In-memory pub/sub fan-out backed by PlatformStore SQLite persistence."""
+PlatformEventBus = PersistentEventBus
+EVENT_BUS = PersistentEventBus(store_provider=get_platform_store)
+_RUNTIME_ORCHESTRATOR: Optional[RuntimeOrchestrator] = None
 
-    def __init__(self, history_size: int = 500) -> None:
-        self._history: Deque[Dict[str, Any]] = deque(maxlen=history_size)
-        self._subscribers: set[asyncio.Queue[Dict[str, Any]]] = set()
-        self._lock = threading.Lock()
-        self._mem_seq = 0
 
-    def push_local(self, event: Dict[str, Any]) -> None:
-        """Broadcast an already-formatted event dict to in-memory backlog and subscribers."""
-        if not isinstance(event, dict):
-            return
-        with self._lock:
-            self._history.append(event)
-            subs = list(self._subscribers)
-        for q in subs:
-            self._deliver_to_queue(q, event)
-
-    @staticmethod
-    def _deliver_to_queue(q: asyncio.Queue[Dict[str, Any]], event: Dict[str, Any]) -> None:
-        loop = getattr(q, "_loop", None)
-        if loop is not None and not loop.is_closed():
-            try:
-                running = asyncio.get_running_loop()
-            except RuntimeError:
-                running = None
-            if running is loop:
-                try:
-                    q.put_nowait(event)
-                except asyncio.QueueFull:
-                    pass
-                return
-            try:
-                loop.call_soon_threadsafe(PlatformEventBus._put_ignore_full, q, event)
-                return
-            except Exception:
-                pass
-        try:
-            q.put_nowait(event)
-        except Exception:
-            pass
-
-    @staticmethod
-    def _put_ignore_full(q: asyncio.Queue[Dict[str, Any]], event: Dict[str, Any]) -> None:
-        try:
-            q.put_nowait(event)
-        except asyncio.QueueFull:
-            pass
-
-    async def publish(
-        self,
-        event_type: str,
-        payload: Optional[Dict[str, Any]] = None,
-        *,
-        run_id: Optional[str] = None,
-        engagement_id: Optional[str] = None,
-        task_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        source: str = "platform",
-        persist: bool = True,
-    ) -> Dict[str, Any]:
-        """Persist event (when enabled) and push to live SSE/WS subscribers."""
-        safe_payload = redact_payload(payload or {})
-        if persist:
-            try:
-                store = get_platform_store()
-                event = store.append_event(
-                    event_type,
-                    run_id=run_id,
-                    engagement_id=engagement_id,
-                    task_id=task_id,
-                    agent_id=agent_id,
-                    source=source,
-                    payload=safe_payload,
-                )
-                return event
-            except Exception as exc:
-                logger.warning("Failed to persist event %s: %s", event_type, exc)
-
-        with self._lock:
-            self._mem_seq += 1
-            seq = self._mem_seq
-        event = {
-            "seq": seq,
-            "ts": time.time(),
-            "type": event_type,
-            "run_id": run_id,
-            "engagement_id": engagement_id,
-            "task_id": task_id,
-            "agent_id": agent_id,
-            "source": source,
-            "payload": safe_payload,
-        }
-        self.push_local(event)
-        return event
-
-    def publish_threadsafe(
-        self,
-        event_type: str,
-        payload: Optional[Dict[str, Any]] = None,
-        *,
-        run_id: Optional[str] = None,
-        engagement_id: Optional[str] = None,
-        source: str = "platform",
-        persist: bool = True,
-    ) -> None:
-        """Emit an event safely from sync code or worker threads."""
-        safe_payload = redact_payload(payload or {})
-        if persist:
-            try:
-                store = get_platform_store()
-                store.append_event(
-                    event_type,
-                    run_id=run_id,
-                    engagement_id=engagement_id,
-                    source=source,
-                    payload=safe_payload,
-                )
-                return
-            except Exception:
-                pass
-        with self._lock:
-            self._mem_seq += 1
-            seq = self._mem_seq
-        self.push_local(
-            {
-                "seq": seq,
-                "ts": time.time(),
-                "type": event_type,
-                "run_id": run_id,
-                "engagement_id": engagement_id,
-                "source": source,
-                "payload": safe_payload,
-            }
-        )
-
-    def subscribe(self, maxsize: int = 512) -> asyncio.Queue[Dict[str, Any]]:
-        """Register and return a new subscriber queue bound to the current loop."""
-        q: asyncio.Queue[Dict[str, Any]] = asyncio.Queue(maxsize=maxsize)
-        with self._lock:
-            self._subscribers.add(q)
-        return q
-
-    def unsubscribe(self, q: asyncio.Queue[Dict[str, Any]]) -> None:
-        """Remove a subscriber queue cleanly."""
-        with self._lock:
-            self._subscribers.discard(q)
-
-    def backlog_since(
-        self,
-        since_seq: Optional[int],
-        *,
-        run_id: Optional[str] = None,
-        engagement_id: Optional[str] = None,
-        limit: int = 200,
-    ) -> List[Dict[str, Any]]:
-        """Return historical events newer than *since_seq* from store or in-memory ring."""
-        seq_floor = 0 if since_seq is None else int(since_seq)
-        try:
-            store = get_platform_store()
-            rows = store.list_events(
-                since_seq=seq_floor,
-                run_id=run_id,
-                engagement_id=engagement_id,
-                limit=limit,
+def get_runtime_orchestrator() -> RuntimeOrchestrator:
+    """Return the shared canonical ``RuntimeOrchestrator`` bound to ``EVENT_BUS``."""
+    global _RUNTIME_ORCHESTRATOR
+    with _SINGLETON_LOCK:
+        if _RUNTIME_ORCHESTRATOR is None:
+            _RUNTIME_ORCHESTRATOR = RuntimeOrchestrator(
+                event_bus=EVENT_BUS,
+                artex_base_url=ARTEX_BASE_URL,
             )
-            if rows:
-                return rows
-        except Exception:
-            pass
-
-        with self._lock:
-            items = list(self._history)
-        filtered = [
-            ev
-            for ev in items
-            if int(ev.get("seq") or 0) > seq_floor
-            and (not run_id or ev.get("run_id") == run_id)
-            and (not engagement_id or ev.get("engagement_id") == engagement_id)
-        ]
-        return filtered[:limit]
-
-
-EVENT_BUS = PlatformEventBus()
+        return _RUNTIME_ORCHESTRATOR
 
 
 def _on_store_event(event: Dict[str, Any]) -> None:
@@ -813,6 +645,15 @@ async def _run_pipeline_task(
             _active_pipelines[target]["error"] = str(exc)
 
 
+def _sync_pipeline_state(target: str, status: str, phase: Optional[str]) -> None:
+    if not target:
+        return
+    entry = _active_pipelines.setdefault(target, {"target": target, "started_at": time.time()})
+    entry["status"] = status
+    if phase is not None:
+        entry["phase"] = phase
+
+
 async def start_platform_run(
     *,
     kind: str = "pipeline",
@@ -829,14 +670,15 @@ async def start_platform_run(
     force_fallback: bool = False,
     self_operate: bool = False,
     proxy: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Start a unified managed platform run on the single ASGI event loop."""
+    """Start a unified managed platform run via ``RuntimeOrchestrator`` on the single ASGI event loop."""
     store = ensure_platform_wiring()
     clean_target = (target or "").strip()
     if not clean_target and engagement_id:
-        eng = store.get_engagement(engagement_id)
+        eng = await asyncio.to_thread(store.get_engagement, engagement_id)
         if eng:
-            clean_target = eng.get("target", "")
+            clean_target = str(eng.get("target") or "").strip()
     if not clean_target and kind != "engine":
         raise ValueError("target is required")
 
@@ -853,7 +695,7 @@ async def start_platform_run(
         if not ok_tgt:
             raise PermissionError(reason_tgt or "Target blocked by ScopeGuard policy")
     else:
-        policy = check_target_policy(
+        check_target_policy(
             prompt,
             action_type=f"platform_{kind}",
             tool_name=engine if kind == "engine" else kind,
@@ -862,31 +704,8 @@ async def start_platform_run(
             engagement_id=engagement_id,
         )
 
-    run_id = new_id("run")
-    reg = register_managed_run(
-        kind=kind,
-        target=clean_target,
-        run_id=run_id,
-        engagement_id=engagement_id,
-        in_scope=scope,
-        out_of_scope=out_of_scope,
-        status="running",
-        current_phase="DISPATCH",
-        meta={
-            "mode": mode,
-            "engine": engine,
-            "model": model,
-            "coverage": coverage,
-            "max_cycles": max_cycles,
-            "self_operate": self_operate,
-            "proxy": proxy,
-        },
-    )
-    eff_eid = reg["engagement_id"]
-
     if clean_target:
         _active_pipelines[clean_target] = {
-            "run_id": run_id,
             "target": clean_target,
             "mode": mode,
             "status": "running",
@@ -894,29 +713,54 @@ async def start_platform_run(
             "started_at": time.time(),
         }
 
-    task = asyncio.create_task(
-        _run_pipeline_task(
-            run_id=run_id,
-            target=clean_target,
-            mode=mode,
-            scope=scope or ([clean_target] if clean_target else []),
-            out_of_scope=out_of_scope or [],
-            engagement_id=eff_eid,
-            kind=kind,
-            prompt=prompt,
-            engine=engine,
-            proxy=proxy,
-        )
+    orch = get_runtime_orchestrator()
+    go_cli = _GO_CLIENT if _GO_CLIENT is not None and not _GO_CLIENT.is_closed else None
+    run_row = await orch.start_run(
+        kind=kind,
+        target=clean_target,
+        engagement_id=engagement_id,
+        scope=scope,
+        out_of_scope=out_of_scope,
+        mode=mode,
+        prompt=prompt,
+        engine=engine,
+        model=model,
+        coverage=coverage,
+        max_cycles=max_cycles,
+        force_fallback=force_fallback,
+        self_operate=self_operate,
+        proxy=proxy,
+        idempotency_key=idempotency_key,
+        go_client=go_cli,
+        on_pipeline_state=_sync_pipeline_state,
     )
-    handle = reg["handle"]
-    handle.task = task
-    handle.state = "running"
-    handle.started_at = time.time()
-    task.add_done_callback(lambda t, rid=run_id: GLOBAL_RUN_CONTROLLER._on_task_done(rid, t))
-    _active_mission_tasks[run_id] = task
-    task.add_done_callback(lambda _t: _active_mission_tasks.pop(run_id, None))
+    run_id = run_row["run_id"]
+    if clean_target and clean_target in _active_pipelines:
+        _active_pipelines[clean_target]["run_id"] = run_id
+    active_task = orch._active_tasks.get(run_id)
+    if active_task is not None:
+        _active_mission_tasks[run_id] = active_task
+        active_task.add_done_callback(lambda _t, rid=run_id: _active_mission_tasks.pop(rid, None))
     log_activity_event("platform", f"run.started:{kind}", clean_target or engine)
-    return reg["run"]
+    return run_row
+
+
+async def recover_platform_run(run_id: str) -> Dict[str, Any]:
+    """Recover a ``PAUSED``/recoverable run from its persisted checkpoint via ``RuntimeOrchestrator``."""
+    ensure_platform_wiring()
+    orch = get_runtime_orchestrator()
+    go_cli = _GO_CLIENT if _GO_CLIENT is not None and not _GO_CLIENT.is_closed else None
+    run_row = await orch.recover_run(
+        run_id,
+        go_client=go_cli,
+        on_pipeline_state=_sync_pipeline_state,
+    )
+    active_task = orch._active_tasks.get(run_id)
+    if active_task is not None:
+        _active_mission_tasks[run_id] = active_task
+        active_task.add_done_callback(lambda _t, rid=run_id: _active_mission_tasks.pop(rid, None))
+    log_activity_event("platform", "run.recovered", run_id)
+    return run_row
 
 
 def control_managed_run_sync(run_id: str, action: str) -> bool:
@@ -1187,24 +1031,51 @@ def get_go_client() -> httpx.AsyncClient:
 
 
 async def probe_artex_health() -> Dict[str, Any]:
-    """Probe Go Core backend health without raising on offline daemon."""
+    """Probe Go Core backend health truthfully, returning both ``health`` and ``upstream`` keys."""
     try:
         client = get_go_client()
         resp = await client.get(
             "/api/v1/health",
             timeout=httpx.Timeout(connect=0.25, read=1.5, write=1.5, pool=0.5),
         )
-        body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"raw": resp.text}
-        return {
-            "online": resp.status_code < 400,
+        body = (
+            resp.json()
+            if resp.headers.get("content-type", "").startswith("application/json")
+            else {"raw": resp.text}
+        )
+        body_dict = body if isinstance(body, dict) else {"raw": body}
+        up_status = str(body_dict.get("status") or "").strip().lower()
+        up_db = str(body_dict.get("database") or "").strip().lower()
+        up_worker = str(body_dict.get("worker_status") or body_dict.get("workers") or "").strip().lower()
+
+        is_degraded = (
+            resp.status_code >= 400
+            or up_status in {"degraded", "unhealthy", "error", "down"}
+            or up_db in {"disconnected", "error", "unavailable", "down"}
+            or up_worker in {"unhealthy", "degraded", "error", "down"}
+        )
+        online = not is_degraded
+        status_label = "online" if online else "degraded"
+        out: Dict[str, Any] = {
+            "online": online,
+            "status": status_label,
             "status_code": resp.status_code,
             "url": ARTEX_BASE_URL,
-            "health": body,
+            "health": body_dict,
+            "upstream": body_dict,
         }
+        if is_degraded and body_dict.get("error"):
+            out["error"] = str(body_dict["error"])
+        elif is_degraded:
+            out["error"] = f"Upstream Go Core degraded (HTTP {resp.status_code}, db={up_db or 'unknown'})"
+        return out
     except Exception as exc:
         return {
             "online": False,
+            "status": "offline",
             "url": ARTEX_BASE_URL,
+            "health": None,
+            "upstream": None,
             "error": str(exc),
         }
 
@@ -1244,7 +1115,9 @@ async def startup_runtime() -> None:
             for item in GLOBAL_RUN_CONTROLLER.list_runs(active_only=True)
             if item.get("run_id")
         ]
-        reconciled = store.reconcile_interrupted_runs(active_run_ids=active_ids)
+        reconciled = await asyncio.to_thread(
+            store.reconcile_interrupted_runs, active_run_ids=active_ids
+        )
         if reconciled:
             logger.info("Reconciled %d interrupted run(s) on startup", len(reconciled))
     except Exception as exc:

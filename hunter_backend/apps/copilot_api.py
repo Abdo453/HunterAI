@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 from rest_framework.views import APIView
 
 from core.copilot_service import (
+    MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENT_EXCERPT_CHARS,
     CopilotService,
     classify_host_security,
     collect_live_context,
@@ -228,10 +230,8 @@ class CopilotConversationDetailView(APIView):
 
 @require_http_methods(["POST"])
 async def copilot_upload_attachment_view(request: HttpRequest) -> JsonResponse:
-    """POST /api/copilot/attachments: multipart file or JSON text upload."""
-    store = ensure_platform_wiring()
-    att_dir = _get_attachments_dir()
-    att_dir.mkdir(parents=True, exist_ok=True)
+    """POST /api/copilot/attachments: multipart file or JSON text upload reconciled with CopilotService limits."""
+    ensure_platform_wiring()
     conv_id = (request.GET.get("conversation_id") or request.POST.get("conversation_id") or "").strip() or None
 
     raw_bytes = b""
@@ -255,32 +255,38 @@ async def copilot_upload_attachment_view(request: HttpRequest) -> JsonResponse:
         conv_id = conv_id or data.get("conversation_id")
         raw_bytes = text_content.encode("utf-8", errors="replace")
 
-    if len(raw_bytes) > 10 * 1024 * 1024:
-        return django_err("Attachment exceeds 10 MB limit", status=413)
+    if len(raw_bytes) > MAX_ATTACHMENT_BYTES:
+        return django_err(
+            f"Attachment exceeds {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB limit",
+            status=413,
+        )
 
-    att_id = new_id("att")
-    sha256 = hashlib.sha256(raw_bytes).hexdigest()
-    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in filename)[:80]
-    storage_path = att_dir / f"{att_id}_{safe_name}"
-    await asyncio.to_thread(storage_path.write_bytes, raw_bytes)
-
-    excerpt = raw_bytes[:8192].decode("utf-8", errors="replace")
-    record = store.save_attachment(
-        attachment_id=att_id,
-        filename=filename,
-        content_type=content_type,
-        size_bytes=len(raw_bytes),
-        sha256=sha256,
-        storage_path=str(storage_path),
-        excerpt=excerpt,
-        conversation_id=conv_id,
+    svc = get_copilot_service()
+    try:
+        record = await asyncio.to_thread(
+            svc.store_attachment,
+            filename=filename,
+            raw_bytes=raw_bytes,
+            content_type=content_type,
+            conversation_id=conv_id,
+        )
+    except ValueError as exc:
+        return django_err(str(exc), status=413)
+    return django_json(
+        {
+            "ok": True,
+            "attachment": record,
+            "max_bytes": MAX_ATTACHMENT_BYTES,
+            "max_excerpt_chars": MAX_ATTACHMENT_EXCERPT_CHARS,
+            **record,
+        },
+        status=201,
     )
-    return django_json({"ok": True, "attachment": record, **record}, status=201)
 
 
 @require_http_methods(["POST"])
 async def copilot_chat_stream_view(request: HttpRequest) -> StreamingHttpResponse | JsonResponse:
-    """POST /api/copilot/chat/stream: native async SSE streaming from CopilotService."""
+    """POST /api/copilot/chat/stream: native async SSE streaming cancelling stream_task on disconnect."""
     data, err = parse_json_body(request)
     if err is not None:
         return err
@@ -293,36 +299,66 @@ async def copilot_chat_stream_view(request: HttpRequest) -> StreamingHttpRespons
     svc: CopilotService = get_copilot_service()
 
     async def event_stream():
+        queue: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=256)
+        turn_gen = svc.stream_turn(
+            message=req.message,
+            conversation_id=req.conversation_id,
+            engagement_id=req.engagement_id,
+            run_id=req.run_id,
+            model=req.model,
+            mode=req.mode,
+            attachment_ids=req.attachment_ids,
+        )
+
+        async def _pump() -> None:
+            try:
+                async for item in turn_gen:
+                    if isinstance(item, bytes):
+                        chunk = item
+                    elif isinstance(item, str):
+                        chunk = item.encode("utf-8")
+                    elif isinstance(item, (tuple, list)) and len(item) == 2:
+                        ev_name, payload = item
+                        chunk = format_sse(
+                            str(ev_name or "message"),
+                            payload if isinstance(payload, dict) else {"content": payload},
+                        )
+                    elif isinstance(item, dict):
+                        ev_name = str(item.get("event") or item.get("type") or "message")
+                        chunk = format_sse(ev_name, item)
+                    else:
+                        chunk = format_sse("message", {"content": str(item)})
+                    await queue.put(chunk)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.exception("Copilot stream failed")
+                await queue.put(format_sse("error", {"error": str(exc)}))
+            finally:
+                try:
+                    await turn_gen.aclose()
+                except Exception as close_exc:
+                    logger.debug("Copilot turn generator close note: %s", close_exc)
+                await queue.put(None)
+
+        stream_task = asyncio.create_task(_pump())
         try:
-            async for item in svc.stream_turn(
-                message=req.message,
-                conversation_id=req.conversation_id,
-                engagement_id=req.engagement_id,
-                run_id=req.run_id,
-                model=req.model,
-                mode=req.mode,
-                attachment_ids=req.attachment_ids,
-            ):
-                if isinstance(item, bytes):
-                    yield item
-                elif isinstance(item, str):
-                    yield item.encode("utf-8")
-                elif isinstance(item, (tuple, list)) and len(item) == 2:
-                    ev_name, payload = item
-                    yield format_sse(
-                        str(ev_name or "message"),
-                        payload if isinstance(payload, dict) else {"content": payload},
-                    )
-                elif isinstance(item, dict):
-                    ev_name = str(item.get("event") or item.get("type") or "message")
-                    yield format_sse(ev_name, item)
-                else:
-                    yield format_sse("message", {"content": str(item)})
-        except asyncio.CancelledError:
+            while True:
+                chunk = await queue.get()
+                if chunk is None:
+                    break
+                yield chunk
+        except (asyncio.CancelledError, GeneratorExit):
             return
-        except Exception as exc:
-            logger.exception("Copilot stream failed")
-            yield format_sse("error", {"error": str(exc)})
+        finally:
+            if not stream_task.done():
+                stream_task.cancel()
+                try:
+                    await stream_task
+                except asyncio.CancelledError:
+                    logger.debug("Copilot SSE stream_task cancelled on client disconnect")
+                except Exception as cancel_exc:
+                    logger.warning("Copilot SSE stream_task shutdown error: %s", cancel_exc)
 
     resp = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
     resp["Cache-Control"] = "no-cache, no-transform"
@@ -508,8 +544,13 @@ async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
     terminal_parts: List[str] = []
 
     if allow_exec and authorized and commands:
-        eff_target, in_scope, oos = _resolve_chat_scope(
-            store, target, data.get("scope"), data.get("out_of_scope"), engagement_id
+        eff_target, in_scope, oos = await asyncio.to_thread(
+            _resolve_chat_scope,
+            store,
+            target,
+            data.get("scope"),
+            data.get("out_of_scope"),
+            engagement_id,
         )
         for cmd in commands:
             ok, status, reason = _evaluate_chat_command(
@@ -529,7 +570,8 @@ async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
             # NEVER auto-execute LLM-generated bash blocks; route to explicit HITL approval queue.
             tool_name = validated_tokens[0]
             cmd_args = " ".join(validated_tokens[1:])
-            apr = store.create_approval(
+            apr = await asyncio.to_thread(
+                store.create_approval,
                 action_type="RUN_TOOL",
                 target=eff_target or (validated_tokens[-1] if len(validated_tokens) > 1 else ""),
                 tool_name=tool_name,

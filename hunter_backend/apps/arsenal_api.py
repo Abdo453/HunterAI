@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import dataclasses
+from datetime import datetime, timezone
 import json
 import logging
 import os
 import re
 import shlex
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -175,6 +178,8 @@ class SevenGateReq(BaseModel):
     impact: str
     reproducibility: Optional[str] = "100% reproducible"
     vulnerability_class: Optional[str] = "idor"
+    recommendation: Optional[str] = None
+    severity: Optional[str] = None
     in_scope: Optional[List[str]] = None
 
 
@@ -246,13 +251,105 @@ def _read_json_file(path: Path, default: Any) -> Any:
 
 
 def _write_json_file(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    from core.persist.atomic_file import atomic_write_json
+
+    atomic_write_json(path, data)
 
 
-# ---------------------------------------------------------------------------
-# /api/control/* (31 routes)
-# ---------------------------------------------------------------------------
+def _extract_agent_module_spec(py_path: Path) -> Dict[str, Any]:
+    """Extract real agent spec metadata from an agent source module via AST (no import side effects)."""
+    stem = py_path.stem
+    agent_id = stem.replace("_", "-")
+    display = " ".join(part.capitalize() for part in stem.split("_"))
+    description = ""
+    class_names: List[str] = []
+    try:
+        tree = ast.parse(py_path.read_text(encoding="utf-8", errors="replace"))
+        doc = ast.get_docstring(tree) or ""
+        if doc:
+            description = doc.strip().splitlines()[0].strip()[:200]
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                class_names.append(node.name)
+                if not description:
+                    cdoc = ast.get_docstring(node) or ""
+                    if cdoc:
+                        description = cdoc.strip().splitlines()[0].strip()[:200]
+    except (OSError, SyntaxError) as exc:
+        logger.debug("AST inspection skipped for %s: %s", py_path, exc)
+    role = stem.removesuffix("_agent")
+    return {
+        "id": agent_id,
+        "name": class_names[0] if class_names else display,
+        "role": role,
+        "description": description or f"Registered {display} specialist module",
+        "tools": [role] if role else [],
+        "status": "ready",
+        "module": f"agents.{stem}",
+    }
+
+
+def _collect_registered_agents() -> List[Dict[str, Any]]:
+    """Collect real registered agent specifications from WorkerRegistry, contract agents, and agents/*_agent.py."""
+    specs: Dict[str, Dict[str, Any]] = {}
+
+    # 1. Live WorkerRegistry entries attached to GLOBAL_COORDINATOR (if any)
+    try:
+        from core.global_state import GLOBAL_COORDINATOR
+
+        registry = getattr(GLOBAL_COORDINATOR, "workers", None) or getattr(GLOBAL_COORDINATOR, "worker_registry", None)
+        if registry is not None and hasattr(registry, "list_workers"):
+            for w in registry.list_workers():
+                wd = w.to_dict() if hasattr(w, "to_dict") else {}
+                wid = str(wd.get("worker_id") or "")
+                if wid:
+                    specs[wid] = {
+                        "id": wid,
+                        "name": str(wd.get("display_name") or wid),
+                        "role": str(wd.get("role") or "worker"),
+                        "description": f"{wd.get('provider_or_runtime') or 'runtime'} worker ({wd.get('role') or 'worker'})",
+                        "tools": list(wd.get("available_tools") or []),
+                        "status": str(wd.get("status") or "idle"),
+                        "module": "core.worker_registry",
+                    }
+    except Exception as exc:
+        logger.debug("WorkerRegistry lookup skipped: %s", exc)
+
+    # 2. Contract agents registered in hunter_ai.agents
+    try:
+        from hunter_ai.agents.recon_contract_agent import ReconContractAgent
+        from hunter_ai.agents.report_contract_agent import ReportContractAgent
+        from hunter_ai.agents.web_contract_agent import WebContractAgent
+
+        for cls in (ReconContractAgent, WebContractAgent, ReportContractAgent):
+            inst = cls()
+            c = getattr(inst, "contract", None)
+            aid = str(getattr(c, "name", None) or cls.__name__.lower()).replace("_", "-")
+            specs.setdefault(
+                aid,
+                {
+                    "id": aid,
+                    "name": str(getattr(c, "name", None) or cls.__name__),
+                    "role": str(getattr(c, "role", None) or "contract"),
+                    "description": str(getattr(c, "description", None) or (cls.__doc__ or "").strip().splitlines()[0] if cls.__doc__ else cls.__name__),
+                    "tools": list(getattr(c, "allowed_tools", None) or getattr(c, "tools", None) or []),
+                    "status": "ready",
+                    "module": cls.__module__,
+                },
+            )
+    except Exception as exc:
+        logger.debug("Contract agent discovery skipped: %s", exc)
+
+    # 3. Specialist agent modules under agents/*_agent.py
+    agents_dir = BASE_DIR / "agents"
+    if agents_dir.is_dir():
+        for py_file in sorted(agents_dir.glob("*_agent.py")):
+            if py_file.name == "base_agent.py":
+                continue
+            spec = _extract_agent_module_spec(py_file)
+            specs.setdefault(spec["id"], spec)
+
+    return list(specs.values())
 
 
 class ControlSystemStatusView(APIView):
@@ -263,7 +360,7 @@ class ControlSystemStatusView(APIView):
             {
                 "status": "online",
                 "backend": "django-asgi",
-                "active_runs": sum(1 for r in runs if r.get("state") in {"running", "paused"}),
+                "active_runs": sum(1 for r in runs if r.get("state") in {"running", "paused", "waiting"}),
                 "total_runs": len(runs),
                 "engagements": len(store.list_engagements(limit=100)),
                 "timestamp": time.time(),
@@ -273,14 +370,7 @@ class ControlSystemStatusView(APIView):
 
 class ControlAgentsListView(APIView):
     def get(self, request: Any) -> Any:
-        agents = [
-            {"id": "recon-agent", "name": "Recon Agent", "status": "ready"},
-            {"id": "validator", "name": "7-Question Validator", "status": "ready"},
-            {"id": "chain-builder", "name": "Exploit Chain Builder", "status": "ready"},
-            {"id": "report-writer", "name": "Report Writer", "status": "ready"},
-            {"id": "burp-agent", "name": "Burp Traffic Analyst", "status": "ready"},
-            {"id": "autopilot", "name": "Autonomous Autopilot", "status": "ready"},
-        ]
+        agents = _collect_registered_agents()
         return ok_json({"agents": agents, "count": len(agents)})
 
 
@@ -356,14 +446,43 @@ async def control_tools_test_view(request: HttpRequest) -> JsonResponse:
     except ValueError as exc:
         return django_err(str(exc), status=400)
     res = await run_command_no_shell([tool_name, "--version"], timeout_s=10.0)
+    stdout = (res.get("stdout") or "")[:400]
+    stderr = (res.get("stderr") or "")[:400]
+    err_detail = str(res.get("error") or "").strip()
+    combined_parts = [p for p in (stdout.strip(), stderr.strip(), err_detail) if p]
+    output = "\n".join(combined_parts)
+    rc = res.get("returncode")
+    passed = rc == 0 and not err_detail
+    if passed:
+        return django_json(
+            {
+                "ok": True,
+                "status": "PASS",
+                "tool_name": tool_name,
+                "returncode": rc,
+                "stdout": stdout,
+                "stderr": stderr,
+                "output": output or f"{tool_name} verified (exit 0)",
+                "message": output or f"{tool_name} verified",
+            },
+            status=200,
+        )
+    missing = rc in {None, -1, 127} or "not found" in output.lower() or "no such file" in output.lower()
+    http_status = 503 if missing else 422
+    fail_msg = output or f"{tool_name} check failed (exit {rc})"
     return django_json(
         {
-            "ok": res.get("returncode") == 0,
+            "ok": False,
+            "status": "FAIL",
             "tool_name": tool_name,
-            "returncode": res.get("returncode"),
-            "stdout": (res.get("stdout") or "")[:400],
-            "stderr": (res.get("stderr") or "")[:400],
-        }
+            "returncode": rc,
+            "stdout": stdout,
+            "stderr": stderr,
+            "output": fail_msg,
+            "message": fail_msg,
+            "error": fail_msg,
+        },
+        status=http_status,
     )
 
 
@@ -373,9 +492,37 @@ class ControlBrowserStatusView(APIView):
             from core.browser.playwright_controller import PLAYWRIGHT_AVAILABLE
 
             available = bool(PLAYWRIGHT_AVAILABLE)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Playwright availability check failed: %s", exc)
             available = False
-        return ok_json({"playwright_available": available, "status": "ready" if available else "unavailable"})
+        browser_type = (os.getenv("BROWSER_TYPE") or "chromium").strip().lower() or "chromium"
+        binary_candidates = (
+            ("firefox",)
+            if browser_type == "firefox"
+            else ("chromium", "chromium-browser", "google-chrome", "chrome", "msedge")
+        )
+        chrome_binary = ""
+        for cand in binary_candidates:
+            found = shutil.which(cand)
+            if found:
+                chrome_binary = found
+                break
+        if not chrome_binary and available:
+            try:
+                from playwright.sync_api import sync_playwright  # noqa: F401
+
+                chrome_binary = f"playwright-managed:{browser_type}"
+            except Exception as exc:
+                logger.debug("Playwright sync_api lookup failed: %s", exc)
+        return ok_json(
+            {
+                "playwright_available": available,
+                "status": "ready" if available else "unavailable",
+                "connection_status": "READY" if available else "OFFLINE",
+                "browser_type": browser_type,
+                "chrome_binary": chrome_binary,
+            }
+        )
 
 
 class ControlBurpMonitorView(APIView):
@@ -641,10 +788,16 @@ class ControlRadarSimulateView(APIView):
 
 class ControlChecklistsView(APIView):
     def get(self, request: Any) -> Any:
+        state = _read_json_file(CHECKLIST_STATE_FILE, {})
+        if not isinstance(state, dict):
+            state = {}
+        catalog: Dict[str, Any] = {}
+        categories: List[Dict[str, Any]] = []
+        total_items = 0
+        checked_items = 0
         try:
             from core.security_checklists import CHECKLIST_CATALOG
 
-            catalog = {}
             if isinstance(CHECKLIST_CATALOG, dict):
                 for key, item in CHECKLIST_CATALOG.items():
                     raw = (
@@ -652,11 +805,41 @@ class ControlChecklistsView(APIView):
                         if dataclasses.is_dataclass(item)
                         else (item.model_dump() if hasattr(item, "model_dump") else dict(vars(item)))
                     )
-                    catalog[key] = json.loads(json.dumps(raw, default=str))
-        except Exception:
+                    serialized = json.loads(json.dumps(raw, default=str))
+                    catalog[key] = serialized
+                    cat_items: List[Dict[str, Any]] = []
+                    for entry in serialized.get("items") or []:
+                        if not isinstance(entry, dict):
+                            continue
+                        iid = str(entry.get("item_id") or "")
+                        is_checked = bool(state.get(iid, False))
+                        total_items += 1
+                        if is_checked:
+                            checked_items += 1
+                        cat_items.append({**entry, "checked": is_checked})
+                    categories.append(
+                        {
+                            "category_id": key,
+                            "category_title": str(serialized.get("category") or key),
+                            "description": str(serialized.get("description") or ""),
+                            "items": cat_items,
+                        }
+                    )
+        except Exception as exc:
+            logger.warning("Failed loading security checklists: %s", exc)
             catalog = {}
-        state = _read_json_file(CHECKLIST_STATE_FILE, {})
-        return ok_json({"catalog": catalog, "state": state})
+            categories = []
+        progress_percent = round((checked_items / total_items) * 100.0, 1) if total_items else 0.0
+        return ok_json(
+            {
+                "categories": categories,
+                "progress_percent": progress_percent,
+                "total_items": total_items,
+                "checked_items": checked_items,
+                "catalog": catalog,
+                "state": state,
+            }
+        )
 
 
 class ControlChecklistsToggleView(APIView):
@@ -676,12 +859,36 @@ class ControlChecklistsToggleView(APIView):
         return ok_json({"ok": True, "item_id": req.item_id, "checked": req.checked})
 
 
+def _serialize_grant_for_api(grant: AuthorizationGrant, *, valid: bool) -> Dict[str, Any]:
+    raw = grant.to_dict()
+    expires_iso = datetime.fromtimestamp(float(grant.not_after), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    scope_strings = [s.value for s in grant.scope]
+    return {
+        **raw,
+        "scope": scope_strings,
+        "scope_targets": raw.get("scope", []),
+        "expires_at": expires_iso,
+        "valid": bool(valid),
+    }
+
+
 class ControlRedteamPolicyStatusView(APIView):
     """GET /api/control/redteam-policy — validates persisted/env policy secret (never hardcoded)."""
 
     def get(self, request: Any) -> Any:
+        from core.config.manager import ConfigManager
+
+        hard_invariants = ConfigManager(base_dir=BASE_DIR).get_hard_invariants()
         if not GRANT_PATH.is_file():
-            return ok_json({"active": False, "grant": None})
+            return ok_json(
+                {
+                    "active": False,
+                    "valid_signature": False,
+                    "current_profile": "STANDARD",
+                    "hard_invariants": hard_invariants,
+                    "grant": None,
+                }
+            )
         try:
             grant = load_grant(str(GRANT_PATH))
             secret = get_or_create_policy_secret().encode("utf-8")
@@ -691,11 +898,22 @@ class ControlRedteamPolicyStatusView(APIView):
                 {
                     "active": active,
                     "valid_signature": valid_sig,
-                    "grant": grant.to_dict(),
+                    "current_profile": "RED_TEAM" if active else "STANDARD",
+                    "hard_invariants": hard_invariants,
+                    "grant": _serialize_grant_for_api(grant, valid=active),
                 }
             )
         except Exception as exc:
-            return ok_json({"active": False, "error": str(exc)})
+            return ok_json(
+                {
+                    "active": False,
+                    "valid_signature": False,
+                    "current_profile": "STANDARD",
+                    "hard_invariants": hard_invariants,
+                    "grant": None,
+                    "error": str(exc),
+                }
+            )
 
 
 class ControlRedteamPolicyIssueView(APIView):
@@ -732,7 +950,15 @@ class ControlRedteamPolicyIssueView(APIView):
         GRANT_PATH.parent.mkdir(parents=True, exist_ok=True)
         save_grant(grant, str(GRANT_PATH))
         log_activity_event("policy", "redteam_grant.issued", req.scope)
-        return ok_json({"ok": True, "active": True, "grant_id": grant.grant_id, "grant": grant.to_dict()})
+        return ok_json(
+            {
+                "ok": True,
+                "active": True,
+                "current_profile": "RED_TEAM",
+                "grant_id": grant.grant_id,
+                "grant": _serialize_grant_for_api(grant, valid=True),
+            }
+        )
 
 
 class ControlRedteamPolicyRevokeView(APIView):
@@ -744,7 +970,7 @@ class ControlRedteamPolicyRevokeView(APIView):
             GRANT_PATH.unlink()
             revoked = True
         log_activity_event("policy", "redteam_grant.revoked", "")
-        return ok_json({"ok": True, "revoked": revoked, "active": False})
+        return ok_json({"ok": True, "revoked": revoked, "active": False, "current_profile": "STANDARD"})
 
 
 class ControlLeadBoardView(APIView):
@@ -754,9 +980,29 @@ class ControlLeadBoardView(APIView):
             from bughunter.tools.lead_board import load_ledger
 
             leads = load_ledger(target) if target else []
-            return ok_json({"target": target, "leads": leads})
+            counts: Dict[str, int] = {
+                "total": len(leads),
+                "new": 0,
+                "investigating": 0,
+                "killed": 0,
+                "reported": 0,
+                "parked": 0,
+            }
+            for ld in leads:
+                if not isinstance(ld, dict):
+                    continue
+                st = str(ld.get("status") or "new").strip().lower()
+                counts[st] = counts.get(st, 0) + 1
+            return ok_json({"target": target, "leads": leads, "counts": counts})
         except Exception as exc:
-            return ok_json({"target": target, "leads": [], "error": str(exc)})
+            return ok_json(
+                {
+                    "target": target,
+                    "leads": [],
+                    "counts": {"total": 0, "new": 0, "investigating": 0, "killed": 0, "reported": 0, "parked": 0},
+                    "error": str(exc),
+                }
+            )
 
 
 class ControlLeadBoardAddView(APIView):
@@ -800,27 +1046,194 @@ class ControlSevenGateEvaluateView(APIView):
         assert req is not None
         from core.seven_question_gate import SevenQuestionGate
 
+        target_host = extract_target_host(req.asset) or req.asset.strip()
+        evidence_parts = [req.poc.strip()]
+        if req.reproducibility:
+            evidence_parts.append(f"Reproducibility: {req.reproducibility.strip()}")
+        if req.impact:
+            evidence_parts.append(f"Impact: {req.impact.strip()}")
+        evidence_text = "\n".join(p for p in evidence_parts if p)
+
+        finding_payload: Dict[str, Any] = {
+            "title": req.title.strip(),
+            "url": req.asset.strip(),
+            "target": target_host,
+            "evidence": evidence_text,
+            "reason": req.impact.strip(),
+            "type": (req.vulnerability_class or "idor").strip(),
+            "recommendation": (
+                req.recommendation.strip()
+                if req.recommendation
+                else f"Enforce strict authorization and validation controls for {(req.vulnerability_class or 'this finding').strip()} on {req.asset.strip()}."
+            ),
+            "tool": "seven_question_gate_api",
+        }
+        if req.severity:
+            finding_payload["severity"] = req.severity.strip()
+
         gate = SevenQuestionGate()
-        result = gate.evaluate_finding(req.model_dump(), in_scope_list=req.in_scope)
+        result = gate.evaluate_finding(finding_payload, in_scope_list=req.in_scope)
         raw_payload = (
             dataclasses.asdict(result)
             if dataclasses.is_dataclass(result)
             else (result.__dict__ if hasattr(result, "__dict__") else result)
         )
         payload = json.loads(json.dumps(raw_payload, default=str))
-        return ok_json({"ok": True, "evaluation": payload})
+        return ok_json(
+            {
+                "ok": True,
+                "passed": bool(payload.get("passed", False)),
+                "score": payload.get("score", 0.0),
+                "missing_items": list(payload.get("missing_items") or []),
+                "triage_statement": str(payload.get("triage_statement") or ""),
+                "answers": payload.get("answers") or {},
+                "vrt_entry": payload.get("vrt_entry"),
+                "evaluation": payload,
+            }
+        )
 
 
 class ControlSwarmTelemetryView(APIView):
     def get(self, request: Any) -> Any:
         target = (request.GET.get("target") or "").strip()
         try:
+            from core.global_state import GLOBAL_EVIDENCE_STORE
             from core.reasoning.attack_surface_graph import AttackSurfaceGraph
+            from hunter_backend.runtime import get_burp_gateway
 
-            g = AttackSurfaceGraph()
-            return ok_json({"target": target, "graph": g.to_dict(), "activity": get_activity_logs(30)})
+            store = ensure_platform_wiring()
+            exported_graph: Dict[str, Any] = {}
+            try:
+                gw = get_burp_gateway()
+                if gw is not None and getattr(gw, "attack_surface_graph", None) is not None:
+                    exported_graph = gw.attack_surface_graph.export_graph()
+            except Exception as gw_exc:
+                logger.debug("ControlSwarmTelemetryView gateway graph unavailable: %s", gw_exc)
+
+            if not exported_graph:
+                g = AttackSurfaceGraph(target_domain=target or "target.local")
+                exported_graph = g.export_graph()
+
+            live_runs = GLOBAL_RUN_CONTROLLER.list_runs(active_only=True, limit=50)
+            persisted_active = store.list_runs(active_only=True, limit=50)
+            seen_run_ids = {r.get("run_id") for r in live_runs if r.get("run_id")}
+            for pr in persisted_active:
+                if pr.get("run_id") and pr["run_id"] not in seen_run_ids:
+                    seen_run_ids.add(pr["run_id"])
+            active_runs_count = len(seen_run_ids)
+            swarm_status = "ACTIVE" if active_runs_count > 0 else "STANDBY"
+
+            # Build real swarm_roster from active runs & registered agents
+            swarm_roster: List[Dict[str, Any]] = []
+            for lr in live_runs:
+                meta = lr.get("meta") if isinstance(lr.get("meta"), dict) else {}
+                swarm_roster.append(
+                    {
+                        "agent": str(lr.get("kind") or "worker"),
+                        "role": str(meta.get("backend") or lr.get("kind") or "worker"),
+                        "status": str(lr.get("state") or "running").upper(),
+                        "node": str(meta.get("target") or target or "workspace"),
+                        "active_tool": str(meta.get("engine") or lr.get("kind") or "pipeline"),
+                    }
+                )
+            if not swarm_roster:
+                for ag in _collect_registered_agents()[:8]:
+                    swarm_roster.append(
+                        {
+                            "agent": ag["name"],
+                            "role": ag.get("role") or "specialist",
+                            "status": str(ag.get("status") or "ready").upper(),
+                            "node": target or "standby",
+                            "active_tool": (ag.get("tools") or [ag["id"]])[0],
+                        }
+                    )
+
+            # Build wiretap_events from real persistent PlatformStore events + in-memory activity logs
+            activity = get_activity_logs(30)
+            wiretap_events: List[Dict[str, Any]] = []
+            latest_seq = store.latest_seq()
+            for ev in store.list_events(since_seq=max(0, latest_seq - 30), limit=30):
+                ev_payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
+                wiretap_events.append(
+                    {
+                        "id": f"ev-{ev.get('seq', 0)}",
+                        "time": datetime.fromtimestamp(
+                            float(ev.get("created_at") or time.time()), tz=timezone.utc
+                        ).strftime("%H:%M:%S"),
+                        "from_agent": str(ev.get("agent_id") or ev.get("source") or "platform"),
+                        "to_agent": str(ev.get("run_id") or "hub"),
+                        "type": str(ev.get("event_type") or "event"),
+                        "summary": str(
+                            ev_payload.get("phase")
+                            or ev_payload.get("title")
+                            or ev_payload.get("status")
+                            or ev.get("event_type")
+                            or ""
+                        )[:200],
+                    }
+                )
+            for act in activity:
+                wiretap_events.append(
+                    {
+                        "id": str(act.get("id") or new_id("wt")),
+                        "time": datetime.fromtimestamp(
+                            float(act.get("ts") or time.time()), tz=timezone.utc
+                        ).strftime("%H:%M:%S"),
+                        "from_agent": str(act.get("category") or "swarm"),
+                        "to_agent": target or "hub",
+                        "type": str(act.get("action") or "activity"),
+                        "summary": str(act.get("detail") or "")[:200],
+                        "simulated": str(act.get("category") or "") == "swarm",
+                    }
+                )
+
+            # Build two_brain_diffs from real court verdicts / evidence store records
+            two_brain_diffs: List[Dict[str, Any]] = []
+            try:
+                verdicts = GLOBAL_EVIDENCE_STORE._read_all("court_verdict")[-20:]
+                for v in verdicts:
+                    two_brain_diffs.append(
+                        {
+                            "diff_id": str(v.get("court_id") or v.get("finding_id") or new_id("diff")),
+                            "title": str(v.get("title") or "Adjudicated Finding"),
+                            "target": str(v.get("endpoint") or target or ""),
+                            "vuln_class": str(v.get("reason_code") or "verification"),
+                            "confidence_score": float(v.get("confidence", 0.0) or 0.0),
+                            "brain_a_hypothesis": str(v.get("title") or ""),
+                            "brain_b_verification": str(v.get("rationale") or ""),
+                            "verdict": str(v.get("verdict") or ""),
+                        }
+                    )
+            except Exception as ev_exc:
+                logger.debug("Court verdict diff extraction skipped: %s", ev_exc)
+
+            return ok_json(
+                {
+                    "target": target,
+                    "swarm_status": swarm_status,
+                    "active_runs_count": active_runs_count,
+                    "swarm_roster": swarm_roster,
+                    "wiretap_events": wiretap_events[-40:],
+                    "two_brain_diffs": two_brain_diffs,
+                    "graph": exported_graph,
+                    "activity": activity,
+                }
+            )
         except Exception as exc:
-            return ok_json({"target": target, "graph": {}, "error": str(exc)})
+            logger.warning("ControlSwarmTelemetryView failed: %s", exc)
+            return ok_json(
+                {
+                    "target": target,
+                    "swarm_status": "DEGRADED",
+                    "active_runs_count": 0,
+                    "swarm_roster": [],
+                    "wiretap_events": [],
+                    "two_brain_diffs": [],
+                    "graph": {},
+                    "activity": [],
+                    "error": str(exc),
+                }
+            )
 
 
 class ControlSwarmTelemetrySimulateStepView(APIView):
