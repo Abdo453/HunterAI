@@ -2123,16 +2123,15 @@ async def opencode_execute_view(request: HttpRequest) -> JsonResponse:
             }
         )
 
-    if web_governance_enforced():
-        ok_policy, policy_reason, policy_detail = validate_scan_target(
-            target,
-            scope=data.get("scope") or data.get("in_scope"),
-            out_of_scope=data.get("out_of_scope"),
-            engagement_id=data.get("engagement_id"),
-            action_type=f"opencode_skill:{clean}",
-        )
-        if not ok_policy:
-            return django_err(policy_reason, status=403, extra={"policy": policy_detail})
+    ok_policy, policy_reason, policy_detail = validate_scan_target(
+        target,
+        scope=data.get("scope") or data.get("in_scope"),
+        out_of_scope=data.get("out_of_scope"),
+        engagement_id=data.get("engagement_id"),
+        action_type=f"opencode_skill:{clean}",
+    )
+    if not ok_policy:
+        return django_err(policy_reason, status=403, extra={"policy": policy_detail})
 
     try:
         from core.workspace_manager import WorkspaceManager

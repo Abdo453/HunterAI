@@ -1727,12 +1727,18 @@ class AutonomousBrain:
         """
         try:
             from urllib.parse import urlparse
+            raw_probe = (url or "").strip()
+            if not raw_probe:
+                return False
             parsed_target = urlparse(base_url)
-            parsed_probe = urlparse(url)
+            parsed_probe = urlparse(raw_probe)
+            probe_scheme = (parsed_probe.scheme or "").lower().strip()
+            if probe_scheme and probe_scheme not in ("http", "https"):
+                return False
             target_host = (parsed_target.hostname or "").lower().strip()
             probe_host = (parsed_probe.hostname or "").lower().strip()
             if not probe_host:
-                return True
+                return not bool(probe_scheme) and not raw_probe.startswith("//")
             if probe_host == target_host:
                 return True
             # Subdomains of target
@@ -2201,7 +2207,7 @@ class AutonomousBrain:
             fetched_scripts = await self._fetch_code_intel_scripts(js_urls, target, proxy=proxy)
 
             async def _fetch_in_scope_source_map(map_url: str) -> Optional[str]:
-                if not map_url or not self._is_in_scope(map_url, target):
+                if not self._is_safe_fetchable_url(map_url, target):
                     return None
                 content = await self._fetch_js(map_url, proxy)
                 return content or None
@@ -3098,6 +3104,27 @@ class AutonomousBrain:
             } if self.eig_planner else None,
         }
 
+    def _is_safe_fetchable_url(self, url: str, base_url: str) -> bool:
+        """Require explicit http/https scheme, in-scope host, and non-overridable SSRF invariants."""
+        raw = (url or "").strip()
+        if not raw or not self._is_in_scope(raw, base_url):
+            return False
+        parsed = urlparse(raw)
+        if (parsed.scheme or "").lower() not in ("http", "https") or not parsed.hostname:
+            return False
+        from core.scope_engine import validate_http_url_target
+        target_host = (urlparse(base_url).hostname or "").lower().strip()
+        in_scope = [target_host, f"*.{target_host}"] if target_host else None
+        allow_loopback = target_host in {"127.0.0.1", "localhost", "::1"}
+        ok, _ = validate_http_url_target(
+            raw,
+            in_scope=in_scope,
+            allow_loopback=allow_loopback,
+            resolve_dns=False,
+            fail_closed=False,
+        )
+        return ok
+
     async def _fetch_code_intel_scripts(
         self,
         js_urls: List[str],
@@ -3107,7 +3134,7 @@ class AutonomousBrain:
         max_scripts: int = 10,
     ) -> Dict[str, str]:
         """Concurrently fetch in-scope external JavaScript bundles for CodeIntelligenceAgent."""
-        in_scope_urls = [u for u in (js_urls or []) if u and self._is_in_scope(u, target)][:max_scripts]
+        in_scope_urls = [u for u in (js_urls or []) if self._is_safe_fetchable_url(u, target)][:max_scripts]
         if not in_scope_urls:
             return {}
 

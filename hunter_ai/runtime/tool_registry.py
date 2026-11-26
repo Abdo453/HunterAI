@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Union
 
 from core.control_plane.policy_gate import ActionCategory, ActionRequest, PolicyGate
-from core.scope_engine import ScopePolicy, StrictScopeEngine
+from core.scope_engine import ScopePolicy, StrictScopeEngine, validate_http_url_target
 from core.security_mode import unrestricted_mode
 
 logger = logging.getLogger("hunter_ai.tool_registry")
@@ -60,10 +60,24 @@ class ToolRegistry:
         scope_engine: Optional[StrictScopeEngine] = None,
     ):
         self._tools: Dict[str, ToolDefinition] = {}
+        if policy_gate is None and scope_engine is None:
+            default_policy = ScopePolicy(allowed_targets=[], excluded_targets=[])
+            scope_engine = StrictScopeEngine(default_policy)
+            policy_gate = PolicyGate(
+                scope_policy=default_policy,
+                authorized=False,
+                allow_destructive=False,
+            )
+        elif policy_gate is None and scope_engine is not None:
+            policy_gate = PolicyGate(
+                scope_policy=scope_engine.policy,
+                authorized=False,
+                allow_destructive=False,
+            )
+        elif scope_engine is None and policy_gate is not None:
+            scope_engine = getattr(policy_gate, "_scope_engine", None)
         self.policy_gate: Optional[PolicyGate] = policy_gate
-        self.scope_engine: Optional[StrictScopeEngine] = scope_engine or (
-            getattr(policy_gate, "_scope_engine", None) if policy_gate is not None else None
-        )
+        self.scope_engine: Optional[StrictScopeEngine] = scope_engine
 
     def register(
         self,
@@ -94,15 +108,36 @@ class ToolRegistry:
         tool: ToolDefinition,
         arguments: Dict[str, Any],
     ) -> Optional[str]:
-        """Enforce StrictScopeEngine + PolicyGate before invoking any network/target tool."""
-        if unrestricted_mode():
-            return None
-
+        """Enforce non-overridable SSRF/scheme invariants unconditionally, then StrictScopeEngine + PolicyGate."""
         candidates: List[str] = []
         for key in _URL_ARGUMENT_KEYS:
             val = arguments.get(key)
             if isinstance(val, str) and val.strip():
                 candidates.append(val.strip())
+
+        is_unrestricted = unrestricted_mode()
+        in_scope = list(self.scope_engine.in_scope) if self.scope_engine is not None else []
+        out_of_scope = list(self.scope_engine.out_of_scope) if self.scope_engine is not None else []
+        allow_loopback = bool(
+            self.scope_engine is not None
+            and getattr(self.scope_engine.policy, "allow_private_ips_override", False)
+        )
+
+        # 1. Non-overridable SSRF, cloud-metadata, and scheme invariants apply EVEN under unrestricted_mode().
+        for candidate in candidates:
+            ok_inv, inv_reason = validate_http_url_target(
+                candidate,
+                in_scope=None if is_unrestricted else in_scope,
+                out_of_scope=None if is_unrestricted else out_of_scope,
+                allow_loopback=allow_loopback,
+                resolve_dns=False,
+                fail_closed=not is_unrestricted,
+            )
+            if not ok_inv:
+                return f"Security invariant / scope denied '{candidate}': {inv_reason}"
+
+        if is_unrestricted:
+            return None
 
         if not candidates:
             if (
@@ -253,7 +288,12 @@ def build_default_tool_registry(
         if http_client is not None:
             resp = await http_client.request(method=method, url=url, params=params, headers=headers, content=body)
         else:
-            async with httpx.AsyncClient(verify=False, timeout=8.0, follow_redirects=False) as client:
+            async with httpx.AsyncClient(
+                verify=False,
+                timeout=8.0,
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
                 resp = await client.request(method=method, url=url, params=params, headers=headers, content=body)
         duration = round(time.time() - t0, 3)
         return {
@@ -288,7 +328,12 @@ def build_default_tool_registry(
             r1 = await http_client.get(baseline_url)
             r2 = await http_client.get(probe_url)
         else:
-            async with httpx.AsyncClient(verify=False, timeout=8.0, follow_redirects=False) as client:
+            async with httpx.AsyncClient(
+                verify=False,
+                timeout=8.0,
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
                 r1 = await client.get(baseline_url)
                 r2 = await client.get(probe_url)
 

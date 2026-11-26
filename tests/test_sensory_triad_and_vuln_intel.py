@@ -657,7 +657,13 @@ async def test_runtime_tool_registry_policy_gate_scope_and_vuln_intel(tmp_path: 
     assert out["results"][0]["applicability"] == "CONFIRMED_APPLICABLE"
 
 
-def test_pipeline_orchestrator_offline_vuln_intel_triage_and_tool_selection(tmp_path: Path):
+def test_pipeline_orchestrator_offline_vuln_intel_triage_and_tool_selection(tmp_path: Path, monkeypatch):
+    # Keep EvidenceStore isolated inside tmp_path so tests never dirty tracked data/ files
+    import core.evidence_store as ev_mod
+
+    orig_es = ev_mod.EvidenceStore
+    monkeypatch.setattr(ev_mod, "EvidenceStore", lambda *a, **k: orig_es(db_path=str(tmp_path / "evidence.sqlite3")))
+
     orch = HunterPipelineOrchestrator(
         target="https://app.example.com",
         authorized=True,
@@ -821,7 +827,6 @@ def test_intelligence_api_vuln_intel_views_kb_and_truthful_opencode_execute(tmp_
 @pytest.mark.asyncio
 async def test_opencode_execute_view_dispatches_real_skill_registry_handler(monkeypatch):
     import core.skill_registry as sr_mod
-    import hunter_backend.apps.intelligence_api as intel_mod
 
     executed_targets: List[str] = []
 
@@ -845,12 +850,17 @@ async def test_opencode_execute_view_dispatches_real_skill_registry_handler(monk
             return FakeMeta() if name == "demo_exec_skill" else None
 
     monkeypatch.setattr(sr_mod, "SkillRegistry", FakeRegistry)
-    monkeypatch.setattr(intel_mod, "web_governance_enforced", lambda: False)
 
     with ASGISyncClient() as client:
+        # 1. Valid in-scope target executes the real skill handler
         resp = client.post(
             "/api/opencode/execute",
-            json={"skill_name": "demo_exec_skill", "target": "https://example.com", "task": "audit"},
+            json={
+                "skill_name": "demo_exec_skill",
+                "target": "https://example.com",
+                "scope": ["example.com"],
+                "task": "audit",
+            },
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -859,3 +869,110 @@ async def test_opencode_execute_view_dispatches_real_skill_registry_handler(monk
         assert body["tool_used"] == "demo_exec_skill"
         assert executed_targets == ["https://example.com"]
         assert len(body["findings"]) == 1
+
+        # 2. Non-overridable SSRF / metadata / scheme / metacharacter targets MUST be blocked
+        #    with HTTP 403 EVEN when HUNTER_WEB_UNRESTRICTED=1!
+        monkeypatch.setenv("HUNTER_WEB_UNRESTRICTED", "1")
+        for forbidden_target in (
+            "http://169.254.169.254/latest/meta-data/",
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:6379/_INFO",
+            "example.com;id",
+        ):
+            r_blk = client.post(
+                "/api/opencode/execute",
+                json={
+                    "skill_name": "demo_exec_skill",
+                    "target": forbidden_target,
+                    "task": "audit",
+                },
+            )
+            assert r_blk.status_code == 403, f"Expected 403 for {forbidden_target}, got {r_blk.status_code}: {r_blk.text}"
+        # Ensure handler was NOT called for any blocked target
+        assert executed_targets == ["https://example.com"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_tool_registry_blocks_invariants_under_unrestricted_and_bare_registry_fails_closed(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from hunter_ai.runtime.tool_registry import ToolRegistry, ToolRiskLevel
+
+    # 1. Bare ToolRegistry() defaults to fail-closed PolicyGate + StrictScopeEngine in governed mode
+    monkeypatch.delenv("HUNTER_UNRESTRICTED", raising=False)
+    monkeypatch.delenv("HUNTER_FULL_POWER", raising=False)
+    bare = ToolRegistry()
+    assert bare.policy_gate is not None
+    assert bare.scope_engine is not None
+
+    handler_invoked: List[str] = []
+
+    async def _probe_stub(url: str) -> Dict[str, Any]:
+        handler_invoked.append(url)
+        return {"ok": True}
+
+    bare.register(
+        name="stub_probe",
+        description="Stub probe",
+        input_schema={"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
+        handler=_probe_stub,
+        risk_level=ToolRiskLevel.SAFE,
+    )
+    denied_bare = await bare.execute("stub_probe", {"url": "https://example.com/health"})
+    assert denied_bare["success"] is False
+    assert denied_bare.get("blocked") is True
+    assert handler_invoked == []
+
+    # 2. Under HUNTER_UNRESTRICTED=1, non-overridable SSRF / metadata / unsafe schemes remain BLOCKED
+    monkeypatch.setenv("HUNTER_UNRESTRICTED", "1")
+    reg = build_default_tool_registry(
+        allowed_targets=["example.com"],
+        authorized=True,
+        vuln_db_path=tmp_path / "unrestricted_vuln.sqlite3",
+    )
+    for bad_url in (
+        "http://169.254.169.254/latest/meta-data/",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "file:///etc/passwd",
+        "gopher://127.0.0.1:6379/_INFO",
+    ):
+        res_probe = await reg.execute("http_probe", {"url": bad_url})
+        assert res_probe["success"] is False, f"Expected block for {bad_url}"
+        assert res_probe.get("blocked") is True
+        res_diff = await reg.execute(
+            "differential_analyze",
+            {"baseline_url": "https://example.com/", "probe_url": bad_url},
+        )
+        assert res_diff["success"] is False
+        assert res_diff.get("blocked") is True
+
+
+@pytest.mark.asyncio
+async def test_autonomous_brain_js_and_sourcemap_rejects_file_and_metadata_urls():
+    brain = AutonomousBrain.__new__(AutonomousBrain)
+    fetched_calls: List[str] = []
+
+    async def _spy_fetch_js(url: str, proxy: Optional[str] = None) -> str:
+        fetched_calls.append(url)
+        return "console.log('ok');"
+
+    brain._fetch_js = _spy_fetch_js
+
+    assert brain._is_in_scope("file:///etc/passwd", "https://app.example.com/") is False
+    assert brain._is_in_scope("gopher://127.0.0.1:6379/", "https://app.example.com/") is False
+    assert brain._is_safe_fetchable_url("file:///etc/passwd", "https://app.example.com/") is False
+    assert brain._is_safe_fetchable_url("http://169.254.169.254/latest/meta-data/app.js", "https://app.example.com/") is False
+    assert brain._is_safe_fetchable_url("https://app.example.com/static/app.js", "https://app.example.com/") is True
+
+    fetched = await brain._fetch_code_intel_scripts(
+        [
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:6379/app.js",
+            "http://169.254.169.254/latest/meta-data/app.js",
+            "https://app.example.com/static/app.js",
+        ],
+        target="https://app.example.com/",
+    )
+    assert list(fetched.keys()) == ["https://app.example.com/static/app.js"]
+    assert fetched_calls == ["https://app.example.com/static/app.js"]
