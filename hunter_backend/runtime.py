@@ -520,6 +520,11 @@ async def _run_pipeline_task(
     scope: List[str],
     out_of_scope: List[str],
     engagement_id: Optional[str],
+    *,
+    kind: str = "pipeline",
+    prompt: str = "",
+    engine: str = "claude",
+    proxy: Optional[str] = None,
 ) -> None:
     store = ensure_platform_wiring()
     try:
@@ -528,7 +533,7 @@ async def _run_pipeline_task(
             "pipeline.progress",
             run_id=run_id,
             engagement_id=engagement_id,
-            source="pipeline",
+            source=kind,
             payload={"phase": "RECON", "progress": 0.15, "target": target, "mode": mode},
         )
         if target in _active_pipelines:
@@ -544,11 +549,10 @@ async def _run_pipeline_task(
                 _active_pipelines[target]["status"] = "stopped"
             return
 
-        # Attempt real pipeline execution if orchestrator exists, with safe progression fallback
         from core.scope_guard import ScopeGuard
 
-        guard = ScopeGuard(in_scope=scope or [target], out_of_scope=out_of_scope)
-        store.update_run(run_id, status="running", current_phase="SCOPE_VERIFIED", progress=0.55)
+        guard = ScopeGuard(in_scope=scope or ([target] if target else []), out_of_scope=out_of_scope)
+        store.update_run(run_id, status="running", current_phase="SCOPE_VERIFIED", progress=0.30)
         store.append_event(
             "pipeline.scope_verified",
             run_id=run_id,
@@ -557,26 +561,228 @@ async def _run_pipeline_task(
             payload={"in_scope": guard.in_scope, "out_of_scope": guard.out_of_scope},
         )
         if phase_delay > 0:
-            await asyncio.sleep(phase_delay)
+            await asyncio.sleep(min(phase_delay, 0.25))
         if not await GLOBAL_RUN_CONTROLLER.checkpoint(run_id):
             store.update_run(run_id, status="stopped", finished_at=time.time())
             if target in _active_pipelines:
                 _active_pipelines[target]["status"] = "stopped"
             return
 
+        discovered_assets: List[Dict[str, Any]] = []
+        discovered_findings: List[Dict[str, Any]] = []
+        scan_stats: Dict[str, Any] = {"assets": 0, "live_endpoints": 0, "findings": 0}
+
+        if target:
+            from core.global_state import GLOBAL_EVIDENCE_STORE
+            from core.live_scanner import run_live_security_scan
+
+            async def _phase_cb(phase_name: str, pct: float, detail: Dict[str, Any]) -> bool:
+                store.update_run(run_id, status="running", current_phase=phase_name, progress=pct)
+                store.append_event(
+                    "pipeline.progress",
+                    run_id=run_id,
+                    engagement_id=engagement_id,
+                    source=kind,
+                    payload={"phase": phase_name, "progress": pct, "target": target, "mode": mode, **detail},
+                )
+                if target in _active_pipelines:
+                    _active_pipelines[target]["phase"] = phase_name
+                return await GLOBAL_RUN_CONTROLLER.checkpoint(run_id)
+
+            scan_res = await run_live_security_scan(
+                target=target,
+                run_id=run_id,
+                mode=mode,
+                proxy=proxy,
+                phase_cb=_phase_cb,
+            )
+            if scan_res.get("cancelled"):
+                store.update_run(run_id, status="stopped", finished_at=time.time())
+                if target in _active_pipelines:
+                    _active_pipelines[target]["status"] = "stopped"
+                return
+
+            discovered_assets = list(scan_res.get("assets") or [])
+            discovered_findings = list(scan_res.get("findings") or [])
+            observations = list(scan_res.get("observations") or [])
+            scan_stats = {
+                "assets": len(discovered_assets),
+                "live_endpoints": int(scan_res.get("live_count") or 0),
+                "endpoints": int(scan_res.get("endpoints_count") or 0),
+                "findings": len(discovered_findings),
+            }
+
+            # Persist observations & findings into EvidenceStore and emit live events
+            for obs in observations:
+                GLOBAL_EVIDENCE_STORE.add_evidence(
+                    run_id=run_id,
+                    source_worker=kind,
+                    source_tool=str(obs.get("source_tool") or "native_scanner"),
+                    evidence_type=str(obs.get("evidence_type") or "observation"),
+                    content=str(obs.get("content") or ""),
+                    confidence=float(obs.get("confidence") or 0.9),
+                    metadata={
+                        "target": str(obs.get("target") or target),
+                        "title": str(obs.get("title") or "Recon Observation"),
+                    },
+                )
+
+            for fd in discovered_findings:
+                ev_type = "proof" if str(fd.get("severity") or "").upper() in {"CRITICAL", "HIGH", "MEDIUM"} else "anomaly"
+                GLOBAL_EVIDENCE_STORE.add_evidence(
+                    run_id=run_id,
+                    source_worker=kind,
+                    source_tool="native_security_audit",
+                    evidence_type=ev_type,
+                    content=str(fd.get("evidence") or ""),
+                    confidence=float(fd.get("confidence") or 0.9),
+                    metadata={
+                        "target": str(fd.get("endpoint") or target),
+                        "title": str(fd.get("title") or "Finding"),
+                        "severity": str(fd.get("severity") or "INFO"),
+                        "cvss_score": float(fd.get("cvss_score") or 0.0),
+                        "vuln_class": str(fd.get("vuln_class") or "web"),
+                    },
+                )
+                store.append_event(
+                    "finding.discovered",
+                    run_id=run_id,
+                    engagement_id=engagement_id,
+                    source=kind,
+                    payload={
+                        "title": fd.get("title"),
+                        "severity": fd.get("severity"),
+                        "endpoint": fd.get("endpoint"),
+                        "vuln_class": fd.get("vuln_class"),
+                    },
+                )
+
+            if discovered_assets:
+                store.append_event(
+                    "run.assets",
+                    run_id=run_id,
+                    engagement_id=engagement_id,
+                    source=kind,
+                    payload={
+                        "target": target,
+                        "assets_count": len(discovered_assets),
+                        "live_endpoints": scan_stats["live_endpoints"],
+                        "findings_count": len(discovered_findings),
+                    },
+                )
+
+            # Persist session & report artifacts for /findings when live HTTP findings exist
+            if scan_stats["live_endpoints"] > 0 and not target.lower().endswith((".example", ".invalid", ".test")):
+                try:
+                    sessions_dir = DATA_DIR / "sessions"
+                    sessions_dir.mkdir(parents=True, exist_ok=True)
+                    session_file = sessions_dir / f"{run_id}.json"
+                    session_file.write_text(
+                        json.dumps(
+                            {
+                                "id": run_id,
+                                "target": target,
+                                "mode": mode,
+                                "status": "completed",
+                                "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                "findings": [
+                                    {
+                                        "id": fd.get("id"),
+                                        "title": fd.get("title"),
+                                        "description": (fd.get("poc_details") or {}).get("description", ""),
+                                        "severity": str(fd.get("severity") or "info").lower(),
+                                        "cvss_score": float(fd.get("cvss_score") or 0.0),
+                                        "tool": "hunter_live_scanner",
+                                        "evidence": fd.get("evidence", ""),
+                                        "recommendation": "Review HTTP security configuration and verify finding reproduction.",
+                                    }
+                                    for fd in discovered_findings
+                                ],
+                            },
+                            indent=2,
+                            ensure_ascii=False,
+                        ),
+                        encoding="utf-8",
+                    )
+                    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+                    for idx, fd in enumerate(discovered_findings[:8]):
+                        rep_file = REPORTS_DIR / f"{run_id}_f{idx + 1}.json"
+                        rep_file.write_text(
+                            json.dumps(
+                                {
+                                    "report_id": fd.get("id") or f"{run_id}-{idx + 1}",
+                                    "title": fd.get("title", "Finding"),
+                                    "severity": str(fd.get("severity") or "INFO").capitalize(),
+                                    "vulnerability_type": fd.get("vuln_class", "web"),
+                                    "target": fd.get("endpoint") or target,
+                                    "platform": "HackerOne",
+                                    "report_ready": str(fd.get("status", "")).upper() == "CONFIRMED",
+                                    "confidence": float(fd.get("confidence") or 0.9),
+                                    "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                    "summary": (fd.get("poc_details") or {}).get("description", ""),
+                                    "evidence": fd.get("evidence", ""),
+                                    "remediation": "Harden server headers, TLS, access controls, and input output encoding.",
+                                },
+                                indent=2,
+                                ensure_ascii=False,
+                            ),
+                            encoding="utf-8",
+                        )
+                except Exception as art_exc:
+                    logger.debug("Artifact export note for %s: %s", run_id, art_exc)
+
+            # Persist Lead Board candidates for discovered live endpoints
+            try:
+                from bughunter.tools.lead_board import add_lead
+
+                lead_tgt = target.replace("https://", "").replace("http://", "").split("/", 1)[0]
+                for a in discovered_assets:
+                    if a.get("kind") == "ENDPOINT" and a.get("attributes", {}).get("live_url"):
+                        add_lead(
+                            lead_tgt,
+                            skill="hunt-misc",
+                            evidence=str(a["attributes"]["live_url"]),
+                            signal=f"HTTP {a['attributes'].get('status_code', '')} live endpoint",
+                            priority="med",
+                        )
+                        break
+            except Exception:
+                pass
+
+        if not await GLOBAL_RUN_CONTROLLER.checkpoint(run_id):
+            store.update_run(run_id, status="stopped", finished_at=time.time())
+            if target in _active_pipelines:
+                _active_pipelines[target]["status"] = "stopped"
+            return
+
+        existing_run = store.get_run(run_id) or {}
+        merged_meta = dict(existing_run.get("meta") or {})
+        merged_meta["discovered_assets"] = discovered_assets
+        merged_meta["discovered_findings"] = discovered_findings
+        merged_meta["scan_stats"] = scan_stats
+
         store.update_run(
             run_id,
             status="completed",
             current_phase="DONE",
             progress=1.0,
+            meta=merged_meta,
             finished_at=time.time(),
         )
         store.append_event(
             "run.completed",
             run_id=run_id,
             engagement_id=engagement_id,
-            source="pipeline",
-            payload={"run_id": run_id, "target": target, "mode": mode},
+            source=kind,
+            payload={
+                "run_id": run_id,
+                "target": target,
+                "mode": mode,
+                "assets_count": scan_stats["assets"],
+                "live_endpoints": scan_stats["live_endpoints"],
+                "findings_count": scan_stats["findings"],
+            },
         )
         if target in _active_pipelines:
             _active_pipelines[target]["status"] = "completed"
@@ -695,6 +901,10 @@ async def start_platform_run(
             scope=scope or ([clean_target] if clean_target else []),
             out_of_scope=out_of_scope or [],
             engagement_id=eff_eid,
+            kind=kind,
+            prompt=prompt,
+            engine=engine,
+            proxy=proxy,
         )
     )
     handle = reg["handle"]

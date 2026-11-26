@@ -78,6 +78,8 @@ export default function OverviewPage() {
     engagementSelectionSeq,
     targetDomain,
     runs,
+    tasks,
+    engagements,
     isScanning,
     launchMission,
     controlRun,
@@ -514,6 +516,48 @@ export default function OverviewPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {tasks.length > 0 && (
+            <div data-testid="go-core-tasks-panel" className="pt-2 border-t border-border-subtle space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-ink-secondary">Go Core Worker Tasks</span>
+                <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-elevated border border-border-subtle text-ink-muted tabular-nums">
+                  {tasks.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto">
+                {tasks.slice(0, 8).map((tk, idx) => {
+                  const st = (tk.status || "PENDING").toUpperCase();
+                  const engMatch = engagements.find((e) => e.id === tk.engagement_id);
+                  const summaryParts = Object.entries(tk.output_summary || {})
+                    .slice(0, 3)
+                    .map(([k, v]) => `${k}: ${String(v)}`)
+                    .join(" · ");
+                  return (
+                    <div
+                      key={`${tk.id || "task"}-${idx}`}
+                      className="p-2 rounded bg-inset border border-border-subtle text-xs flex flex-col gap-1"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-sentinel-primary font-semibold truncate">
+                          {tk.agent_role} · {engMatch?.target || tk.title}
+                        </span>
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${statusPillClass(st)}`}>
+                          {st}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-ink-muted truncate">{tk.title}</div>
+                      {summaryParts && (
+                        <div className="text-[10px] font-mono text-ink-secondary truncate ltr-isolate">
+                          {summaryParts}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </section>

@@ -195,7 +195,7 @@ class RunControlActionView(APIView):
     def post(self, request: Any, run_id: str) -> Any:
         from hunter_backend.runtime import control_managed_run_sync
 
-        store = rt.ensure_platform_wiring()
+        store = ensure_platform_wiring()
         if self.action == "pause":
             if not control_managed_run_sync(run_id, "pause"):
                 return err_json("Run not found or cannot be paused", status=404)
@@ -218,14 +218,37 @@ class RunEventsView(APIView):
     """GET /api/runs/<run_id>/events."""
 
     def get(self, request: Any, run_id: str) -> Any:
-        events = GLOBAL_COORDINATOR.events(run_id)
-        if not events:
+        coord_events = GLOBAL_COORDINATOR.events(run_id)
+        store = ensure_platform_wiring()
+        run_row = store.get_run(run_id)
+        plat_events = store.list_events(run_id=run_id, limit=200)
+
+        if not coord_events and not plat_events and run_row is None:
             return err_json("Run not found or has no recorded events", status=404)
+
+        serialized: List[Dict[str, Any]] = [_serialize_event(e) for e in coord_events]
+        seen_sigs = {
+            (str(item.get("event_type") or ""), str(item.get("timestamp") or ""))
+            for item in serialized
+        }
+        for ev in plat_events:
+            ev_item = {
+                "event_id": f"seq_{ev.get('seq', 0)}",
+                "run_id": ev.get("run_id") or run_id,
+                "event_type": ev.get("event_type"),
+                "timestamp": ev.get("created_at"),
+                "payload": dict(ev.get("payload") or {}),
+            }
+            sig = (str(ev_item["event_type"] or ""), str(ev_item["timestamp"] or ""))
+            if sig not in seen_sigs:
+                seen_sigs.add(sig)
+                serialized.append(ev_item)
+
         return ok_json(
             {
                 "run_id": run_id,
-                "count": len(events),
-                "events": [_serialize_event(e) for e in events],
+                "count": len(serialized),
+                "events": serialized,
             }
         )
 
@@ -255,11 +278,16 @@ class RunFindingsView(APIView):
         evidence = GLOBAL_EVIDENCE_STORE.list_evidence(run_id=run_id)
         findings: List[Dict[str, Any]] = []
         rejected: List[Dict[str, Any]] = []
+        seen_titles: set[tuple[str, str]] = set()
         for rec in evidence:
+            meta_title = str((rec.metadata or {}).get("title") or "").strip()
+            meta_asset = str((rec.metadata or {}).get("target") or "")
             item = {
                 "evidence_id": rec.evidence_id,
-                "title": f"{rec.evidence_type} on {rec.source_tool or 'unknown'}",
-                "affected_asset": rec.metadata.get("target", ""),
+                "title": meta_title or f"{rec.evidence_type} on {rec.source_tool or 'unknown'}",
+                "affected_asset": meta_asset,
+                "severity": str((rec.metadata or {}).get("severity") or "INFO"),
+                "cvss_score": float((rec.metadata or {}).get("cvss_score") or 0.0),
                 "category": rec.evidence_type,
                 "confidence": rec.confidence,
                 "verification_status": rec.verification_status,
@@ -270,8 +298,35 @@ class RunFindingsView(APIView):
                 rejected.append(item)
             elif rec.evidence_type == "proof":
                 findings.append(item)
+                seen_titles.add((item["title"], item["affected_asset"]))
             elif rec.evidence_type == "anomaly" and rec.confidence >= 0.7:
                 findings.append({**item, "needs_verification": True})
+                seen_titles.add((item["title"], item["affected_asset"]))
+
+        # Merge structured findings saved in PlatformStore run meta (including LOW/INFO hardening items)
+        run_row = ensure_platform_wiring().get_run(run_id)
+        if run_row and isinstance(run_row.get("meta"), dict):
+            for fd in run_row["meta"].get("discovered_findings") or []:
+                if not isinstance(fd, dict):
+                    continue
+                t = str(fd.get("title") or "Finding")
+                ep = str(fd.get("endpoint") or run_row.get("target") or "")
+                if (t, ep) in seen_titles:
+                    continue
+                seen_titles.add((t, ep))
+                findings.append(
+                    {
+                        "evidence_id": fd.get("id"),
+                        "title": t,
+                        "affected_asset": ep,
+                        "severity": str(fd.get("severity") or "INFO"),
+                        "cvss_score": float(fd.get("cvss_score") or 0.0),
+                        "category": str(fd.get("vuln_class") or "web"),
+                        "confidence": float(fd.get("confidence") or 0.9),
+                        "verification_status": str(fd.get("status") or "TRIAGED").lower(),
+                        "evidence": str(fd.get("evidence") or "")[:500],
+                    }
+                )
 
         return ok_json(
             {

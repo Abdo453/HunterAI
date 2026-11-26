@@ -258,14 +258,49 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
         },
         "cloud_providers": list(prov_dict.get("cloud") or []),
     }
+    hub_assets: List[Dict[str, Any]] = []
+    hub_findings: List[Dict[str, Any]] = []
+    seen_hub_assets: set[tuple[str, str]] = set()
+    seen_hub_findings: set[tuple[str, str]] = set()
+    for r in runs:
+        meta = r.get("meta") if isinstance(r.get("meta"), dict) else None
+        if not meta:
+            continue
+        r_eid = r.get("engagement_id")
+        r_target = r.get("target")
+        for a in meta.get("discovered_assets") or []:
+            if not isinstance(a, dict):
+                continue
+            akey = (str(a.get("kind") or ""), str(a.get("value") or ""))
+            if akey[1] and akey not in seen_hub_assets:
+                seen_hub_assets.add(akey)
+                enriched_a = dict(a)
+                if r_eid and not enriched_a.get("engagement_id"):
+                    enriched_a["engagement_id"] = r_eid
+                if r_target and not enriched_a.get("target"):
+                    enriched_a["target"] = r_target
+                hub_assets.append(enriched_a)
+        for fd in meta.get("discovered_findings") or []:
+            if not isinstance(fd, dict):
+                continue
+            fkey = (str(fd.get("vuln_class") or ""), str(fd.get("endpoint") or ""))
+            if fkey not in seen_hub_findings:
+                seen_hub_findings.add(fkey)
+                enriched_fd = dict(fd)
+                if r_eid and not enriched_fd.get("engagement_id"):
+                    enriched_fd["engagement_id"] = r_eid
+                if r_target and not enriched_fd.get("target"):
+                    enriched_fd["target"] = r_target
+                hub_findings.append(enriched_fd)
+
     counts = {
         "engagements": len(engagements),
         "runs": len(runs),
         "active_runs": sum(1 for r in runs if r.get("status") in {"running", "paused"}),
         "pending_approvals": len(approvals),
         "unread_notifications": len(notifications),
-        "assets": len(engagements),
-        "findings": 0,
+        "assets": len(hub_assets) or len(engagements),
+        "findings": len(hub_findings),
     }
     return django_json(
         {
@@ -276,6 +311,8 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
             "active_run": active_run,
             "engagements": engagements,
             "runs": runs,
+            "assets": hub_assets,
+            "findings": hub_findings,
             "pending_approvals": approvals,
             "approvals": {
                 "pending": approvals,
@@ -1028,6 +1065,19 @@ async def artex_go_proxy_view(request: HttpRequest, path: str) -> HttpResponse:
             },
             status=503,
         )
+
+    if (clean_path == "scan" or clean_path.endswith("/scan")) and request.method == "POST" and upstream.status_code < 300:
+        try:
+            parsed_req = json.loads(body.decode("utf-8", errors="ignore")) if body else {}
+            scan_target = str((parsed_req or {}).get("target") or "").strip()
+            if scan_target:
+                ensure_platform_wiring().append_event(
+                    "artex.scan_dispatched",
+                    source="go_core",
+                    payload={"target": scan_target, "status": "QUEUED"},
+                )
+        except Exception:
+            pass
 
     resp = HttpResponse(
         upstream.content,

@@ -941,51 +941,6 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         setGoCoreHealth((prev) => ({ ...prev, lastSyncedAt: nowTs }));
       }
 
-      // 3. Stats (from Django /api/platform/artex/stats, falling back to Hub counts when offline)
-      const statsWrap = unwrapArtexPayload(artexStatsRes.data);
-      const unwrappedStats = statsWrap.payload;
-      if (
-        artexStatsRes.ok &&
-        statsWrap.online !== false &&
-        unwrappedStats &&
-        typeof unwrappedStats === "object" &&
-        !Array.isArray(unwrappedStats)
-      ) {
-        const s = unwrappedStats as Record<string, unknown>;
-        const nextStats: StatsSummary = {
-          total_assets: Number(s.total_assets || 0),
-          total_findings: Number(s.total_findings || 0),
-          total_engagements: Number(s.total_engagements || 0),
-          status: String(s.status || "ONLINE"),
-          error: typeof s.error === "string" ? s.error : undefined,
-        };
-        const fp = fingerprintData(nextStats);
-        if (fpRef.current.stats !== fp) {
-          fpRef.current.stats = fp;
-          setStats(nextStats);
-        }
-      } else if (nextGoHealth.status === "offline" || statsWrap.online === false) {
-        const cnts =
-          hubOv?.counts && typeof hubOv.counts === "object"
-            ? (hubOv.counts as Record<string, unknown>)
-            : null;
-        const hubStatsObj =
-          hubOv?.stats && typeof hubOv.stats === "object"
-            ? (hubOv.stats as Record<string, unknown>)
-            : null;
-        const offlineStats: StatsSummary = {
-          total_assets: Number(cnts?.assets || 0),
-          total_findings: Number(cnts?.findings || 0),
-          total_engagements: Number(cnts?.engagements ?? hubStatsObj?.engagement_count ?? 0),
-          status: "OFFLINE",
-        };
-        const fp = fingerprintData(offlineStats);
-        if (fpRef.current.stats !== fp) {
-          fpRef.current.stats = fp;
-          setStats(offlineStats);
-        }
-      }
-
       // 4. Engagements (Merge Go Core proxy + Django Hub overview)
       const mergedEngs: EngagementRecord[] = [];
       const seenEngIds = new Set<string>();
@@ -1045,58 +1000,164 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         setEngagements(mergedEngs);
       }
 
-      // 5. Assets via /api/platform/artex/assets
+      // 5. Assets (Merge Go Core + Django Hub run discoveries)
+      const mergedAssets: AssetRecord[] = [];
+      const seenAssetKeys = new Set<string>();
+      const pushNormalizedAsset = (a: Record<string, unknown>) => {
+        const kind = String(a.kind || "ASSET");
+        const value = String(a.value || "");
+        if (!value) return;
+        const key = `${kind.toUpperCase()}|${value.toLowerCase()}`;
+        if (seenAssetKeys.has(key)) return;
+        seenAssetKeys.add(key);
+        mergedAssets.push({
+          id: String(a.id || key),
+          target_id: typeof a.target_id === "string" ? a.target_id : undefined,
+          kind,
+          value,
+          attributes:
+            a.attributes && typeof a.attributes === "object"
+              ? (a.attributes as Record<string, unknown>)
+              : {},
+          first_seen: typeof a.first_seen === "string" ? a.first_seen : null,
+          created_at: typeof a.created_at === "string" ? a.created_at : null,
+        });
+      };
+
+      const activeEngFilterObj = currentEngId
+        ? mergedEngs.find((e) => e.id === currentEngId) || null
+        : null;
+      const hubMatchesFilter = (item: Record<string, unknown>): boolean => {
+        if (!currentEngId) return true;
+        const itemEid = typeof item.engagement_id === "string" ? item.engagement_id : "";
+        if (itemEid && itemEid === currentEngId) return true;
+        const filterHost = activeEngFilterObj?.target
+          ? normalizeTargetForCompare(activeEngFilterObj.target)
+          : "";
+        if (!filterHost) return false;
+        const candidateStr = String(item.target || item.value || item.endpoint || "").toLowerCase();
+        return candidateStr.includes(filterHost.replace(/:\d+$/, ""));
+      };
+
       const rawAssets = unwrapArtexPayload(artexAssetsRes.data).payload;
       if (artexAssetsRes.ok && Array.isArray(rawAssets)) {
-        const normalizedAssets: AssetRecord[] = rawAssets
-          .filter((a): a is Record<string, unknown> => Boolean(a && typeof a === "object"))
-          .map((a) => ({
-            id: String(a.id || ""),
-            target_id: typeof a.target_id === "string" ? a.target_id : undefined,
-            kind: String(a.kind || "ASSET"),
-            value: String(a.value || ""),
-            attributes:
-              a.attributes && typeof a.attributes === "object"
-                ? (a.attributes as Record<string, unknown>)
-                : {},
-            first_seen: typeof a.first_seen === "string" ? a.first_seen : null,
-            created_at: typeof a.created_at === "string" ? a.created_at : null,
-          }));
-        const fp = fingerprintData(normalizedAssets);
+        for (const a of rawAssets) {
+          if (a && typeof a === "object") {
+            pushNormalizedAsset(a as Record<string, unknown>);
+          }
+        }
+      }
+      if (hubOverviewRes.ok && hubOv && Array.isArray(hubOv.assets)) {
+        for (const a of hubOv.assets) {
+          if (a && typeof a === "object" && hubMatchesFilter(a as Record<string, unknown>)) {
+            pushNormalizedAsset(a as Record<string, unknown>);
+          }
+        }
+      }
+      if (mergedAssets.length > 0 || (artexAssetsRes.ok && Array.isArray(rawAssets))) {
+        const fp = fingerprintData(mergedAssets);
         if (fpRef.current.assets !== fp) {
           fpRef.current.assets = fp;
-          setAssets(normalizedAssets);
+          setAssets(mergedAssets);
         }
       }
 
-      // 6. Findings via /api/platform/artex/findings
+      // 6. Findings (Merge Go Core + Django Hub run discoveries)
+      const mergedFindings: FindingRecord[] = [];
+      const seenFindingKeys = new Set<string>();
+      const pushNormalizedFinding = (f: Record<string, unknown>) => {
+        const vulnClass = String(f.vuln_class || "unknown");
+        const endpoint = String(f.endpoint || "");
+        const title = String(f.title || "Untitled Finding");
+        const key = `${vulnClass.toLowerCase()}|${endpoint.toLowerCase()}|${title.toLowerCase()}`;
+        if (seenFindingKeys.has(key)) return;
+        seenFindingKeys.add(key);
+        mergedFindings.push({
+          id: String(f.id || key),
+          engagement_id: typeof f.engagement_id === "string" ? f.engagement_id : undefined,
+          target_id: typeof f.target_id === "string" ? f.target_id : undefined,
+          title,
+          vuln_class: vulnClass,
+          severity: String(f.severity || "info").toUpperCase(),
+          cvss_score: Number(f.cvss_score || 0),
+          confidence: Number(f.confidence || 0),
+          endpoint,
+          evidence: String(f.evidence || ""),
+          poc_details:
+            f.poc_details && typeof f.poc_details === "object"
+              ? (f.poc_details as Record<string, unknown>)
+              : undefined,
+          poc_script: typeof f.poc_script === "string" ? f.poc_script : undefined,
+          status: String(f.status || "CONFIRMED"),
+          created_at: typeof f.created_at === "string" ? f.created_at : null,
+        });
+      };
+
       const rawFindings = unwrapArtexPayload(artexFindingsRes.data).payload;
       if (artexFindingsRes.ok && Array.isArray(rawFindings)) {
-        const normalizedFindings: FindingRecord[] = rawFindings
-          .filter((f): f is Record<string, unknown> => Boolean(f && typeof f === "object"))
-          .map((f) => ({
-            id: String(f.id || ""),
-            engagement_id: typeof f.engagement_id === "string" ? f.engagement_id : undefined,
-            target_id: typeof f.target_id === "string" ? f.target_id : undefined,
-            title: String(f.title || "Untitled Finding"),
-            vuln_class: String(f.vuln_class || "unknown"),
-            severity: String(f.severity || "info").toUpperCase(),
-            cvss_score: Number(f.cvss_score || 0),
-            confidence: Number(f.confidence || 0),
-            endpoint: String(f.endpoint || ""),
-            evidence: String(f.evidence || ""),
-            poc_details:
-              f.poc_details && typeof f.poc_details === "object"
-                ? (f.poc_details as Record<string, unknown>)
-                : undefined,
-            poc_script: typeof f.poc_script === "string" ? f.poc_script : undefined,
-            status: String(f.status || "CONFIRMED"),
-            created_at: typeof f.created_at === "string" ? f.created_at : null,
-          }));
-        const fp = fingerprintData(normalizedFindings);
+        for (const f of rawFindings) {
+          if (f && typeof f === "object") {
+            pushNormalizedFinding(f as Record<string, unknown>);
+          }
+        }
+      }
+      if (hubOverviewRes.ok && hubOv && Array.isArray(hubOv.findings)) {
+        for (const f of hubOv.findings) {
+          if (f && typeof f === "object" && hubMatchesFilter(f as Record<string, unknown>)) {
+            pushNormalizedFinding(f as Record<string, unknown>);
+          }
+        }
+      }
+      if (mergedFindings.length > 0 || (artexFindingsRes.ok && Array.isArray(rawFindings))) {
+        const fp = fingerprintData(mergedFindings);
         if (fpRef.current.findings !== fp) {
           fpRef.current.findings = fp;
-          setFindings(normalizedFindings);
+          setFindings(mergedFindings);
+        }
+      }
+
+      // 3b. Reconcile Stats with merged Hub discoveries
+      const statsWrap = unwrapArtexPayload(artexStatsRes.data);
+      const unwrappedStats = statsWrap.payload;
+      if (
+        artexStatsRes.ok &&
+        statsWrap.online !== false &&
+        unwrappedStats &&
+        typeof unwrappedStats === "object" &&
+        !Array.isArray(unwrappedStats)
+      ) {
+        const s = unwrappedStats as Record<string, unknown>;
+        const nextStats: StatsSummary = {
+          total_assets: Math.max(Number(s.total_assets || 0), mergedAssets.length),
+          total_findings: Math.max(Number(s.total_findings || 0), mergedFindings.length),
+          total_engagements: Math.max(Number(s.total_engagements || 0), mergedEngs.length),
+          status: String(s.status || "ONLINE"),
+          error: typeof s.error === "string" ? s.error : undefined,
+        };
+        const fp = fingerprintData(nextStats);
+        if (fpRef.current.stats !== fp) {
+          fpRef.current.stats = fp;
+          setStats(nextStats);
+        }
+      } else if (nextGoHealth.status === "offline" || statsWrap.online === false) {
+        const cnts =
+          hubOv?.counts && typeof hubOv.counts === "object"
+            ? (hubOv.counts as Record<string, unknown>)
+            : null;
+        const hubStatsObj =
+          hubOv?.stats && typeof hubOv.stats === "object"
+            ? (hubOv.stats as Record<string, unknown>)
+            : null;
+        const offlineStats: StatsSummary = {
+          total_assets: Math.max(Number(cnts?.assets || 0), mergedAssets.length),
+          total_findings: Math.max(Number(cnts?.findings || 0), mergedFindings.length),
+          total_engagements: Number(cnts?.engagements ?? hubStatsObj?.engagement_count ?? mergedEngs.length),
+          status: "OFFLINE",
+        };
+        const fp = fingerprintData(offlineStats);
+        if (fpRef.current.stats !== fp) {
+          fpRef.current.stats = fp;
+          setStats(offlineStats);
         }
       }
 
@@ -1578,6 +1639,8 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           }
           addConsoleLog("SUCCESS", "go-core", `Go Core scan dispatched for ${normTarget}`);
           void refreshData();
+          window.setTimeout(() => void refreshData(), 1000);
+          window.setTimeout(() => void refreshData(), 2800);
           return { ok: true };
         }
 

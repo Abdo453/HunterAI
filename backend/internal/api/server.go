@@ -857,6 +857,8 @@ func (s *APIServer) handleScan(w http.ResponseWriter, r *http.Request) {
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
-		_, _ = s.orchestrator.RunAutonomousMission(ctx, t)
+		if _, err := s.orchestrator.RunAutonomousMission(ctx, t); err != nil {
+			log.Printf("[-] [API] Background mission failed for %q: %v", t, err)
+		}
 	}(target)
 }

@@ -62,6 +62,7 @@ export default function OperationsPage() {
   const {
     engagements,
     selectedEngagement,
+    targetDomain,
     selectEngagement,
     createEngagement,
     isLoading,
@@ -105,7 +106,7 @@ export default function OperationsPage() {
   const [newLeadEvidence, setNewLeadEvidence] = useState<string>("");
 
   const loadAll = useCallback(async () => {
-    const lt = selectedEngagement?.target || "example.com";
+    const lt = selectedEngagement?.target || targetDomain || "example.com";
     const [rtRes, chkRes, lbRes] = await Promise.all([
       apiJson<RedTeamPolicyState>("/api/control/redteam-policy"),
       apiJson<{ categories?: ChecklistCategory[]; progress_percent?: number }>("/api/control/checklists"),
@@ -123,7 +124,7 @@ export default function OperationsPage() {
       setLeadCounts(lbRes.data.counts || {});
       if (lbRes.data.target) setLeadTarget(lbRes.data.target);
     }
-  }, [apiJson, selectedEngagement?.target]);
+  }, [apiJson, selectedEngagement?.target, targetDomain]);
 
   useEffect(() => {
     if (!isLoading || selectedEngagement) {

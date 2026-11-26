@@ -104,6 +104,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
 
   const [targetInput, setTargetInput] = useState<string>(targetDomain || "");
   const [validationError, setValidationError] = useState<string>("");
+  const [launchNotice, setLaunchNotice] = useState<string>("");
   const [presetsOpen, setPresetsOpen] = useState<boolean>(false);
 
   const presetsContainerRef = useRef<HTMLDivElement>(null);
@@ -168,6 +169,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
     userEditedTargetRef.current = true;
     setTargetInput(preset.target);
     setValidationError("");
+    setLaunchNotice("");
     setPresetsOpen(false);
     targetInputRef.current?.focus();
   };
@@ -197,6 +199,7 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
     e.preventDefault();
     userEditedTargetRef.current = true;
     setValidationError("");
+    setLaunchNotice("");
 
     const check = validateScanTarget(targetInput);
     if (!check.valid) {
@@ -209,9 +212,13 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
     }
 
     const res = await launchScan(check.normalizedTarget);
-    if (!res.ok && res.error) {
-      setValidationError(res.error);
+    if (!res.ok) {
+      if (res.error) setValidationError(res.error);
+      return;
     }
+    const engineLabel = res.via === "go_core" ? "Go Core Scanner" : "Django Pipeline";
+    setLaunchNotice(`Scan dispatched for ${check.normalizedTarget} (${engineLabel})`);
+    window.setTimeout(() => setLaunchNotice(""), 6500);
   };
 
   const goStyle = getStatusBadgeStyle(goCoreHealth.status);
@@ -453,6 +460,15 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
             >
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
               <span>{validationError}</span>
+            </div>
+          )}
+          {!validationError && launchNotice && (
+            <div
+              role="status"
+              className="flex items-center gap-1.5 text-xs text-sentinel-success px-1 font-mono"
+            >
+              <Activity className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+              <span className="truncate ltr-isolate">{launchNotice}</span>
             </div>
           )}
         </div>

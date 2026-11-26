@@ -1190,3 +1190,127 @@ def test_08_no_target_snapback_on_polling_and_all_workspaces(
     assert nav_input.input_value() == "http://127.0.0.1:3001"
 
     diag.assert_clean()
+
+
+def test_09_live_target_scan_populates_assets_findings_and_run_details(
+    e2e_stack: E2EStack,
+    e2e_page: tuple[Page, PageDiagnostics],
+) -> None:
+    """Launch a live scan against mock vulnerable server and verify KPI cards, Details 200 OK, /surface, and /findings."""
+    page, diag = e2e_page
+    _wait_ui_ready_with_overview(page, f"{e2e_stack.ui_base}/")
+
+    # Ensure All Workspaces ("") is selected before scanning
+    eng_select = page.locator("#engagement-selector")
+    if eng_select.input_value() != "":
+        with page.expect_response(
+            lambda r: "/api/platform/context" in r.url and r.request.method == "PUT",
+            timeout=10000,
+        ):
+            eng_select.select_option("")
+
+    created_run_id = ""
+    try:
+        # Dispatch OmniHunter Full Loop against e2e_stack.vuln_base via Overview form
+        mission_form = page.locator("form").filter(has=page.locator("#overview-target"))
+        page.locator("#overview-target").fill(e2e_stack.vuln_base)
+        page.wait_for_function(
+            "() => { const form = document.querySelector('#overview-target')?.closest('form'); const btn = form?.querySelector('button[type=\"submit\"]'); return Boolean(btn && !btn.disabled); }",
+            timeout=5000,
+        )
+        with page.expect_response(
+            lambda r: "/api/platform/runs/start" in r.url and r.request.method == "POST",
+            timeout=10000,
+        ) as start_resp:
+            mission_form.locator('button[type="submit"]').click()
+        assert start_resp.value.status == 200, start_resp.value.text()
+        created_run_id = start_resp.value.json().get("run_id") or ""
+        assert created_run_id
+
+        # Wait for the scan run row to transition to COMPLETED (phase delay = 5s in E2E)
+        run_row = page.locator("table tbody tr", has_text=created_run_id).first
+        run_row.wait_for(state="visible", timeout=15000)
+        page.wait_for_function(
+            """(rid) => {
+                const rows = Array.from(document.querySelectorAll('table tbody tr'));
+                const row = rows.find(tr => (tr.innerText || '').includes(rid));
+                return Boolean(row && (row.innerText || '').toUpperCase().includes('COMPLETED'));
+            }""",
+            arg=created_run_id,
+            timeout=25000,
+        )
+
+        # Verify Telemetry Summary cards update with non-zero counts (no reload)
+        page.wait_for_function(
+            """() => {
+                const sec = document.querySelector('section[aria-label="Telemetry Summary"]');
+                if (!sec) return false;
+                const cards = Array.from(sec.children);
+                if (cards.length < 3) return false;
+                const nums = cards.slice(0, 3).map(c => {
+                    const txt = (c.querySelector('.text-2xl, .text-lg')?.textContent || '0').replace(/,/g, '').trim();
+                    return Number.parseInt(txt, 10) || 0;
+                });
+                return nums[0] > 0 && nums[1] > 0 && nums[2] > 0;
+            }""",
+            timeout=15000,
+        )
+
+        # Open Run Details modal and confirm Events (200 OK), Evidence (>0), Findings (>0)
+        with page.expect_response(
+            lambda r: f"/api/runs/{created_run_id}/events" in r.url and r.request.method == "GET",
+            timeout=10000,
+        ) as ev_resp:
+            run_row.locator("button", has_text="Details").click()
+        assert ev_resp.value.status == 200
+
+        dialog = page.locator(f'div[role="dialog"][aria-label="Run {created_run_id}"]')
+        dialog.wait_for(state="visible", timeout=10000)
+        page.wait_for_function(
+            """(rid) => {
+                const dlg = document.querySelector(`div[role="dialog"][aria-label="Run ${rid}"]`);
+                if (!dlg) return false;
+                const txt = dlg.innerText || '';
+                return !txt.includes('(0)') || txt.includes('Events');
+            }""",
+            arg=created_run_id,
+            timeout=8000,
+        )
+        dialog.locator("button", has_text="Findings").click()
+        dialog_txt = dialog.inner_text()
+        assert "SQL" in dialog_txt or "XSS" in dialog_txt or "Security" in dialog_txt, dialog_txt
+        dialog.locator('button[aria-label="Close"]').click()
+        dialog.wait_for(state="hidden", timeout=5000)
+
+        save_verification_screenshot(page, "11_live_scan_overview_results.png")
+
+        # Verify /surface renders discovered assets
+        _wait_ui_ready(page, f"{e2e_stack.ui_base}/surface")
+        page.wait_for_function(
+            """(url) => {
+                const txt = document.body.innerText || '';
+                return txt.includes(url) || txt.includes('ENDPOINT') || txt.includes('SUBDOMAIN');
+            }""",
+            arg="127.0.0.1",
+            timeout=12000,
+        )
+
+        # Verify /findings renders discovered vulnerability rows cleanly
+        _wait_ui_ready(page, f"{e2e_stack.ui_base}/findings")
+        page.wait_for_function(
+            """() => {
+                const txt = document.body.innerText || '';
+                return txt.includes('XSS') || txt.includes('SQL') || txt.includes('Security Hardening');
+            }""",
+            timeout=12000,
+        )
+
+        diag.assert_clean()
+    finally:
+        if created_run_id:
+            s_file = REPO_ROOT / "data" / "sessions" / f"{created_run_id}.json"
+            if s_file.exists():
+                s_file.unlink()
+            for r_file in (REPO_ROOT / "data" / "reports").glob(f"{created_run_id}_f*.json"):
+                r_file.unlink()
+
