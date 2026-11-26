@@ -9,14 +9,53 @@ import React, {
   useRef,
   useState,
 } from "react";
-
-export const ARTEX_API_BASE = (
-  process.env.NEXT_PUBLIC_ARTEX_API_BASE || "http://127.0.0.1:7071/api/v1"
-).replace(/\/+$/, "");
+import { useRouter } from "next/navigation";
 
 export const HUNTER_API_BASE = (
   process.env.NEXT_PUBLIC_HUNTER_API_BASE || "http://127.0.0.1:8000"
 ).replace(/\/+$/, "");
+
+export function getDjangoApiBase(): string {
+  const configured = process.env.NEXT_PUBLIC_HUNTER_API_BASE?.trim();
+  if (configured) {
+    return configured.replace(/\/+$/, "");
+  }
+  if (typeof window !== "undefined") {
+    if (window.location.port === "8000") {
+      return window.location.origin;
+    }
+    const host = window.location.hostname || "127.0.0.1";
+    return `${window.location.protocol}//${host}:8000`;
+  }
+  return HUNTER_API_BASE;
+}
+
+export function getDjangoWsUrl(wsPath: string): string {
+  const normalized = wsPath.startsWith("/") ? wsPath : `/${wsPath}`;
+  const httpBase = getDjangoApiBase();
+  const wsBase = httpBase.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
+  return `${wsBase}${normalized}`;
+}
+
+export function readCsrfToken(): string {
+  if (typeof document === "undefined") return "";
+  const pairs = document.cookie ? document.cookie.split(";") : [];
+  for (const raw of pairs) {
+    const idx = raw.indexOf("=");
+    if (idx === -1) continue;
+    const name = raw.slice(0, idx).trim();
+    if (name === "csrftoken") {
+      try {
+        return decodeURIComponent(raw.slice(idx + 1).trim());
+      } catch {
+        return raw.slice(idx + 1).trim();
+      }
+    }
+  }
+  return "";
+}
+
+const STREAM_DIRECT_PREFIXES = ["/api/copilot/chat/stream", "/api/platform/stream"];
 
 export interface AssetRecord {
   id: string;
@@ -133,18 +172,35 @@ export interface GoCoreHealth {
   viaBridge?: boolean;
 }
 
+export interface HubServicesSnapshot {
+  artex_go_core?: Record<string, unknown>;
+  ollama?: { online: boolean; host?: string };
+  lm_studio?: { online: boolean; host?: string };
+  cloud_providers?: string[];
+  burp_proxy?: { online: boolean; host?: string };
+  burp_agent?: { online: boolean; host?: string };
+}
+
 export interface HunterHubHealth {
   status: "connected" | "offline" | "checking";
   error?: string;
   lastSyncedAt: number | null;
   latestSeq: number;
-  services?: {
-    ollama?: { online: boolean; host?: string };
-    lm_studio?: { online: boolean; host?: string };
-    cloud_providers?: string[];
-    burp_proxy?: { online: boolean; host?: string };
-    burp_agent?: { online: boolean; host?: string };
-  };
+  services?: HubServicesSnapshot;
+}
+
+export interface OverviewCounts {
+  engagements: number;
+  runs: number;
+  active_runs: number;
+  pending_approvals: number;
+  findings: number;
+  assets: number;
+  leads: number;
+  conversations: number;
+  unread_notifications: number;
+  tools_installed: number;
+  agents: number;
 }
 
 export type ConsoleLevel = "INFO" | "SUCCESS" | "WARN" | "ERROR" | "AUDIT";
@@ -164,6 +220,38 @@ export interface CopilotRef {
   section?: string;
 }
 
+export interface RepeaterDraft {
+  rawRequest: string;
+  targetUrl?: string;
+  useProxy?: boolean;
+}
+
+export interface MissionLaunchInput {
+  kind: "omni" | "pipeline" | "mission" | "engine" | "go_core";
+  target: string;
+  engagement_id?: string | null;
+  scope?: string[];
+  out_of_scope?: string[];
+  mode?: string;
+  prompt?: string;
+  engine?: string;
+  model?: string;
+  coverage?: number;
+  max_cycles?: number;
+  force_fallback?: boolean;
+  self_operate?: boolean;
+  proxy?: string | null;
+}
+
+export interface EngagementCreateInput {
+  name?: string;
+  target: string;
+  in_scope?: string[];
+  out_of_scope?: string[];
+  set_active?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isPrivateOrLocalHost(host: string): boolean {
@@ -175,11 +263,19 @@ function isPrivateOrLocalHost(host: string): boolean {
     h === "metadata.google.internal" ||
     h === "0.0.0.0" ||
     h === "::1" ||
-    h === "::"
+    h === "::" ||
+    h.startsWith("::ffff:127.") ||
+    h.startsWith("::ffff:169.254.") ||
+    h.startsWith("::ffff:10.") ||
+    h.startsWith("::ffff:192.168.") ||
+    /^::ffff:172\.(1[6-9]|2\d|3[01])\./.test(h)
   ) {
     return true;
   }
-  if (/^127\./.test(h)) return true;
+  // Decimal integer, hex, octal, or shorthand loopback forms
+  if (/^\d+$/.test(h) || /^0x[0-9a-f]+$/i.test(h) || /^127(?:\.\d+){0,3}$/.test(h)) {
+    return true;
+  }
   if (/^10\./.test(h)) return true;
   if (/^169\.254\./.test(h)) return true;
   if (/^192\.168\./.test(h)) return true;
@@ -281,14 +377,70 @@ function formatTimeHHMMSS(ts?: string | number | null): string {
   return d.toLocaleTimeString("en-GB", { hour12: false });
 }
 
+function unwrapArtexPayload(raw: unknown): { online?: boolean; payload: unknown } {
+  if (raw && typeof raw === "object" && !Array.isArray(raw) && "data" in raw) {
+    const obj = raw as { online?: boolean; data?: unknown };
+    return { online: obj.online, payload: obj.data };
+  }
+  return { payload: raw };
+}
+
+export function extractApiError(payload: unknown, statusCode: number): string {
+  if (payload && typeof payload === "object") {
+    const rec = payload as Record<string, unknown>;
+    if (typeof rec.detail === "string" && rec.detail) return rec.detail;
+    if (rec.detail && typeof rec.detail === "object") {
+      const det = rec.detail as Record<string, unknown>;
+      if (typeof det.reason === "string" && det.reason) return det.reason;
+    }
+    if (typeof rec.error === "string" && rec.error) return rec.error;
+    if (typeof rec.message === "string" && rec.message) return rec.message;
+  }
+  return statusCode ? `HTTP ${statusCode}` : "Network error";
+}
+
+function sectionToRoute(section?: string): string {
+  switch ((section || "").toLowerCase()) {
+    case "assets":
+    case "telemetry":
+    case "radar":
+      return "/surface";
+    case "findings":
+    case "results":
+      return "/findings";
+    case "targets":
+    case "redteam":
+      return "/operations";
+    case "editor":
+    case "opencode":
+      return "/studio";
+    case "burp":
+    case "browser":
+      return "/intercept";
+    case "agents":
+    case "skills":
+    case "tools":
+    case "mcp":
+      return "/arsenal";
+    case "models":
+    case "diagnostics":
+    case "settings":
+      return "/system";
+    default:
+      return "/";
+  }
+}
+
 interface PlatformContextValue {
   engagements: EngagementRecord[];
   selectedEngagementId: string;
   selectedEngagement: EngagementRecord | null;
   selectEngagement: (id: string) => Promise<void>;
+  createEngagement: (input: EngagementCreateInput) => Promise<{ ok: boolean; engagement?: Record<string, unknown>; error?: string }>;
   targetDomain: string;
   setTargetDomain: (target: string) => void;
   stats: StatsSummary;
+  overviewCounts: OverviewCounts | null;
   assets: AssetRecord[];
   findings: FindingRecord[];
   tasks: TaskRecord[];
@@ -308,6 +460,7 @@ interface PlatformContextValue {
   clearConsoleLogs: () => void;
   refreshNow: () => Promise<void>;
   launchScan: (target: string) => Promise<{ ok: boolean; error?: string; via?: string }>;
+  launchMission: (input: MissionLaunchInput) => Promise<{ ok: boolean; run?: RunRecord; error?: string }>;
   decideApproval: (
     approvalId: string,
     decision: "approved" | "rejected",
@@ -323,13 +476,24 @@ interface PlatformContextValue {
   setInspectedFinding: (finding: FindingRecord | null) => void;
   copilotOpen: boolean;
   setCopilotOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  commandPaletteOpen: boolean;
+  setCommandPaletteOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  repeaterDraft: RepeaterDraft | null;
+  setRepeaterDraft: (draft: RepeaterDraft | null) => void;
+  sendToRepeater: (draft: RepeaterDraft) => void;
   navigateToRef: (ref: CopilotRef) => boolean;
   hunterFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  apiJson: <T = Record<string, unknown>>(
+    path: string,
+    options?: { method?: string; body?: unknown; signal?: AbortSignal }
+  ) => Promise<{ ok: boolean; status: number; data: T | null; error?: string }>;
 }
 
 const PlatformContext = createContext<PlatformContextValue | null>(null);
 
 export function PlatformProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+
   const [engagements, setEngagements] = useState<EngagementRecord[]>([]);
   const [selectedEngagementId, setSelectedEngagementId] = useState<string>("");
   const [targetDomain, setTargetDomain] = useState<string>("example.com");
@@ -340,6 +504,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
     total_engagements: 0,
     status: "CHECKING",
   });
+  const [overviewCounts, setOverviewCounts] = useState<OverviewCounts | null>(null);
   const [assets, setAssets] = useState<AssetRecord[]>([]);
   const [findings, setFindings] = useState<FindingRecord[]>([]);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
@@ -367,8 +532,9 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
   const [inspectedAsset, setInspectedAsset] = useState<AssetRecord | null>(null);
   const [inspectedFinding, setInspectedFinding] = useState<FindingRecord | null>(null);
   const [copilotOpen, setCopilotOpen] = useState<boolean>(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState<boolean>(false);
+  const [repeaterDraft, setRepeaterDraft] = useState<RepeaterDraft | null>(null);
 
-  const useProxyRef = useRef<boolean>(false);
   const pollAbortRef = useRef<AbortController | null>(null);
   const lastSeqRef = useRef<number>(0);
   const lastEventIdRef = useRef<string>("");
@@ -386,6 +552,17 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     selectedEngRef.current = selectedEngagementId;
   }, [selectedEngagementId]);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("copilot") === "open") {
+        setCopilotOpen(true);
+      }
+    } catch {
+      // Ignore query parsing failure
+    }
+  }, []);
 
   const addConsoleLog = useCallback(
     (level: ConsoleLevel, source: string, message: string, customId?: string, ts?: string) => {
@@ -411,45 +588,87 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /**
-   * Fetch against FastAPI Hub, transparently falling back to the same-origin
-   * `/api/hunter-proxy` bridge if cross-origin browser CORS blocks direct :8000 access.
+   * Unified Django fetch:
+   * - REST `/api/*` uses same-origin relative path (Next.js rewrite -> Django `:8000`)
+   * - Streaming SSE (`/api/copilot/chat/stream`, `/api/platform/stream`) goes directly to Django API base
+   * - Includes `credentials: "include"` and injects `X-CSRFToken` on mutations.
    */
   const hunterFetch = useCallback(async (path: string, init?: RequestInit): Promise<Response> => {
     const normalized = path.startsWith("/") ? path : `/${path}`;
-    const proxyUrl = `/api/hunter-proxy${normalized}`;
-    const directUrl = `${HUNTER_API_BASE}${normalized}`;
+    const isDirectStream = STREAM_DIRECT_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+    const url = isDirectStream ? `${getDjangoApiBase()}${normalized}` : normalized;
 
-    const isCrossOrigin =
-      typeof window !== "undefined" &&
-      (() => {
-        try {
-          return new URL(HUNTER_API_BASE, window.location.href).origin !== window.location.origin;
-        } catch {
-          return false;
-        }
-      })();
+    const method = (init?.method || "GET").toUpperCase();
+    const headers = new Headers(init?.headers || undefined);
 
-    if (useProxyRef.current && isCrossOrigin) {
-      return fetch(proxyUrl, init);
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !headers.has("X-CSRFToken")) {
+      const token = readCsrfToken();
+      if (token) {
+        headers.set("X-CSRFToken", token);
+      }
     }
 
-    try {
-      const resp = await fetch(directUrl, init);
-      return resp;
-    } catch (err) {
-      if (init?.signal?.aborted) {
-        throw err;
-      }
-      if (isCrossOrigin) {
-        const proxyResp = await fetch(proxyUrl, init);
-        if (proxyResp.status !== 503) {
-          useProxyRef.current = true;
-        }
-        return proxyResp;
-      }
-      throw err;
-    }
+    return fetch(url, {
+      ...init,
+      method,
+      headers,
+      credentials: init?.credentials || "include",
+    });
   }, []);
+
+  const apiJson = useCallback(
+    async <T = Record<string, unknown>>(
+      path: string,
+      options?: { method?: string; body?: unknown; signal?: AbortSignal }
+    ): Promise<{ ok: boolean; status: number; data: T | null; error?: string }> => {
+      const method = (options?.method || "GET").toUpperCase();
+      const headers: Record<string, string> = {};
+      let serialized: BodyInit | undefined;
+      if (options?.body !== undefined) {
+        if (options.body instanceof FormData) {
+          serialized = options.body;
+        } else {
+          headers["Content-Type"] = "application/json";
+          serialized = JSON.stringify(options.body);
+        }
+      }
+      try {
+        const res = await hunterFetch(path, {
+          method,
+          headers,
+          body: serialized,
+          signal: options?.signal,
+          cache: "no-store",
+        });
+        const text = await res.text();
+        let data: T | null = null;
+        if (text) {
+          try {
+            data = JSON.parse(text) as T;
+          } catch {
+            data = { raw: text } as unknown as T;
+          }
+        }
+        return {
+          ok: res.ok,
+          status: res.status,
+          data,
+          error: res.ok ? undefined : extractApiError(data, res.status),
+        };
+      } catch (err) {
+        if (options?.signal?.aborted) {
+          return { ok: false, status: 0, data: null };
+        }
+        return {
+          ok: false,
+          status: 0,
+          data: null,
+          error: err instanceof Error ? err.message : "Network error",
+        };
+      }
+    },
+    [hunterFetch]
+  );
 
   const refreshData = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) {
@@ -467,61 +686,40 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
     const isGoUuid = UUID_RE.test(currentEngId);
     const goFilter = isGoUuid ? `?engagement_id=${encodeURIComponent(currentEngId)}` : "";
 
-    const fetchJson = async (url: string, useHunter = false): Promise<{ ok: boolean; status: number; data: unknown }> => {
-      try {
-        const res = useHunter
-          ? await hunterFetch(url, { signal, cache: "no-store" })
-          : await fetch(url, { signal, cache: "no-store" });
-        const text = await res.text();
-        let data: unknown = null;
-        if (text) {
-          try {
-            data = JSON.parse(text);
-          } catch {
-            data = { raw: text };
-          }
-        }
-        return { ok: res.ok, status: res.status, data };
-      } catch {
-        return { ok: false, status: 0, data: null };
-      }
-    };
-
     try {
       const [
-        goHealthRes,
-        goStatsRes,
-        goEngsRes,
-        goAssetsRes,
-        goFindingsRes,
-        goTasksRes,
-        goAuditRes,
         hubOverviewRes,
-        hubArtexHealthRes,
         hubApprovalsRes,
         hubRunsRes,
+        artexHealthRes,
+        artexStatsRes,
+        artexEngsRes,
+        artexAssetsRes,
+        artexFindingsRes,
+        artexTasksRes,
+        artexAuditRes,
       ] = await Promise.all([
-        fetchJson(`${ARTEX_API_BASE}/health`),
-        fetchJson(`${ARTEX_API_BASE}/stats`),
-        fetchJson(`${ARTEX_API_BASE}/engagements`),
-        fetchJson(`${ARTEX_API_BASE}/assets${goFilter}`),
-        fetchJson(`${ARTEX_API_BASE}/findings${goFilter}`),
-        fetchJson(`${ARTEX_API_BASE}/tasks${goFilter}`),
-        fetchJson(`${ARTEX_API_BASE}/audit${goFilter}`),
-        fetchJson("/api/platform/overview", true),
-        fetchJson("/api/platform/artex/health", true),
-        fetchJson("/api/platform/approvals", true),
-        fetchJson("/api/platform/runs", true),
+        apiJson<Record<string, unknown>>("/api/platform/overview", { signal }),
+        apiJson<Record<string, unknown>>("/api/platform/approvals", { signal }),
+        apiJson<Record<string, unknown>>("/api/platform/runs", { signal }),
+        apiJson<Record<string, unknown>>("/api/platform/artex/health", { signal }),
+        apiJson<unknown>("/api/platform/artex/stats", { signal }),
+        apiJson<unknown>("/api/platform/artex/engagements", { signal }),
+        apiJson<unknown>(`/api/platform/artex/assets${goFilter}`, { signal }),
+        apiJson<unknown>(`/api/platform/artex/findings${goFilter}`, { signal }),
+        apiJson<unknown>(`/api/platform/artex/tasks${goFilter}`, { signal }),
+        apiJson<unknown>(`/api/platform/artex/audit${goFilter}`, { signal }),
       ]);
 
       if (signal.aborted) return;
 
       const nowTs = Date.now();
 
-      // 1. Evaluate FastAPI Hub Health
-      const hubOv = (hubOverviewRes.data && typeof hubOverviewRes.data === "object"
-        ? hubOverviewRes.data
-        : null) as Record<string, unknown> | null;
+      // 1. Evaluate Django Hub Health
+      const hubOv =
+        hubOverviewRes.data && typeof hubOverviewRes.data === "object"
+          ? hubOverviewRes.data
+          : null;
 
       if (hubOverviewRes.ok && hubOv && hubOv.status === "ok") {
         const latestSeq = Number(hubOv.latest_seq || 0);
@@ -542,8 +740,21 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
             fpRef.current.activeRunId = nextRunId || "";
             setActiveRunId(nextRunId);
           }
+          if (!selectedEngRef.current && typeof ctxObj.active_engagement_id === "string" && ctxObj.active_engagement_id) {
+            selectedEngRef.current = ctxObj.active_engagement_id;
+            setSelectedEngagementId(ctxObj.active_engagement_id);
+          }
         }
-        const services = (hubOv.services || {}) as HunterHubHealth["services"];
+
+        if (hubOv.counts && typeof hubOv.counts === "object") {
+          const cntFp = fingerprintData(hubOv.counts);
+          if (fpRef.current.counts !== cntFp) {
+            fpRef.current.counts = cntFp;
+            setOverviewCounts(hubOv.counts as OverviewCounts);
+          }
+        }
+
+        const services = (hubOv.services || {}) as HubServicesSnapshot;
         const nextHub: HunterHubHealth = {
           status: "connected",
           lastSyncedAt: nowTs,
@@ -558,9 +769,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           setHunterHubHealth((prev) => ({ ...prev, lastSyncedAt: nowTs, latestSeq }));
         }
       } else {
-        const errMsg =
-          (hubOv && typeof hubOv.error === "string" ? hubOv.error : "") ||
-          "FastAPI Platform Hub unreachable";
+        const errMsg = hubOverviewRes.error || "Django Platform Hub unreachable";
         const nextHub: HunterHubHealth = {
           status: "offline",
           error: errMsg,
@@ -574,37 +783,29 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 2. Evaluate Truthful Go Core Health (Direct + /api/platform/artex/health)
-      const directData = (goHealthRes.data && typeof goHealthRes.data === "object"
-        ? goHealthRes.data
-        : null) as Record<string, unknown> | null;
-      const bridgeData = (hubArtexHealthRes.data && typeof hubArtexHealthRes.data === "object"
-        ? hubArtexHealthRes.data
-        : null) as Record<string, unknown> | null;
+      // 2. Evaluate Truthful Go Core Health via Django /api/platform/artex/health
+      const bridgeData =
+        (artexHealthRes.data && typeof artexHealthRes.data === "object"
+          ? artexHealthRes.data
+          : null) ||
+        (hubOv?.services && typeof (hubOv.services as Record<string, unknown>).artex_go_core === "object"
+          ? ((hubOv.services as Record<string, unknown>).artex_go_core as Record<string, unknown>)
+          : null);
+
+      const upstreamObj =
+        bridgeData?.upstream && typeof bridgeData.upstream === "object"
+          ? (bridgeData.upstream as Record<string, unknown>)
+          : null;
 
       let nextGoHealth: GoCoreHealth;
-      if (goHealthRes.status === 200 && directData) {
+      if (bridgeData && bridgeData.online === true) {
         nextGoHealth = {
           status: "connected",
-          database: directData.database === "connected" ? "connected" : "unknown",
-          engine: typeof directData.engine === "string" ? directData.engine : "ARTEX-Pro Go Core",
-          lastSyncedAt: nowTs,
-          viaBridge: false,
-        };
-      } else if (goHealthRes.status === 503 && directData) {
-        nextGoHealth = {
-          status: "degraded",
-          database: directData.database === "disconnected" ? "disconnected" : "unknown",
-          engine: typeof directData.engine === "string" ? directData.engine : "ARTEX-Pro Go Core",
-          error: typeof directData.error === "string" ? directData.error : "Database unavailable",
-          lastSyncedAt: nowTs,
-          viaBridge: false,
-        };
-      } else if (hubArtexHealthRes.ok && bridgeData && bridgeData.online === true) {
-        nextGoHealth = {
-          status: "connected",
-          database: "connected",
-          engine: "ARTEX-Pro Go Core",
+          database: upstreamObj?.database === "connected" ? "connected" : "connected",
+          engine:
+            typeof upstreamObj?.engine === "string"
+              ? upstreamObj.engine
+              : "ARTEX-Pro Go Core",
           lastSyncedAt: nowTs,
           viaBridge: true,
         };
@@ -622,8 +823,9 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           database: "unknown",
           error:
             (bridgeData && typeof bridgeData.error === "string" ? bridgeData.error : "") ||
-            "Go Core API unreachable",
+            "Go Core API unreachable via Django bridge",
           lastSyncedAt: nowTs,
+          viaBridge: true,
         };
       }
 
@@ -631,7 +833,6 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         status: nextGoHealth.status,
         database: nextGoHealth.database,
         error: nextGoHealth.error,
-        viaBridge: nextGoHealth.viaBridge,
       });
       if (fpRef.current.goHealth !== goHealthFp) {
         fpRef.current.goHealth = goHealthFp;
@@ -640,14 +841,15 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         setGoCoreHealth((prev) => ({ ...prev, lastSyncedAt: nowTs }));
       }
 
-      // 3. Stats
-      if (goStatsRes.data && typeof goStatsRes.data === "object") {
-        const s = goStatsRes.data as Record<string, unknown>;
+      // 3. Stats (from Django /api/platform/artex/stats, falling back to Hub counts when offline)
+      const unwrappedStats = unwrapArtexPayload(artexStatsRes.data).payload;
+      if (artexStatsRes.ok && unwrappedStats && typeof unwrappedStats === "object") {
+        const s = unwrappedStats as Record<string, unknown>;
         const nextStats: StatsSummary = {
           total_assets: Number(s.total_assets || 0),
           total_findings: Number(s.total_findings || 0),
           total_engagements: Number(s.total_engagements || 0),
-          status: String(s.status || (goStatsRes.ok ? "ONLINE" : "DEGRADED")),
+          status: String(s.status || "ONLINE"),
           error: typeof s.error === "string" ? s.error : undefined,
         };
         const fp = fingerprintData(nextStats);
@@ -656,10 +858,14 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
           setStats(nextStats);
         }
       } else if (nextGoHealth.status === "offline") {
+        const cnts =
+          hubOv?.counts && typeof hubOv.counts === "object"
+            ? (hubOv.counts as Record<string, unknown>)
+            : null;
         const offlineStats: StatsSummary = {
-          total_assets: 0,
-          total_findings: 0,
-          total_engagements: 0,
+          total_assets: Number(cnts?.assets || 0),
+          total_findings: Number(cnts?.findings || 0),
+          total_engagements: Number(cnts?.engagements || 0),
           status: "OFFLINE",
         };
         const fp = fingerprintData(offlineStats);
@@ -669,12 +875,13 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 4. Engagements (Merge Go Core + FastAPI Hub)
+      // 4. Engagements (Merge Go Core proxy + Django Hub overview)
       const mergedEngs: EngagementRecord[] = [];
       const seenEngIds = new Set<string>();
+      const rawGoEngs = unwrapArtexPayload(artexEngsRes.data).payload;
 
-      if (goEngsRes.ok && Array.isArray(goEngsRes.data)) {
-        for (const item of goEngsRes.data) {
+      if (artexEngsRes.ok && Array.isArray(rawGoEngs)) {
+        for (const item of rawGoEngs) {
           if (!item || typeof item !== "object") continue;
           const ge = item as Record<string, unknown>;
           const id = String(ge.id || ge.code || "");
@@ -726,9 +933,10 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         setEngagements(mergedEngs);
       }
 
-      // 5. Assets
-      if (goAssetsRes.ok && Array.isArray(goAssetsRes.data)) {
-        const normalizedAssets: AssetRecord[] = goAssetsRes.data
+      // 5. Assets via /api/platform/artex/assets
+      const rawAssets = unwrapArtexPayload(artexAssetsRes.data).payload;
+      if (artexAssetsRes.ok && Array.isArray(rawAssets)) {
+        const normalizedAssets: AssetRecord[] = rawAssets
           .filter((a): a is Record<string, unknown> => Boolean(a && typeof a === "object"))
           .map((a) => ({
             id: String(a.id || ""),
@@ -749,9 +957,10 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 6. Findings
-      if (goFindingsRes.ok && Array.isArray(goFindingsRes.data)) {
-        const normalizedFindings: FindingRecord[] = goFindingsRes.data
+      // 6. Findings via /api/platform/artex/findings
+      const rawFindings = unwrapArtexPayload(artexFindingsRes.data).payload;
+      if (artexFindingsRes.ok && Array.isArray(rawFindings)) {
+        const normalizedFindings: FindingRecord[] = rawFindings
           .filter((f): f is Record<string, unknown> => Boolean(f && typeof f === "object"))
           .map((f) => ({
             id: String(f.id || ""),
@@ -779,9 +988,10 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 7. Go Tasks
-      if (goTasksRes.ok && Array.isArray(goTasksRes.data)) {
-        const normalizedTasks: TaskRecord[] = goTasksRes.data
+      // 7. Go Tasks via /api/platform/artex/tasks
+      const rawTasks = unwrapArtexPayload(artexTasksRes.data).payload;
+      if (artexTasksRes.ok && Array.isArray(rawTasks)) {
+        const normalizedTasks: TaskRecord[] = rawTasks
           .filter((t): t is Record<string, unknown> => Boolean(t && typeof t === "object"))
           .map((t) => ({
             id: String(t.id || ""),
@@ -808,9 +1018,10 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 8. Go Audit Logs (append new records into LiveConsole unless paused)
-      if (goAuditRes.ok && Array.isArray(goAuditRes.data)) {
-        const normalizedAudit: AuditRecord[] = goAuditRes.data
+      // 8. Go Audit Logs via /api/platform/artex/audit
+      const rawAudit = unwrapArtexPayload(artexAuditRes.data).payload;
+      if (artexAuditRes.ok && Array.isArray(rawAudit)) {
+        const normalizedAudit: AuditRecord[] = rawAudit
           .filter((a): a is Record<string, unknown> => Boolean(a && typeof a === "object"))
           .map((a) => ({
             id: String(a.id || ""),
@@ -846,7 +1057,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 9. FastAPI Runs & Approvals
+      // 9. Django Hub Runs & Approvals
       const runsPayload = hubRunsRes.data as { runs?: unknown[] } | null;
       const rawRuns =
         hubRunsRes.ok && runsPayload && Array.isArray(runsPayload.runs)
@@ -885,7 +1096,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
       }
     }
-  }, [addConsoleLog, hunterFetch]);
+  }, [addConsoleLog, apiJson]);
 
   // Visibility-aware polling loop (4s interval, paused when document.hidden === true)
   useEffect(() => {
@@ -917,7 +1128,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
     };
   }, [refreshData]);
 
-  // SSE /api/platform/stream subscription when FastAPI Hub is reachable and page is visible
+  // Direct SSE /api/platform/stream subscription to Django Hub
   useEffect(() => {
     if (hunterHubHealth.status !== "connected") {
       return;
@@ -1110,19 +1321,108 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         setTargetDomain(found.target);
       }
       if (hunterHubHealth.status === "connected" && id) {
-        try {
-          await hunterFetch("/api/platform/context", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ active_engagement_id: id }),
-          });
-        } catch {
-          // Non-fatal
-        }
+        await apiJson("/api/platform/context", {
+          method: "PUT",
+          body: { active_engagement_id: id },
+        });
       }
       await refreshData();
     },
-    [engagements, hunterHubHealth.status, hunterFetch, refreshData]
+    [engagements, hunterHubHealth.status, apiJson, refreshData]
+  );
+
+  const createEngagement = useCallback(
+    async (input: EngagementCreateInput) => {
+      const res = await apiJson<Record<string, unknown>>("/api/platform/engagements", {
+        method: "POST",
+        body: input,
+      });
+      if (!res.ok) {
+        return { ok: false, error: res.error || "Failed to create engagement" };
+      }
+      const eng =
+        res.data && typeof res.data.engagement === "object"
+          ? (res.data.engagement as Record<string, unknown>)
+          : undefined;
+      if (eng && typeof eng.engagement_id === "string") {
+        setSelectedEngagementId(eng.engagement_id);
+        selectedEngRef.current = eng.engagement_id;
+      }
+      await refreshData();
+      return { ok: true, engagement: eng };
+    },
+    [apiJson, refreshData]
+  );
+
+  const launchMission = useCallback(
+    async (input: MissionLaunchInput): Promise<{ ok: boolean; run?: RunRecord; error?: string }> => {
+      if (input.kind !== "engine" || input.target.trim()) {
+        const check = validateScanTarget(input.target, selectedEngagement);
+        if (!check.valid) {
+          return { ok: false, error: check.reason || "invalid_format" };
+        }
+      }
+
+      setIsScanning(true);
+      const normTarget = input.target.trim();
+      if (normTarget) {
+        setTargetDomain(normTarget.replace(/^https?:\/\//, "").split("/")[0]);
+      }
+
+      try {
+        if (input.kind === "go_core") {
+          addConsoleLog("INFO", "dispatcher", `Dispatching Go Core scan via Django proxy: ${normTarget}`);
+          const res = await apiJson<unknown>("/api/platform/artex/scan", {
+            method: "POST",
+            body: { target: normTarget },
+          });
+          if (!res.ok) {
+            addConsoleLog("ERROR", "go-core", `Go Core scan rejected: ${res.error}`);
+            return { ok: false, error: res.error || `HTTP ${res.status}` };
+          }
+          addConsoleLog("SUCCESS", "go-core", `Go Core scan dispatched for ${normTarget}`);
+          void refreshData();
+          return { ok: true };
+        }
+
+        addConsoleLog("INFO", "dispatcher", `Starting ${input.kind} mission for ${normTarget || input.engine}`);
+        const res = await apiJson<{ status?: string; run?: RunRecord }>("/api/platform/runs/start", {
+          method: "POST",
+          body: {
+            kind: input.kind,
+            target: normTarget,
+            engagement_id: input.engagement_id ?? (selectedEngagementId || null),
+            scope: input.scope ?? (selectedEngagement?.in_scope?.length ? selectedEngagement.in_scope : undefined),
+            out_of_scope:
+              input.out_of_scope ??
+              (selectedEngagement?.out_of_scope?.length ? selectedEngagement.out_of_scope : undefined),
+            mode: input.mode || "full",
+            prompt: input.prompt || "",
+            engine: input.engine || "claude",
+            model: input.model || "",
+            coverage: input.coverage ?? 0.85,
+            max_cycles: input.max_cycles ?? 10,
+            force_fallback: Boolean(input.force_fallback),
+            self_operate: Boolean(input.self_operate),
+            proxy: input.proxy || null,
+          },
+        });
+        if (!res.ok) {
+          addConsoleLog("ERROR", "runs", `Mission launch rejected: ${res.error}`);
+          return { ok: false, error: res.error || `HTTP ${res.status}` };
+        }
+        const run = res.data?.run;
+        if (run?.run_id) {
+          setActiveRunId(run.run_id);
+        }
+        addConsoleLog("SUCCESS", "runs", `Started ${input.kind} run ${run?.run_id || ""}`);
+        void refreshData();
+        return { ok: true, run };
+      } finally {
+        window.setTimeout(() => setIsScanning(false), 1000);
+      }
+    },
+    [selectedEngagement, selectedEngagementId, addConsoleLog, apiJson, refreshData]
   );
 
   const launchScan = useCallback(
@@ -1132,40 +1432,22 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, error: check.reason || "invalid_format" };
       }
 
-      setTargetDomain(check.normalizedTarget);
-      setIsScanning(true);
-      addConsoleLog("INFO", "dispatcher", `Dispatching autonomous scan for target: ${check.normalizedTarget}`);
-
-      try {
-        const res = await fetch(`${ARTEX_API_BASE}/scan`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target: check.normalizedTarget }),
-        });
-
-        if (res.ok) {
-          addConsoleLog(
-            "SUCCESS",
-            "go-core",
-            `Scan accepted by ARTEX-Pro Go Core (${res.status}) for ${check.normalizedTarget}`
-          );
-          void refreshData();
-          return { ok: true, via: "go_core" };
-        }
-
-        const errData = (await res.json().catch(() => null)) as { error?: string } | null;
-        const errMsg = errData?.error || `Go Core returned HTTP ${res.status}`;
-        addConsoleLog("ERROR", "go-core", `Scan dispatch rejected: ${errMsg}`);
-        return { ok: false, error: errMsg };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Go Core API unreachable";
-        addConsoleLog("ERROR", "go-core", `Failed to reach Go Core API: ${msg}`);
-        return { ok: false, error: msg };
-      } finally {
-        window.setTimeout(() => setIsScanning(false), 1200);
+      if (goCoreHealth.status === "connected") {
+        const res = await launchMission({ kind: "go_core", target: check.normalizedTarget });
+        return { ok: res.ok, error: res.error, via: "go_core" };
       }
+
+      const res = await launchMission({
+        kind: "pipeline",
+        target: check.normalizedTarget,
+        scope:
+          selectedEngagement?.in_scope?.length
+            ? selectedEngagement.in_scope
+            : [check.normalizedTarget],
+      });
+      return { ok: res.ok, error: res.error, via: "django_pipeline" };
     },
-    [selectedEngagement, addConsoleLog, refreshData]
+    [goCoreHealth.status, launchMission, selectedEngagement]
   );
 
   const decideApproval = useCallback(
@@ -1174,34 +1456,26 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       decision: "approved" | "rejected",
       note = ""
     ): Promise<{ ok: boolean; error?: string }> => {
-      try {
-        const res = await hunterFetch(`/api/platform/approvals/${encodeURIComponent(approvalId)}/decide`, {
+      const res = await apiJson<Record<string, unknown>>(
+        `/api/platform/approvals/${encodeURIComponent(approvalId)}/decide`,
+        {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ decision, note, decided_by: "artex-nextjs-operator" }),
-        });
-        const data = (await res.json().catch(() => null)) as { detail?: unknown; error?: string } | null;
-        if (!res.ok) {
-          const detail =
-            typeof data?.detail === "string"
-              ? data.detail
-              : data?.error || `HTTP ${res.status}`;
-          addConsoleLog("ERROR", "approvals", `Approval decision failed (${approvalId}): ${detail}`);
-          return { ok: false, error: detail };
+          body: { decision, note, decided_by: "artex-nextjs-operator" },
         }
-        addConsoleLog(
-          decision === "approved" ? "SUCCESS" : "WARN",
-          "approvals",
-          `Approval ${approvalId} marked ${decision}`
-        );
-        await refreshData();
-        return { ok: true };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Request failed";
-        return { ok: false, error: msg };
+      );
+      if (!res.ok) {
+        addConsoleLog("ERROR", "approvals", `Approval decision failed (${approvalId}): ${res.error}`);
+        return { ok: false, error: res.error };
       }
+      addConsoleLog(
+        decision === "approved" ? "SUCCESS" : "WARN",
+        "approvals",
+        `Approval ${approvalId} marked ${decision}`
+      );
+      await refreshData();
+      return { ok: true };
     },
-    [hunterFetch, addConsoleLog, refreshData]
+    [apiJson, addConsoleLog, refreshData]
   );
 
   const controlRun = useCallback(
@@ -1209,21 +1483,26 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       runId: string,
       action: "pause" | "resume" | "stop"
     ): Promise<{ ok: boolean; error?: string }> => {
-      try {
-        const res = await hunterFetch(`/api/platform/runs/${encodeURIComponent(runId)}/${action}`, {
-          method: "POST",
-        });
-        if (!res.ok) {
-          return { ok: false, error: `HTTP ${res.status}` };
-        }
-        addConsoleLog("INFO", "runs", `Run ${runId} -> ${action}`);
-        await refreshData();
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : "Failed" };
+      const res = await apiJson<Record<string, unknown>>(
+        `/api/platform/runs/${encodeURIComponent(runId)}/${action}`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        return { ok: false, error: res.error || `HTTP ${res.status}` };
       }
+      addConsoleLog("INFO", "runs", `Run ${runId} -> ${action}`);
+      await refreshData();
+      return { ok: true };
     },
-    [hunterFetch, addConsoleLog, refreshData]
+    [apiJson, addConsoleLog, refreshData]
+  );
+
+  const sendToRepeater = useCallback(
+    (draft: RepeaterDraft) => {
+      setRepeaterDraft(draft);
+      router.push("/studio?tab=repeater");
+    },
+    [router]
   );
 
   const navigateToRef = useCallback(
@@ -1232,35 +1511,56 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       if (kind === "asset") {
         const match =
           assets.find((a) => a.id === ref.id) ||
-          assets.find((a) => ref.label && ref.label.includes(a.value));
+          assets.find((a) => ref.label && a.value && a.value.includes(ref.label));
         if (match) {
           setInspectedAsset(match);
-          return true;
         }
-        return false;
+        router.push("/surface");
+        return true;
       }
       if (kind === "finding") {
         const match =
           findings.find((f) => f.id === ref.id) ||
-          findings.find((f) => ref.label && ref.label.includes(f.title));
+          findings.find((f) => ref.label && f.title && f.title.includes(ref.label));
         if (match) {
           setInspectedFinding(match);
-          return true;
         }
-        return false;
+        router.push("/findings");
+        return true;
       }
-      if (kind === "approval") {
-        const el = document.getElementById("approvals-panel");
-        el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        return Boolean(el);
+      if (kind === "approval" || kind === "run") {
+        router.push("/");
+        if (kind === "approval") {
+          window.setTimeout(() => {
+            document.getElementById("approvals-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }, 150);
+        }
+        return true;
       }
       if (kind === "engagement" && ref.id) {
         void selectEngagement(ref.id);
+        router.push("/operations");
+        return true;
+      }
+      if (kind === "lead") {
+        router.push("/operations");
+        return true;
+      }
+      if (kind === "skill" || kind === "tool") {
+        router.push("/arsenal");
+        return true;
+      }
+      if (kind === "conversation") {
+        setCopilotOpen(true);
+        return true;
+      }
+      if (ref.section) {
+        router.push(sectionToRoute(ref.section));
         return true;
       }
       return false;
     },
-    [assets, findings, selectEngagement]
+    [assets, findings, router, selectEngagement]
   );
 
   const pendingApprovalsCount = useMemo(
@@ -1274,9 +1574,11 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       selectedEngagementId,
       selectedEngagement,
       selectEngagement,
+      createEngagement,
       targetDomain,
       setTargetDomain,
       stats,
+      overviewCounts,
       assets,
       findings,
       tasks,
@@ -1296,6 +1598,7 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       clearConsoleLogs,
       refreshNow: refreshData,
       launchScan,
+      launchMission,
       decideApproval,
       controlRun,
       inspectedAsset,
@@ -1304,16 +1607,24 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       setInspectedFinding,
       copilotOpen,
       setCopilotOpen,
+      commandPaletteOpen,
+      setCommandPaletteOpen,
+      repeaterDraft,
+      setRepeaterDraft,
+      sendToRepeater,
       navigateToRef,
       hunterFetch,
+      apiJson,
     }),
     [
       engagements,
       selectedEngagementId,
       selectedEngagement,
       selectEngagement,
+      createEngagement,
       targetDomain,
       stats,
+      overviewCounts,
       assets,
       findings,
       tasks,
@@ -1332,13 +1643,18 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
       clearConsoleLogs,
       refreshData,
       launchScan,
+      launchMission,
       decideApproval,
       controlRun,
       inspectedAsset,
       inspectedFinding,
       copilotOpen,
+      commandPaletteOpen,
+      repeaterDraft,
+      sendToRepeater,
       navigateToRef,
       hunterFetch,
+      apiJson,
     ]
   );
 

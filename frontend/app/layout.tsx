@@ -17,11 +17,13 @@ import "@xyflow/react/dist/style.css";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
 import { I18nProvider } from "@/lib/i18n";
+import { PlatformProvider } from "@/lib/platform-context";
+import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "ARTEX-Pro | Unified Cyber Command Center",
   description:
-    "Enterprise Autonomous Multi-Agent Security Platform (Go Core + PostgreSQL + FastAPI Hub + Next.js)",
+    "Autonomous Multi-Agent Security Platform (Go Core + PostgreSQL + Django ASGI Hub + Next.js 15)",
 };
 
 export default function RootLayout({
@@ -33,7 +35,11 @@ export default function RootLayout({
     <html lang="en" dir="ltr" data-theme="dark" suppressHydrationWarning>
       <body className="min-h-screen bg-canvas text-ink-primary antialiased">
         <ThemeProvider>
-          <I18nProvider>{children}</I18nProvider>
+          <I18nProvider>
+            <PlatformProvider>
+              <AppShell>{children}</AppShell>
+            </PlatformProvider>
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -99,6 +99,7 @@ export default function CopilotDrawer() {
   const {
     copilotOpen,
     setCopilotOpen,
+    commandPaletteOpen,
     selectedEngagementId,
     runs,
     activeRunId,
@@ -371,13 +372,13 @@ export default function CopilotDrawer() {
   useEffect(() => {
     if (!copilotOpen) return;
     const onKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
+      if (ev.key === "Escape" && !commandPaletteOpen) {
         setCopilotOpen(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [copilotOpen, setCopilotOpen]);
+  }, [copilotOpen, commandPaletteOpen, setCopilotOpen]);
 
   const handlePointerResize = (e: React.PointerEvent<HTMLDivElement>) => {
     if (fullWidth) return;

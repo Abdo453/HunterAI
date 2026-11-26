@@ -44,18 +44,34 @@ export function safeHref(url: unknown, fallback = "#"): string {
 }
 
 function renderInlineMarkdown(text: string): string {
-  let out = escapeHtml(text);
-  out = out.replace(/`([^`\n]+)`/g, '<code class="ltr-isolate">$1</code>');
-  out = out.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
-  out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, label: string, href: string) => {
+  const placeholders: string[] = [];
+  const stash = (html: string): string => {
+    const token = `\u0000TOK${placeholders.length}\u0000`;
+    placeholders.push(html);
+    return token;
+  };
+
+  // Extract inline code first so markdown syntax inside backticks is preserved literally.
+  let staged = text.replace(/`([^`\n]+)`/g, (_m, code: string) =>
+    stash(`<code class="ltr-isolate">${escapeHtml(code)}</code>`)
+  );
+
+  // Extract markdown links before escaping so query strings (&) are escaped only once.
+  staged = staged.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, href: string) => {
     const safeUrl = safeHref(href, "#");
     if (safeUrl === "#") {
-      return escapeHtml(label);
+      return stash(escapeHtml(label));
     }
-    return `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    return stash(
+      `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
+    );
   });
-  return out;
+
+  let out = escapeHtml(staged);
+  out = out.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+
+  return out.replace(/\u0000TOK(\d+)\u0000/g, (_m, idx: string) => placeholders[Number(idx)] ?? "");
 }
 
 /**
