@@ -24,6 +24,117 @@ from hunter_backend.asgi import application  # noqa: E402
 from hunter_backend.runtime import shutdown_runtime, startup_runtime  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _isolate_smoke_platform_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Isolate PlatformStore DB, data paths, and runtime globals away from live repo state."""
+    import core.platform_store as ps
+    from core.cost_budget import GLOBAL_COST_CONTROLLER
+    from core.run_control import GLOBAL_RUN_CONTROLLER
+    import hunter_backend.apps.arsenal_api as arsenal_api
+    import hunter_backend.apps.copilot_api as copilot_api
+    import hunter_backend.apps.operations_api as ops_api
+    import hunter_backend.runtime as rt
+
+    data_dir = tmp_path / "data"
+    reports_dir = data_dir / "reports"
+    snapshots_dir = data_dir / "snapshots"
+    runs_dir = data_dir / "runs"
+    tool_outputs_dir = data_dir / "tool_outputs"
+    att_dir = tmp_path / "copilot_attachments"
+    db_file = data_dir / "platform_state.sqlite3"
+
+    for d in (
+        data_dir,
+        reports_dir,
+        snapshots_dir,
+        runs_dir,
+        tool_outputs_dir,
+        att_dir,
+        data_dir / "root_controller",
+    ):
+        d.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("HUNTER_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("HUNTER_PLATFORM_DB_PATH", str(db_file))
+    monkeypatch.setenv("PLATFORM_DB_PATH", str(db_file))
+    monkeypatch.setenv("HUNTER_COPILOT_ATTACHMENTS_DIR", str(att_dir))
+
+    monkeypatch.setattr("hunter_backend.secrets_util.BASE_DIR", tmp_path)
+    monkeypatch.setattr(rt, "DATA_DIR", data_dir)
+    monkeypatch.setattr(rt, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(rt, "SNAPSHOTS_DIR", snapshots_dir)
+    monkeypatch.setattr(rt, "RUNS_DIR", runs_dir)
+    monkeypatch.setattr(rt, "TARGETS_FILE", data_dir / "targets.json")
+    monkeypatch.setattr(rt, "CONTROL_SETTINGS_FILE", data_dir / "control_settings.json")
+    monkeypatch.setattr(rt, "CHECKLIST_STATE_FILE", data_dir / "checklist_state.json")
+    monkeypatch.setattr(rt, "RADAR_STATE_FILE", data_dir / "radar" / "latest_state.json")
+
+    monkeypatch.setattr(arsenal_api, "DATA_DIR", data_dir)
+    monkeypatch.setattr(arsenal_api, "TARGETS_FILE", data_dir / "targets.json")
+    monkeypatch.setattr(arsenal_api, "CONTROL_SETTINGS_FILE", data_dir / "control_settings.json")
+    monkeypatch.setattr(arsenal_api, "CHECKLIST_STATE_FILE", data_dir / "checklist_state.json")
+    monkeypatch.setattr(arsenal_api, "RADAR_STATE_FILE", data_dir / "radar" / "latest_state.json")
+    monkeypatch.setattr(arsenal_api, "GRANT_PATH", data_dir / "root_controller" / "grant.json")
+
+    monkeypatch.setattr(ops_api, "DATA_DIR", data_dir)
+    monkeypatch.setattr(ops_api, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(ops_api, "SNAPSHOTS_DIR", snapshots_dir)
+    monkeypatch.setattr(ops_api, "RUNS_DIR", runs_dir)
+    monkeypatch.setattr(ops_api, "TOOL_OUTPUTS_DIR", tool_outputs_dir)
+
+    monkeypatch.setattr(copilot_api, "DATA_DIR", data_dir)
+    monkeypatch.setattr(copilot_api, "ATTACHMENTS_DIR", att_dir)
+
+    prev_store = ps._GLOBAL_PLATFORM_STORE
+    prev_wired = rt._WIRED
+    prev_ctrl_hook = GLOBAL_RUN_CONTROLLER.on_state_change
+    prev_runs = dict(GLOBAL_RUN_CONTROLLER._runs)
+    prev_budget = GLOBAL_COST_CONTROLLER.budget
+    prev_scope_in = list(rt._SCOPE_STATE["in_scope"])
+    prev_scope_out = list(rt._SCOPE_STATE["out_of_scope"])
+    prev_pipelines = dict(rt._active_pipelines)
+    prev_mission_tasks = dict(rt._active_mission_tasks)
+    prev_go_client = rt._GO_CLIENT
+    prev_main_loop = rt.MAIN_LOOP
+    prev_burp_worker = rt._BURP_WORKER_TASK
+
+    ps._GLOBAL_PLATFORM_STORE = None
+    rt.EVENT_BUS._history.clear()
+    rt._WIRED = False
+    GLOBAL_RUN_CONTROLLER.on_state_change = None
+    GLOBAL_RUN_CONTROLLER._runs.clear()
+    rt._SCOPE_STATE["in_scope"] = []
+    rt._SCOPE_STATE["out_of_scope"] = []
+    rt._active_pipelines.clear()
+    rt._active_mission_tasks.clear()
+
+    try:
+        yield db_file
+    finally:
+        try:
+            GLOBAL_RUN_CONTROLLER.stop_all()
+        except Exception:
+            pass
+        GLOBAL_RUN_CONTROLLER._runs.clear()
+        GLOBAL_RUN_CONTROLLER._runs.update(prev_runs)
+        GLOBAL_RUN_CONTROLLER.on_state_change = prev_ctrl_hook
+        GLOBAL_COST_CONTROLLER.budget = prev_budget
+        rt._WIRED = prev_wired
+        rt._SCOPE_STATE["in_scope"] = prev_scope_in
+        rt._SCOPE_STATE["out_of_scope"] = prev_scope_out
+        rt._active_pipelines.clear()
+        rt._active_pipelines.update(prev_pipelines)
+        rt._active_mission_tasks.clear()
+        rt._active_mission_tasks.update(prev_mission_tasks)
+        rt.MAIN_LOOP = prev_main_loop
+        rt._BURP_WORKER_TASK = prev_burp_worker
+        rt._GO_CLIENT = prev_go_client
+        if ps._GLOBAL_PLATFORM_STORE is not None:
+            ps._GLOBAL_PLATFORM_STORE.close()
+        ps._GLOBAL_PLATFORM_STORE = prev_store
+        rt.EVENT_BUS._history.clear()
+
+
 def _make_asgi_client() -> httpx.AsyncClient:
     transport = httpx.ASGITransport(app=application)
     return httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000")
@@ -529,3 +640,55 @@ def test_pentest_cli_lab_flags_and_env_application(monkeypatch: pytest.MonkeyPat
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = prev
+
+
+@pytest.mark.asyncio
+async def test_smoke_db_isolation_and_engagement_deduplication(tmp_path: Path) -> None:
+    """Verify smoke tests hit tmp_path DB and upsert_engagement deduplicates omitted engagement_id."""
+    import core.platform_store as ps
+
+    store = ps.get_platform_store()
+    assert Path(store.db_path).resolve() != ps.DEFAULT_DB_PATH.resolve()
+    assert tmp_path.resolve() in Path(store.db_path).resolve().parents
+
+    first = store.upsert_engagement(
+        target="https://Smoke-Dedup.example/",
+        name="Smoke   Target",
+        in_scope=["smoke-dedup.example"],
+        source="local",
+        metadata={"pass": 1},
+    )
+    second = store.upsert_engagement(
+        target="https://smoke-dedup.example",
+        name="smoke target",
+        in_scope=["smoke-dedup.example", "*.smoke-dedup.example"],
+        source="LOCAL",
+        metadata={"pass": 2},
+    )
+    assert second["engagement_id"] == first["engagement_id"]
+    assert second["in_scope"] == ["smoke-dedup.example", "*.smoke-dedup.example"]
+    assert second["metadata"] == {"pass": 2}
+
+    # Different source or name stays distinct
+    other_source = store.upsert_engagement(
+        target="https://smoke-dedup.example",
+        name="Smoke Target",
+        source="pipeline",
+    )
+    assert other_source["engagement_id"] != first["engagement_id"]
+
+    async with _make_asgi_client() as client:
+        r1 = await client.post(
+            "/api/platform/engagements",
+            json={"target": "juice-shop.example", "in_scope": ["juice-shop.example"]},
+        )
+        r2 = await client.post(
+            "/api/platform/engagements",
+            json={"target": "juice-shop.example/", "in_scope": ["juice-shop.example"]},
+        )
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+        assert r2.json()["engagement"]["engagement_id"] == r1.json()["engagement"]["engagement_id"]
+        assert len(
+            [e for e in store.list_engagements(limit=50) if "juice-shop.example" in e["target"]]
+        ) == 1

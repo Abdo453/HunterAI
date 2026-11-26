@@ -137,8 +137,16 @@ class PlatformStore:
     """Thread-safe SQLite WAL persistence layer for HunterAI Platform Hub & Copilot."""
 
     def __init__(self, db_path: Optional[str | Path] = None):
-        env_path = os.getenv("HUNTER_PLATFORM_DB_PATH")
-        resolved = Path(db_path) if db_path is not None else (Path(env_path) if env_path else DEFAULT_DB_PATH)
+        env_path = (os.getenv("HUNTER_PLATFORM_DB_PATH") or os.getenv("PLATFORM_DB_PATH") or "").strip()
+        data_dir = (os.getenv("HUNTER_DATA_DIR") or "").strip()
+        if db_path is not None:
+            resolved = Path(db_path)
+        elif env_path:
+            resolved = Path(env_path)
+        elif data_dir:
+            resolved = Path(data_dir) / "platform_state.sqlite3"
+        else:
+            resolved = DEFAULT_DB_PATH
         self.db_path = resolved
         if str(self.db_path) != ":memory:":
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -402,6 +410,20 @@ class PlatformStore:
             "updated_at": row["updated_at"],
         }
 
+    @staticmethod
+    def _normalize_engagement_key(
+        target: str,
+        name: str,
+        source: str,
+    ) -> Tuple[str, str, str]:
+        """Return canonical normalized (target, name, source) key for engagement deduplication."""
+        clean_target = (target or "").strip()
+        norm_target = clean_target.rstrip("/").lower() or clean_target.lower()
+        collapsed_name = " ".join((name or "").strip().split())
+        norm_name = collapsed_name.rstrip("/").lower() or collapsed_name.lower()
+        norm_source = (source or "local").strip().lower() or "local"
+        return norm_target, norm_name, norm_source
+
     def upsert_engagement(
         self,
         *,
@@ -415,15 +437,36 @@ class PlatformStore:
         engagement_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = time.time()
-        eid = engagement_id or new_id("eng")
-        clean_target = redact_text(target.strip())
-        clean_name = redact_text((name or clean_target or eid).strip())
+        clean_target = redact_text((target or "").strip())
+        clean_source = (source or "local").strip() or "local"
+        clean_name = redact_text((name or clean_target).strip())
         scope_list = [str(s).strip() for s in (in_scope if in_scope is not None else ([clean_target] if clean_target else [])) if str(s).strip()]
         oos_list = [str(s).strip() for s in (out_of_scope or []) if str(s).strip()]
         with self._lock:
-            existing = self._conn.execute(
-                "SELECT * FROM engagements WHERE engagement_id = ?", (eid,)
-            ).fetchone()
+            existing = None
+            if engagement_id:
+                eid = engagement_id
+                existing = self._conn.execute(
+                    "SELECT * FROM engagements WHERE engagement_id = ?", (eid,)
+                ).fetchone()
+            else:
+                target_key = self._normalize_engagement_key(clean_target, clean_name, clean_source)
+                candidates = self._conn.execute(
+                    "SELECT * FROM engagements ORDER BY updated_at DESC"
+                ).fetchall()
+                for cand in candidates:
+                    if self._normalize_engagement_key(
+                        cand["target"] or "",
+                        cand["name"] or "",
+                        cand["source"] or "",
+                    ) == target_key:
+                        existing = cand
+                        eid = cand["engagement_id"]
+                        break
+                if existing is None:
+                    eid = new_id("eng")
+            if not clean_name:
+                clean_name = eid
             if existing:
                 old_meta = _json_loads(existing["metadata_json"], {})
                 if metadata:
@@ -440,7 +483,7 @@ class PlatformStore:
                         _json_dumps(scope_list),
                         _json_dumps(oos_list),
                         status,
-                        source,
+                        clean_source,
                         _json_dumps(old_meta),
                         now,
                         eid,
@@ -459,7 +502,7 @@ class PlatformStore:
                         _json_dumps(scope_list),
                         _json_dumps(oos_list),
                         status,
-                        source,
+                        clean_source,
                         _json_dumps(metadata or {}),
                         now,
                         now,

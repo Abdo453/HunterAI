@@ -146,13 +146,14 @@ def test_01_layout_theme_bilingual_and_responsive_matrix(
     diag.assert_clean()
 
 
-def _post_json_with_csrf(
+def _request_json_with_csrf(
     page: Page,
     api_base: str,
+    method: str,
     path: str,
     payload: dict[str, object],
 ):
-    """Issue a POST JSON request with a valid Django CSRF cookie & header."""
+    """Issue a mutating JSON request with a valid Django CSRF cookie & header."""
     csrf_resp = page.request.get(f"{api_base}/api/csrf")
     csrf_token = ""
     if csrf_resp.ok:
@@ -160,11 +161,32 @@ def _post_json_with_csrf(
     headers = {"Content-Type": "application/json"}
     if csrf_token:
         headers["X-CSRFToken"] = csrf_token
-    return page.request.post(
+    return page.request.fetch(
         f"{api_base}{path}",
+        method=method,
         data=json.dumps(payload),
         headers=headers,
     )
+
+
+def _post_json_with_csrf(
+    page: Page,
+    api_base: str,
+    path: str,
+    payload: dict[str, object],
+):
+    """Issue a POST JSON request with a valid Django CSRF cookie & header."""
+    return _request_json_with_csrf(page, api_base, "POST", path, payload)
+
+
+def _put_json_with_csrf(
+    page: Page,
+    api_base: str,
+    path: str,
+    payload: dict[str, object],
+):
+    """Issue a PUT JSON request with a valid Django CSRF cookie & header."""
+    return _request_json_with_csrf(page, api_base, "PUT", path, payload)
 
 
 def test_02_target_scopeguard_run_launch_and_live_console(
@@ -1058,5 +1080,113 @@ def test_07_example_test_sites_presets_and_launch(
         .first
     )
     workspace_card.wait_for(state="visible", timeout=10000)
+
+    diag.assert_clean()
+
+
+def _wait_polling_cycle_settled(page: Page, wait_ms: int = 4600) -> None:
+    """Wait past the 4s polling interval and assert at least one /api/platform/overview poll ran."""
+    with page.expect_response(
+        lambda r: "/api/platform/overview" in r.url and r.request.method == "GET",
+        timeout=12000,
+    ):
+        page.wait_for_timeout(wait_ms)
+
+
+def test_08_no_target_snapback_on_polling_and_all_workspaces(
+    e2e_stack: E2EStack,
+    e2e_page: tuple[Page, PageDiagnostics],
+) -> None:
+    """Verify All Workspaces selection and user-entered/preset targets never snap back across 4s polls or SSE."""
+    page, diag = e2e_page
+
+    eng_resp = _post_json_with_csrf(
+        page,
+        e2e_stack.api_base,
+        "/api/platform/engagements",
+        {
+            "name": "SnapbackBaselineTarget",
+            "target": "old-workspace.example",
+            "in_scope": ["old-workspace.example"],
+            "set_active": True,
+        },
+    )
+    assert eng_resp.status in (200, 201), eng_resp.text()
+    snap_eng_id = eng_resp.json()["engagement"]["engagement_id"]
+
+    _wait_ui_ready_with_overview(page, f"{e2e_stack.ui_base}/")
+
+    eng_select = page.locator("#engagement-selector")
+    nav_input = page.locator("#scan-target-input")
+    overview_target = page.locator("#overview-target")
+
+    page.wait_for_function(
+        """(eid) => {
+            const sel = document.querySelector('#engagement-selector');
+            const inp = document.querySelector('#scan-target-input');
+            return Boolean(sel && sel.value === eid && inp && inp.value === 'old-workspace.example');
+        }""",
+        arg=snap_eng_id,
+        timeout=15000,
+    )
+    assert eng_select.input_value() == snap_eng_id
+    assert nav_input.input_value() == "old-workspace.example"
+
+    # 1. Selecting "All Workspaces" ("") persists active_engagement_id=null and stays "" across > 4.5s polling
+    with page.expect_response(
+        lambda r: "/api/platform/context" in r.url and r.request.method == "PUT",
+        timeout=10000,
+    ) as clear_ctx_resp:
+        eng_select.select_option("")
+    assert clear_ctx_resp.value.status == 200
+    assert clear_ctx_resp.value.json()["context"]["active_engagement_id"] is None
+
+    _wait_polling_cycle_settled(page, 4600)
+    assert eng_select.input_value() == ""
+    ctx_after_clear = page.request.get(f"{e2e_stack.api_base}/api/platform/context").json()
+    assert ctx_after_clear["context"]["active_engagement_id"] is None
+
+    # 2. Selecting SnapbackBaselineTarget populates old-workspace.example; typing a custom target stays across poll + SSE
+    with page.expect_response(
+        lambda r: "/api/platform/context" in r.url and r.request.method == "PUT",
+        timeout=10000,
+    ) as set_ctx_resp:
+        eng_select.select_option(snap_eng_id)
+    assert set_ctx_resp.value.status == 200
+    assert set_ctx_resp.value.json()["context"]["active_engagement_id"] == snap_eng_id
+
+    page.wait_for_function(
+        "() => (document.querySelector('#scan-target-input')?.value || '') === 'old-workspace.example'",
+        timeout=8000,
+    )
+
+    nav_input.fill("http://testphp.vulnweb.com")
+    overview_target.fill("http://testphp.vulnweb.com")
+
+    # Trigger an SSE CONTEXT_UPDATED refresh while waiting > 4.5s across the 4s polling interval
+    sse_ctx_resp = _put_json_with_csrf(
+        page,
+        e2e_stack.api_base,
+        "/api/platform/context",
+        {"active_engagement_id": snap_eng_id, "extra": {"snapback_sse_probe": True}},
+    )
+    assert sse_ctx_resp.status == 200
+
+    _wait_polling_cycle_settled(page, 4600)
+    assert nav_input.input_value() == "http://testphp.vulnweb.com"
+    assert overview_target.input_value() == "http://testphp.vulnweb.com"
+    assert eng_select.input_value() == snap_eng_id
+
+    # 3. Picking a Navbar preset while an active engagement is selected also holds across > 4.5s polling
+    presets_btn = page.locator('[data-testid="navbar-target-presets-btn"]')
+    popover = page.locator("#navbar-target-presets-popover")
+    presets_btn.click()
+    popover.wait_for(state="visible", timeout=5000)
+    popover.locator("button", has_text="http://127.0.0.1:3001").click()
+    popover.wait_for(state="hidden", timeout=5000)
+    assert nav_input.input_value() == "http://127.0.0.1:3001"
+
+    _wait_polling_cycle_settled(page, 4600)
+    assert nav_input.input_value() == "http://127.0.0.1:3001"
 
     diag.assert_clean()
