@@ -26,6 +26,7 @@ import stat
 import tempfile
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import parse_qs, urlparse
@@ -343,8 +344,139 @@ class CaptureStore:
         unique: Dict[str, CapturedTransaction] = {}
         for transaction in self.transactions.values():
             unique[transaction.tx_id] = transaction
+        if not self._session_only:
+            req_dir = self.root_dir / "requests"
+            if req_dir.is_dir():
+                for req_file in sorted(req_dir.glob("*.json"), key=lambda p: p.stat().st_mtime):
+                    tid = req_file.stem
+                    if tid not in unique:
+                        loaded = self.get_transaction(tid)
+                        if loaded is not None:
+                            unique[loaded.tx_id] = loaded
         transactions = list(unique.values())
         return transactions[-limit:] if limit is not None else transactions
+
+    @staticmethod
+    def format_transaction_row(
+        tx: CapturedTransaction,
+        *,
+        redact: bool = True,
+        include_bodies: bool = False,
+    ) -> Dict[str, Any]:
+        """Convert a CapturedTransaction into a structured HTTP table row.
+
+        Always includes the canonical keys:
+        ``id, time, method, host, path, status, length, request_headers, response_status``
+        while preserving SecretSanitizer redaction.
+        """
+        parsed = urlparse(tx.url or "")
+        host = tx.target_host or (parsed.hostname or "")
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        ts_val = float(tx.timestamp or 0.0)
+        iso_time = datetime.fromtimestamp(ts_val, tz=timezone.utc).isoformat() if ts_val > 0 else ""
+
+        req_headers = dict(tx.req_headers or {})
+        resp_headers = dict(tx.resp_headers or {})
+        if redact:
+            req_headers = SecretSanitizer.sanitize_data(req_headers)
+            resp_headers = SecretSanitizer.sanitize_data(resp_headers)
+
+        status_int = int(tx.status_code or 0)
+        row: Dict[str, Any] = {
+            "id": tx.tx_id,
+            "tx_id": tx.tx_id,
+            "time": iso_time,
+            "timestamp": ts_val,
+            "method": (tx.method or "GET").upper(),
+            "host": host,
+            "target_host": host,
+            "path": path,
+            "url": tx.url or "",
+            "status": status_int,
+            "response_status": status_int,
+            "status_code": status_int,
+            "length": len(tx.resp_body or ""),
+            "request_headers": req_headers,
+            "response_headers": resp_headers,
+            "tool_source": tx.tool_source,
+            "content_type": tx.content_type,
+        }
+        if include_bodies:
+            req_body = str(tx.req_body or "")
+            resp_body = str(tx.resp_body or "")
+            if redact:
+                req_body = SecretSanitizer.sanitize_text(req_body)
+                resp_body = SecretSanitizer.sanitize_text(resp_body)
+            row["req_headers"] = req_headers
+            row["resp_headers"] = resp_headers
+            row["req_body"] = req_body
+            row["resp_body"] = resp_body
+        return row
+
+    def query_structured_transactions(
+        self,
+        *,
+        limit: int = 100,
+        host: Optional[str] = None,
+        method: Optional[str] = None,
+        redact: bool = True,
+        include_bodies: bool = False,
+        newest_first: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Query structured HTTP transaction rows for `/api/burp/traffic` and live inspection."""
+        all_tx = self.list_transactions(limit=None)
+        host_filter = (host or "").strip().lower()
+        if host_filter and "://" in host_filter:
+            host_filter = (urlparse(host_filter).hostname or host_filter).lower()
+        method_filter = (method or "").strip().upper()
+
+        rows: List[Dict[str, Any]] = []
+        for tx in all_tx:
+            row = self.format_transaction_row(tx, redact=redact, include_bodies=include_bodies)
+            if host_filter:
+                row_host = str(row.get("host") or "").lower()
+                row_url = str(row.get("url") or "").lower()
+                if host_filter not in row_host and host_filter not in row_url:
+                    continue
+            if method_filter and row.get("method") != method_filter:
+                continue
+            rows.append(row)
+
+        if newest_first:
+            rows.reverse()
+            return rows[: max(1, int(limit))]
+        return rows[-max(1, int(limit)) :]
+
+    def get_structured_transaction(
+        self,
+        request_id: str,
+        *,
+        redact: bool = True,
+        include_bodies: bool = True,
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieve a single transaction formatted as a structured row."""
+        tx = self.get_transaction(request_id)
+        if tx is None:
+            return None
+        return self.format_transaction_row(tx, redact=redact, include_bodies=include_bodies)
+
+    def query_live_inspection_rows(
+        self,
+        *,
+        target: Optional[str] = None,
+        limit: int = 100,
+        redact: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Return structured rows with request/response bodies for `enhanced_burp_inspect_view(source='live')`."""
+        return self.query_structured_transactions(
+            limit=limit,
+            host=target,
+            redact=redact,
+            include_bodies=True,
+            newest_first=True,
+        )
 
     def get_by_trace_id(self, trace_id: str) -> List[CapturedTransaction]:
         """Returns all transactions associated with a trace_id"""

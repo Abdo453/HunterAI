@@ -2191,14 +2191,27 @@ class AutonomousBrain:
 
         # ── PHASE 0.3: CODE INTELLIGENCE (Client-side Page & JS Analysis) ────
         code_intel_res: Dict[str, Any] = {}
+        fetched_scripts: Dict[str, str] = {}
+        code_intel_hypotheses: List[Dict[str, Any]] = []
+        self._code_intel_hypotheses = code_intel_hypotheses
         spa_detected = False
         try:
             target_host_sanitized = (urlparse(target).hostname or "target").replace(":", "_").replace(".", "_")
             code_intel_agent = CodeIntelligenceAgent(output_dir=f"data/scans/{target_host_sanitized}")
+            fetched_scripts = await self._fetch_code_intel_scripts(js_urls, target, proxy=proxy)
+
+            async def _fetch_in_scope_source_map(map_url: str) -> Optional[str]:
+                if not map_url or not self._is_in_scope(map_url, target):
+                    return None
+                content = await self._fetch_js(map_url, proxy)
+                return content or None
+
             code_intel_res = await code_intel_agent.analyze_page(
                 target_url=target,
                 raw_html=html,
-                headers=headers
+                headers=headers,
+                fetched_scripts=fetched_scripts,
+                source_map_fetcher=_fetch_in_scope_source_map,
             )
             self._last_code_intel = code_intel_res
             fw = code_intel_res.get("framework", {})
@@ -2227,13 +2240,28 @@ class AutonomousBrain:
                                     attributes={"params": ep.get("parameters", [])}
                                 )
                             )
+
+            # Consume CodeIntelligence secrets & source_sink_flows as CANDIDATE hypotheses routed to EvidenceCourt
+            code_intel_hypotheses = self._ingest_code_intel_hypotheses(target, code_intel_res)
+            self._code_intel_hypotheses = code_intel_hypotheses
+            if code_intel_hypotheses:
+                js_findings.extend(code_intel_hypotheses)
+
             m = code_intel_res.get("manifest", {})
             await self._log(
-                f"[CODE_INTEL] Analyzed {m.get('js_analyzed', 0)} scripts | "
+                f"[CODE_INTEL] Analyzed {m.get('js_analyzed', 0)} scripts "
+                f"(fetched={len(fetched_scripts)}, sourcemaps={len(code_intel_res.get('source_maps_resolved', []))}) | "
                 f"Discovered {m.get('endpoints_discovered', 0)} API endpoints | "
-                f"Secrets validated: {m.get('secrets_discovered', 0)}"
+                f"Secrets validated: {m.get('secrets_discovered', 0)} | "
+                f"Candidate hypotheses routed to EvidenceCourt: {len(code_intel_hypotheses)}"
             )
-            self._audit("code_intelligence_done", manifest=m)
+            self._audit(
+                "code_intelligence_done",
+                manifest=m,
+                fetched_scripts_count=len(fetched_scripts),
+                source_maps_resolved=len(code_intel_res.get("source_maps_resolved", [])),
+                candidate_hypotheses_count=len(code_intel_hypotheses),
+            )
 
             # Bidirectional Sensor Feedback: direct active Browser Sensor to explore top newly discovered JS API routes
             if hasattr(self, "browser_explorer") and self.browser_explorer:
@@ -2724,7 +2752,7 @@ class AutonomousBrain:
             js_tasks = []
             for js_url in js_urls:
                 async def _analyze_js(u=js_url):
-                    content = await self._fetch_js(u, proxy)
+                    content = fetched_scripts.get(u) or await self._fetch_js(u, proxy)
                     if not content:
                         return None
                     result = await self.artifact.analyze_js_file(content, u)
@@ -3056,6 +3084,7 @@ class AutonomousBrain:
             "audit_log": self._audit_log,
             "objective_result": objective_result,   # Finding ≠ Completion tracking
             "code_intelligence": getattr(self, "_last_code_intel", code_intel_res),
+            "code_intel_hypotheses": getattr(self, "_code_intel_hypotheses", []),
             "browser_exploration": getattr(self, "_last_browser_exploration", {}),
             "exploration_coverage": getattr(self, "_last_browser_exploration", {}).get("coverage", {}),
             "exploration_memory": getattr(self, "_last_browser_exploration", {}).get("memory", {}),
@@ -3068,6 +3097,186 @@ class AutonomousBrain:
                 "global_risk_budget": self.eig_planner.global_risk_budget,
             } if self.eig_planner else None,
         }
+
+    async def _fetch_code_intel_scripts(
+        self,
+        js_urls: List[str],
+        target: str,
+        *,
+        proxy: Optional[str] = None,
+        max_scripts: int = 10,
+    ) -> Dict[str, str]:
+        """Concurrently fetch in-scope external JavaScript bundles for CodeIntelligenceAgent."""
+        in_scope_urls = [u for u in (js_urls or []) if u and self._is_in_scope(u, target)][:max_scripts]
+        if not in_scope_urls:
+            return {}
+
+        async def _load_one(url: str) -> Tuple[str, str]:
+            try:
+                content = await self._fetch_js(url, proxy)
+                return url, content or ""
+            except Exception:
+                return url, ""
+
+        results = await asyncio.gather(*[_load_one(u) for u in in_scope_urls], return_exceptions=True)
+        fetched: Dict[str, str] = {}
+        for item in results:
+            if isinstance(item, tuple) and len(item) == 2 and item[1]:
+                fetched[item[0]] = item[1]
+        return fetched
+
+    def _ingest_code_intel_hypotheses(
+        self,
+        target: str,
+        code_intel_res: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Route CodeIntelligenceAgent secrets & source_sink_flows to EvidenceCourt as CANDIDATE hypotheses.
+
+        Never auto-confirms static JS findings; every signal is adjudicated by EvidenceCourt
+        with ``status="CANDIDATE"`` so Phase 3 epistemic boundaries remain strictly enforced.
+        """
+        hypotheses: List[Dict[str, Any]] = []
+        if not isinstance(code_intel_res, dict):
+            return hypotheses
+
+        # 1. Client-side secret candidates (excluding REJECTED placeholders)
+        for sec in code_intel_res.get("secrets", []) or []:
+            if not isinstance(sec, dict):
+                continue
+            if str(sec.get("status", "")).upper() == "REJECTED":
+                continue
+            secret_type = str(sec.get("secret_type") or "secret_exposure")
+            source_file = str(sec.get("source_file") or target)
+            line_no = int(sec.get("line_number") or 0)
+            redacted = str(sec.get("redacted_preview") or "***")
+            claim = {
+                "title": f"Client-side {secret_type} candidate in {source_file}:{line_no}",
+                "source_file": source_file,
+                "line_number": line_no,
+                "redacted_preview": redacted,
+                "secret_type": secret_type,
+                "entropy": sec.get("entropy", 0.0),
+                "validation_notes": sec.get("validation_notes", ""),
+                "provenance": "code_intelligence",
+            }
+            judgment = EvidenceCourt.adjudicate(
+                target_url=target,
+                parameter=f"{source_file}:{line_no}",
+                vuln_class="secret_exposure",
+                finder_claim=claim,
+                verifier_result={
+                    "reproduced": False,
+                    "status": "CANDIDATE",
+                    "source": "code_intelligence",
+                },
+                is_in_scope=True,
+            )
+            entry = {
+                "kind": "code_intel_secret",
+                "vuln_class": "secret_exposure",
+                "secret_type": secret_type,
+                "source_file": source_file,
+                "line_number": line_no,
+                "redacted_preview": redacted,
+                "verdict": judgment.verdict.value,
+                "epistemic_state": judgment.epistemic_state,
+                "reportable": judgment.reportable,
+                "judgment_id": judgment.judgment_id,
+                "rationale": judgment.adjudication_rationale,
+            }
+            hypotheses.append(entry)
+
+            if self.security_state is not None:
+                self.security_state.add_unknown(
+                    f"Is client-side secret candidate ({secret_type}) at {source_file}:{line_no} live and privileged?"
+                )
+            if self.attack_surface_graph is not None:
+                from core.reasoning.attack_surface_graph import EpistemicStatus, SurfaceEdge
+                edge_id = f"CI-SEC-{abs(hash((source_file, line_no, secret_type))) % 100000}"
+                if edge_id not in self.attack_surface_graph.edges:
+                    self.attack_surface_graph.add_edge(
+                        SurfaceEdge(
+                            edge_id=edge_id,
+                            source_node_id=target,
+                            target_node_id=f"SECRET:{secret_type}",
+                            relation_type="CANDIDATE_VIOLATION",
+                            epistemic_status=EpistemicStatus.CANDIDATE,
+                            conditions={"source_file": source_file, "line": line_no},
+                            evidence_refs=[judgment.judgment_id],
+                        )
+                    )
+
+        # 2. Client-side source -> sink flows (unsanitized / exploitable candidates)
+        for flow in code_intel_res.get("source_sink_flows", []) or []:
+            if not isinstance(flow, dict) or not flow.get("is_exploitable", False):
+                continue
+            source_name = str(flow.get("source") or "client_source")
+            sink_name = str(flow.get("sink") or "dom_sink")
+            sink_cat = str(flow.get("sink_category") or "DOM")
+            source_file = str(flow.get("source_file") or target)
+            line_no = int(flow.get("line_number") or 0)
+            vuln_class = "dom_xss" if sink_cat in ("DOM", "EXEC") else "client_sink_injection"
+            claim = {
+                "title": f"Source-to-Sink flow {source_name} -> {sink_name} in {source_file}:{line_no}",
+                "source": source_name,
+                "sink": sink_name,
+                "sink_category": sink_cat,
+                "source_file": source_file,
+                "line_number": line_no,
+                "data_path": list(flow.get("data_path") or []),
+                "evidence": str(flow.get("evidence") or ""),
+                "provenance": "code_intelligence",
+            }
+            judgment = EvidenceCourt.adjudicate(
+                target_url=target,
+                parameter=f"{source_name}->{sink_name}",
+                vuln_class=vuln_class,
+                finder_claim=claim,
+                verifier_result={
+                    "reproduced": False,
+                    "status": "CANDIDATE",
+                    "source": "code_intelligence",
+                },
+                is_in_scope=True,
+            )
+            entry = {
+                "kind": "code_intel_source_sink",
+                "vuln_class": vuln_class,
+                "source": source_name,
+                "sink": sink_name,
+                "sink_category": sink_cat,
+                "source_file": source_file,
+                "line_number": line_no,
+                "data_path": list(flow.get("data_path") or []),
+                "verdict": judgment.verdict.value,
+                "epistemic_state": judgment.epistemic_state,
+                "reportable": judgment.reportable,
+                "judgment_id": judgment.judgment_id,
+                "rationale": judgment.adjudication_rationale,
+            }
+            hypotheses.append(entry)
+
+            if self.security_state is not None:
+                self.security_state.add_unknown(
+                    f"Is client-side flow {source_name} -> {sink_name} at {source_file}:{line_no} exploitable in live DOM?"
+                )
+            if self.attack_surface_graph is not None:
+                from core.reasoning.attack_surface_graph import EpistemicStatus, SurfaceEdge
+                edge_id = f"CI-FLOW-{abs(hash((source_file, line_no, source_name, sink_name))) % 100000}"
+                if edge_id not in self.attack_surface_graph.edges:
+                    self.attack_surface_graph.add_edge(
+                        SurfaceEdge(
+                            edge_id=edge_id,
+                            source_node_id=target,
+                            target_node_id=f"{vuln_class.upper()}:{sink_name}",
+                            relation_type="CANDIDATE_VIOLATION",
+                            epistemic_status=EpistemicStatus.CANDIDATE,
+                            conditions={"source": source_name, "sink": sink_name, "file": source_file, "line": line_no},
+                            evidence_refs=[judgment.judgment_id],
+                        )
+                    )
+
+        return hypotheses
 
     async def explore_discovered_endpoint(self, endpoint_url_or_path: str) -> Dict[str, Any]:
         """Bidirectional sensor feedback: directs the active browser to visit and inspect a new route"""

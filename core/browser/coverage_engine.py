@@ -116,6 +116,36 @@ class CoverageEngine:
         if tested:
             self.tested_forms.add(form_sig)
 
+    def register_forms(self, forms: List[Dict[str, Any]], *, tested: bool = False) -> None:
+        """Bulk-register structured form dicts into coverage telemetry."""
+        for form in forms or []:
+            if not isinstance(form, dict):
+                continue
+            sig = str(
+                form.get("signature")
+                or f"{str(form.get('method', 'GET')).upper()}:{form.get('action', '')}"
+            ).strip()
+            if sig:
+                self.register_form(sig, tested=tested)
+
+    def merge_from(self, other: "CoverageEngine") -> None:
+        """Merge counters from another CoverageEngine without losing observations."""
+        if other is self or other is None:
+            return
+        self.discovered_pages.update(other.discovered_pages)
+        self.visited_pages.update(other.visited_pages)
+        self.discovered_states.update(other.discovered_states)
+        self.explored_states.update(other.explored_states)
+        self.discovered_forms.update(other.discovered_forms)
+        self.tested_forms.update(other.tested_forms)
+        self.discovered_actions.update(other.discovered_actions)
+        self.executed_actions.update(other.executed_actions)
+        self.discovered_apis.update(other.discovered_apis)
+        self.observed_apis.update(other.observed_apis)
+        self.discovered_js.update(other.discovered_js)
+        self.analyzed_js.update(other.analyzed_js)
+        self.reached_auth_states.update(other.reached_auth_states)
+
     def register_action(self, action_id: str, executed: bool = False) -> None:
         self.discovered_actions.add(action_id)
         if executed:

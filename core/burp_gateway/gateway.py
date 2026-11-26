@@ -24,7 +24,8 @@ import uvicorn
 
 from core.burp_gateway.capture_store import CaptureStore, CapturedTransaction
 from core.burp_gateway.issue_exporter import BurpIssueExporter
-from core.burp_gateway.task_queue import BurpTask, TaskAction, TaskQueue
+from core.burp_gateway.task_queue import BurpTask, TaskAction, TaskQueue, TaskStatus
+from core.secret_sanitizer import SecretSanitizer
 from core.burp_gateway.provenance import EvidenceProvenanceEngine, ProvenanceStage
 from core.burp_gateway.handoff_contract import AgentHandoffContract
 from core.burp_gateway.correlation import BurpCorrelationContext
@@ -86,6 +87,7 @@ class BurpGateway:
         self.cases: Dict[str, AgentHandoffContract] = {}
 
         self.confirmed_findings: List[Dict[str, Any]] = []
+        self.burp_issues: List[Dict[str, Any]] = []
         self.active_scope: Dict[str, List[str]] = {
             "include": [],
             "exclude": []
@@ -214,6 +216,40 @@ class BurpGateway:
         elif hasattr(self.scope_engine, "is_in_scope"):
             return self.scope_engine.is_in_scope(target_to_check)
         return True, "Authorized (Permissive)"
+
+    def query_traffic_rows(
+        self,
+        *,
+        limit: int = 100,
+        host: Optional[str] = None,
+        method: Optional[str] = None,
+        redact: bool = True,
+        include_bodies: bool = False,
+        newest_first: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Query structured HTTP transaction rows `{id, time, method, host, path, status, length, request_headers, response_status}`."""
+        return self.capture_store.query_structured_transactions(
+            limit=limit,
+            host=host,
+            method=method,
+            redact=redact,
+            include_bodies=include_bodies,
+            newest_first=newest_first,
+        )
+
+    def query_live_inspection_rows(
+        self,
+        *,
+        target: Optional[str] = None,
+        limit: int = 100,
+        redact: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Query structured HTTP rows with scrubbed bodies for live Burp inspection."""
+        return self.capture_store.query_live_inspection_rows(
+            target=target,
+            limit=limit,
+            redact=redact,
+        )
 
     def _setup_routes(self):
         from core.controllers.burp_research_controller import ScopeViolationError
@@ -445,6 +481,40 @@ class BurpGateway:
                 logger.error(f"[GATEWAY] Traffic ingestion error: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
+        @self.app.get("/api/traffic")
+        async def list_traffic(
+            limit: int = 100,
+            host: Optional[str] = None,
+            method: Optional[str] = None,
+            include_bodies: bool = True,
+        ):
+            """Returns structured HTTP transaction rows (with secrets redacted)."""
+            rows = self.query_traffic_rows(
+                limit=max(1, min(int(limit), 1000)),
+                host=host,
+                method=method,
+                redact=True,
+                include_bodies=include_bodies,
+            )
+            return {
+                "transactions": rows,
+                "traffic": rows,
+                "items": rows,
+                "count": len(rows),
+            }
+
+        @self.app.get("/api/traffic/{tx_id}")
+        async def get_traffic_item(tx_id: str):
+            """Returns a single structured HTTP transaction (with secrets redacted)."""
+            row = self.capture_store.get_structured_transaction(
+                tx_id,
+                redact=True,
+                include_bodies=True,
+            )
+            if row is None:
+                return JSONResponse(status_code=404, content={"error": "Transaction not found"})
+            return row
+
         @self.app.post("/api/tasks")
         async def create_task(req: Request):
             """Receives task dispatch from Burp Context Menu"""
@@ -496,6 +566,25 @@ class BurpGateway:
                 return JSONResponse(status_code=404, content={"error": "Task not found"})
             return t.to_dict()
 
+        @self.app.post("/api/tasks/{task_id}/complete")
+        async def complete_task(task_id: str, req: Request):
+            """Allows the Burp extension poller to report inbound task execution completion."""
+            t = self.task_queue.get_task(task_id)
+            if not t:
+                return JSONResponse(status_code=404, content={"error": "Task not found"})
+            try:
+                data = await req.json()
+            except Exception:
+                data = {}
+            raw_status = str(data.get("status") or "COMPLETED").upper()
+            t.status = TaskStatus.FAILED if raw_status == "FAILED" else TaskStatus.COMPLETED
+            if "result" in data:
+                t.result = SecretSanitizer.sanitize_data(data["result"])
+            if "error" in data and data["error"] is not None:
+                t.error = str(data["error"])
+            t.completed_at = time.time()
+            return {"status": "UPDATED", "task": t.to_dict()}
+
         @self.app.post("/api/scope")
         async def update_scope(req: Request):
             """Adds a host or updates scope directly from Burp"""
@@ -530,10 +619,39 @@ class BurpGateway:
             """Receives native Burp Scanner issues to correlate into Evidence Graph"""
             try:
                 data = await req.json()
-                self.capture_store.record_timeline_event("BURP_SCANNER_ISSUE_INGESTED", data)
-                return {"status": "INGESTED", "issue": data.get("name", "Burp Issue")}
+                scrubbed = SecretSanitizer.sanitize_data(data if isinstance(data, dict) else {"raw": data})
+                issue_record = {
+                    "finding_id": scrubbed.get("finding_id") or scrubbed.get("id") or f"burp_iss_{uuid.uuid4().hex[:8]}",
+                    "name": scrubbed.get("name") or scrubbed.get("issue_name") or "Burp Issue",
+                    "issue_name": scrubbed.get("issue_name") or scrubbed.get("name") or "Burp Issue",
+                    "type": scrubbed.get("type", 0),
+                    "severity": scrubbed.get("severity", "Medium"),
+                    "confidence": scrubbed.get("confidence", "Tentative"),
+                    "url": scrubbed.get("url") or scrubbed.get("target") or "",
+                    "target": scrubbed.get("target") or scrubbed.get("url") or "",
+                    "detail": scrubbed.get("detail") or scrubbed.get("evidence") or "",
+                    "evidence": scrubbed.get("evidence") or scrubbed.get("detail") or "",
+                    "remediation": scrubbed.get("remediation") or "",
+                    "source": scrubbed.get("source") or "burp_scanner",
+                    "provenance": "burp_extension",
+                    "verified_by_burp": bool(scrubbed.get("verified_by_burp", True)),
+                    "created_at": time.time(),
+                }
+                self.burp_issues.append(issue_record)
+                self.capture_store.record_timeline_event("BURP_SCANNER_ISSUE_INGESTED", issue_record)
+                return {"status": "INGESTED", "finding_id": issue_record["finding_id"], "issue": issue_record["name"]}
             except Exception as e:
                 return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.app.get("/api/issues/burp")
+        async def list_burp_issues(source: Optional[str] = None, limit: int = 100):
+            """Returns ingested Burp Scanner issues for BurpAdapter.import_supported_findings()."""
+            items = list(self.burp_issues)
+            if source:
+                src_l = source.strip().lower()
+                items = [it for it in items if str(it.get("source", "")).lower() == src_l or src_l == "all"]
+            sliced = items[-max(1, min(int(limit), 1000)) :]
+            return {"issues": sliced, "findings": sliced, "count": len(sliced)}
 
         @self.app.get("/api/issues/export")
         async def export_issues_for_burp():
