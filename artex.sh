@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 #  ARTEX-Pro Unified Multi-Agent Offensive Security Architecture Launcher
-#  ONE COMMAND FOR EVERYTHING: Go Core + PostgreSQL 16+ + Next.js 15 + AI Agent
+#  ONE COMMAND FOR EVERYTHING: PostgreSQL + Go Core + Django ASGI + Next.js
 # ==============================================================================
 
 set -e

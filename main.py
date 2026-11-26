@@ -179,17 +179,21 @@ def main():
     except Exception as e:
         print(f"[*] AI Diagnostics notice: {e}")
 
-    # Web UI (default)
+    # Unified Django ASGI Web Backend
     try:
         import uvicorn
-        print(f"\n[*] PentestAI Unified - Web UI Server Starting...")
-        print(f"    🟢 Dashboard URL -> http://localhost:{args.port}")
-        print(f"    🟢 Remote Access -> http://{args.host}:{args.port}")
-        print(f"    Taskade: {'ENABLED' if os.getenv('TASKADE_API_KEY') else 'disabled'}")
-        print(f"    👉 افتح المتصفح الآن على: http://localhost:{args.port}")
-        print(f"    (الخادم شغال وينتظر طلبات المتصفح - اضغط Ctrl+C للإيقاف)\n")
-        uvicorn.run("ui.web.app:app", host=args.host, port=args.port,
-                    reload=False, log_level="info")
+        print(f"\n[*] HunterAI Unified - Django ASGI Server Starting...")
+        print(f"    -> API / ASGI URL -> http://{args.host}:{args.port}")
+        print(f"    -> Next.js UI URL -> http://127.0.0.1:3000")
+        print(f"    Taskade: {'ENABLED' if os.getenv('TASKADE_API_KEY') else 'disabled'}\n")
+        uvicorn.run(
+            "hunter_backend.asgi:application",
+            host=args.host,
+            port=args.port,
+            workers=1,
+            reload=False,
+            log_level="info",
+        )
 
     except ImportError:
         print("[!] uvicorn not found - pip install uvicorn")

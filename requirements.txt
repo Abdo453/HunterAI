@@ -3,10 +3,15 @@
 # متطلبات التشغيل الأساسية؛ الـ lock الكامل في requirements.lock
 # ============================================================
 
-# ويب
-fastapi
+# ويب (Django 5.2 + DRF + Pure ASGI)
+Django>=5.2,<5.3
+djangorestframework>=3.16
+django-cors-headers>=3.13
+whitenoise>=6.3
 uvicorn[standard]
+asgiref>=3.8
 pydantic>=2.5
+fastapi
 python-multipart
 aiofiles
 jinja2
