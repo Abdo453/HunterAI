@@ -196,19 +196,40 @@ class ToolManager:
         return None
 
     def resolve_binary(self, cmd: str) -> str:
-        """حل مسار الأداة بدقة لمنع التعارض بين أدوات بايثون وأدوات كالي Go"""
+        """حل مسار الأداة بدقة لمنع التعارض بين أدوات بايثون وأدوات كالي Go،
+        مع دعم امتداد ``.exe`` داخل ``~/go/bin`` و ``%GOPATH%/bin`` على ويندوز."""
         import os
+        import sys
+
+        is_win = sys.platform == "win32" or os.name == "nt"
+        go_bin_dirs = []
+        gopath = os.environ.get("GOPATH")
+        if gopath:
+            go_bin_dirs.append(os.path.join(gopath, "bin"))
+        go_bin_dirs.append(os.path.expanduser(os.path.join("~", "go", "bin")))
+
+        def _find_in_go_bin(name: str) -> Optional[str]:
+            candidates = [name]
+            if is_win and not name.lower().endswith((".exe", ".bat", ".cmd")):
+                candidates = [f"{name}.exe", name, f"{name}.cmd", f"{name}.bat"]
+            for base_dir in go_bin_dirs:
+                for cand in candidates:
+                    full = os.path.join(base_dir, cand)
+                    if os.path.isfile(full) and (is_win or os.access(full, os.X_OK)):
+                        return full
+            return None
+
         c = cmd.lower().strip()
         if c in ("httpx", "httpx-toolkit"):
             if shutil.which("httpx-toolkit"):
                 return "httpx-toolkit"
-            go_httpx = os.path.expanduser("~/go/bin/httpx")
-            if os.path.isfile(go_httpx) and os.access(go_httpx, os.X_OK):
+            go_httpx = _find_in_go_bin("httpx")
+            if go_httpx:
                 return go_httpx
 
-        # فحص مجلد Go الافتراضي لجميع أدوات Go في كالي
-        go_bin = os.path.expanduser(f"~/go/bin/{cmd}")
-        if os.path.isfile(go_bin) and os.access(go_bin, os.X_OK):
+        # فحص مجلد Go الافتراضي لجميع أدوات Go (Kali & Windows)
+        go_bin = _find_in_go_bin(cmd)
+        if go_bin:
             return go_bin
 
         return cmd

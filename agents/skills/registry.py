@@ -146,6 +146,55 @@ class SkillRegistry:
     def all_skills(self) -> List[SkillMeta]:
         return list(self._skills.values())
 
+    def list_skills(self, include_directory_skills: bool = False) -> List[Dict[str, Any]]:
+        """List registered vulnerability skills (optionally including directory skills)."""
+        out = [
+            {
+                "name": m.name,
+                "layer": "agent_vuln",
+                "vuln_type": m.vuln_type,
+                "cwe": m.cwe,
+                "owasp_top10": m.owasp_top10,
+                "default_severity": m.default_severity,
+            }
+            for m in self._skills.values()
+        ]
+        if include_directory_skills:
+            from core.skill_registry import SKILL_REGISTRY
+            for dm in SKILL_REGISTRY.get_all(include_agent_skills=False):
+                out.append(
+                    {
+                        "name": dm.name,
+                        "layer": "directory",
+                        "category": dm.category,
+                        "description": dm.description,
+                    }
+                )
+        return sorted(out, key=lambda x: x["name"])
+
+    async def dispatch_skill_execution(
+        self,
+        skill_name: str,
+        target_url: str,
+        param_name: str = "",
+        proxy: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Optional["SkillResult"]:
+        """Unified dispatcher: resolves agent vuln skills directly or bridges directory skills via ``_SkillContractAdapter``."""
+        meta = self.get(skill_name)
+        if meta is not None:
+            return await self.run_skill(meta, target_url, param_name, proxy=proxy, **kwargs)
+        from core.skill_registry import SKILL_REGISTRY, _SkillContractAdapter
+        dir_inst = SKILL_REGISTRY.instantiate(skill_name)
+        if dir_inst is None:
+            return None
+        adapter = (
+            dir_inst
+            if isinstance(dir_inst, _SkillContractAdapter)
+            else _SkillContractAdapter.from_directory_skill(dir_inst)
+        )
+        return await adapter.run(target_url, param_name, **kwargs)
+
     def __len__(self) -> int:
         return len(self._skills)
 
@@ -369,6 +418,19 @@ def bootstrap_builtin_skills() -> SkillRegistry:
     reg.register_class(BFLAAuthBypassSkill, param_keywords=["action", "method", "admin", "cmd", "op", "function"])
     reg.register_class(WebCacheDeceptionSkill, param_keywords=["cache", "format", "ext", "type"])
     reg.register_class(LLMPromptInjectionSkill, param_keywords=["prompt", "instruction", "system_prompt", "assistant", "completion", "chat", "message"])
+
+    # Safe Differential SQLi Assessment Skill
+    from agents.skills.safe_sqli_assessment import SafeSQLiAssessmentSkill
+    reg.register_class(
+        SafeSQLiAssessmentSkill,
+        param_keywords=["id", "user_id", "order_id", "category", "filter", "search", "sort", "order", "limit", "offset"],
+        meta_overrides={
+            "vuln_type": "sqli",
+            "cwe": "CWE-89",
+            "owasp_top10": "A03:2021",
+            "default_severity": "High",
+        },
+    )
 
     return reg
 

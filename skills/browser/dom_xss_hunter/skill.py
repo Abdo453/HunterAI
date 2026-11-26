@@ -139,18 +139,20 @@ class DOMXSSHunterSkill(BaseSkill):
         # Write findings JSON
         findings_json = json.dumps(all_findings, indent=2)
         findings_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id,
-            "dom_xss_findings.json", findings_json
+            ctx.target, "browser",
+            "dom_xss_findings.json", findings_json,
+            ctx.session_id,
         )
-        result.output_files["dom_xss_findings.json"] = findings_path
+        result.output_files["dom_xss_findings.json"] = str(findings_path)
 
         # Write markdown report
         report_md = self._build_report_md(ctx.target, all_findings)
         report_path = ctx.workspace.write_file(
-            ctx.target, ctx.session_id,
-            "dom_xss_report.md", report_md
+            ctx.target, "browser",
+            "dom_xss_report.md", report_md,
+            ctx.session_id,
         )
-        result.output_files["dom_xss_report.md"] = report_path
+        result.output_files["dom_xss_report.md"] = str(report_path)
 
         result.findings = result.findings or []
         result.metadata = {

@@ -35,19 +35,120 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import shlex
 import shutil
+import tempfile
 import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+
+import yaml
 
 from core.sandbox import LocalSandbox
 
 logger = logging.getLogger(__name__)
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_TOOL_CATALOG_PATH = _REPO_ROOT / "config" / "tools.catalog.yaml"
+
+
+def _approved_path_roots(extra_roots: Optional[Sequence[Path]] = None) -> List[Path]:
+    """Return resolved workspace and approved wordlist root directories."""
+    roots: List[Path] = [
+        _REPO_ROOT.resolve(),
+        Path.cwd().resolve(),
+        (_REPO_ROOT / "wordlists").resolve(),
+        (_REPO_ROOT / "data" / "wordlists").resolve(),
+        (_REPO_ROOT / "data" / "sandbox_workdir").resolve(),
+        Path(tempfile.gettempdir()).resolve(),
+        Path("/usr/share/seclists").resolve(strict=False),
+        Path("/usr/share/wordlists").resolve(strict=False),
+        (Path.home() / "wordlist" / "SecLists").resolve(strict=False),
+    ]
+    env_roots = os.getenv("HUNTERAI_WORDLIST_ROOTS", "")
+    for item in env_roots.split(os.pathsep):
+        cleaned = item.strip()
+        if cleaned:
+            roots.append(Path(cleaned).resolve(strict=False))
+    if extra_roots:
+        for r in extra_roots:
+            roots.append(Path(r).resolve(strict=False))
+    # Deduplicate preserving order
+    dedup: List[Path] = []
+    for r in roots:
+        if r not in dedup:
+            dedup.append(r)
+    return dedup
+
+
+def _looks_like_filesystem_path(token: str) -> bool:
+    """Heuristically identify argv tokens representing filesystem paths (not URLs/flags)."""
+    s = token.strip()
+    if not s:
+        return False
+    if "://" in s:
+        return False
+    if s.startswith("-"):
+        return False
+    # UNC path or Windows drive path (e.g. C:\... or C:/...)
+    if s.startswith("\\\\") or re.match(r"^[A-Za-z]:[/\\]", s):
+        return True
+    # POSIX absolute path or explicit relative/traversal path
+    if s.startswith("/") or s.startswith("./") or s.startswith("../") or s.startswith(".\\") or s.startswith("..\\"):
+        return True
+    if ".." in Path(s).parts:
+        return True
+    return False
+
+
+def validate_argv_paths(
+    argv: Sequence[str],
+    *,
+    tool_id: str,
+    allowed_roots: Optional[Sequence[Path]] = None,
+) -> None:
+    """Validate path-like argv entries using ``Path.resolve()`` containment
+    against workspace and approved wordlist roots (fail-closed)."""
+    roots = _approved_path_roots(allowed_roots)
+    # Skip argv[0] (executable already validated against allowlist)
+    for part in argv[1:]:
+        token = str(part)
+        # Handle --flag=/path/to/file style tokens too
+        candidate = token
+        if token.startswith("-") and "=" in token:
+            _, candidate = token.split("=", 1)
+
+        if ".." in Path(candidate).parts or ".." in candidate.split("/") or ".." in candidate.split("\\"):
+            raise ToolError(
+                f"وسيط محظور (path traversal): {part}",
+                category="VALIDATION",
+                tool_id=tool_id,
+            )
+
+        if not _looks_like_filesystem_path(candidate):
+            continue
+
+        # Block UNC paths unconditionally
+        if candidate.startswith("\\\\") or candidate.startswith("//"):
+            raise ToolError(
+                f"وسيط محظور (UNC path): {part}",
+                category="VALIDATION",
+                tool_id=tool_id,
+            )
+
+        resolved = Path(candidate).resolve(strict=False)
+        if not any(resolved == root or resolved.is_relative_to(root) for root in roots):
+            raise ToolError(
+                f"وسيط محظور (مسار خارج النطاق المسموح): {part}",
+                category="VALIDATION",
+                tool_id=tool_id,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -262,12 +363,15 @@ class CliTool(Tool):
 
         # بناء 명령 كمصفوفة وسيطات (لا shell string)
         argv = self._build_argv(arguments)
-        # Validation إضافية: لا مسارات traversal في الوسائط
-        for part in argv:
-            if ".." in str(part) or str(part).startswith("/"):
-                raise ToolError(
-                    f"وسيط محظور (مسار مطلق/transversal): {part}",
-                    category="VALIDATION", tool_id=definition.tool_id)
+        # Validation إضافية: فحص احتواء المسارات عبر Path.resolve() ضد workspace و wordlists المعتمدة
+        sandbox_roots: List[Path] = []
+        sb_obj = getattr(self, "sandbox", None)
+        if sb_obj is not None and getattr(sb_obj, "allowed_workdir", None):
+            sandbox_roots.append(Path(sb_obj.allowed_workdir))
+        extra_roots = getattr(self, "allowed_roots", None)
+        if extra_roots:
+            sandbox_roots.extend(Path(p) for p in extra_roots)
+        validate_argv_paths(argv, tool_id=definition.tool_id, allowed_roots=sandbox_roots)
 
         run_id = f"tool-{uuid.uuid4().hex[:8]}"
         # 8. التنفيذ عبر back-end مناسب (sandbox إن وُجد، وإلا تنفيذ مباشر آمن)
@@ -455,13 +559,14 @@ class ToolRegistry:
         return True, None
 
     def _register_default_tools(self) -> None:
-        """تسجيل الأدوات الأساسية (core) حتى يكون السجل صالحاً فور الإنشاء.
+        """تسجيل الأدوات الأساسية (core) ثم تحميل الكتالوج الموحّد ``config/tools.catalog.yaml``
+        أو المسار الممرر عبر ``config_path`` حتى يكون السجل صالحاً ومطابقاً للمصدر الوحيد."""
+        loaded_from_catalog = self._load_tools_from_config(
+            Path(self.config_path) if self.config_path else DEFAULT_TOOL_CATALOG_PATH
+        )
 
-        يعيد السلوك الذي كان موجوداً قبل إعادة كتابة السجل (تسجيل افتراضي
-        لـ nmap/httpx/subfinder ...) حتى لا تفشل بوابة GATE-02 على سجل فارغ.
-        """
+        # Ensure baseline core tools exist even if a custom minimal config_path was provided
         core_tools = [
-            # (tool_id, name, executable, risk_level, requires_authorization)
             ("nmap", "Network port scanner & service fingerprinter", "nmap", RiskLevel.MEDIUM, False),
             ("httpx", "HTTP probing & technology detection", "httpx", RiskLevel.LOW, False),
             ("subfinder", "Passive subdomain enumeration", "subfinder", RiskLevel.LOW, False),
@@ -470,6 +575,8 @@ class ToolRegistry:
             ("nuclei", "Vulnerability scanner with templated nuclei", "nuclei", RiskLevel.HIGH, True),
         ]
         for tool_id, name, executable, risk, requires_auth in core_tools:
+            if self.get(tool_id) is not None:
+                continue
             definition = ToolDefinition(
                 tool_id=tool_id,
                 name=name,
@@ -485,6 +592,65 @@ class ToolRegistry:
                 scope_relevant=True,
             )
             self.register(CliTool(definition))
+
+        if loaded_from_catalog:
+            logger.debug("Loaded %d tools from catalog", loaded_from_catalog)
+
+    def _load_tools_from_config(self, path: Path) -> int:
+        """Load declarative tool definitions from ``config/tools.catalog.yaml`` or a JSON/YAML list."""
+        if not path or not path.is_file():
+            return 0
+        try:
+            raw_text = path.read_text(encoding="utf-8")
+            parsed = json.loads(raw_text) if path.suffix.lower() == ".json" else yaml.safe_load(raw_text)
+        except Exception as exc:
+            logger.warning("Failed to parse tool catalog %s: %s", path, exc)
+            return 0
+
+        entries: List[Dict[str, Any]] = []
+        if isinstance(parsed, dict) and isinstance(parsed.get("tools"), list):
+            entries = [e for e in parsed["tools"] if isinstance(e, dict)]
+        elif isinstance(parsed, list):
+            entries = [e for e in parsed if isinstance(e, dict)]
+        else:
+            return 0
+
+        count = 0
+        for item in entries:
+            tid = str(item.get("id") or item.get("tool_id") or item.get("name") or "").strip()
+            if not tid:
+                continue
+            exe = str(item.get("executable") or item.get("cmd") or tid).strip()
+            risk = str(item.get("risk") or item.get("risk_level") or RiskLevel.MEDIUM).lower()
+            perms = list(item.get("permissions") or item.get("required_permissions") or ["recon"])
+            timeout_raw = item.get("timeout_s", item.get("timeout", 300.0))
+            timeout_val = float(timeout_raw) if timeout_raw and float(timeout_raw) > 0 else 300.0
+            requires_auth = bool(
+                item.get("requires_authorization", item.get("approval_required", risk in (RiskLevel.HIGH, RiskLevel.CRITICAL)))
+            )
+            input_schema = item.get("input_schema") or {
+                "type": "object",
+                "properties": {"target": {"type": "string"}},
+                "required": ["target"],
+            }
+            definition = ToolDefinition(
+                tool_id=tid,
+                name=str(item.get("name") or tid),
+                description=str(item.get("purpose") or item.get("description") or f"{tid} security tool"),
+                input_schema=input_schema,
+                backend=str(item.get("backend") or "cli"),
+                executable=exe,
+                allowed_executables=list(item.get("allowed_executables") or [exe]),
+                required_permissions=perms,
+                risk_level=risk,
+                timeout_s=timeout_val,
+                approval_required=requires_auth,
+                enabled=bool(item.get("enabled", True)),
+                scope_relevant=bool(item.get("scope_relevant", True)),
+            )
+            self.register(CliTool(definition))
+            count += 1
+        return count
 
     def require(self, tool_id: str) -> Tool:
         """جلب أداة أو رفع استثناء إن لم تكن مسجّلة (fail-closed)."""
@@ -850,6 +1016,11 @@ _SECRET_PATTERNS = [
 def _redact_secrets(text: str) -> str:
     for pat in _SECRET_PATTERNS:
         text = pat.sub("***", text)
+    try:
+        from core.secret_sanitizer import SecretSanitizer
+        text = SecretSanitizer.sanitize_text(text)
+    except Exception:
+        pass
     return text
 
 
