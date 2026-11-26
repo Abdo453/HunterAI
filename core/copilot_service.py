@@ -655,7 +655,7 @@ def evaluate_action_policy(
     try:
         from core.control_plane.policy_gate import ActionCategory as PGCategory
         from core.control_plane.policy_gate import ActionRequest as PGRequest
-        from core.control_plane.policy_gate import PolicyGate
+        from core.control_plane.policy_gate import PolicyGate, extract_candidate_destinations
 
         pg_category = (
             PGCategory.ACTIVE_FUZZING
@@ -679,17 +679,132 @@ def evaluate_action_policy(
                 and "." in host_only
             ):
                 pg_allowed.append(f"*.{host_only}")
+
+        raw_target_str = (target or "").strip()
+        target_host = extract_target_host(raw_target_str)
+        allow_explicit_loopback = is_explicit_lab_loopback(target_host, scope_adapter._in_scope)
+        allow_explicit_private = is_explicit_lab_private(target_host, scope_adapter._in_scope)
+
+        # Strip query/fragment from HTTP(S) target before PolicyGate destination scanning so
+        # SSRF test payloads inside query parameters (e.g. ?url=http://169.254.169.254)
+        # do not misclassify an in-scope destination host while preserving host/port/path checks.
+        pg_target_str = raw_target_str
+        if pg_target_str.lower().startswith(("http://", "https://")):
+            pg_target_str = pg_target_str.split("?", 1)[0].split("#", 1)[0]
+
+        # Unconditionally block non-overridable cloud metadata, link-local, 0.0.0.0/8, and
+        # unsafe schemes in command arguments (even when HUNTER_WEB_UNRESTRICTED=1), and
+        # enforce explicit lab scope for loopback/private destinations under governed mode.
+        if sanitized_args:
+            cmd_candidates: List[str] = list(extract_candidate_destinations(sanitized_args))
+            for raw_tok in sanitized_args.split():
+                tok = raw_tok.strip().strip("'\"`(),;")
+                if not tok:
+                    continue
+                if tok.startswith("-"):
+                    if "=" not in tok:
+                        continue
+                    tok = tok.split("=", 1)[1].strip().strip("'\"`(),;")
+                    if not tok:
+                        continue
+                if "://" in tok:
+                    tok_scheme = tok.split("://", 1)[0].lower()
+                    if tok_scheme not in {"http", "https"}:
+                        return {
+                            "allowed": False,
+                            "status": "BLOCKED_POLICY_GATE",
+                            "reason": f"Unsupported or unsafe URL scheme {tok_scheme!r} in command arguments; only http/https allowed",
+                            "risk_tier": risk_tier.value,
+                            "sanitized_args": "",
+                            "proposal_id": proposal.id,
+                        }
+                    tok_host = extract_target_host(tok)
+                    if tok_host and tok_host not in cmd_candidates:
+                        cmd_candidates.append(tok_host)
+                    continue
+                low_tok = tok.lower().strip("[]")
+                is_ip_like = (
+                    ":" in low_tok
+                    or "." in low_tok
+                    or low_tok.startswith("0x")
+                    or (low_tok.isdigit() and int(low_tok) >= 16777216)
+                )
+                if is_ip_like:
+                    tok_host = extract_target_host(tok)
+                    if tok_host and normalize_ip_literal(tok_host) is not None and tok_host not in cmd_candidates:
+                        cmd_candidates.append(tok_host)
+
+            for cmd_host in cmd_candidates:
+                cmd_cat, cmd_reason = classify_host_security(cmd_host)
+                if cmd_cat == "non_overridable":
+                    return {
+                        "allowed": False,
+                        "status": "BLOCKED_POLICY_GATE",
+                        "reason": cmd_reason or f"SECURITY INVARIANT: Host '{cmd_host}' is strictly forbidden.",
+                        "risk_tier": risk_tier.value,
+                        "sanitized_args": "",
+                        "proposal_id": proposal.id,
+                    }
+                if web_governance_enforced() and (allow_explicit_loopback or allow_explicit_private):
+                    if cmd_cat == "loopback" and not is_explicit_lab_loopback(cmd_host, scope_adapter._in_scope):
+                        return {
+                            "allowed": False,
+                            "status": "BLOCKED_POLICY_GATE",
+                            "reason": cmd_reason or f"SECURITY INVARIANT: Loopback destination '{cmd_host}' is not explicitly authorized.",
+                            "risk_tier": risk_tier.value,
+                            "sanitized_args": "",
+                            "proposal_id": proposal.id,
+                        }
+                    if cmd_cat == "private_lab" and not is_explicit_lab_private(cmd_host, scope_adapter._in_scope):
+                        return {
+                            "allowed": False,
+                            "status": "BLOCKED_POLICY_GATE",
+                            "reason": cmd_reason or f"SECURITY INVARIANT: Private destination '{cmd_host}' is not explicitly authorized.",
+                            "risk_tier": risk_tier.value,
+                            "sanitized_args": "",
+                            "proposal_id": proposal.id,
+                        }
+
+        pg_allowed_eff = list(pg_allowed)
+        pg_req_target = pg_target_str
+        pg_req_url = pg_target_str if pg_target_str.lower().startswith(("http://", "https://")) else None
+        pg_req_path: Optional[str] = None
+        pg_req_port: Optional[int] = None
+        pg_req_command = sanitized_args or None
+
+        if allow_explicit_loopback:
+            # StrictScopeEngine treats 127.0.0.0/8 and localhost as inviolable even when
+            # HUNTER_ALLOW_LOCALHOST_SCOPE=1 + explicit scope were verified by scope_adapter.
+            # Keep PolicyGate enforcing path/port/active-fuzzing/non-loopback invariants by
+            # substituting only the verified loopback host with a synthetic scoped placeholder.
+            if "://" in pg_target_str:
+                parsed_t = urlparse(pg_target_str)
+            elif pg_target_str.count(":") > 1 and not pg_target_str.startswith("["):
+                parsed_t = urlparse(f"http://[{pg_target_str}]")
+            else:
+                parsed_t = urlparse(f"http://{pg_target_str}")
+            pg_placeholder = "explicit-loopback-lab.invalid"
+            pg_allowed_eff.append(pg_placeholder)
+            pg_req_target = pg_placeholder
+            pg_req_url = None
+            pg_req_path = parsed_t.path or ""
+            pg_req_port = parsed_t.port
+            pg_req_command = None
+
         pg_scope = ScopePolicy(
-            allowed_targets=pg_allowed,
-            excluded_targets=list(out_of_scope or []),
+            allowed_targets=pg_allowed_eff,
+            excluded_targets=list(scope_adapter._host_out_of_scope),
+            allow_private_ips_override=allow_explicit_private,
             fail_closed=web_governance_enforced(),
         )
         pg = PolicyGate(scope_policy=pg_scope, authorized=allow_active_tests, allow_destructive=False)
         pg_req = PGRequest(
             category=pg_category,
-            target=target or "",
-            command=sanitized_args or None,
-            url=target if (target or "").startswith(("http://", "https://")) else None,
+            target=pg_req_target,
+            command=pg_req_command,
+            url=pg_req_url,
+            path=pg_req_path,
+            port=pg_req_port,
             reason=rationale or f"Copilot proposal {action_type}",
             requested_by_model="copilot",
             metadata={"action_type": action_type, "tool_name": tool_name},

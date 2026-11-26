@@ -15,9 +15,11 @@ No LLM opinion is involved.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Callable, Dict, Optional
+from urllib.parse import parse_qsl, urlparse
 
-from core.detectors.contract import Detection, DetectionContext
+from core.detectors.contract import Detection, DetectionContext, normalize_body
 from core.detectors.evidence_chain import EvidenceChain
 from core.detectors.idor import IDORDetector
 from core.detectors.open_redirect import OpenRedirectDetector
@@ -64,6 +66,161 @@ def _exchange_hashes(detection: Detection):
     return "", ""
 
 
+def _header_ci(headers: Dict[str, str], name: str) -> str:
+    target = name.lower()
+    for key, value in (headers or {}).items():
+        if str(key).lower() == target:
+            return str(value)
+    return ""
+
+
+def _first_identity_label(headers: Dict[str, str], fallback: str) -> str:
+    for key, value in (headers or {}).items():
+        val = str(value or "").strip()
+        if val:
+            return f"{key}:{val}"
+    return fallback
+
+
+def _build_proof_payload(detection: Detection) -> Optional[Dict[str, Any]]:
+    """Derive a genuine Phase 3 ProofPayload dict strictly from captured detector exchanges."""
+    finding = detection.finding
+    exchanges = list(detection.exchanges or [])
+    if not detection.confirmed or finding is None or not exchanges:
+        return None
+
+    vuln = normalize_vuln_type(detection.vuln_class).lower()
+    proof_token = str(getattr(finding.verification, "proof_token", "") or "")
+
+    if vuln in ("sqli", "sql_injection", "sqli_boolean"):
+        if len(exchanges) < 4:
+            return None
+        control_a, control_b = exchanges[0], exchanges[1]
+        true_ex, false_ex = exchanges[2], exchanges[3]
+        control_ok = normalize_body(control_a.body) == normalize_body(control_b.body)
+        true_matches = normalize_body(true_ex.body) == normalize_body(control_a.body)
+        false_diverges = normalize_body(false_ex.body) != normalize_body(true_ex.body)
+        # Verify additional captured true/false pairs if present
+        for idx in range(4, len(exchanges) - 1, 2):
+            extra_t, extra_f = exchanges[idx], exchanges[idx + 1]
+            if normalize_body(extra_t.body) != normalize_body(control_a.body):
+                true_matches = False
+            if normalize_body(extra_f.body) == normalize_body(extra_t.body):
+                false_diverges = False
+        return {
+            "artifact_type": "sqli",
+            "response_text": true_ex.body,
+            "baseline_text": control_a.body,
+            "metadata": {
+                "boolean_true_matches_baseline": true_matches,
+                "boolean_false_diverges": false_diverges,
+                "control_matches_baseline": control_ok,
+                "false_response_text": false_ex.body[:500],
+                "status_code": true_ex.status_code,
+                "reproduced_count": finding.verification.reproduced_count,
+            },
+        }
+
+    if vuln in ("xss", "cross_site_scripting", "reflected_xss"):
+        if len(exchanges) < 2 or not proof_token:
+            return None
+        baseline_ex, tested_ex = exchanges[0], exchanges[-1]
+        breakout = f'"><{proof_token}>'
+        # Only assert the unescaped breakout token if it was actually observed verbatim
+        if breakout in tested_ex.body and breakout not in baseline_ex.body:
+            return {
+                "artifact_type": "token",
+                "response_text": tested_ex.body,
+                "baseline_text": baseline_ex.body,
+                "expected_token": breakout,
+                "probed_expression": "",
+                "metadata": {"status_code": tested_ex.status_code},
+            }
+        return None
+
+    if vuln in ("idor", "bola"):
+        if len(exchanges) < 2 or not proof_token:
+            return None
+        owner_ex = exchanges[0]
+        tested_req = finding.tested_request
+        attacker_ex = exchanges[1]
+        if tested_req is not None:
+            for ex in exchanges[1:]:
+                if ex.probe.url == tested_req.url and ex.probe.headers == tested_req.headers:
+                    attacker_ex = ex
+                    break
+        owner_id = _first_identity_label(owner_ex.probe.headers, "owner")
+        actor_id = _first_identity_label(attacker_ex.probe.headers, "anonymous")
+        # Baseline is an unauthorized/denied exchange without the victim marker (if observed)
+        denied_baseline = ""
+        for ex in exchanges[1:]:
+            if ex is not attacker_ex and proof_token not in ex.body:
+                denied_baseline = ex.body
+                break
+        return {
+            "artifact_type": "idor",
+            "response_text": attacker_ex.body,
+            "baseline_text": denied_baseline,
+            "expected_token": proof_token,
+            "probed_expression": "",
+            "metadata": {
+                "actor_id": actor_id,
+                "owner_id": owner_id,
+                "status_code": attacker_ex.status_code,
+            },
+        }
+
+    if vuln == "ssrf":
+        if len(exchanges) < 2 or not proof_token:
+            return None
+        baseline_ex, tested_ex = exchanges[0], exchanges[-1]
+        cb_match = re.search(r"callback for path ['\"]([^'\"]+)['\"]", str(finding.evidence or ""))
+        oob_callbacks = [cb_match.group(1)] if cb_match else []
+        if not oob_callbacks:
+            return None
+        return {
+            "artifact_type": "ssrf",
+            "response_text": tested_ex.body,
+            "baseline_text": baseline_ex.body,
+            "expected_token": proof_token,
+            "probed_expression": "",
+            "metadata": {
+                "oob_nonce": proof_token,
+                "oob_callbacks": oob_callbacks,
+                "status_code": tested_ex.status_code,
+            },
+        }
+
+    if vuln in ("open_redirect", "openredirect"):
+        if len(exchanges) < 2:
+            return None
+        baseline_ex, tested_ex = exchanges[0], exchanges[-1]
+        location = _header_ci(tested_ex.response_headers, "Location")
+        baseline_loc = _header_ci(baseline_ex.response_headers, "Location")
+        probe_redirect_host = ""
+        for _k, val in parse_qsl(urlparse(tested_ex.probe.url).query, keep_blank_values=True):
+            if val.lower().startswith(("http://", "https://")):
+                probe_redirect_host = (urlparse(val).hostname or "").lower()
+                if probe_redirect_host:
+                    break
+        if not (location and probe_redirect_host):
+            return None
+        return {
+            "artifact_type": "open_redirect",
+            "response_text": tested_ex.body or f"Location: {location}",
+            "baseline_text": baseline_ex.body or (f"Location: {baseline_loc}" if baseline_loc else ""),
+            "expected_token": proof_token,
+            "probed_expression": "",
+            "metadata": {
+                "probe_redirect_host": probe_redirect_host,
+                "location": location,
+                "status_code": tested_ex.status_code,
+            },
+        }
+
+    return None
+
+
 def build_gate_evidence(detection: Detection) -> Dict[str, Any]:
     """Map a confirmed detection to the keys the 7-Question Gate checks.
 
@@ -75,7 +232,7 @@ def build_gate_evidence(detection: Detection) -> Dict[str, Any]:
 
     finding = detection.finding
     request_hash, response_hash = _exchange_hashes(detection)
-    return {
+    evidence: Dict[str, Any] = {
         "confirmed": True,
         "poc": finding.reproducibility.reproduction_curl or finding.evidence,
         "reproduction": list(finding.reproducibility.reproduction_steps),
@@ -90,6 +247,10 @@ def build_gate_evidence(detection: Detection) -> Dict[str, Any]:
         "vuln_class": detection.vuln_class,
         "detector": detection.detector,
     }
+    proof_payload = _build_proof_payload(detection)
+    if proof_payload is not None:
+        evidence["proof_payload"] = proof_payload
+    return evidence
 
 
 @dataclass

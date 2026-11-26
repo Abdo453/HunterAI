@@ -411,9 +411,21 @@ class HunterAIBenchmarkRunner:
             "title": "Confirmed IDOR via Tenant Isolation Bypass",
             "evidence": "Observed HTTP 200 with full PII disclosure when requesting user_id=42 from user_id=41 session",
             "type": "broken_access_control.idor",
-            "url": "https://api.local/v1/users/42"
+            "severity": "High",
+            "url": "https://api.local/v1/users/42",
+            "target": "api.local",
+            "poc": "curl -s -H 'Authorization: Bearer <user41_token>' https://api.local/v1/users/42",
+            "recommendation": "Enforce server-side object-level authorization checking that the authenticated session owns the requested user_id.",
+            "proof_payload": {
+                "artifact_type": "idor",
+                "response_text": '{"user_id": 42, "tenant": "tenant_b", "email": "victim42@api.local", "canary": "TENANT_B_SECRET_42"}',
+                "baseline_text": '{"user_id": 41, "tenant": "tenant_a", "email": "user41@api.local"}',
+                "expected_token": "TENANT_B_SECRET_42",
+                "probed_expression": "",
+                "metadata": {"actor_id": "41", "owner_id": "42", "status_code": 200},
+            },
         }
-        eval_strong = SevenQuestionGate.evaluate_finding(strong_finding)
+        eval_strong = SevenQuestionGate.evaluate_finding(strong_finding, in_scope_list=["api.local"])
 
         passed = eval_weak.passed is False and eval_strong.passed is True
         score = 5.0 if passed else 0.0
