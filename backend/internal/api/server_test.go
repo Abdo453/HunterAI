@@ -295,15 +295,18 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 		}
 	}
 
-	// Reject malformed JSON, empty target, shell metacharacters, and non-HTTP schemes with 400
+	// Reject malformed JSON, empty target, shell metacharacters, control chars, and non-HTTP schemes with 400
 	badInputs := []string{
 		`{invalid`,
 		`{}`,
 		`{"target": "   "}`,
 		`{"target": "example.com; id"}`,
 		`{"target": "example.com && whoami"}`,
+		`{"target": "example.com | id"}`,
 		`{"target": "$(cat /etc/passwd)"}`,
 		`{"target": "example.com` + "`id`" + `"}`,
+		`{"target": "example.com\nid"}`,
+		`{"target": "example.com\u0000"}`,
 		`{"target": "file:///etc/passwd"}`,
 		`{"target": "gopher://127.0.0.1:6379/_INFO"}`,
 	}
@@ -316,57 +319,93 @@ func TestScanMethodAndPayloadValidation(t *testing.T) {
 		}
 	}
 
-	// Reject cloud metadata, link-local, loopback, and RFC1918 targets with 403
-	blockedTargets := []string{
+	// Non-overridable cloud metadata, link-local, and unspecified targets stay 403 in both modes
+	hardBlockedTargets := []string{
 		"169.254.169.254",
 		"http://169.254.169.254/latest/meta-data/",
 		"[::ffff:169.254.169.254]",
 		"2852039166",
 		"0xa9fea9fe",
 		"metadata.google.internal",
+		"metadata.internal",
 		"100.100.100.200",
+		"fd00:ec2::254",
+		"0.0.0.0",
+	}
+	localAndPrivateTargets := []string{
 		"127.0.0.1",
+		"http://127.0.0.1:8080",
 		"localhost",
+		"http://localhost:3000",
 		"::1",
 		"2130706433",
 		"0x7f000001",
 		"10.0.0.1",
-		"172.16.0.5",
 		"192.168.1.10",
-	}
-	for _, target := range blockedTargets {
-		payload := `{"target":"` + target + `"}`
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Fatalf("POST /api/v1/scan (%s): expected 403, got %d (body: %s)", target, rec.Code, rec.Body.String())
-		}
+		"172.16.0.5",
 	}
 
-	// ARTEX_ALLOW_LOCAL_SCAN=1 allows loopback/private targets, while 169.254.0.0/16 & metadata remain blocked
-	t.Run("ARTEX_ALLOW_LOCAL_SCAN preserves non-overridable metadata block", func(t *testing.T) {
-		t.Setenv("ARTEX_ALLOW_LOCAL_SCAN", "1")
+	// Default mode (ARTEX_ALLOW_LOCAL_SCAN unset): local/private pentest targets and *.local are allowed,
+	// while non-overridable cloud metadata, link-local, and 0.0.0.0 remain 403.
+	t.Run("default allows local and private targets while blocking cloud metadata", func(t *testing.T) {
+		t.Setenv("ARTEX_ALLOW_LOCAL_SCAN", "")
 
-		metaReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"169.254.169.254"}`))
-		metaRec := httptest.NewRecorder()
-		handler.ServeHTTP(metaRec, metaReq)
-		if metaRec.Code != http.StatusForbidden {
-			t.Fatalf("169.254.169.254 must stay 403 even with ARTEX_ALLOW_LOCAL_SCAN=1, got %d", metaRec.Code)
+		for _, target := range hardBlockedTargets {
+			payload := `{"target":"` + target + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("POST /api/v1/scan (%s) default mode: expected 403, got %d (body: %s)", target, rec.Code, rec.Body.String())
+			}
 		}
 
-		localReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"127.0.0.1"}`))
-		localRec := httptest.NewRecorder()
-		handler.ServeHTTP(localRec, localReq)
-		if localRec.Code != http.StatusAccepted {
-			t.Fatalf("127.0.0.1 with ARTEX_ALLOW_LOCAL_SCAN=1 expected 202, got %d (body: %s)", localRec.Code, localRec.Body.String())
-		}
-		select {
-		case <-scanDispatched:
-		case <-time.After(2 * time.Second):
-			t.Fatalf("expected local scan goroutine to invoke orchestrator")
+		allowedByDefault := append([]string{"app.local", "http://my-lab.local:3000"}, localAndPrivateTargets...)
+		for _, target := range allowedByDefault {
+			payload := `{"target":"` + target + `"}`
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusAccepted {
+				t.Fatalf("POST /api/v1/scan (%s) default mode: expected 202, got %d (body: %s)", target, rec.Code, rec.Body.String())
+			}
+			select {
+			case <-scanDispatched:
+			case <-time.After(2 * time.Second):
+				t.Fatalf("expected default-mode scan goroutine to invoke orchestrator for %s", target)
+			}
 		}
 	})
+
+	// Explicit strict cloud-safe mode (ARTEX_ALLOW_LOCAL_SCAN=0/false/no/off) blocks local/private targets and metadata 403
+	for _, optOutVal := range []string{"0", "false", "no", "off"} {
+		optOutVal := optOutVal
+		t.Run("ARTEX_ALLOW_LOCAL_SCAN="+optOutVal+" blocks local/private and cloud metadata", func(t *testing.T) {
+			t.Setenv("ARTEX_ALLOW_LOCAL_SCAN", optOutVal)
+
+			for _, target := range append(append([]string(nil), localAndPrivateTargets...), hardBlockedTargets...) {
+				payload := `{"target":"` + target + `"}`
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(payload))
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, req)
+				if rec.Code != http.StatusForbidden {
+					t.Fatalf("POST /api/v1/scan (%s) with ARTEX_ALLOW_LOCAL_SCAN=%s: expected 403, got %d (body: %s)", target, optOutVal, rec.Code, rec.Body.String())
+				}
+			}
+
+			pubReq := httptest.NewRequest(http.MethodPost, "/api/v1/scan", strings.NewReader(`{"target":"example.com"}`))
+			pubRec := httptest.NewRecorder()
+			handler.ServeHTTP(pubRec, pubReq)
+			if pubRec.Code != http.StatusAccepted {
+				t.Fatalf("example.com with ARTEX_ALLOW_LOCAL_SCAN=%s expected 202, got %d (body: %s)", optOutVal, pubRec.Code, pubRec.Body.String())
+			}
+			select {
+			case <-scanDispatched:
+			case <-time.After(2 * time.Second):
+				t.Fatalf("expected public scan goroutine to invoke orchestrator with ARTEX_ALLOW_LOCAL_SCAN=%s", optOutVal)
+			}
+		})
+	}
 
 	// Reject scan when DB is nil instead of panicking in background goroutine
 	nilSrv := NewAPIServer(nil, 0)

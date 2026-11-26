@@ -588,7 +588,12 @@ func (s *APIServer) handleAudit(w http.ResponseWriter, r *http.Request) {
 
 func allowLocalScanEnabled() bool {
 	val := strings.ToLower(strings.TrimSpace(os.Getenv("ARTEX_ALLOW_LOCAL_SCAN")))
-	return val == "1" || val == "true" || val == "yes" || val == "on"
+	switch val {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
 }
 
 var hardBlockedMetadataHosts = map[string]struct{}{
@@ -727,7 +732,7 @@ func extractTargetHost(trimmed string) (string, int, string) {
 }
 
 func classifyTargetAddr(addr netip.Addr, allowLocal bool) (int, string) {
-	addr = addr.Unmap()
+	addr = addr.Unmap().WithZone("")
 
 	// Non-overridable link-local/metadata, unspecified, multicast, and reserved ranges.
 	if addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsUnspecified() || addr.IsMulticast() {
@@ -752,7 +757,7 @@ func classifyTargetAddr(addr netip.Addr, allowLocal bool) (int, string) {
 	}
 
 	if !allowLocal && (addr.IsLoopback() || addr.IsPrivate()) {
-		return http.StatusForbidden, fmt.Sprintf("Target IP %s is a private or loopback destination (set ARTEX_ALLOW_LOCAL_SCAN=1 for local labs)", addr)
+		return http.StatusForbidden, fmt.Sprintf("Target IP %s is a private or loopback destination (ARTEX_ALLOW_LOCAL_SCAN disabled; unset or set ARTEX_ALLOW_LOCAL_SCAN=1 for local labs)", addr)
 	}
 	return 0, ""
 }
