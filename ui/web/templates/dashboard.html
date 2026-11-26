@@ -430,8 +430,42 @@
   </main>
 
   <footer class="soc-footer">
-    HunterAI Control Center • Artex-Style Tactical SecOps Interface • Offline-Capable Kali &amp; Windows Control Plane
+    <div>HunterAI Control Center • Artex-Style Tactical SecOps Interface • Offline-Capable Kali &amp; Windows Control Plane</div>
+    <nav class="legacy-hub-bar" style="margin-top: 8px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; font-size: 12px; opacity: 0.85;">
+      <span>مركز قيادة OmniHunter الذاتي:</span>
+      <a href="/classic" style="color: #67e8f9;">مرآة التفكير المعرفي (CoT)</a>
+      <a href="/opencode" style="color: #67e8f9;">ترسانة كالي ومصفوفة MCP</a>
+      <a href="/chat" style="color: #67e8f9;">شات وتوجيه الوكلاء</a>
+      <a href="#panel-court-title" style="color: #67e8f9;">محكمة الأدلة والـ PoC</a>
+      <button type="button" class="btn btn-xs" onclick="switchTab('readiness', this)">جاهزية البيئة</button>
+    </nav>
+    <section id="tab-readiness" style="display:none; text-align: left; max-width: 1100px; margin: 10px auto 0; padding: 12px; background: rgba(15,23,42,0.75); border: 1px solid #1e293b; border-radius: 8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <strong>Environment Readiness</strong>
+        <span id="readiness-state-badge" class="panel-meta">UNKNOWN</span>
+      </div>
+      <div id="readiness-list" class="empty-state">Click Readiness to probe environment diagnostics.</div>
+    </section>
   </footer>
+  <script>
+    function switchTab(name, btn) {
+      var el = document.getElementById('tab-' + name);
+      if (!el) return;
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+      if (el.style.display === 'block' && name === 'readiness' && window.fetch) {
+        fetch('/api/diagnostics/readiness').then(function(r){ return r.json(); }).then(function(d){
+          var badge = document.getElementById('readiness-state-badge');
+          var list = document.getElementById('readiness-list');
+          if (badge) badge.textContent = d.overall_status || d.status || 'CHECKED';
+          if (list && Array.isArray(d.results)) {
+            list.innerHTML = d.results.map(function(x){
+              return '<div style="padding:3px 0;">[' + (x.status || '?') + '] ' + (x.name || '') + ' — ' + (x.detail || '') + '</div>';
+            }).join('');
+          }
+        }).catch(function(){});
+      }
+    }
+  </script>
 
   <!-- Modal 1: Finding Details -->
   <div id="finding-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="finding-modal-title">

@@ -6,6 +6,7 @@
 # ويب
 fastapi
 uvicorn[standard]
+websockets
 pydantic>=2.5
 python-multipart
 aiofiles

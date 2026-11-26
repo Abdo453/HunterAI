@@ -90,7 +90,7 @@ class WebDashboard:
             target = payload.get("target", "")
             mission = payload.get("mission", "full")
             session = {
-                "session_id": f"sess_{int(asyncio.get_event_loop().time())}",
+                "session_id": f"sess_{int(asyncio.get_running_loop().time())}",
                 "target": target,
                 "mission": mission,
                 "status": "running",

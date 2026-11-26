@@ -242,7 +242,7 @@ class MCPClient:
             "params": params or {},
         }
         timeout = timeout_s if timeout_s is not None else self.config.timeout_s
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
         self._pending[req_id] = future
 

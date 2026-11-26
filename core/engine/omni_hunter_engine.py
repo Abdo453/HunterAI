@@ -367,6 +367,8 @@ class OmniHunterEngine:
         }
         self.confirmed_findings: List[Dict[str, Any]] = []
         self.exploit_chains: List[Dict[str, Any]] = []
+        self.sir_graph: Optional[Any] = None
+        self.sir_judgments: List[Any] = []
         self.current_phase = AssessmentPhase.INIT
         self._start_time: float = 0.0
 
@@ -1137,6 +1139,40 @@ class OmniHunterEngine:
 
     def _run_adjudication_phase(self) -> None:
         logger.info("[OmniHunter] ── Phase 7: EVIDENCE COURT FINAL ADJUDICATION ──")
+        sir_graph = getattr(self, "sir_graph", None) or (
+            self.surface.get("sir_graph") if isinstance(self.surface, dict) else None
+        )
+        if sir_graph is None and isinstance(self.surface, dict) and self.surface.get("normalized_signals"):
+            try:
+                from core.normalizer.tool_normalizer import ToolOutputNormalizer
+                sir_graph = ToolOutputNormalizer.ingest_to_sir(self.surface["normalized_signals"])
+                self.sir_graph = sir_graph
+            except Exception as sir_err:
+                logger.debug("[EvidenceCourt] Could not compile normalized_signals to SIRGraph: %s", sir_err)
+
+        if sir_graph is not None:
+            try:
+                from core.bridges.sir_to_court import submit_sir_to_court
+                judgments = submit_sir_to_court(sir_graph, self.court)
+                self.sir_judgments = list(judgments)
+                for j in judgments:
+                    verdict_obj = getattr(j, "verdict", None)
+                    verdict_val = verdict_obj.value if hasattr(verdict_obj, "value") else str(verdict_obj or "")
+                    if verdict_val.upper() == "CONFIRMED":
+                        self.confirmed_findings.append({
+                            "task_id": getattr(j, "claim_id", f"SIR-{len(self.confirmed_findings) + 1}"),
+                            "target": getattr(j, "target", self.config.target_url),
+                            "vuln_class": getattr(j, "vuln_class", "SIR_FINDING"),
+                            "verdict": "CONFIRMED",
+                            "confidence": getattr(j, "confidence", 0.9),
+                            "evidence": getattr(j, "reasons", []),
+                            "source": "sir_to_court",
+                            "timestamp": time.time(),
+                        })
+                logger.info("[EvidenceCourt] Adjudicated %d SIR entities via EvidenceCourt bridge.", len(judgments))
+            except Exception as bridge_err:
+                logger.warning("[EvidenceCourt] SIR-to-Court bridge skipped: %s", bridge_err)
+
         seen_fingerprints: Set[str] = set()
         deduped = []
         for finding in self.confirmed_findings:

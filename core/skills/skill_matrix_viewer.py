@@ -110,7 +110,11 @@ class SkillMatrixViewer:
         try:
             with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
                 data = json.load(f)
-            for item in data.get("skills", []):
+            raw_skills = data.get("skills", [])
+            items = list(raw_skills.values()) if isinstance(raw_skills, dict) else raw_skills
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
                 name = item.get("name", "")
                 if name.startswith("abh-"):
                     continue  # already counted in get_agentic_bug_hunter_skills

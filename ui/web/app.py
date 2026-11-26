@@ -303,3 +303,14 @@ async def ws_terminal(websocket: WebSocket) -> None:
         pass
     except Exception as exc:
         logger.debug("WebSocket terminal closed: %s", exc)
+
+
+# ── Legacy OmniHunter Routes & Sub-App Compatibility ──────────────────────────
+from ui.web.legacy_routes import (
+    AgentCoPilotState,
+    copilot_state,
+    get_burp_gateway,
+    register_legacy_routes,
+)
+
+register_legacy_routes(app)

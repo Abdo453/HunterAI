@@ -189,9 +189,13 @@ def test_opencode_curated_skills_manifest():
 
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert "skills" in data
-    assert len(data["skills"]) >= 200
+    raw_skills = data["skills"]
+    assert len(raw_skills) >= 200
 
-    skill_names = [s["name"] for s in data["skills"]]
+    if isinstance(raw_skills, dict):
+        skill_names = list(raw_skills.keys())
+    else:
+        skill_names = [s["name"] for s in raw_skills]
     assert any("abh-" in name for name in skill_names)
 
 

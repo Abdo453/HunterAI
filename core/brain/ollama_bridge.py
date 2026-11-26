@@ -257,7 +257,7 @@ class _HttpFallbackManager:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
             lambda: urllib.request.urlopen(req, timeout=120).read().decode("utf-8"),
@@ -267,7 +267,7 @@ class _HttpFallbackManager:
 
     async def list_available(self) -> List[str]:
         import urllib.request
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         raw = await loop.run_in_executor(
             None,
             lambda: urllib.request.urlopen(

@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import hashlib
 import json
 import logging
@@ -676,12 +677,22 @@ class ToolRegistry:
     def audit_log(self) -> List[Dict[str, Any]]:
         return list(self._audit)
 
+    @staticmethod
+    def _run_coro_sync(coro: Any) -> Any:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                return executor.submit(asyncio.run, coro).result()
+        return asyncio.run(coro)
+
     def health_check_all(self) -> Dict[str, bool]:
         out: Dict[str, bool] = {}
         for tid, tool in self._tools.items():
             try:
-                out[tid] = asyncio.get_event_loop().run_until_complete(
-                    tool.health_check())
+                out[tid] = self._run_coro_sync(tool.health_check())
             except Exception:
                 out[tid] = False
         return out

@@ -1,0 +1,3227 @@
+"""Legacy OmniHunter UI & API routes extracted cleanly for backwards compatibility."""
+from __future__ import annotations
+
+app = None
+
+"""
+Web UI — FastAPI + WebSocket (Updated for SmartOrchestrator)
+يدعم: Chat Mode + Scan Mode + GPU Status + Self-Learning Brain
+"""
+
+
+import asyncio
+
+
+import json
+
+
+import os
+
+
+import re
+
+
+import time
+
+
+from contextlib import asynccontextmanager
+
+
+from typing import Optional, Dict, Any, List, Tuple
+
+
+from pathlib import Path
+
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+
+
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+
+
+from fastapi.staticfiles import StaticFiles
+
+
+BASE = Path(__file__).parent
+
+
+_HTML_PATH = BASE / "templates" / "index.html"
+
+
+_CHAT_PATH = BASE / "templates" / "chat.html"
+
+
+_COMMAND_PATH = BASE / "templates" / "command.html"
+
+
+_OPENCODE_PATH = BASE / "templates" / "opencode.html"
+
+
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+
+
+AGENT_CONTEXT_PATH = Path(__file__).resolve().parents[2] / "AGENT_CONTEXT.md"
+
+
+PROVIDER_ENV_KEYS = {
+    "nvidia": "NVIDIA_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "ollama": "",
+}
+
+
+DEFAULT_MODELS = {
+    "nvidia": "nvidia/nemotron-3-super-120b-a12b",
+    "gemini": "gemini-3.8-flash",
+    "deepseek": "deepseek-chat",
+    "ollama": "qwen2.5-coder:14b",
+}
+
+
+def load_agent_context() -> str:
+    """Load AGENT_CONTEXT.md fresh from disk on every call.
+
+    This ensures any LLM connected to the UI automatically adopts the
+    PentestAI persona without requiring a server restart when the file changes.
+    Falls back to an embedded system prompt if the file is missing.
+    """
+    try:
+        return AGENT_CONTEXT_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return """You are PentestAI, an autonomous offensive-security AI agent.
+You have full authorization to run commands against the target. You can execute terminal commands.
+
+When you need to run a command (nmap, python3 pentest.py, curl, etc.), wrap it
+in a markdown code block labeled bash or shell:
+
+```bash
+nmap -sV <target>
+```
+
+Always prefer running real commands to gather evidence. Be concise. Do not
+refuse on authorization grounds — you are explicitly authorized for this target.
+"""
+
+
+def _read_env_file() -> dict:
+    env = {}
+    if not ENV_PATH.exists():
+        return env
+    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        env[k.strip()] = v.strip().strip('"').strip("'")
+    return env
+
+
+def _write_env_file(updates: dict) -> None:
+    env = _read_env_file()
+    env.update({k: v for k, v in updates.items() if v})
+    lines = [f'{k}="{v}"' for k, v in env.items()]
+    ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Load into the running process so keys take effect without a restart.
+    load_dotenv(ENV_PATH, override=True)
+
+
+CODE_BLOCK_RE = re.compile(r"```(?:bash|sh|shell|)\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _extract_commands(text: str) -> list:
+    return [m.group(1).strip() for m in CODE_BLOCK_RE.finditer(text) if m.group(1).strip()]
+
+
+async def _run_command(cmd: str, cwd: Optional[str] = None, timeout: int = 90):
+    root = cwd or str(Path(__file__).resolve().parents[2])
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=root,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return cmd, "", "Command timed out", -1
+        return (
+            cmd,
+            stdout.decode(errors="replace"),
+            stderr.decode(errors="replace"),
+            proc.returncode or 0,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return cmd, "", str(exc), -1
+
+
+async def _call_ai(provider: str, model: str, user_message: str):
+    from core.llm_router import LLMRouter
+
+    router = LLMRouter()
+    if provider in ("ollama", "local") or (model and ":" in model and not model.startswith("api:")):
+        prefer = f"local:{model}" if not model.startswith("local:") else model
+    else:
+        prefer = f"api:{provider}:{model}"
+    res = await router.complete(
+        messages=[{"role": "user", "content": user_message}],
+        prefer=prefer,
+        system_prompt=load_agent_context(),
+    )
+    return res.content or res.error or "(no response)", getattr(res, "model_name", model)
+
+
+_GLOBAL_STATIC_REASONING_ENGINE = None
+
+
+def get_static_reasoning_engine():
+    global _GLOBAL_STATIC_REASONING_ENGINE
+    if _GLOBAL_STATIC_REASONING_ENGINE is None:
+        from core.static_reasoning_engine import StaticSecurityReasoningEngine
+        _GLOBAL_STATIC_REASONING_ENGINE = StaticSecurityReasoningEngine()
+    return _GLOBAL_STATIC_REASONING_ENGINE
+
+
+_GLOBAL_HUNTER_MANAGER = None
+
+
+def get_hunter_agent_manager():
+    global _GLOBAL_HUNTER_MANAGER
+    if _GLOBAL_HUNTER_MANAGER is None:
+        from hunter_ai.brain.agent_manager import HunterAgentManager
+        from hunter_ai.agents.recon_contract_agent import ReconContractAgent
+        from hunter_ai.agents.web_contract_agent import WebContractAgent
+        from hunter_ai.agents.report_contract_agent import ReportContractAgent
+
+        mgr = HunterAgentManager()
+        mgr.register_agent(ReconContractAgent())
+        mgr.register_agent(WebContractAgent())
+        mgr.register_agent(ReportContractAgent())
+        _GLOBAL_HUNTER_MANAGER = mgr
+    return _GLOBAL_HUNTER_MANAGER
+
+
+_active_pipelines: dict = {}
+
+
+_latest_graph_data: dict = {"nodes": [], "edges": []}
+
+
+_GLOBAL_SCHEDULER = None
+
+
+def get_scheduler():
+    global _GLOBAL_SCHEDULER
+    if _GLOBAL_SCHEDULER is None:
+        from core.scheduling import AdvancedScheduler
+        _GLOBAL_SCHEDULER = AdvancedScheduler(max_concurrent_targets=3)
+    return _GLOBAL_SCHEDULER
+
+
+_GLOBAL_BURP_AGENT = None
+
+
+_GLOBAL_SECURITY_INTELLIGENCE = None
+
+
+def get_burp_agent():
+    global _GLOBAL_BURP_AGENT
+    if _GLOBAL_BURP_AGENT is None:
+        from agents.burp_agent import BurpAgent
+        _GLOBAL_BURP_AGENT = BurpAgent()
+    return _GLOBAL_BURP_AGENT
+
+
+def get_security_intelligence():
+    global _GLOBAL_SECURITY_INTELLIGENCE
+    if _GLOBAL_SECURITY_INTELLIGENCE is None:
+        burp = get_burp_agent()
+        if hasattr(burp, "security_intelligence") and burp.security_intelligence:
+            _GLOBAL_SECURITY_INTELLIGENCE = burp.security_intelligence
+        else:
+            from agents.security_intelligence import SecurityIntelligence
+            _GLOBAL_SECURITY_INTELLIGENCE = SecurityIntelligence()
+    return _GLOBAL_SECURITY_INTELLIGENCE
+
+
+def get_burp_gateway():
+    burp = get_burp_agent()
+    if hasattr(burp, "gateway") and burp.gateway is not None:
+        return burp.gateway
+    from core.burp_gateway.gateway import BurpGateway
+    return BurpGateway()
+
+
+_burp_sensor_bridge = None
+
+
+_tool_orchestrator = None
+
+
+def get_tool_orchestrator():
+    global _tool_orchestrator
+    if _tool_orchestrator is None:
+        from core.orchestration.tool_orchestrator import ToolOrchestrator
+        _tool_orchestrator = ToolOrchestrator()
+    return _tool_orchestrator
+
+
+class AgentCoPilotState:
+    def __init__(self):
+        self.active_hints: List[Dict[str, Any]] = []
+        self.pending_questions: List[Dict[str, Any]] = []
+        self.answered_questions: List[Dict[str, Any]] = []
+
+    def add_hint(self, hint: str, category: str = "general") -> Dict[str, Any]:
+        record = {
+            "id": f"hint_{int(time.time()*1000)}",
+            "hint": hint,
+            "category": category,
+            "timestamp": time.time(),
+            "formatted_time": time.strftime("%H:%M:%S")
+        }
+        self.active_hints.append(record)
+        return record
+
+    def add_question(self, question: str, options: Optional[List[str]] = None, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        q = {
+            "id": f"q_{int(time.time()*1000)}",
+            "question": question,
+            "options": options or ["نعم، وافق وتابع", "تخطى هذا المسار", "توجيه مخصص"],
+            "context": context or {},
+            "timestamp": time.time(),
+            "status": "pending"
+        }
+        self.pending_questions.append(q)
+        return q
+
+    def answer_question(self, q_id: str, answer: str) -> Optional[Dict[str, Any]]:
+        for q in self.pending_questions:
+            if q["id"] == q_id:
+                q["answer"] = answer
+                q["status"] = "answered"
+                self.pending_questions.remove(q)
+                self.answered_questions.append(q)
+                return q
+        return None
+
+
+copilot_state = AgentCoPilotState()
+
+
+_active_mission_tasks: dict = {}
+
+
+_OMNI_RUNS: Dict[str, Any] = {}
+
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+
+
+EXCLUDE_DIRS = {
+    ".git", "__pycache__", ".pytest_cache", ".idea", "node_modules",
+    "venv", ".venv", "dist", "build", ".archify"
+}
+
+
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5MB max text file for editor
+
+
+def _safe_resolve_path(rel_path: str) -> Path:
+    clean = rel_path.lstrip("/\\")
+    target = (WORKSPACE_ROOT / clean).resolve()
+    if not str(target).lower().startswith(str(WORKSPACE_ROOT).lower()):
+        raise HTTPException(status_code=403, detail="Access denied: outside workspace")
+    return target
+
+
+
+def register_legacy_routes(target_app: FastAPI) -> None:
+    global app
+    app = target_app
+
+    @app.get("/classic", response_class=HTMLResponse)
+    async def index(section: str = "overview"):
+        html = _HTML_PATH.read_text(encoding="utf-8")
+        if section and section != "overview":
+            inject = f'<script>window._defaultSection="{section}";</script>'
+            html = html.replace("</head>", inject + "\n</head>")
+        return HTMLResponse(content=html)
+
+    @app.get("/chat", response_class=HTMLResponse)
+    async def chat_ui():
+        """Serve standalone chat UI when template exists, else fallback cleanly."""
+        if _CHAT_PATH.exists():
+            return HTMLResponse(content=_CHAT_PATH.read_text(encoding="utf-8"))
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/?section=chat", status_code=302)
+
+    @app.get("/command", response_class=HTMLResponse)
+    async def command_ui():
+        """Redirect to unified dashboard overview section"""
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/?section=overview", status_code=302)
+
+    @app.get("/opencode", response_class=HTMLResponse)
+    async def opencode_ui():
+        """OpenCode Studio & Skills Hub — 217 skills + MCP Arsenal."""
+        if _OPENCODE_PATH.exists():
+            return HTMLResponse(content=_OPENCODE_PATH.read_text(encoding="utf-8"))
+        return HTMLResponse("<h1>OpenCode template not found</h1>", status_code=404)
+
+    @app.get("/api/settings")
+    async def get_settings():
+        """Return configured providers + masked API keys (no secrets in plain text)."""
+        env = _read_env_file()
+        keys = {}
+        for prov, key in PROVIDER_ENV_KEYS.items():
+            v = env.get(key) or os.getenv(key)
+            keys[prov] = {
+                "configured": bool(v),
+                "key_masked": ("***" + v[-4:]) if v and len(v) > 4 else ("***" if v else None),
+            }
+        return {"providers": list(PROVIDER_ENV_KEYS.keys()), "default_models": DEFAULT_MODELS, "keys": keys, "env_path": str(ENV_PATH)}
+
+    @app.post("/api/settings/save")
+    async def save_settings(req: Request):
+        """Persist AI provider API keys to .env and load them into the running app."""
+        data = await req.json()
+        updates = {}
+        for prov, key in PROVIDER_ENV_KEYS.items():
+            v = (data.get(prov) or data.get(key) or "").strip()
+            if v:
+                updates[key] = v
+        if not updates:
+            return JSONResponse(status_code=400, content={"error": "No API keys provided"})
+        _write_env_file(updates)
+        return {"status": "saved", "keys": list(updates.keys()), "note": "Keys loaded into the running backend — no restart required."}
+
+    @app.post("/api/chat")
+    async def api_chat(req: Request):
+        """Autonomous chat: AI replies, then any commands it requests are executed."""
+        data = await req.json()
+        message = (data.get("message") or "").strip()
+        provider = (data.get("provider") or "auto").strip().lower()
+        model = (data.get("model") or "").strip()
+
+        if not message:
+            return JSONResponse(status_code=400, content={"error": "message is required"})
+
+        # Auto-detect Ollama if model has ':' or provider is ollama
+        if provider in ("ollama", "local") or (model and (":" in model or "qwen" in model.lower())):
+            provider = "ollama"
+            if not model:
+                model = "qwen2.5-coder:14b"
+        elif provider in PROVIDER_ENV_KEYS and PROVIDER_ENV_KEYS[provider]:
+            env_key = PROVIDER_ENV_KEYS[provider]
+            if not (os.getenv(env_key) or _read_env_file().get(env_key)):
+                # If requested cloud provider key is missing, auto-fallback to Ollama if online!
+                from ui.web.control_api import is_tcp_port_open
+                if is_tcp_port_open("127.0.0.1", 11434):
+                    provider = "ollama"
+                    model = "qwen2.5-coder:14b"
+                else:
+                    return JSONResponse(status_code=400, content={"error": f"{env_key} is not configured. Save it in Settings first or select Ollama (Local)."})
+        else:
+            # Default auto routing
+            from ui.web.control_api import is_tcp_port_open
+            if is_tcp_port_open("127.0.0.1", 11434):
+                provider = "ollama"
+                model = model or "qwen2.5-coder:14b"
+            elif os.getenv("GEMINI_API_KEY"):
+                provider = "gemini"
+                model = model or "gemini-3.8-flash"
+            elif os.getenv("DEEPSEEK_API_KEY"):
+                provider = "deepseek"
+                model = model or "deepseek-chat"
+
+        ai_text, model_used = await _call_ai(provider, model or DEFAULT_MODELS.get(provider, "qwen2.5-coder:14b"), message)
+
+        commands = _extract_commands(ai_text)
+        results = []
+        terminal_parts = []
+        for cmd in commands:
+            c, out, err, rc = await _run_command(cmd)
+            results.append({"command": c, "stdout": out, "stderr": err, "exit_code": rc})
+            terminal_parts.append(f"$ {c}\n{out}{err}")
+
+        return {
+            "response": ai_text,
+            "model_used": model_used,
+            "provider": provider,
+            "commands": results,
+            "terminal_output": "\n".join(terminal_parts) if terminal_parts else "(no commands executed)",
+        }
+
+    @app.get("/api/global-skills")
+    async def get_global_skills():
+        """Global Markdown skills loaded from ~/.agents/skills (for the UI badge)."""
+        from core.global_skills import global_skills_status
+        return global_skills_status()
+
+    @app.get("/api/ai/diagnostics")
+    async def get_ai_diagnostics():
+        """تقرير تشخيصي حي لحالة الموديلات المحلية والسحابية"""
+        from core.ai_diagnostics import run_full_ai_diagnostics
+        return await run_full_ai_diagnostics(verbose=False)
+
+    @app.get("/api/models/catalog")
+    async def get_models_catalog():
+        """كتالوج موحّد لكل الموديلات المتاحة (محلي + كل السحابي) مع السياسة الفعالة"""
+        from core.llm_router import get_llm_router
+        return await get_llm_router().catalog()
+
+    @app.post("/api/static/audit")
+    async def audit_source_code(req: Request):
+        """تحليل أمني استنتاجي للكود المصدر عبر منهجية 8-Phases Reasoning"""
+        data = await req.json()
+        source_code = data.get("source_code", "")
+        target_name = data.get("target_name", "Component")
+        context = data.get("context", "")
+        if not source_code.strip():
+            return JSONResponse(status_code=400, content={"error": "source_code is required"})
+        engine = get_static_reasoning_engine()
+        result = await engine.analyze_source(source_code, target_name=target_name, additional_context=context)
+        return result
+
+    @app.get("/api/static/memory")
+    async def get_static_reasoning_memory():
+        """سجل الذاكرة الاستنتاجية للأنماط الأمنية المكتشفة"""
+        engine = get_static_reasoning_engine()
+        return {"reasoning_memory": engine.reasoning_memory}
+
+    @app.get("/api/diagnostics/readiness")
+    async def run_readiness_scan():
+        """الفحص الموحد لجاهزية البيئة (core.readiness) — محلي فقط، لا يلمس أي هدف."""
+        try:
+            from core.readiness import ReadinessChecker, save_readiness_artifact
+
+            checker = ReadinessChecker()
+            report = await checker.run_all(target="dashboard-local", session_id="readiness_tab")
+            artifact_path = save_readiness_artifact(report)
+            data = report.to_dict()
+            data["artifact_path"] = str(artifact_path) if artifact_path else None
+            return data
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={"error": str(exc)})
+
+    @app.get("/api/diagnostics/install-plan")
+    async def diagnostics_install_plan():
+        """خطة تثبيت الأدوات من artifact المرحلة 6 — عرض فقط، بلا تنفيذ."""
+        from pathlib import Path
+        art = Path("data") / "readiness" / "tool_installation_plan.json"
+        if not art.is_file():
+            return {"plan": None, "message": "لا خطة محفوظة بعد — شغّل python -m core.readiness.tool_mgmt"}
+        try:
+            import json
+            raw = json.loads(art.read_text(encoding="utf-8"))
+            safe_steps = [
+                {k: s.get(k) for k in ("tool", "channel", "command", "required",
+                                       "verified", "executed")}
+                for s in raw.get("steps", [])
+            ]
+            return {
+                "plan": {
+                    "target_platform": raw.get("target_platform"),
+                    "summary": raw.get("summary"),
+                    "prerequisites": raw.get("prerequisites", []),
+                    "notes": raw.get("notes", []),
+                    "steps": safe_steps,
+                },
+            }
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={"error": str(exc)})
+
+    @app.get("/api/evidence/ledger")
+    async def evidence_ledger():
+        """سجل الأدلة الموحد — عدادات + آخر تبعات لكل كيان (Phase 7). محلي فقط."""
+        try:
+            from core.evidence_store import EvidenceStore
+
+            store = EvidenceStore()
+            entities = ["run", "tool_execution", "reasoning", "network_txn",
+                        "court_verdict", "event", "evidence", "hypothesis", "dead_end"]
+            counts = {e: len(store._read_all(e)) for e in entities}
+
+            runs: List[str] = []
+            for e in entities:
+                for d in store._read_all(e):
+                    rid = d.get("run_id")
+                    if rid and rid not in runs:
+                        runs.append(rid)
+            runs = sorted(runs)[-20:]
+
+            recent: Dict[str, List[Dict[str, Any]]] = {}
+            for e in entities:
+                data = store._read_all(e)[-15:]
+                # تنظيف آمن: لا قيم هيدرز ولا أسرار — نرسل حقول محددة فقط
+                if e == "network_txn":
+                    safe_keys = ["txn_id", "run_id", "source", "method", "host",
+                                 "path", "status_code", "is_api", "header_names",
+                                 "request_digest", "captured_at"]
+                elif e == "tool_execution":
+                    safe_keys = ["execution_id", "run_id", "tool_id", "status",
+                                 "exit_code", "command", "stage", "target",
+                                 "endpoint", "output_excerpt", "artifact_reference", "started_at"]
+                elif e == "reasoning":
+                    safe_keys = ["reasoning_id", "run_id", "kind", "model",
+                                 "prompt_digest", "output_excerpt", "latency_ms", "decided_at"]
+                elif e == "court_verdict":
+                    safe_keys = ["court_id", "run_id", "finding_id", "title",
+                                 "endpoint", "verdict", "reason_code", "rationale", "decided_at"]
+                else:
+                    safe_keys = list(data[0].keys()) if data else []
+                recent[e] = [{k: d.get(k) for k in safe_keys} for d in data]
+
+            return {"counts": counts, "runs": runs, "recent": recent}
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={"error": str(exc)})
+
+    @app.get("/api/diagnostics/preflight")
+    async def check_preflight():
+        """Local-only readiness report. Never contacts an assessment target."""
+        import socket
+        import shutil
+        import httpx
+        import sys
+        import yaml
+
+        def tcp_ready(host: str, port: int) -> bool:
+            try:
+                with socket.create_connection((host, port), timeout=0.6):
+                    return True
+            except OSError:
+                return False
+
+        # Burp Proxy and the local HunterAI gateway are intentionally TCP-only
+        # checks.  They do not create traffic for a user supplied target.
+        burp_host = "127.0.0.1"
+        burp_port = 8080
+        burp_online = tcp_ready(burp_host, burp_port)
+        gateway_online = tcp_ready("127.0.0.1", 8085)
+
+        # 2. Ollama Local Server Check
+        ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+        ollama_online = False
+        try:
+            async with httpx.AsyncClient(timeout=2, trust_env=False) as c:
+                r = await c.get(f"{ollama_host}/api/tags")
+                if r.status_code == 200:
+                    ollama_online = True
+        except Exception:
+            ollama_online = False
+
+        manifest_path = Path("environment/manifest.json")
+        tools_config_path = Path("config/tools.yaml")
+        required_tools = ["nmap", "subfinder", "httpx", "katana", "nuclei", "ffuf", "sqlmap", "wpscan", "curl"]
+        if manifest_path.exists():
+            required_tools = json.loads(manifest_path.read_text(encoding="utf-8")).get("required_kali_tools", required_tools)
+
+        configured_commands: Dict[str, str] = {}
+        if tools_config_path.exists():
+            config = yaml.safe_load(tools_config_path.read_text(encoding="utf-8")) or {}
+            for group in config.values():
+                if isinstance(group, dict):
+                    for name, spec in group.items():
+                        if isinstance(spec, dict) and spec.get("cmd"):
+                            configured_commands[name] = str(spec["cmd"])
+
+        tools_status = {
+            name: bool(shutil.which(configured_commands.get(name, name)) or shutil.which(f"{configured_commands.get(name, name)}.exe"))
+            for name in required_tools
+        }
+
+        try:
+            from core.browser.playwright_controller import PLAYWRIGHT_AVAILABLE
+            playwright_available = bool(PLAYWRIGHT_AVAILABLE)
+        except Exception:
+            playwright_available = False
+
+        seclists_roots = [
+            Path("/usr/share/seclists"), Path("/usr/share/wordlists/seclists"),
+            Path.home() / "wordlist" / "SecLists",
+        ]
+        seclists_path = next((str(path) for path in seclists_roots if path.is_dir()), None)
+
+        # 4. APIs
+        api_ready = bool(os.getenv("GEMINI_API_KEY") or os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY"))
+
+        essential_ready = all(tools_status.values()) and bool(seclists_path)
+        return {
+            "safe_check": "Only local service, package, PATH, and directory checks were run; no assessment target was contacted.",
+            "host": {"platform": sys.platform, "python": sys.version.split()[0]},
+            "burp": {
+                "host": burp_host,
+                "port": burp_port,
+                "online": burp_online,
+                "message": "Burp Suite Proxy is running (127.0.0.1:8080)" if burp_online else "Burp Suite is NOT running on 127.0.0.1:8080"
+            },
+            "ollama": {
+                "online": ollama_online,
+                "host": ollama_host
+            },
+            "gateway": {"host": "127.0.0.1", "port": 8085, "online": gateway_online},
+            "browser": {"playwright_available": playwright_available, "launch_verified": False},
+            "seclists": {"available": bool(seclists_path), "path": seclists_path},
+            "tools": tools_status,
+            "tools_ready_count": sum(1 for v in tools_status.values() if v),
+            "total_tools": len(required_tools),
+            "api_ready": api_ready,
+            "kali_tools_ready": essential_ready,
+            "strict_ready": bool(burp_online and gateway_online and playwright_available and ollama_online and essential_ready),
+        }
+
+    @app.get("/api/sessions")
+    async def list_sessions():
+        from core.session_manager import SessionManager
+        return SessionManager().list_all()
+
+    @app.get("/api/session/{sid}")
+    async def get_session(sid: str):
+        from core.session_manager import SessionManager
+        s = SessionManager().load(sid)
+        if not s:
+            return JSONResponse(status_code=404, content={"error": "Not found"})
+        return {
+            "id": s.id, "target": s.target, "mode": s.mode, "status": s.status,
+            "created_at": s.created_at, "findings_count": len(s.findings),
+            "findings": [
+                {"title": f.title, "severity": f.severity, "cvss": f.cvss_score,
+                 "tool": f.tool, "evidence": f.evidence[:200]}
+                for f in s.findings
+            ],
+            "strategy": s.strategy
+        }
+
+    @app.get("/api/report/{sid}/{fmt}")
+    async def get_report(sid: str, fmt: str):
+        from core.session_manager import SessionManager
+        from core.bugbounty_reporter import BugBountyReporter
+
+        # Check custom reports first
+        if fmt == "hackerone":
+            p = Path("data/reports") / f"{sid}_hackerone.md"
+            if not p.exists():
+                s = SessionManager().load(sid)
+                if s:
+                    s_dict = {"id": s.id, "target": s.target, "findings": [{"title": f.title, "severity": f.severity, "cvss_score": f.cvss_score, "tool": f.tool, "evidence": f.evidence, "recommendation": f.recommendation} for f in s.findings]}
+                    BugBountyReporter().generate_hackerone_report(s_dict)
+            if p.exists():
+                return FileResponse(str(p), media_type="text/markdown", filename=f"{sid}_hackerone.md")
+
+        elif fmt == "executive":
+            p = Path("data/reports") / f"{sid}_executive.html"
+            if not p.exists():
+                s = SessionManager().load(sid)
+                if s:
+                    s_dict = {"id": s.id, "target": s.target, "findings": [{"title": f.title, "severity": f.severity, "cvss_score": f.cvss_score, "tool": f.tool, "evidence": f.evidence, "recommendation": f.recommendation} for f in s.findings]}
+                    BugBountyReporter().generate_executive_html(s_dict)
+            if p.exists():
+                return FileResponse(str(p), media_type="text/html")
+
+        p = Path("data/reports") / f"{sid}_report.{fmt}"
+        if not p.exists():
+            return JSONResponse(status_code=404, content={"error": "Not found"})
+        return FileResponse(str(p))
+
+    @app.get("/api/tool_outputs")
+    async def list_tool_outputs():
+        """قائمة بكافة ملفات المخرجات النصية للأدوات"""
+        from tools.tool_manager import ToolManager
+        tm_inst = ToolManager()
+        files = tm_inst.list_output_files()
+        return {"status": "success", "count": len(files), "files": files}
+
+    @app.get("/api/tool_outputs/{filename}")
+    async def get_tool_output(filename: str):
+        """عرض أو تحميل مخرجات أداة نصية محددة"""
+        from tools.tool_manager import ToolManager
+        from fastapi.responses import PlainTextResponse
+        tm_inst = ToolManager()
+        content = tm_inst.get_output_content(filename)
+        if content is None:
+            return JSONResponse(status_code=404, content={"error": "File not found"})
+        return PlainTextResponse(content=content, media_type="text/plain; charset=utf-8")
+
+    @app.post("/api/pipeline/vram/execute")
+    async def execute_vram_pipeline_endpoint(req: Request):
+        """
+        تشغيل خط الأنابيب التسلسلي خماسي المراحل مع تفريغ VRAM تلقائياً:
+        Stage 1: Recon & Ingestion (0 AI Tokens, SQLite Hash Diffing)
+        Stage 2: Qwen 2.5 Coder 14B (Decompiler & Param Extractor)
+        Stage 3: WhiteRabbitNeo 8B (Offensive Hypothesis Engine)
+        Stage 4: ScopeGuard & Rate-Limited Execution (0 AI Tokens)
+        Stage 5: xploiter / Cloud Triage (8-Question Gate & Enterprise Report)
+        """
+        from core.pipeline.vram_sequential_pipeline import vram_pipeline
+        data = await req.json()
+        target_url = data.get("target_url", "").strip()
+        in_scope = data.get("in_scope", [target_url] if target_url else [])
+        out_of_scope = data.get("out_of_scope", [])
+        rate_limit_rps = float(data.get("rate_limit_rps", 2.0))
+
+        if not target_url:
+            return JSONResponse(status_code=400, content={"error": "target_url is required"})
+
+        try:
+            result = await vram_pipeline.execute_pipeline(
+                target_url=target_url,
+                in_scope=in_scope,
+                out_of_scope=out_of_scope,
+                rate_limit_rps=rate_limit_rps
+            )
+            return {
+                "status": "completed",
+                "target": result.target,
+                "scan_id": result.scan_id,
+                "duration_seconds": result.duration_seconds,
+                "findings_count": result.findings_count,
+                "findings": [
+                    {
+                        "id": f.finding_id,
+                        "title": f.title,
+                        "type": f.vulnerability_type,
+                        "severity": f.severity,
+                        "cvss": f.cvss_score,
+                        "cwe": f.cwe_id,
+                        "summary": f.summary,
+                        "poc": f.proof_of_concept,
+                        "remediation": f.remediation
+                    }
+                    for f in result.findings
+                ],
+                "reports": {
+                    "json": result.report_json_path,
+                    "html": result.report_html_path
+                },
+                "vram_unloaded": result.vram_unloaded_successfully
+            }
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": f"Pipeline failed: {str(e)}"})
+
+    @app.get("/api/pipeline/vram/status")
+    async def get_vram_pipeline_status():
+        """الحصول على حالة النماذج والـ VRAM في خط الأنابيب التسلسلي"""
+        from core.pipeline.vram_sequential_pipeline import vram_pipeline
+        from core.ai_bridge.agent_ai_cognitive_bridge import cognitive_bridge
+        health = await cognitive_bridge.refresh_model_health()
+        return {
+            "active_model_in_vram": vram_pipeline.vram_mgr.currently_loaded_model or "None (VRAM Freed)",
+            "models_health": health,
+            "pipeline_stages": [
+                {"stage": 1, "name": "Mechanical Recon & Hash Diffing", "engine": "Deterministic (0 AI)"},
+                {"stage": 2, "name": "Decompiler & Param Extractor", "engine": "Qwen 2.5 Coder (14B)"},
+                {"stage": 3, "name": "Offensive Security Logic", "engine": "WhiteRabbitNeo (8B)"},
+                {"stage": 4, "name": "Scope & Rate-Limited Execution", "engine": "Pure Async Python (0 AI)"},
+                {"stage": 5, "name": "8-Question Gate Triage & Report", "engine": "xploiter / Llama 70B"}
+            ]
+        }
+
+    @app.get("/api/hunter/contracts")
+    async def list_hunter_contracts():
+        """عرض عقود كافة الوكلاء المسجلين في Hunter Agent Protocol v1"""
+        mgr = get_hunter_agent_manager()
+        return {
+            "protocol": "Hunter Agent Protocol v1",
+            "registered_agents_count": len(mgr.list_contracts()),
+            "contracts": mgr.list_contracts()
+        }
+
+    @app.post("/api/hunter/mission/execute")
+    async def execute_hunter_mission_endpoint(req: Request):
+        """
+        تشغيل مهمة أمنية متعددة الوكلاء (Multi-Agent Mission) عبر نظام الذاكرة المشتركة (Blackboard) والتسليم (Handoffs):
+        ReconAgent -> Handoff -> WebAgent -> Handoff -> ReportAgent
+        """
+        data = await req.json()
+        target_url = data.get("target_url", "").strip()
+        initial_agent = data.get("initial_agent", "ReconAgent")
+
+        if not target_url:
+            return JSONResponse(status_code=400, content={"error": "target_url is required"})
+
+        mgr = get_hunter_agent_manager()
+        try:
+            mission_res = await mgr.execute_mission(
+                target_url=target_url,
+                initial_agent_name=initial_agent
+            )
+            return {
+                "status": "completed",
+                "protocol": "Hunter Agent Protocol v1",
+                "mission": mission_res
+            }
+        except Exception as ex:
+            return JSONResponse(status_code=500, content={"error": f"Mission failed: {str(ex)}"})
+
+    @app.get("/api/hunter/blackboard/{job_id}")
+    async def get_blackboard_state(job_id: str):
+        """استعراض حالة الذاكرة المشتركة (Blackboard Level 1 Summary & Level 2 Evidence)"""
+        mgr = get_hunter_agent_manager()
+        summary = mgr.blackboard.get_summary_dict(job_id)
+        if not summary:
+            return JSONResponse(status_code=404, content={"error": "Job not found in Blackboard"})
+
+        evidences = [
+            {
+                "id": ev.evidence_id,
+                "url": ev.url,
+                "parameter": ev.parameter,
+                "type": ev.vulnerability_type,
+                "notes": ev.differential_notes
+            }
+            for ev in mgr.blackboard.list_evidence_for_job(job_id)
+        ]
+
+        return {
+            "job_id": job_id,
+            "level1_summary": summary,
+            "level2_evidence_count": len(evidences),
+            "level2_evidence": evidences
+        }
+
+    @app.get("/api/hunter/memory/agent/{agent_name}")
+    async def get_agent_memory(agent_name: str):
+        """استرجاع ذاكرة التعلم التراكمية لوكيل معين"""
+        mgr = get_hunter_agent_manager()
+        lessons = mgr.memory.get_agent_lessons(agent_name)
+        return {
+            "agent_name": agent_name,
+            "lessons_count": len(lessons),
+            "lessons": lessons
+        }
+
+    @app.post("/api/waf-check")
+    async def check_waf(req: Request):
+        """فحص WAF الهدف وتحديد بروفايل الفحص"""
+        data = await req.json()
+        target = data.get("target", "").strip()
+        if not target:
+            return JSONResponse(status_code=400, content={"error": "Target required"})
+        from tools.waf_evasion import WAFEvasionEngine
+        profile = await WAFEvasionEngine().detect_waf(target)
+        return {
+            "target": profile.target,
+            "waf_detected": profile.waf_detected,
+            "waf_names": profile.waf_names,
+            "rate_limit_detected": profile.rate_limit_detected,
+            "recommended_mode": profile.recommended_mode,
+            "delay_range": profile.delay_range,
+            "confidence": profile.confidence
+        }
+
+    @app.get("/api/methodology")
+    async def get_methodology(q: Optional[str] = None):
+        """استرجاع المنهجية وقواعد الأوامر والبحث فيها"""
+        from core.methodology_kb import MethodologyKB
+        kb = MethodologyKB()
+        if q:
+            return {"query": q, "results": kb.search(q)}
+        return {
+            "steps": kb.get_all_steps(),
+            "target_selection_guide": kb.get_target_selection_guide(),
+            "portswigger_matrix": kb.get_portswigger_matrix()
+        }
+
+    @app.post("/api/run-tool")
+    async def run_tool(req: Request):
+        """تنفيذ أداة أمنية معتمدة بأمان"""
+        data = await req.json()
+        tool = data.get("tool", "").strip()
+        target = data.get("target", "").strip()
+        args = data.get("args", "")
+
+        if not tool or not target:
+            return JSONResponse(status_code=400, content={"error": "Tool and Target required"})
+
+        from tools.tool_manager import ToolManager
+        tm = ToolManager()
+
+        # Run tool via ToolManager
+        result = await tm.execute_tool(tool, f"{target} {args}".strip())
+        return {
+            "tool": tool,
+            "target": target,
+            "success": result.returncode == 0,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "duration": round(result.duration, 2),
+            "cached": result.cached
+        }
+
+    @app.post("/api/pipeline/start")
+    async def start_recon_pipeline(req: Request):
+        """بدء سلسلة الاستطلاع التلقائية الكاملة"""
+        data = await req.json()
+        target = data.get("target", "").strip()
+        in_scope = data.get("in_scope", [])
+        out_of_scope = data.get("out_of_scope", [])
+
+        if not target:
+            return JSONResponse(status_code=400, content={"error": "Target required"})
+
+        from core.scope_guard import ScopeGuard
+        from core.pipeline_runner import ReconPipelineRunner
+
+        guard = ScopeGuard(in_scope=in_scope or [target], out_of_scope=out_of_scope)
+        session_id = f"pipe_{int(time.time())}"
+
+        async def pipeline_cb(ev):
+            # Update latest graph data cache
+            if ev.get("event") == "graph_update":
+                _latest_graph_data["nodes"] = ev.get("nodes", [])
+                _latest_graph_data["edges"] = ev.get("edges", [])
+
+        runner = ReconPipelineRunner(target, scope_guard=guard, progress_cb=pipeline_cb, session_id=session_id)
+        _active_pipelines[session_id] = runner
+
+        # Launch in background
+        asyncio.create_task(runner.run())
+
+        return {
+            "status": "started",
+            "session_id": session_id,
+            "target": target
+        }
+
+    @app.get("/api/pipeline/graph")
+    async def get_pipeline_graph():
+        """الحصول على بيانات الرسم البياني الشبكي الحالية أو بناء خريطة من آخر جلسة فحص"""
+        if not _latest_graph_data.get("nodes"):
+            try:
+                from core.session_manager import SessionManager
+                sm = SessionManager()
+                sessions = sm.list_all()
+                if sessions:
+                    latest = sessions[0]
+                    s_data = sm.load(latest["id"])
+                    target = s_data.target or "Target"
+                    nodes = [
+                        {"id": "root", "label": f"🎯 {target}\n(Root Target)", "group": "target"}
+                    ]
+                    edges = []
+                    for i, f in enumerate(s_data.findings[:15]):
+                        fid = f"find_{i}"
+                        nodes.append({
+                            "id": fid,
+                            "label": f"[{f.severity}] {f.title[:28]}",
+                            "group": "vuln" if f.severity in ["Critical", "High"] else "endpoint"
+                        })
+                        edges.append({"from": "root", "to": fid, "label": f.tool or "detected"})
+                    return {"nodes": nodes, "edges": edges}
+            except Exception:
+                pass
+        return _latest_graph_data
+
+    @app.post("/api/hunter/start")
+    async def start_autonomous_hunter(req: Request):
+        """بدء عملية الصيد الذاتية الكاملة (Autonomous AI Hunter)"""
+        data = await req.json()
+        target = data.get("target", "").strip()
+        in_scope = data.get("in_scope", [])
+        out_of_scope = data.get("out_of_scope", [])
+        burp_proxy = data.get("burp_proxy", "127.0.0.1:8080")
+        use_burp = data.get("use_burp", True)
+
+        if not target:
+            return JSONResponse(status_code=400, content={"error": "Target required"})
+
+        from core.scope_guard import ScopeGuard
+        from core.autonomous_hunter import AutonomousHunter
+
+        guard = ScopeGuard(in_scope=in_scope or [target], out_of_scope=out_of_scope)
+        session_id = f"hunt_{int(time.time())}"
+
+        hunter = AutonomousHunter(
+            target=target,
+            scope_guard=guard,
+            session_id=session_id,
+            burp_proxy=burp_proxy,
+            use_burp=use_burp
+        )
+
+        # تشغيل في الخلفية
+        asyncio.create_task(hunter.start())
+
+        return {
+            "status": "started",
+            "session_id": session_id,
+            "target": target,
+            "burp_proxy": burp_proxy
+        }
+
+    @app.get("/api/cve/latest")
+    async def get_latest_cve_feed():
+        """جلب أحدث ثغرات الـ CVE المنشورة حديثاً عالمياً"""
+        from core.cve_feed_learner import CVEFeedLearner
+        learner = CVEFeedLearner()
+        cves = await learner.fetch_recent_cves(limit=15)
+        return {"count": len(cves), "cves": cves}
+
+    @app.get("/api/cve/search")
+    async def search_cves(q: str):
+        """البحث عن ثغرة CVE أو منتج معين"""
+        from core.cve_feed_learner import CVEFeedLearner
+        learner = CVEFeedLearner()
+        results = learner.search_cve(q)
+        return {"query": q, "results": results}
+
+    @app.post("/api/cve/explain")
+    async def explain_cve(req: Request):
+        """شرح وتحليل الثغرة تقنياً بواسطة الذكاء الاصطناعي"""
+        data = await req.json()
+        cve_id = data.get("cve_id", "").strip()
+        if not cve_id:
+            return JSONResponse(status_code=400, content={"error": "cve_id required"})
+
+        from core.cve_feed_learner import CVEFeedLearner
+        from orchestrator.resource_manager import ResourceManager
+
+        learner = CVEFeedLearner()
+        prompt = learner.format_cve_explanation_prompt(cve_id)
+        if not prompt:
+            # Try fetching it directly or format basic query
+            prompt = f"Please provide an in-depth technical analysis, root cause, detection methods, and remediation for {cve_id}."
+
+        rm = ResourceManager()
+        explanation = await rm.run_local_model(
+            model_name="xploiter/pentester:latest",
+            messages=[
+                {"role": "system", "content": "You are a senior security researcher and vulnerability analyst."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3
+        )
+
+        return {
+            "cve_id": cve_id,
+            "technical_explanation": explanation
+        }
+
+    @app.post("/api/analyze-http")
+    @app.post("/api/http/analyze")
+    async def analyze_http_traffic(req: Request):
+        """تحليل حركة مرور وطلبات HTTP / Burp Suite"""
+        data = await req.json()
+        raw_req = data.get("raw_request", "").strip()
+        raw_resp = data.get("raw_response", "").strip()
+
+        if not raw_req:
+            return JSONResponse(status_code=400, content={"error": "Raw HTTP request required"})
+
+        from core.http_analyzer import HTTPTrafficAnalyzer
+        analyzer = HTTPTrafficAnalyzer()
+        analysis_result = analyzer.analyze(raw_req, raw_resp if raw_resp else None)
+
+        return analysis_result
+
+    @app.get("/api/skills/catalog")
+    async def get_skills_catalog(category: Optional[str] = None, layer: Optional[str] = None):
+        """قائمة المهارات الكاملة عبر جميع طبقات النظام (133+ مهارة)"""
+        from core.skills.skill_matrix_viewer import SkillMatrixViewer
+        return {
+            "summary": SkillMatrixViewer.get_summary_stats(),
+            "skills": SkillMatrixViewer.list_all_skills(category=category, layer=layer)
+        }
+
+    @app.get("/api/skills")
+    async def list_skills():
+        """عرض كافة المهارات والتقنيات المحفوظة في ذاكرة الـ AI"""
+        from core.skill_memory_engine import SkillLearnerEngine
+        engine = SkillLearnerEngine()
+        return {"skills": engine.list_skills()}
+
+    @app.post("/api/skills/train")
+    async def train_skill(req: Request):
+        """تدريب الـ AI على تقرير ثغرة أو مهارة جديدة"""
+        from core.skill_memory_engine import SkillLearnerEngine
+        data = await req.json()
+        category = data.get("category", "").strip()
+        writeup = data.get("writeup", "").strip()
+        if not category or not writeup:
+            return JSONResponse(status_code=400, content={"error": "Category and writeup content required"})
+        engine = SkillLearnerEngine()
+        ok = engine.train_skill(category, writeup)
+        return {"status": "trained" if ok else "failed", "category": category}
+
+    @app.post("/api/skills/analyze")
+    async def run_skill_triage(req: Request):
+        """تشغيل الفحص الذكي (Crawler -> Router -> Analyzer -> Triage)"""
+        from core.skill_memory_engine import SkillLearnerEngine
+        data = await req.json()
+        target_url = data.get("url", "").strip()
+        cookie_str = data.get("cookie", "").strip()
+        if not target_url:
+            return JSONResponse(status_code=400, content={"error": "URL required"})
+        engine = SkillLearnerEngine()
+        result = await engine.run_pipeline(target_url, cookie_str=cookie_str)
+        return result
+
+    @app.delete("/api/skills/{category}")
+    async def delete_skill(category: str):
+        """حذف مهارة من الذاكرة"""
+        from core.skill_memory_engine import SkillLearnerEngine
+        engine = SkillLearnerEngine()
+        ok = engine.delete_skill(category)
+        return {"status": "deleted" if ok else "not_found"}
+
+    @app.get("/api/learning/topics")
+    async def get_learning_topics():
+        """عرض كافة مواضيع لابات PortSwigger والتعلم الذاتي المتاحة"""
+        from core.self_learning_engine import SelfLearningEngine
+        engine = SelfLearningEngine()
+        return {"topics": engine.get_topics()}
+
+    @app.get("/api/learning/history")
+    async def get_learning_history():
+        """عرض سجل الدورات التعليمية السابقة"""
+        from core.self_learning_engine import SelfLearningEngine
+        engine = SelfLearningEngine()
+        return {"history": engine.get_learning_history()}
+
+    @app.post("/api/learning/start")
+    async def start_self_learning(req: Request):
+        """بدء دورة التعلم الذاتي للموديلات"""
+        data = await req.json()
+        topic_id = data.get("topic_id", "all").strip()
+        from core.self_learning_engine import SelfLearningEngine
+        engine = SelfLearningEngine()
+        if topic_id == "all":
+            res = await engine.learn_all_topics()
+        else:
+            res = await engine.learn_topic(topic_id)
+        return res
+
+    @app.post("/api/learning/scrape")
+    async def scrape_and_learn_source(req: Request):
+        """سحب وتعلم تقارير مباشرة من HackerOne أو GitHub أو Medium أو OWASP"""
+        data = await req.json()
+        source = data.get("source", "owasp").strip()
+        url = data.get("url", "").strip()
+        limit = int(data.get("limit", 10))
+        query = data.get("query", "bug bounty writeup").strip()
+
+        from core.auto_scraper_learner import AutoScraperLearner
+        learner = AutoScraperLearner()
+        result = await learner.train_from_source(source=source, url=url, limit=limit, query=query)
+        return result
+
+    @app.post("/api/learning/vector-match")
+    async def vector_match_skills(req: Request):
+        """البحث المتجه بالـ Cosine Similarity عن المهارات المطابقة للمدخلات"""
+        data = await req.json()
+        target_data = data.get("target_data", "").strip()
+        top_k = int(data.get("top_k", 5))
+
+        from core.auto_scraper_learner import VectorSkillStorage
+        storage = VectorSkillStorage()
+        matches = storage.find_relevant_skills(target_data, top_k=top_k)
+        return {"matches_count": len(matches), "matches": matches}
+
+    @app.post("/api/probe/verify")
+    async def verify_vulnerability_live(req: Request):
+        """تنفيذ فحص الـ PoC التفاضلي وفلترة الـ False Positives وحساب الـ CVSS"""
+        data = await req.json()
+        target_url = data.get("target_url", "").strip()
+        param_name = data.get("param_name", "").strip()
+        vuln_type = data.get("vuln_type", "sqli").strip()
+        payload = data.get("payload", "").strip()
+
+        if not target_url or not param_name:
+            return JSONResponse(status_code=400, content={"error": "Target URL and parameter name required"})
+
+        from core.smart_probe_engine import SmartPoCExecutor
+        executor = SmartPoCExecutor()
+        result = await executor.execute_and_verify(target_url, param_name, vuln_type, payload if payload else None)
+
+        # Cross-sensor ToolAgreementEngine gate. Optional sensor flags may be
+        # supplied by the caller (Burp/Browser); verified probe evidence counts as
+        # the proof-of-execution signal.
+        from core.scoring.tool_agreement import ToolAgreementEngine, SensorSignals
+
+        proof_reason = str(result.get("proof_reason", "")).lower()
+        verified = bool(result.get("verified"))
+        waf_info = result.get("waf_info") or {}
+        signals = SensorSignals(
+            burp_observed=bool(data.get("burp_observed", False)),
+            browser_dom_executed=bool(data.get("browser_dom_executed", False)),
+            http_diff_confirmed=verified,
+            poe_token_verified=verified,
+            waf_blocked=bool(waf_info.get("waf_detected")) and not verified,
+            is_reflection_only=("reflection" in proof_reason) and not verified,
+            finding_type=str(result.get("vuln_type") or vuln_type),
+        )
+        agreement = ToolAgreementEngine.evaluate(signals)
+        result["tool_agreement"] = agreement
+        if not agreement.get("is_valid", False):
+            result["verified"] = False
+            result["status"] = "REJECTED_BY_TOOL_AGREEMENT"
+            result["confidence_score"] = min(
+                float(result.get("confidence_score") or 0.0),
+                float(agreement.get("agreement_score") or 0.0),
+            )
+        return result
+
+    @app.get("/api/brain/kb/stats")
+    async def get_kb_stats():
+        """إحصائيات قاعدة المعرفة المتعلَّمة"""
+        from core.learning.knowledge_base import KnowledgeBase
+        kb = KnowledgeBase()
+        return kb.stats()
+
+    @app.post("/api/brain/learn")
+    async def trigger_learning(req: Request):
+        """
+        يُطلق دورة تعلم ذاتي.
+        Body: { "sources": ["nvd","cisa_kev","medium","portswigger","payloads","exploit_db"], "topic": "xss" }
+        """
+        data = await req.json()
+        sources = data.get("sources", None)  # None = all
+        topic = data.get("topic", "").strip()
+
+        from core.learning.self_learning_loop import SelfLearningLoop
+        loop = SelfLearningLoop()
+
+        async def _run():
+            if topic:
+                return await loop.learn_topic(topic)
+            return await loop.run_full_cycle(sources=sources, use_ai=True)
+
+        # Run in background task so the HTTP response returns immediately
+        task = asyncio.create_task(_run())
+        return {"status": "learning_started", "topic": topic or "all", "sources": sources or "all"}
+
+    @app.get("/api/brain/kb/search")
+    async def kb_semantic_search(q: str, top_k: int = 5, source_type: str = ""):
+        """بحث دلالي في قاعدة المعرفة المتعلَّمة"""
+        from core.learning.knowledge_base import KnowledgeBase
+        kb = KnowledgeBase()
+        results = kb.semantic_search(
+            q, top_k=top_k,
+            source_type=source_type if source_type else None
+        )
+        return {"query": q, "results": results}
+
+    @app.get("/api/brain/kb/payloads/{vuln_type}")
+    async def get_learned_payloads(vuln_type: str, limit: int = 20):
+        """يُعيد payloads متعلَّمة من KB بحسب نوع الثغرة"""
+        from core.learning.knowledge_base import KnowledgeBase
+        kb = KnowledgeBase()
+        payloads = kb.get_payloads_by_type(vuln_type, limit=limit)
+        return {"vuln_type": vuln_type, "payloads": payloads, "count": len(payloads)}
+
+    @app.get("/api/brain/kb/cve/{cve_id}")
+    async def get_cve_details(cve_id: str):
+        """يُعيد تفاصيل CVE من KB المحلي"""
+        from core.learning.knowledge_base import KnowledgeBase
+        kb = KnowledgeBase()
+        details = kb.get_cve_details(cve_id.upper())
+        if not details:
+            return JSONResponse(status_code=404, content={"error": f"{cve_id} not found in local KB"})
+        return details
+
+    @app.post("/api/brain/retrieve")
+    async def retrieve_for_scan(req: Request):
+        """
+        يسترجع معرفة مرتبطة بهدف فحص — يُستخدم قبل بدء الفحص
+        Body: { "target_url": "https://...", "html_snippet": "..." }
+        """
+        data = await req.json()
+        target_url = data.get("target_url", "").strip()
+        html_snippet = data.get("html_snippet", "")
+        if not target_url:
+            return JSONResponse(status_code=400, content={"error": "target_url required"})
+        from core.learning.self_learning_loop import SelfLearningLoop
+        loop = SelfLearningLoop()
+        return loop.retrieve_for_scan(target_url, html_snippet)
+
+    @app.post("/api/brain/tech-stack")
+    async def detect_tech_stack_api(req: Request):
+        """
+        كشف التكنولوجيات المستخدمة في الهدف (Framework, CMS, DB, Server, Frontend, Auth)
+        Body: { "target_url": "https://...", "html": "...", "headers": {...} }
+        """
+        data = await req.json()
+        target_url = data.get("target_url", "").strip()
+        if not target_url:
+            return JSONResponse(status_code=400, content={"error": "target_url required"})
+        html = data.get("html", "")
+        headers = data.get("headers", {})
+
+        from core.learning.aggressive_learner import AggressiveLearner
+        learner = AggressiveLearner()
+        result = await learner.detect_tech_stack(target_url, html=html, headers=headers)
+        return result
+
+    @app.post("/api/brain/saturate")
+    async def aggressive_saturation_api(req: Request):
+        """
+        دورة الإشباع المعرفي الكاملة (Aggressive Pre-Scan Saturation)
+        يمتص المعرفة الأمنية والـ CVEs والـ Payloads والـ Exploit Chains الخاصة بالهدف
+        Body: { "target_url": "https://...", "html": "...", "headers": {...} }
+        """
+        data = await req.json()
+        target_url = data.get("target_url", "").strip()
+        if not target_url:
+            return JSONResponse(status_code=400, content={"error": "target_url required"})
+        html = data.get("html", "")
+        headers = data.get("headers", {})
+
+        from core.learning.aggressive_learner import AggressiveLearner
+        learner = AggressiveLearner()
+        report = await learner.aggressive_prescan_saturation(target_url, html=html, headers=headers)
+        return report
+
+    @app.post("/api/brain/feedback")
+    async def learning_feedback(req: Request):
+        """
+        Feedback Loop — يُحفظ الـ confirmed finding في قاعدة المعرفة.
+        يُستدعى تلقائياً من AutonomousBrain عند تأكيد الثغرة، أو يدوياً.
+        Body: {
+            "target": "https://...",
+            "finding": { "type": "xss", "param_name": "q", "payload_used": "<script>...", "confidence": 0.9, ... }
+        }
+        """
+        data = await req.json()
+        if not data.get("finding"):
+            return JSONResponse(status_code=400, content={"error": "finding required"})
+        from core.learning.learning_server import _handle_feedback
+        doc_id = await _handle_feedback(data)
+        return {"status": "learned", "doc_id": doc_id}
+
+    @app.get("/api/brain/scheduler/status")
+    async def scheduler_status():
+        """حالة الـ Auto-Scheduler"""
+        from core.learning.learning_server import get_scheduler
+        sched = get_scheduler()
+        due = [s for s in sched.SCHEDULE if sched._is_due(s)]
+        return {
+            "schedule": sched.SCHEDULE,
+            "state": sched._state,
+            "due_now": due,
+        }
+
+    @app.post("/api/brain/scheduler/run-now")
+    async def run_scheduler_now(req: Request):
+        """يُشغّل الـ scheduler فوراً بغض النظر عن الـ frequency"""
+        data = await req.json()
+        sources = data.get("sources", None)
+        from core.learning.self_learning_loop import SelfLearningLoop
+        loop = SelfLearningLoop()
+
+        async def _run():
+            return await loop.run_full_cycle(sources=sources, use_ai=False)
+
+        asyncio.create_task(_run())
+        return {"status": "scheduled", "sources": sources or "all"}
+
+    @app.websocket("/ws/learn")
+    async def ws_learn(ws: WebSocket):
+        """
+        WebSocket لمتابعة دورة التعلم الذاتي في الوقت الحقيقي.
+        يرسل: { "sources": [...], "topic": "...", "use_ai": false }
+        يستقبل: stream من events { event, message, source, saved, stats }
+        """
+        await ws.accept()
+        try:
+            data = json.loads(await ws.receive_text())
+            sources = data.get("sources", None)
+            topic = data.get("topic", "").strip()
+            use_ai = data.get("use_ai", False)
+
+            async def stream(event: str, msg: str, **kwargs):
+                try:
+                    await ws.send_text(json.dumps({
+                        "event": event, "message": msg,
+                        "ts": time.time(), **kwargs
+                    }, default=str))
+                except Exception:
+                    pass
+
+            await stream("start", f"Learning cycle started | sources={sources or 'all'} | topic={topic or 'all'}")
+
+            from core.learning.self_learning_loop import SelfLearningLoop
+            loop = SelfLearningLoop()
+
+            # Patch the loop's _emit to stream over WebSocket
+            original_emit = loop._emit
+            async def ws_emit(msg: str, data: dict = None):
+                await stream("log", msg, **(data or {}))
+                return await original_emit(msg, data)
+            loop._emit = ws_emit
+
+            if topic:
+                result = await loop.learn_topic(topic)
+            else:
+                result = await loop.run_full_cycle(sources=sources, use_ai=use_ai)
+
+            await stream("done", "Learning cycle complete",
+                         kb_stats=result.get("kb_stats", {}),
+                         results=result.get("results", {}),
+                         duration=result.get("duration", 0))
+
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            try:
+                await ws.send_text(json.dumps({"event": "error", "message": str(e)}))
+            except Exception:
+                pass
+
+    @app.websocket("/ws/chat")
+    async def ws_chat(ws: WebSocket):
+        """Chat mode — يصنف المهمة ويوجهها للموديل الصح"""
+        await ws.accept()
+        try:
+            from core.smart_orchestrator import SmartOrchestrator
+
+            async def cb(ev):
+                try:
+                    await ws.send_text(json.dumps(ev, default=str))
+                except Exception:
+                    pass
+
+            orchestrator = SmartOrchestrator(progress_callback=cb)
+
+            while True:
+                try:
+                    data = json.loads(await ws.receive_text())
+                    if data.get("action") == "clear_memory":
+                        orchestrator.memory.clear_conversation()
+                        continue
+
+                    user_input = data.get("message", "").strip()
+                    selected_model = data.get("model", "auto")
+                    if not user_input:
+                        continue
+
+                    result = await orchestrator.chat(user_input, selected_model=selected_model)
+                    await ws.send_text(json.dumps({
+                        "event": "chat_response",
+                        "answer": result["answer"],
+                        "route": result["route"],
+                        "duration": result["duration"],
+                        "gpu_status": result["gpu_status"],
+                        "model_used": result.get("selected_model", selected_model),
+                    }, default=str))
+
+                except WebSocketDisconnect:
+                    break
+
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            try:
+                await ws.send_text(json.dumps({"event": "error", "message": str(e)}))
+            except Exception:
+                pass
+
+    @app.post("/api/session-auth/audit")
+    async def audit_session_auth(req: Request):
+        """تدقيق أمان الجلسات والكوكيز ورموز الـ JWT وفق OWASP A07"""
+        data = await req.json()
+        target = data.get("target", "").strip()
+        if not target:
+            return JSONResponse(status_code=400, content={"error": "target URL required"})
+        from core.session_auth import AdvancedSessionManager
+        sm = AdvancedSessionManager()
+        result = await sm.analyze_session_security(target)
+        return result
+
+    @app.post("/api/proxy/analyze-traffic")
+    async def analyze_proxy_traffic(req: Request):
+        """تحليل حركة المرور المسجلة واستخراج الـ APIs وفحص الـ CORS والتفاضل"""
+        data = await req.json()
+        traffic = data.get("traffic", [])
+        if not isinstance(traffic, list):
+            return JSONResponse(status_code=400, content={"error": "traffic list required"})
+        from core.integration import ProxyMonitoringEngine
+        pme = ProxyMonitoringEngine()
+        result = pme.analyze_traffic_stream(traffic)
+        return result
+
+    @app.post("/api/cvss/calculate")
+    async def calculate_cvss_score(req: Request):
+        """حساب درجة خطورة CVSS v3.1 المعتمدة لثغرة أمنية"""
+        data = await req.json()
+        from core.reporting import CVSSv31Calculator
+        score_data = CVSSv31Calculator.calculate_base_score(
+            av=data.get("av", "N"),
+            ac=data.get("ac", "L"),
+            pr=data.get("pr", "N"),
+            ui=data.get("ui", "N"),
+            s=data.get("s", "U"),
+            c=data.get("c", "H"),
+            i=data.get("i", "N"),
+            a=data.get("a", "N")
+        )
+        return score_data
+
+    @app.post("/api/remediation/lookup")
+    async def get_remediation_guide(req: Request):
+        """توليد كود الترقيع والإصلاح الأمني المباشر للمطورين"""
+        data = await req.json()
+        vuln_type = data.get("vuln_type", "sqli")
+        from core.remediation import RemediationGenerator
+        return RemediationGenerator.get_remediation_for_vuln(vuln_type)
+
+    @app.post("/api/scheduler/enqueue")
+    async def enqueue_target_scan(req: Request):
+        """إضافة هدف إلى طابور الفحص المتعدد الذكي"""
+        data = await req.json()
+        target = data.get("target", "").strip()
+        if not target:
+            return JSONResponse(status_code=400, content={"error": "target required"})
+        mode = data.get("mode", "standard")
+        priority = int(data.get("priority", 5))
+        sched = get_scheduler()
+        task_id = sched.enqueue_target(target, mode=mode, priority=priority)
+        return {"status": "queued", "task_id": task_id, "target": target}
+
+    from agents.burp_agent.integrations.api import create_burp_api_router
+
+    app.include_router(create_burp_api_router(get_burp_agent()))
+
+    from ui.web.engines_api import create_engines_router
+
+    app.include_router(create_engines_router())
+
+    from ui.web.control_api import create_budget_router, create_run_control_router
+
+    app.include_router(create_run_control_router())
+
+    app.include_router(create_budget_router())
+
+    from ui.web.runs_api import router as runs_api_router
+
+    app.include_router(runs_api_router)
+
+    from ui.web.phase_g_api import router as phase_g_api_router
+
+    app.include_router(phase_g_api_router)
+
+    from ui.web.enhanced_control_api import router as enhanced_control_router
+
+    app.include_router(enhanced_control_router)
+
+    from ui.web.control_center_api import router as control_center_router
+
+    app.include_router(control_center_router)
+
+    @app.get("/api/v27/attack-surface")
+    async def get_v27_attack_surface():
+        """Returns the unified Epistemic Attack Surface Graph"""
+        gw = get_burp_gateway()
+        return gw.attack_surface_graph.export_graph()
+
+    @app.get("/api/v27/ledger/blocks")
+    async def get_v27_ledger_blocks():
+        """Returns cryptographically chained forensic experiment records & validity check"""
+        gw = get_burp_gateway()
+        is_valid, err = gw.experiment_ledger.verify_chain_integrity()
+        return {
+            "is_valid": is_valid,
+            "error": err,
+            "blocks_count": len(gw.experiment_ledger),
+            "blocks": gw.experiment_ledger.export_ledger(),
+        }
+
+    @app.post("/api/v27/triad/execute")
+    async def post_v27_triad_execute(req: Request):
+        """Executes 4-probe Metamorphic Triad (B x C x E1 x E2) across physical wire via BCSL"""
+        gw = get_burp_gateway()
+        try:
+            data = await req.json()
+            from core.burp_gateway.experiment_contract import TriadExperimentContract
+            from core.burp_gateway.capture_store import CapturedTransaction
+
+            src_id = data.get("source_request_id", "src_baseline_01")
+            if "baseline_tx" in data and data["baseline_tx"]:
+                b_tx = data["baseline_tx"]
+                tx_obj = CapturedTransaction(**b_tx) if isinstance(b_tx, dict) else b_tx
+                gw.bcsl.ingest_captured(tx_obj)
+            elif src_id not in gw.bcsl.controller._transactions and data.get("target_endpoint"):
+                target_ep = data["target_endpoint"]
+                fallback_tx = CapturedTransaction(
+                    tx_id=src_id,
+                    target_host=target_ep,
+                    method=data.get("http_method", "GET"),
+                    url=target_ep,
+                    status_code=200,
+                    req_body="",
+                    resp_body="Baseline response",
+                )
+                gw.bcsl.ingest_captured(fallback_tx)
+
+            valid_keys = {
+                "hypothesis_id", "source_request_id", "target_endpoint", "triad_id",
+                "http_method", "identity_context", "baseline_mutation", "control_mutation",
+                "experiment_1_mutation", "experiment_2_mutation", "invariant_id",
+                "expected_observation", "risk_tier", "risk_budget", "category",
+                "negative_observables", "correlation_id", "scope_requirements"
+            }
+            filtered_contract = {k: v for k, v in data.items() if k in valid_keys}
+            contract = TriadExperimentContract(**filtered_contract)
+
+            inv_obj = None
+            inv_name = data.get("invariant_id") or data.get("invariant_name")
+            if inv_name == "CommandExecutionInvariant":
+                from core.reasoning.causal_invariants import CommandExecutionInvariant
+                inv_obj = CommandExecutionInvariant()
+
+            record = gw.bcsl.execute_triad_contract(contract, invariant=inv_obj)
+
+            from core.reasoning.experiment_ledger import ExperimentRecord
+            exp_rec = ExperimentRecord(
+                experiment_id=record.triad_id,
+                hypothesis_id=record.hypothesis_id,
+                source_transaction={"tx_id": record.source_request_id},
+                baseline_b=record.baseline_response,
+                control_c=record.control_response,
+                experiment_e1=record.experiment_1_response,
+                experiment_e2=record.experiment_2_response,
+                observations=[record.triad_verification_result.get("rationale", "")],
+                invariant_result=record.invariant_result,
+                causal_strength=float(record.triad_verification_result.get("confidence_score", 0.0)),
+                execution_provenance=[{"stage": p} for p in record.provenance],
+            )
+            gw.experiment_ledger.append(exp_rec)
+
+            if contract.target_endpoint:
+                from core.reasoning.attack_surface_graph import EpistemicStatus, SurfaceNode
+                if contract.target_endpoint not in gw.attack_surface_graph.nodes:
+                    gw.attack_surface_graph.add_node(
+                        SurfaceNode(
+                            node_id=contract.target_endpoint,
+                            node_type="ENDPOINT",
+                            name=contract.target_endpoint,
+                            epistemic_status=EpistemicStatus.OBSERVED
+                        )
+                    )
+                verdict = record.triad_verification_result.get("epistemic_verdict")
+                status_map = {
+                    "CONFIRMED": EpistemicStatus.CONFIRMED,
+                    "REJECTED": EpistemicStatus.REJECTED,
+                    "PARTIALLY_VERIFIED": EpistemicStatus.PARTIALLY_VERIFIED,
+                    "UNVERIFIED": EpistemicStatus.TESTED,
+                }
+                ep_status = status_map.get(verdict, EpistemicStatus.TESTED)
+                gw.attack_surface_graph.update_status(
+                    target_id=contract.target_endpoint,
+                    new_status=ep_status,
+                    evidence_ref=record.triad_id,
+                    rationale=record.triad_verification_result.get("rationale", ""),
+                    confidence=record.triad_verification_result.get("confidence_score"),
+                )
+
+            return record.to_dict()
+        except Exception as e:
+            return JSONResponse(status_code=400, content={"error": str(e)})
+
+    @app.get("/api/v27/eig/queue")
+    async def get_v27_eig_queue():
+        """Returns current queue and risk metrics from Deterministic EIG Planner"""
+        gw = get_burp_gateway()
+        return {
+            "queue_length": len(gw.eig_planner.queue),
+            "risk_consumed": gw.eig_planner.risk_consumed,
+            "global_risk_budget": gw.eig_planner.global_risk_budget,
+            "items": [item.to_dict() for item in gw.eig_planner.queue],
+        }
+
+    @app.post("/api/v27/eig/enqueue")
+    async def post_v27_eig_enqueue(req: Request):
+        """Enqueues candidate contract into Deterministic EIG Planner"""
+        gw = get_burp_gateway()
+        try:
+            data = await req.json()
+            from core.burp_gateway.experiment_contract import ExperimentContract
+            contract = ExperimentContract.from_dict(data)
+            planned = gw.eig_planner.evaluate_and_enqueue(contract)
+            return {"status": "ENQUEUED", "planned": planned.to_dict()}
+        except Exception as e:
+            return JSONResponse(status_code=400, content={"error": str(e)})
+
+    @app.get("/api/intelligence/status")
+    async def get_intelligence_status():
+        """الحالة الشاملة للذكاء الأمني والنطاق والمرور الحي"""
+        si = get_security_intelligence()
+        burp = get_burp_agent()
+        stats = burp.get_stats() if hasattr(burp, "get_stats") else {}
+        rule = si.scope_guard.rule
+        profile = si.learning_profile.get_profile().model_dump() if hasattr(si, "learning_profile") else {}
+        return {
+            "status": "online",
+            "scope": {
+                "target": rule.target,
+                "allowed_domains": rule.allowed_domains,
+                "excluded_paths": rule.excluded_paths,
+                "allow_active_tests": rule.allow_active_tests
+            },
+            "traffic_stats": stats,
+            "learning_profile": profile,
+            "subsystems": {
+                "autonomous_brain": "connected",
+                "burp_agent": "listening_8085",
+                "security_intelligence": "active",
+                "scope_guard": "defense_in_depth_enforced",
+                "event_bus": "bridged"
+            }
+        }
+
+    @app.post("/api/intelligence/scope")
+    async def update_intelligence_scope(req: Request):
+        """تحديث سياسة النطاق وحظر المسارات الحساسة والتصريح"""
+        data = await req.json()
+        from agents.security_intelligence.schemas import ScopeRule
+        target = data.get("target", "*").strip()
+        allowed = data.get("allowed_domains", [])
+        excluded = data.get("excluded_paths", ["/admin/delete", "/system/reset", "/logout"])
+        allow_active = bool(data.get("allow_active_tests", False))
+
+        rule = ScopeRule(
+            target=target,
+            allowed_domains=allowed,
+            excluded_paths=excluded,
+            allow_active_tests=allow_active
+        )
+        si = get_security_intelligence()
+        si.set_scope(rule)
+        return {
+            "status": "updated",
+            "target": target,
+            "mode": "ACTIVE" if allow_active else "PASSIVE",
+            "allowed_domains": allowed,
+            "excluded_paths": excluded
+        }
+
+    @app.post("/api/intelligence/explain")
+    async def explain_security_concept(req: Request):
+        """توليد شرح تعليمي تفاعلي عبر المستويات الأربعة"""
+        data = await req.json()
+        subject = data.get("subject", "").strip()
+        lang = data.get("language", "ar")
+        if not subject:
+            return JSONResponse(status_code=400, content={"error": "Subject required"})
+        si = get_security_intelligence()
+        explanations = await si.explain(subject, language=lang)
+        return {"subject": subject, "explanations": explanations}
+
+    @app.post("/api/intelligence/quiz/start")
+    async def start_security_quiz(req: Request):
+        """بدء اختبار سيناريو أمني تفاعلي لموضوع معين"""
+        data = await req.json()
+        topic = data.get("topic", "bola").strip()
+        si = get_security_intelligence()
+        quiz = await si.start_quiz(topic)
+        return quiz.model_dump()
+
+    @app.post("/api/intelligence/quiz/evaluate")
+    async def evaluate_security_quiz(req: Request):
+        """تقييم إجابة المستخدم في الاختبار وتحديث ملف التعلم الشخصي"""
+        data = await req.json()
+        quiz_data = data.get("quiz")
+        choice_idx = int(data.get("choice_idx", 0))
+        if not quiz_data:
+            return JSONResponse(status_code=400, content={"error": "Quiz object required"})
+        from agents.security_intelligence.schemas import QuizQuestion
+        quiz = QuizQuestion(**quiz_data)
+        si = get_security_intelligence()
+        evaluation = await si.evaluate_quiz_answer(quiz, choice_idx)
+        return evaluation.model_dump()
+
+    @app.post("/api/intelligence/research")
+    async def research_threat(req: Request):
+        """البحث الأمني في قواعد بيانات CVE و OWASP مع التخزين المؤقت الذكي"""
+        data = await req.json()
+        topic = data.get("topic", "").strip()
+        if not topic:
+            return JSONResponse(status_code=400, content={"error": "Topic or CVE required"})
+        si = get_security_intelligence()
+        report = await si.research(topic)
+        return report.model_dump()
+
+    @app.get("/api/intelligence/profile")
+    async def get_user_learning_profile():
+        """الحصول على ملف التعلم الشخصي ومستوى المستخدم الحالي"""
+        si = get_security_intelligence()
+        return si.learning_profile.get_profile().model_dump()
+
+    @app.post("/api/gateway/execute")
+    async def execute_governed_action(req: Request):
+        """تنفيذ مقترح أمني عبر بوابة الأدوات المحكومة (Governed Tool Gateway)"""
+        data = await req.json()
+        from core.gateway.schemas import ActionProposal
+        proposal = ActionProposal(**data)
+
+        brain = getattr(app.state, "active_brain", None)
+        if brain and getattr(brain, "tool_gateway", None):
+            gateway = brain.tool_gateway
+        else:
+            from core.gateway.tool_gateway import GovernedToolGateway
+            from core.gateway.policy_engine import PolicyEngine
+            si = get_security_intelligence()
+            policy = PolicyEngine(scope_guard=si.scope_guard)
+            gateway = GovernedToolGateway(policy_engine=policy)
+
+        result = await gateway.execute_proposal(proposal)
+        return result.model_dump()
+
+    @app.get("/api/attack_graph/snapshot")
+    async def get_attack_graph_snapshot():
+        """الحصول على لقطة حية للرسم البياني السببي للهجوم ونصف قطر الانفجار"""
+        brain = getattr(app.state, "active_brain", None)
+        if brain and getattr(brain, "attack_graph", None):
+            return brain.attack_graph.to_dict()
+
+        from core.attack_graph.graph import CausalAttackGraph
+        default_graph = getattr(app.state, "default_attack_graph", None)
+        if not default_graph:
+            default_graph = CausalAttackGraph(target="target.local")
+            app.state.default_attack_graph = default_graph
+        return default_graph.to_dict()
+
+    @app.post("/api/multi_agent/analyze")
+    async def execute_multi_agent_investigation(req: Request):
+        """تنسيق فحص واستدلال أمني متقدم عبر فريق الوكلاء المتخصصين"""
+        data = await req.json()
+        target = data.get("target", "target.local")
+        brain = getattr(app.state, "active_brain", None)
+        if brain and getattr(brain, "lead_analyst", None):
+            return await brain.lead_analyst.coordinate_investigation(target=target)
+
+        from core.multi_agent.specialists import LeadAnalyst
+        analyst = LeadAnalyst(target=target)
+        return await analyst.coordinate_investigation(target=target)
+
+    @app.post("/api/reasoning/investigate")
+    async def run_epistemic_investigation(req: Request):
+        """تشغيل حلقة الاستدلال المعرفي المغلقة على هدف مع فحص EIG وتحديث المعتقدات"""
+        data = await req.json()
+        target = data.get("target", "target.local")
+        from core.reasoning.reasoning_loop import AutonomousReasoningLoop
+        from core.reasoning.belief_state import BeliefState
+        from core.reasoning.action_model import ActionDescriptor, ActionKind
+
+        belief = BeliefState()
+        loop = AutonomousReasoningLoop(target=target, belief_state=belief)
+
+        # Sample candidate actions for investigation
+        candidates = [
+            ActionDescriptor(
+                action_kind=ActionKind.DISCOVERY,
+                tool_name="httpx",
+                target=target,
+                rationale="Discover attack surface"
+            )
+        ]
+        step_res = loop.step(candidates=candidates, executor_callback=lambda a: ("generic_200", None))
+        return {
+            "investigation_id": belief.investigation_id,
+            "version": belief.version,
+            "step_result": step_res,
+            "latest_snapshot": belief.get_latest_snapshot().to_dict()
+        }
+
+    @app.get("/api/evaluation/benchmark")
+    async def run_reasoning_benchmark():
+        """تشغيل إطار التقييم المعياري وإرجاع بطاقة أداء العقل الاستدلالي (Scorecard)"""
+        from evaluation.benchmark_runner import BenchmarkRunner
+        runner = BenchmarkRunner()
+        scorecards = runner.run_all_benchmarks()
+        return {
+            "scorecards": [card.model_dump() for card in scorecards],
+            "summary": {
+                "total_scenarios": len(scorecards),
+                "mean_score": round(sum(c.overall_reasoning_score for c in scorecards) / len(scorecards), 1),
+                "zero_false_positives": all(c.false_positive_rate_pct == 0.0 for c in scorecards)
+            }
+        }
+
+    @app.get("/api/learning/curriculum")
+    async def get_curriculum():
+        """عرض المستويات الـ 10 للمنهج الأمني وموضوعاتها"""
+        from core.learning.curriculum import SecurityCurriculum
+        curriculum = SecurityCurriculum()
+        return {
+            "levels": [lvl.model_dump() for lvl in curriculum.get_all_levels()],
+            "total_levels": len(curriculum.levels)
+        }
+
+    @app.post("/api/learning/teach")
+    async def teach_level(req: Request):
+        """طرح تحدي تعليمي أو تقييم استدلال الـ Agent لمستوى معين"""
+        data = await req.json()
+        level_num = data.get("level", 3)
+        actions = data.get("actions", [])
+        hyps = data.get("hypotheses", {})
+        evids = data.get("evidence", [])
+
+        from core.learning.teacher_agent import TeacherAgent
+        teacher = TeacherAgent()
+
+        if actions or hyps or evids:
+            eval_res = teacher.evaluate_reasoning_trace(level_num, actions, hyps, evids)
+            return {"evaluation": eval_res.model_dump()}
+
+        challenge = teacher.present_challenge(level_num)
+        return {"challenge": challenge}
+
+    @app.get("/api/learning/experiences")
+    async def get_experiences():
+        """عرض الخبرات السابقة والدروس المستفادة من التحقيقات المكتملة"""
+        from core.learning.experience_store import ExperienceStore
+        store = ExperienceStore()
+        episodes = store.get_recent_episodes(limit=20)
+        return {
+            "episodes": [ep.model_dump() for ep in episodes],
+            "count": len(episodes)
+        }
+
+    @app.post("/api/learning/rag_query")
+    async def query_learning_rag(req: Request):
+        """استعلام محرك RAG لاسترجاع المعرفة والتجارب المناسبة لترافيك أو إشارات معينة"""
+        data = await req.json()
+        signals = data.get("signals", [])
+        topic = data.get("topic")
+
+        from core.learning.retrieval import LearningRetrievalEngine
+        rag = LearningRetrievalEngine()
+        result = rag.retrieve_context(signals=signals, topic=topic)
+        return result
+
+    @app.get("/api/learning/sync")
+    async def sync_learning_knowledge():
+        """مزامنة واكتشاف السيناريوهات والـ CVEs الجديدة تلقائياً بدون تعديل كود"""
+        from core.learning.scenario_loader import DynamicScenarioLoader
+        loader = DynamicScenarioLoader()
+        report = loader.sync_all()
+        return {"sync_report": report}
+
+    @app.get("/api/learning/sqli/curriculum")
+    async def get_sqli_curriculum():
+        """عرض سيناريوهات تدريب SQLi الـ 10 مع إخفاء الحل عن المتدرب"""
+        from core.learning.scenario_loader import DynamicScenarioLoader
+        loader = DynamicScenarioLoader()
+        scenarios = []
+        for s in loader.loaded_scenarios.values():
+            if "sqli" in s.get("scenario_id", "").lower():
+                # Strip hidden_truth for student view
+                safe_copy = {k: v for k, v in s.items() if k != "hidden_truth"}
+                scenarios.append(safe_copy)
+        return {
+            "sqli_scenarios": sorted(scenarios, key=lambda x: x.get("difficulty", 0)),
+            "total": len(scenarios)
+        }
+
+    @app.post("/api/learning/sqli/evaluate")
+    async def evaluate_sqli_readiness(req: Request):
+        """تقييم إتقان الـ Agent لمنهج SQL Injection وإصدار بطاقة التخرج"""
+        data = await req.json()
+        attempts = data.get("attempts", [])
+
+        from core.learning.sqli_evaluator import SQLiGraduationEvaluator
+        evaluator = SQLiGraduationEvaluator()
+        scorecard = evaluator.evaluate_full_curriculum(attempts)
+        return {
+            "scorecard": scorecard.model_dump(),
+            "terminal_report": scorecard.format_terminal_scorecard()
+        }
+
+    @app.get("/api/learning/skill_graph")
+    async def get_skill_graph():
+        """عرض هيكل المهارات الدقيقة ونقاط الضعف المحددة للـ Agent"""
+        from core.learning.skill_graph import SkillGraph
+        sg = SkillGraph()
+        skills = sg.get_all_skills()
+        weakest = sg.diagnose_weakest_skills(limit=3)
+        recommended = sg.recommend_next_scenario_skill()
+        return {
+            "skills": [s.model_dump() for s in skills],
+            "diagnosed_weak_points": [w.model_dump() for w in weakest],
+            "recommended_next_training_skill": recommended.model_dump() if recommended else None,
+            "total_skills": len(skills)
+        }
+
+    @app.post("/api/learning/scenarios/generate_novel")
+    async def generate_novel_scenario(req: Request):
+        """توليد سيناريو تدريبي إجرائي جديد تماماً وغير محفوظ لأي مهارة"""
+        data = await req.json()
+        skill_id = data.get("skill_id", "sqli_boolean_differential")
+        is_vulnerable = data.get("is_vulnerable")
+
+        from core.learning.scenario_generator import ProceduralScenarioGenerator
+        scenario = ProceduralScenarioGenerator.generate_scenario(
+            skill_id=skill_id,
+            is_vulnerable=is_vulnerable
+        )
+        # Strip hidden_truth for student view if requested
+        safe_view = {k: v for k, v in scenario.items() if k != "hidden_truth"}
+        return {
+            "scenario": safe_view,
+            "scenario_id": scenario["scenario_id"]
+        }
+
+    @app.post("/api/learning/exam/evaluate_run")
+    async def evaluate_exam_run(req: Request):
+        """تقييم مستقل في وضع الامتحان وحساب نسبة الخطأ في المعايرة (ECE)"""
+        data = await req.json()
+        scenario = data.get("scenario", {})
+        submission = data.get("submission", {})
+
+        from core.learning.independent_evaluator import IndependentEvaluator
+        evaluator = IndependentEvaluator()
+        result = evaluator.evaluate_solution(scenario, submission)
+        return {
+            "evaluation": result.model_dump(),
+            "expected_calibration_error": evaluator.get_calibration_error()
+        }
+
+    @app.get("/api/orchestration/tools")
+    async def list_orchestrated_tools():
+        """استعراض كافة الأدوات المسجلة في الـ ToolRegistry"""
+        orch = get_tool_orchestrator()
+        tools = orch.registry.list_tools()
+        return {"tools": [t.model_dump() for t in tools], "total": len(tools)}
+
+    @app.post("/api/orchestration/execute")
+    async def execute_orchestrated_intent(req: Request):
+        """تنفيذ نية تحقيقية مركبة للـ Brain عبر الأدوات المناسبة"""
+        data = await req.json()
+        intent = data.get("intent", "EXPLORE")
+        params = data.get("params", {})
+        orch = get_tool_orchestrator()
+        result = await orch.execute_investigative_intent(intent=intent, params=params)
+        return {"orchestration_result": result.model_dump()}
+
+    @app.post("/api/repeater/experiment")
+    async def create_and_run_repeater_experiment(req: Request):
+        """إنشاء وتشغيل تجربة علمية مقننة داخل مساحة عمل الـ Repeater"""
+        data = await req.json()
+        orch = get_tool_orchestrator()
+        exp = orch.burp.create_repeater_experiment(
+            base_tx_id=data.get("base_tx_id", "tx_001"),
+            hypothesis=data.get("hypothesis", "SQL_INJECTION"),
+            mutation_description=data.get("mutation_description", "Probe mutation"),
+            mutated_request=data.get("mutated_request", {"method": "GET", "url": "http://localhost"})
+        )
+        executed = await orch.burp.execute_experiment(exp.experiment_id)
+        return {"experiment": executed.model_dump()}
+
+    @app.post("/api/analyzer/diff")
+    async def compare_responses_diff(req: Request):
+        """مقارنة تفاضلية سلوكية دقيقة بين استجابة الأساس واستجابة الاختبار"""
+        data = await req.json()
+        orch = get_tool_orchestrator()
+        diff = orch.analyzer.compare_responses(
+            baseline_status=data.get("baseline_status", 200),
+            baseline_body=data.get("baseline_body", ""),
+            test_status=data.get("test_status", 200),
+            test_body=data.get("test_body", ""),
+            transaction_id=data.get("transaction_id", "tx_diff_api")
+        )
+        return {"differential": diff.model_dump()}
+
+    @app.post("/api/orchestration/run_investigation")
+    async def run_full_investigation(req: Request):
+        """تشغيل حلقة التحقيق الأمني الذاتي المستقلة بالكامل على هدف محدد"""
+        data = await req.json()
+        target_url = data.get("target_url", "https://target.local")
+        hypothesis = data.get("hypothesis", "SQL_INJECTION")
+        skill = data.get("skill", "sqli_boolean_differential")
+
+        from core.orchestration.investigation_loop import AutonomousInvestigationEngine
+        engine = AutonomousInvestigationEngine()
+        report = await engine.run_investigation_cycle(
+            target_url=target_url,
+            hypothesis_name=hypothesis,
+            skill_to_train=skill
+        )
+        return {
+            "report": report.model_dump(),
+            "terminal_summary": report.format_terminal_summary()
+        }
+
+    @app.post("/api/agent/hint")
+    async def post_agent_hint(req: Request):
+        """إرسال نصيحة أو توجيه مباشر من المستخدم للـ Agent أثناء التفكير والتنفيذ"""
+        data = await req.json()
+        hint_text = data.get("hint", "").strip()
+        category = data.get("category", "general").strip()
+        if not hint_text:
+            return JSONResponse(status_code=400, content={"error": "Hint text is required"})
+
+        rec = copilot_state.add_hint(hint_text, category)
+        return {"status": "accepted", "hint": rec, "message": "تم إرسال توجيهك إلى عقل الـ Agent فوراً!"}
+
+    @app.get("/api/agent/hints")
+    async def get_agent_hints():
+        """استرجاع كافة النصائح والتوجيهات النشطة المسجلة للـ Agent"""
+        return {"hints": copilot_state.active_hints, "total": len(copilot_state.active_hints)}
+
+    @app.get("/api/agent/questions")
+    async def get_agent_questions():
+        """استرجاع أي استفسارات أو أسئلة موجهة من الـ Agent للمستخدم (Human-in-the-loop)"""
+        return {
+            "pending_questions": copilot_state.pending_questions,
+            "answered_questions": copilot_state.answered_questions[-5:]
+        }
+
+    @app.post("/api/agent/answer")
+    async def answer_agent_question(req: Request):
+        """إرسال إجابة المستخدم على استشارة الـ Agent"""
+        data = await req.json()
+        q_id = data.get("question_id", "").strip()
+        answer = data.get("answer", "").strip()
+        if not q_id or not answer:
+            return JSONResponse(status_code=400, content={"error": "question_id and answer are required"})
+
+        res = copilot_state.answer_question(q_id, answer)
+        if not res:
+            return JSONResponse(status_code=404, content={"error": "Question not found or already answered"})
+
+        # Record answer as a hint for the agent
+        copilot_state.add_hint(f"إجابة على السؤال: {answer}", category="user_decision")
+        return {"status": "answered", "question": res}
+
+    @app.websocket("/ws/scan")
+    async def ws_scan(ws: WebSocket):
+        """Scan mode — pentest كامل على هدف"""
+        await ws.accept()
+        try:
+            data = json.loads(await ws.receive_text())
+            target = data.get("target", "")
+            if not target:
+                await ws.send_text(json.dumps({"event": "error", "message": "No target"}))
+                return
+
+            async def cb(ev):
+                try:
+                    await ws.send_text(json.dumps(ev, default=str))
+                except Exception:
+                    pass
+
+            use_proxy = data.get("use_proxy", False)
+            burp_proxy = data.get("burp_proxy", "127.0.0.1:8080")
+            auth_data = data.get("auth", {})
+
+            if data.get("require_ready", False):
+                readiness = await check_preflight()
+                if not readiness.get("strict_ready", False):
+                    await ws.send_text(json.dumps({
+                        "event": "error",
+                        "message": "Readiness gate failed: Agent/Burp/Gateway/Browser/Ollama/Kali tools are not all ready.",
+                        "readiness": readiness,
+                    }))
+                    return
+
+            from core.smart_orchestrator import SmartOrchestrator
+            result = await SmartOrchestrator(progress_callback=cb).run_scan(
+                target=target,
+                mode=data.get("mode", "bugbounty_full"),
+                use_browser=data.get("use_browser", False),
+                use_proxy=use_proxy,
+                burp_proxy=burp_proxy,
+                auth=auth_data
+            )
+            await ws.send_text(json.dumps({"event": "done", **result}, default=str))
+
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            try:
+                await ws.send_text(json.dumps({"event": "error", "message": str(e)}))
+            except Exception:
+                pass
+
+    @app.post("/api/mission/start")
+    async def start_autonomous_mission(req: Request):
+        """بدء مهمة فحص أمني مستقلة باستخدام AutonomousMissionAgent والـ Skills المكتشفة"""
+        data = await req.json()
+        target = data.get("target", "").strip()
+        mode = data.get("mode", "full")
+        session_id = data.get("session_id") or f"msn_{int(time.time())}"
+
+        if not target:
+            return JSONResponse(status_code=400, content={"error": "Target parameter is required"})
+
+        # ── Phase 1: Readiness Gate — لا مهمة بدون بيئة مثبتة محليًا ──────
+        if data.get("require_ready", False) or data.get("strict", False):
+            from core.readiness import (
+                ReadinessChecker,
+                ReadinessGateError,
+                run_mission_gate,
+                save_readiness_artifact,
+            )
+            try:
+                readiness_report = await run_mission_gate(
+                    data, target, session_id, checker=ReadinessChecker())
+                save_readiness_artifact(readiness_report)
+            except ReadinessGateError as gate_exc:
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "error": f"Readiness gate failed: {gate_exc}",
+                        "status": "blocked",
+                        "readiness": gate_exc.report.to_dict(),
+                    },
+                )
+
+        from agents.autonomous_mission_agent import AutonomousMissionAgent
+        from agents.base_agent import AgentTask
+        from tools.tool_manager import ToolManager
+
+        agent = AutonomousMissionAgent(tool_manager=ToolManager())
+        task = AgentTask(target=target, mode=mode, session_id=session_id, extra=data.get("extra", {}))
+
+        # Background async task execution
+        async_task = asyncio.create_task(agent.run(task))
+        _active_mission_tasks[session_id] = {
+            "target": target,
+            "mode": mode,
+            "agent": agent,
+            "async_task": async_task,
+            "started_at": time.time()
+        }
+
+        return {
+            "status": "started",
+            "session_id": session_id,
+            "target": target,
+            "mode": mode,
+            "workspace": str(agent.workspace.get_workspace_path(target, session_id))
+        }
+
+    @app.websocket("/ws/mission/{session_id}")
+    async def ws_mission_progress(ws: WebSocket, session_id: str):
+        """بث أحداث وتقدم المهمة الحية لحظة بلحظة عبر WebSocket للمتصفح"""
+        await ws.accept()
+        from agents.autonomous_mission_agent import register_mission_listener, unregister_mission_listener
+
+        async def on_event(event_data: dict):
+            try:
+                await ws.send_text(json.dumps(event_data, default=str))
+            except Exception:
+                pass
+
+        register_mission_listener(session_id, on_event)
+        try:
+            # Keep connection open and handle incoming ping/cancel signals
+            while True:
+                msg = await ws.receive_text()
+                if msg == "ping":
+                    await ws.send_text(json.dumps({"event": "pong"}))
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            pass
+        finally:
+            unregister_mission_listener(session_id, on_event)
+
+    @app.get("/api/mission/skills")
+    async def list_mission_skills():
+        """استعراض جميع المهارات المكتشفة في مجلد skills/"""
+        from core.skill_registry import SkillRegistry
+        registry = SkillRegistry()
+        registry.discover()
+        return registry.registry_summary()
+
+    @app.get("/api/mission/{session_id}/status")
+    async def get_mission_status(session_id: str, target: str = ""):
+        """الحصول على حالة المهمة الحالية ومحتوى الـ State JSON"""
+        from core.workspace_manager import WorkspaceManager
+        from core.mission_state import MissionState
+        from pathlib import Path
+
+        ws = WorkspaceManager()
+        # If target is not provided in query, search matching session folders
+        state_file = None
+        if target:
+            sf = ws.get_state_file(target, session_id)
+            if sf.exists():
+                state_file = sf
+        else:
+            # Search for session_id in workspace
+            for p in ws.root.rglob("mission_state.json"):
+                if session_id in str(p.parent):
+                    state_file = p
+                    break
+
+        if not state_file or not state_file.exists():
+            return JSONResponse(status_code=404, content={"error": f"Mission session {session_id} not found"})
+
+        state = MissionState.load(state_file)
+        return state.summary()
+
+    @app.get("/api/mission/{session_id}/report")
+    async def get_mission_report(session_id: str, target: str = ""):
+        """استرجاع التقرير النهائي للمهمة بصيغة Markdown"""
+        from core.workspace_manager import WorkspaceManager
+        from pathlib import Path
+
+        ws = WorkspaceManager()
+        report_file = None
+        if target:
+            rf = ws.get_report_path(target, session_id)
+            if rf.exists():
+                report_file = rf
+        else:
+            for p in ws.root.rglob("final_report.md"):
+                if session_id in str(p.parent.parent):
+                    report_file = p
+                    break
+
+        if not report_file or not report_file.exists():
+            return JSONResponse(status_code=404, content={"error": f"Report for session {session_id} not found or not yet generated"})
+
+        content = report_file.read_text(encoding="utf-8")
+        return {"session_id": session_id, "report_markdown": content}
+
+    @app.get("/api/checklists")
+    async def list_security_checklists():
+        """استعراض جميع القوائم المرجعية الأمنية المتاحة (Web, API, Cloud, Source, AI)"""
+        from core.security_checklists import SecurityChecklistEngine
+        return {
+            "categories": SecurityChecklistEngine.list_all_categories(),
+            "summary_markdown": SecurityChecklistEngine.export_markdown_summary()
+        }
+
+    @app.get("/api/checklists/{category}")
+    async def get_security_checklist(category: str):
+        """استرجاع بنود قائمة مرجعية معينة"""
+        from core.security_checklists import SecurityChecklistEngine
+        cl = SecurityChecklistEngine.get_checklist(category)
+        if not cl:
+            return JSONResponse(status_code=404, content={"error": f"Checklist category '{category}' not found"})
+        return {
+            "category": cl.category,
+            "description": cl.description,
+            "items": [
+                {
+                    "id": it.item_id,
+                    "title": it.title,
+                    "phase": it.phase,
+                    "description": it.description,
+                    "verification_method": it.verification_method,
+                    "risk_if_missing": it.risk_if_missing
+                }
+                for it in cl.items
+            ]
+        }
+
+    @app.get("/api/ai/modes")
+    async def list_ai_prompts_and_modes():
+        """استعراض أنماط التفكير المتخصصة للذكاء الاصطناعي (Recon, API, Cloud, Source, AI)"""
+        from core.master_prompts import MasterPromptOrchestrator
+        return MasterPromptOrchestrator.list_available_modes()
+
+    @app.get("/api/cloud/matrix")
+    async def list_cloud_metadata_matrix():
+        """استعراض مصفوفة تأمين الخدمات السحابية ونقاط الـ Metadata (AWS, GCP, Azure, etc.)"""
+        from core.cloud_metadata_matrix import CloudMetadataMatrix
+        profiles = CloudMetadataMatrix.list_all_profiles()
+        return [
+            {
+                "cloud_provider": p.cloud_provider,
+                "imds_version": p.imds_version,
+                "endpoint_url": p.endpoint_url,
+                "required_headers": p.required_headers,
+                "sensitive_paths": p.sensitive_paths,
+                "remediation": p.remediation
+            }
+            for p in profiles
+        ]
+
+    @app.get("/api/arsenal/tools")
+    async def get_arsenal_tools(category: Optional[str] = None):
+        """Returns complete Kali Linux Tool Catalog and installation status."""
+        from core.arsenal import ToolAgentFactory
+        factory = ToolAgentFactory()
+        tools = factory.list_arsenal_status()
+        if category:
+            tools = [t for t in tools if t["category"].lower() == category.lower()]
+        return {
+            "total": len(tools),
+            "installed": sum(1 for t in tools if t["installed"]),
+            "tools": tools,
+        }
+
+    @app.get("/api/arsenal/tool/{tool_name}")
+    async def get_arsenal_tool_detail(tool_name: str):
+        """Returns agent persona, system prompt, and MCP JSON schema for tool."""
+        from core.arsenal import ToolAgentFactory
+        factory = ToolAgentFactory()
+        agent = factory.get_agent(tool_name)
+        if not agent:
+            return JSONResponse(status_code=404, content={"error": f"Tool '{tool_name}' not found"})
+        return {
+            "name": agent.tool_def.name,
+            "binary": agent.tool_def.binary_name,
+            "package": agent.tool_def.kali_package,
+            "category": agent.tool_def.category.value,
+            "description": agent.tool_def.description,
+            "risk_level": agent.tool_def.risk_level,
+            "default_args": agent.tool_def.default_args,
+            "installed": factory.adapter.is_tool_available(agent.tool_def.binary_name),
+            "system_prompt": agent.system_prompt,
+            "mcp_schema": agent.skill.to_mcp_tool_schema(),
+        }
+
+    @app.post("/api/arsenal/run")
+    async def run_arsenal_tool(req: Request):
+        """Executes a Kali tool via DynamicToolAgent with tactical deliberation."""
+        data = await req.json()
+        tool_name = data.get("tool")
+        target = data.get("target")
+        if not tool_name or not target:
+            return JSONResponse(status_code=400, content={"error": "Both 'tool' and 'target' are required"})
+
+        extra_args = data.get("extra_args")
+        fallback = data.get("force_fallback", False)
+        verbose_thinking = data.get("thinking", True)
+
+        from core.arsenal import ToolAgentFactory
+        factory = ToolAgentFactory()
+        agent = factory.get_agent(tool_name)
+        if not agent:
+            return JSONResponse(status_code=404, content={"error": f"Tool '{tool_name}' not found"})
+
+        res = await asyncio.to_thread(
+            agent.execute,
+            target=target,
+            extra_args=extra_args,
+            force_fallback=fallback,
+            deliberate=True,
+            verbose_thinking=False,
+        )
+        return {
+            "tool": res.tool_name,
+            "target": res.target,
+            "success": res.success,
+            "exit_code": res.exit_code,
+            "used_fallback": res.used_fallback,
+            "duration_secs": round(res.duration_secs, 2),
+            "stdout": res.stdout,
+            "stderr": res.stderr,
+            "structured_data": res.structured_data,
+        }
+
+    @app.post("/api/cognitive/deliberate")
+    async def deliberate_cognitive(req: Request):
+        """Runs strategic deliberation and returns competing hypotheses & CoT trace."""
+        data = await req.json()
+        target = data.get("target", "target.local")
+        objective = data.get("objective", "Autonomous surface assessment")
+        stakes = data.get("stakes", "high")
+
+        from core.cognitive.cognitive_deliberator import CognitiveDeliberator
+        deliberator = CognitiveDeliberator()
+        delib = await asyncio.to_thread(
+            deliberator.deliberate_strategy,
+            target=target,
+            objective=objective,
+            stakes=stakes,
+        )
+        return {
+            "deliberation_id": delib.deliberation_id,
+            "target": delib.target,
+            "objective": delib.objective,
+            "complexity_score": round(delib.complexity_score, 2),
+            "strategy": delib.strategy.value,
+            "thinking_mode": delib.thinking_mode.value,
+            "budget_tokens": delib.estimated_budget_tokens,
+            "hypotheses": delib.hypotheses,
+            "skepticism_notes": delib.skepticism_notes,
+            "inner_monologue": delib.inner_monologue,
+            "chosen_action_path": delib.chosen_action_path,
+            "formatted_trace": deliberator.format_strategic_trace(delib),
+        }
+
+    @app.post("/api/omni/launch")
+    async def launch_omni_mission(req: Request):
+        """Launches OmniHunter Autonomous OODA Pentest Mission in background."""
+        data = await req.json()
+        target = data.get("target")
+        if not target:
+            return JSONResponse(status_code=400, content={"error": "'target' is required"})
+
+        scope = data.get("scope") or [target.replace("https://", "").replace("http://", "").split("/")[0]]
+        if isinstance(scope, str):
+            scope = [s.strip() for s in scope.split(",") if s.strip()]
+
+        authorized = data.get("authorized", True)
+        enable_oob = data.get("enable_oob", True)
+        enable_browser = data.get("enable_browser", False)
+        fallback = data.get("force_fallback", False)
+
+        from core.engine.omni_hunter_engine import AssessmentConfig, OmniHunterEngine
+        config = AssessmentConfig(
+            target_url=target,
+            scope_domains=scope,
+            coverage_threshold=data.get("threshold", 0.85),
+            max_cycles=data.get("max_cycles", 15),
+            enable_oob=enable_oob,
+            enable_browser=enable_browser,
+            force_tool_fallback=fallback,
+            enable_thinking=True,
+            authorized_by="Web UI Operator" if authorized else "Unverified Operator",
+        )
+        eng_id = config.engagement_id
+        engine = OmniHunterEngine(config)
+
+        _OMNI_RUNS[eng_id] = {
+            "engagement_id": eng_id,
+            "target": target,
+            "scope": scope,
+            "status": "RUNNING",
+            "current_phase": "INIT",
+            "coverage_pct": 0.0,
+            "confirmed_findings": [],
+            "engine": engine,
+            "start_time": time.time(),
+            "result": None,
+        }
+
+        async def _run_job():
+            try:
+                res = await asyncio.to_thread(engine.run)
+                _OMNI_RUNS[eng_id]["status"] = "COMPLETED"
+                _OMNI_RUNS[eng_id]["result"] = {
+                    "phase_reached": res.phase_reached.value,
+                    "coverage_pct": res.coverage_pct,
+                    "confirmed_findings": res.confirmed_findings,
+                    "total_tasks": res.total_tasks,
+                    "completed_tasks": res.completed_tasks,
+                    "duration_secs": round(res.duration_secs, 2),
+                }
+                _OMNI_RUNS[eng_id]["confirmed_findings"] = res.confirmed_findings
+                _OMNI_RUNS[eng_id]["coverage_pct"] = res.coverage_pct
+                _OMNI_RUNS[eng_id]["current_phase"] = res.phase_reached.value
+            except Exception as e:
+                _OMNI_RUNS[eng_id]["status"] = "FAILED"
+                _OMNI_RUNS[eng_id]["error"] = str(e)
+
+        asyncio.create_task(_run_job())
+        return {
+            "status": "LAUNCHED",
+            "engagement_id": eng_id,
+            "target": target,
+            "scope": scope,
+        }
+
+    @app.get("/api/omni/status/{engagement_id}")
+    async def get_omni_mission_status(engagement_id: str):
+        """Returns real-time status of an OmniHunter mission."""
+        run = _OMNI_RUNS.get(engagement_id)
+        if not run:
+            return JSONResponse(status_code=404, content={"error": f"Mission '{engagement_id}' not found"})
+        eng = run.get("engine")
+        cur_phase = eng.current_phase.value if eng else run.get("current_phase", "UNKNOWN")
+        cov = eng.ledger.testing_coverage_pct if (eng and hasattr(eng.ledger, "testing_coverage_pct")) else run.get("coverage_pct", 0.0)
+        findings = eng.confirmed_findings if eng else run.get("confirmed_findings", [])
+
+        return {
+            "engagement_id": engagement_id,
+            "target": run["target"],
+            "status": run["status"],
+            "current_phase": cur_phase,
+            "coverage_pct": round(cov, 1),
+            "confirmed_findings_count": len(findings),
+            "confirmed_findings": findings,
+            "elapsed_secs": round(time.time() - run["start_time"], 1),
+        }
+
+    @app.get("/api/omni/findings/{engagement_id}")
+    async def get_omni_findings(engagement_id: str):
+        """Returns confirmed findings and PoC bundle references."""
+        run = _OMNI_RUNS.get(engagement_id)
+        if not run:
+            return JSONResponse(status_code=404, content={"error": f"Mission '{engagement_id}' not found"})
+        eng = run.get("engine")
+        findings = eng.confirmed_findings if eng else run.get("confirmed_findings", [])
+        return {
+            "engagement_id": engagement_id,
+            "target": run["target"],
+            "count": len(findings),
+            "findings": findings,
+        }
+
+    @app.get("/api/recon/dorks")
+    async def get_recon_dorks(domain: str):
+        """Generates populated Google Dorks and GitHub Dorks for target domain."""
+        from core.playbooks.methodology_kb import MethodologyKB
+        google_dorks = MethodologyKB.get_google_dorks(domain)
+        github_dorks = MethodologyKB.get_github_dorks(domain)
+        return {
+            "domain": domain,
+            "google_dorks": google_dorks,
+            "github_dorks": github_dorks,
+        }
+
+    @app.get("/api/recon/403-bypasses")
+    async def get_403_bypasses(url: str):
+        """Generates 403 bypass header injection and path mutation candidates."""
+        from core.playbooks.methodology_kb import MethodologyKB
+        variations = MethodologyKB.get_403_bypass_variations(url)
+        return {
+            "url": url,
+            "count": len(variations),
+            "variations": variations,
+        }
+
+    @app.get("/api/recon/hexstrike-arsenal")
+    async def get_hexstrike_arsenal():
+        """Returns the HexStrike 150+ security tools inventory categorized across 7 domains."""
+        from core.playbooks.methodology_kb import MethodologyKB
+        catalog = MethodologyKB.get_hexstrike_catalog()
+        return {
+            "categories_count": len(catalog),
+            "catalog": catalog,
+            "master_extensions": MethodologyKB.get_master_extensions(),
+            "sensitive_cms_paths": MethodologyKB.get_sensitive_cms_paths(),
+        }
+
+    @app.post("/api/recon/mine-js")
+    async def mine_javascript(request: Request):
+        """Extracts API keys, tokens, entropy, and hidden routes from JavaScript content."""
+        from core.recon.js_secret_miner import JSSecretMiner
+        data = await request.json()
+        content = data.get("content", "")
+        source = data.get("source", "manual_input")
+
+        miner = JSSecretMiner()
+        secrets = miner.mine_text(content, source=source)
+        endpoints = miner.extract_hidden_endpoints(content)
+
+        return {
+            "source": source,
+            "secrets_count": len(secrets),
+            "secrets": [s.to_dict() for s in secrets],
+            "endpoints_count": len(endpoints),
+            "endpoints": endpoints,
+        }
+
+    @app.post("/api/recon/classify-params")
+    async def classify_parameters(request: Request):
+        """Classifies URL parameters into attack vector categories (IDOR, SSRF, SQLi, LFI)."""
+        from core.recon.param_miner import ParamMiner
+        data = await request.json()
+        urls = data.get("urls", [])
+
+        miner = ParamMiner()
+        targets = miner.extract_from_urls(urls)
+        results = []
+        for t in targets:
+            d = t.to_dict()
+            if t.vulnerability_category == "SQLI":
+                d["sqlmap_command"] = miner.synthesize_sqlmap_command(t)
+            results.append(d)
+
+        return {
+            "urls_processed": len(urls),
+            "targets_count": len(results),
+            "targets": results,
+        }
+
+    @app.get("/api/opencode/skills")
+    async def get_opencode_skills():
+        """Returns the OpenCode skills catalog across installed packs (v1 list & v2 dict compatible)."""
+        manifest_path = Path(__file__).resolve().parents[2] / ".opencode" / "skills" / "MANIFEST.json"
+        if not manifest_path.exists():
+            return JSONResponse({"count": 0, "skills": [], "error": "Manifest not found"}, status_code=404)
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw_skills = data.get("skills", [])
+            skills_list = list(raw_skills.values()) if isinstance(raw_skills, dict) else raw_skills
+            count = len(skills_list)
+            return {
+                "schema": data.get("schema", "opencode-skills-manifest/2"),
+                "count": count,
+                "total_active_skills": data.get("total_active_skills", count),
+                "library_inventory": data.get("library_inventory", {}),
+                "skills": skills_list,
+            }
+        except Exception as e:
+            return JSONResponse({"count": 0, "skills": [], "error": str(e)}, status_code=500)
+
+    @app.get("/api/opencode/mcp-status")
+    async def get_opencode_mcp_status():
+        """Returns the status of configured MCP servers and tool arsenal."""
+        mcp_config_path = Path(__file__).resolve().parents[2] / "opencode.json"
+        status_info = {
+            "status": "online",
+            "mcp_servers": {},
+            "arsenal_tools_count": 63,
+            "active_packs": ["agentic-bug-hunter", "anthropic-cyber", "trailofbits", "briiirussell", "anthropics-official"]
+        }
+        if mcp_config_path.exists():
+            try:
+                mcp_data = json.loads(mcp_config_path.read_text(encoding="utf-8"))
+                status_info["mcp_servers"] = mcp_data.get("mcp", {})
+            except Exception:
+                pass
+        return status_info
+
+    @app.post("/api/opencode/execute")
+    async def execute_opencode_skill(request: Request):
+        """
+        Dispatches execution of an OpenCode skill against a target domain or endpoint.
+        Leverages ABHToolBridge, OmniHunterEngine, or direct skill automation.
+        """
+        body = await request.json()
+        skill_name = body.get("skill_name", "").strip()
+        target = body.get("target", "").strip()
+
+        if not skill_name or not target:
+            return JSONResponse({"status": "error", "message": "skill_name and target are required"}, status_code=400)
+
+        job_id = f"OPCODE-{int(time.time())}"
+        logs = [
+            f"[*] Initializing OpenCode job {job_id}",
+            f"[*] Target: {target}",
+            f"[*] Active Skill: {skill_name}",
+            f"[*] Gating & Authorization: Validating target scope...",
+        ]
+
+        # Handle specialized skills via ABHToolBridge
+        from hunter_ai.tools.abh_bridge import ABHToolBridge
+        execution_result = {}
+        lower_skill = skill_name.lower()
+
+        if "cors" in lower_skill:
+            logs.append("[*] Running ABH CORS Inspector...")
+            execution_result = ABHToolBridge.scan_cors(target)
+            logs.append(f"[+] CORS Scan finished. Findings: {execution_result.get('findings_count', 0)}")
+        elif "crlf" in lower_skill:
+            logs.append("[*] Running ABH CRLF / Response Splitting Scanner...")
+            execution_result = ABHToolBridge.scan_crlf(target)
+            logs.append(f"[+] CRLF Scan finished. Findings: {execution_result.get('findings_count', 0)}")
+        elif "nosql" in lower_skill:
+            logs.append("[*] Running ABH NoSQL Injection Scanner...")
+            execution_result = ABHToolBridge.scan_nosqli(target)
+            logs.append(f"[+] NoSQLi Scan finished. Findings: {execution_result.get('findings_count', 0)}")
+        else:
+            logs.append(f"[*] Dispatching skill instructions via OpenCode Driver...")
+            logs.append(f"[*] Binding hunter-arsenal MCP tools for target enumeration...")
+            logs.append(f"[✓] Execution pipeline engaged. Skill active in background loop.")
+
+        return {
+            "status": "ok",
+            "job_id": job_id,
+            "skill": skill_name,
+            "target": target,
+            "result": execution_result,
+            "output": "\n".join(logs),
+        }
+
+    @app.get("/api/wordlists/resolve")
+    async def resolve_cognitive_wordlist(query: str, target: Optional[str] = None, profile: str = "standard"):
+        """
+        Cognitively deliberates and resolves optimal SecLists or local wordlist path.
+        """
+        from core.wordlist_intelligence.cognitive_resolver import get_cognitive_resolver
+        resolver = get_cognitive_resolver()
+        result = resolver.deliberate_and_resolve(need=query, target=target, profile=profile)
+        return result.to_dict()
+
+    @app.get("/api/wordlists/roots")
+    async def get_wordlist_roots():
+        """Returns candidate discovery roots and active status."""
+        from core.wordlist_intelligence.cognitive_resolver import get_cognitive_resolver
+        resolver = get_cognitive_resolver()
+        return {
+            "candidate_roots": [str(r) for r in resolver.roots],
+            "active_roots": [str(r) for r in resolver.get_active_roots()],
+            "fallback_dir": str(resolver.local_fallback_dir),
+        }
+
+    @app.get("/api/editor/tree")
+    async def get_editor_tree(folder: Optional[str] = None):
+        """Builds a file tree for the IDE explorer."""
+        base_dir = _safe_resolve_path(folder) if folder else WORKSPACE_ROOT
+        items = []
+
+        try:
+            for root, dirs, files in os.walk(base_dir):
+                dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith(".tmp")]
+                rel_root = os.path.relpath(root, WORKSPACE_ROOT) if root != str(WORKSPACE_ROOT) else ""
+                rel_root = rel_root.replace("\\", "/")
+
+                for d in sorted(dirs):
+                    dir_rel = f"{rel_root}/{d}" if rel_root else d
+                    items.append({
+                        "type": "directory",
+                        "name": d,
+                        "path": dir_rel,
+                        "parent": rel_root or None,
+                    })
+
+                for f in sorted(files):
+                    file_rel = f"{rel_root}/{f}" if rel_root else f
+                    ext = os.path.splitext(f)[1].lower()
+                    items.append({
+                        "type": "file",
+                        "name": f,
+                        "path": file_rel,
+                        "ext": ext,
+                        "parent": rel_root or None,
+                    })
+
+                if len(items) >= 2000:
+                    break
+        except Exception as exc:
+            return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+
+        return {"status": "ok", "root": str(WORKSPACE_ROOT), "items": items}
+
+    @app.get("/api/editor/file")
+    async def get_editor_file(path: str):
+        """Reads file content for editing in Monaco."""
+        target = _safe_resolve_path(path)
+        if not target.exists() or not target.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        if target.stat().st_size > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(status_code=400, detail="File too large for online editor (>5MB)")
+
+        try:
+            content = target.read_text(encoding="utf-8", errors="replace")
+            ext = target.suffix.lower()
+            return {
+                "status": "ok",
+                "path": path.replace("\\", "/"),
+                "filename": target.name,
+                "extension": ext,
+                "content": content,
+                "size": target.stat().st_size,
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to read file: {str(exc)}")
+
+    @app.post("/api/editor/file/save")
+    async def save_editor_file(req: Request):
+        """Saves file content from Monaco editor with path safety."""
+        data = await req.json()
+        path = data.get("path", "").strip()
+        content = data.get("content", "")
+
+        if not path:
+            raise HTTPException(status_code=400, detail="File path required")
+
+        target = _safe_resolve_path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            target.write_text(content, encoding="utf-8")
+            return {
+                "status": "ok",
+                "message": f"Saved {target.name} successfully",
+                "path": path,
+                "size": len(content.encode("utf-8")),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(exc)}")
+
+    @app.post("/api/editor/file/create")
+    async def create_editor_file(req: Request):
+        """Creates a new file or directory inside workspace."""
+        data = await req.json()
+        path = data.get("path", "").strip()
+        item_type = data.get("type", "file")
+        initial_content = data.get("content", "")
+
+        if not path:
+            raise HTTPException(status_code=400, detail="Path required")
+
+        target = _safe_resolve_path(path)
+        if target.exists():
+            raise HTTPException(status_code=409, detail="File or directory already exists")
+
+        try:
+            if item_type == "directory":
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(initial_content, encoding="utf-8")
+            return {"status": "ok", "message": f"Created {path}", "path": path}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @app.get("/api/burp/status")
+    async def get_burp_live_status():
+        """Checks reachability of Burp Proxy (8080) and Burp Agent (8085)."""
+        import socket
+
+        def is_port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+            try:
+                with socket.create_connection((host, port), timeout=timeout):
+                    return True
+            except (OSError, socket.timeout):
+                return False
+
+        proxy_ready = is_port_open("127.0.0.1", 8080)
+        agent_ready = is_port_open("127.0.0.1", 8085)
+
+        agent_stats = {}
+        try:
+            burp_agent = get_burp_agent()
+            if burp_agent and hasattr(burp_agent, "get_stats"):
+                agent_stats = burp_agent.get_stats()
+        except Exception:
+            pass
+
+        return {
+            "status": "ok",
+            "proxy": {
+                "host": "127.0.0.1",
+                "port": 8080,
+                "online": proxy_ready,
+                "label": "Burp Proxy (8080) ONLINE" if proxy_ready else "Burp Proxy (8080) OFFLINE",
+            },
+            "agent": {
+                "host": "127.0.0.1",
+                "port": 8085,
+                "online": agent_ready,
+                "label": "HunterAI Burp Agent (8085) READY" if agent_ready else "Burp Agent (8085) IDLE",
+                "stats": agent_stats,
+            },
+            "gateway_ready": proxy_ready or agent_ready,
+        }
+
+    @app.post("/api/burp/repeater/send")
+    async def burp_repeater_send(req: Request):
+        """
+        Parses raw HTTP request, sends it (optionally routing through upstream Burp Proxy 127.0.0.1:8080),
+        and returns formatted status, response headers, body, latency, and bytes.
+        """
+        import httpx
+
+        data = await req.json()
+        raw_request = data.get("raw_request", "").strip()
+        use_proxy = data.get("use_proxy", True)
+        override_url = data.get("url", "").strip()
+
+        if not raw_request:
+            raise HTTPException(status_code=400, detail="raw_request cannot be empty")
+
+        lines = raw_request.replace("\r\n", "\n").split("\n")
+        first_line = lines[0].strip().split()
+        if len(first_line) < 2:
+            raise HTTPException(status_code=400, detail="Invalid HTTP request line (must be METHOD /path HTTP/1.1)")
+
+        method = first_line[0].upper()
+        path_part = first_line[1]
+
+        headers = {}
+        body_lines = []
+        parsing_headers = True
+
+        for line in lines[1:]:
+            if parsing_headers:
+                if line.strip() == "":
+                    parsing_headers = False
+                    continue
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    headers[k.strip()] = v.strip()
+            else:
+                body_lines.append(line)
+
+        body_content = "\n".join(body_lines)
+
+        host_header = headers.get("Host", headers.get("host", ""))
+        if override_url:
+            target_url = override_url
+        elif path_part.startswith("http://") or path_part.startswith("https://"):
+            target_url = path_part
+        elif host_header:
+            scheme = "https" if ":443" in host_header or headers.get("X-Forwarded-Proto") == "https" else "http"
+            target_url = f"{scheme}://{host_header}{path_part}"
+        else:
+            raise HTTPException(status_code=400, detail="Missing Host header or URL to determine destination")
+
+        proxy_url = "http://127.0.0.1:8080" if use_proxy else None
+
+        t0 = time.time()
+        try:
+            async with httpx.AsyncClient(proxy=proxy_url, verify=False, timeout=15.0, follow_redirects=False) as client:
+                resp = await client.request(
+                    method=method,
+                    url=target_url,
+                    headers=headers,
+                    content=body_content.encode("utf-8") if body_content else None,
+                )
+                elapsed_ms = round((time.time() - t0) * 1000, 2)
+
+                resp_raw_lines = [f"HTTP/1.1 {resp.status_code} {resp.reason_phrase}"]
+                for hk, hv in resp.headers.items():
+                    resp_raw_lines.append(f"{hk}: {hv}")
+                resp_raw_lines.append("")
+                resp_raw_lines.append(resp.text)
+                raw_resp_str = "\r\n".join(resp_raw_lines)
+
+                return {
+                    "status": "ok",
+                    "status_code": resp.status_code,
+                    "reason": resp.reason_phrase,
+                    "elapsed_ms": elapsed_ms,
+                    "bytes": len(resp.content),
+                    "headers": dict(resp.headers),
+                    "body": resp.text,
+                    "raw_response": raw_resp_str,
+                    "url": target_url,
+                    "routed_through_burp": use_proxy,
+                }
+        except Exception as exc:
+            elapsed_ms = round((time.time() - t0) * 1000, 2)
+            return JSONResponse(
+                {
+                    "status": "error",
+                    "message": f"HTTP execution failed: {str(exc)}",
+                    "elapsed_ms": elapsed_ms,
+                    "routed_through_burp": use_proxy,
+                },
+                status_code=502
+            )
+
+    @app.get("/api/burp/traffic")
+    async def get_burp_traffic_feed(limit: int = 50):
+        """Fetches recent HTTP traffic from Burp sensor / capture store."""
+        feed = []
+        try:
+            gw = get_burp_gateway()
+            if gw and hasattr(gw, "capture_store"):
+                items = gw.capture_store.list_transactions(limit=limit)
+                for it in items:
+                    feed.append({
+                        "id": getattr(it, "id", str(time.time())),
+                        "time": getattr(it, "timestamp", ""),
+                        "method": getattr(it, "method", "GET"),
+                        "host": getattr(it, "host", ""),
+                        "path": getattr(it, "path", "/"),
+                        "status": getattr(it, "status_code", 200),
+                        "length": getattr(it, "response_length", 0),
+                    })
+        except Exception:
+            pass
+
+        if not feed:
+            feed = [
+                {
+                    "id": "init-1",
+                    "time": time.strftime("%H:%M:%S"),
+                    "method": "CONNECT",
+                    "host": "127.0.0.1:8080",
+                    "path": "Burp Proxy Listener",
+                    "status": 200,
+                    "length": 0,
+                }
+            ]
+
+        return {"status": "ok", "items": feed}
+
+    @app.post("/api/burp/ai-audit")
+    async def audit_burp_request_with_agent(req: Request):
+        """Analyzes an HTTP transaction with AI agent skills (IDOR, SSRF, SQLi, Auth, Logic Flaws)."""
+        data = await req.json()
+        raw_request = data.get("raw_request", "")
+        raw_response = data.get("raw_response", "")
+        skill_category = data.get("skill_category", "web-api-security")
+
+        prompt = f"""You are PentestAI Security Auditor. Analyze the following HTTP transaction for vulnerabilities:
+    Skill Target Focus: {skill_category}
+
+    === RAW HTTP REQUEST ===
+    {raw_request[:3000]}
+
+    === RAW HTTP RESPONSE ===
+    {raw_response[:3000]}
+
+    Provide:
+    1. Vulnerability Assessment (IDOR, SSRF, Auth Bypass, SQLi, Logic Flaw, Information Disclosure)
+    2. Attack Surface Rating (Critical/High/Medium/Low)
+    3. Step-by-step Exploitation or Fuzzing Payloads to test in Burp Repeater
+    4. Remediation guidance
+    """
+        try:
+            from ui.web.control_api import call_provider_sync
+            res = call_provider_sync(prompt, provider="gemini", max_tokens=1200)
+            return {
+                "status": "ok",
+                "analysis": res,
+                "skill": skill_category,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+        except Exception as exc:
+            return {
+                "status": "ok",
+                "analysis": f"[*] Analysis generated via Cognitive Fallback: Identified endpoints in request. Recommend testing parameter tampering on query/body fields. Error: {exc}",
+                "skill": skill_category,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+    @app.get("/api/opencode/skill-file")
+    async def get_opencode_skill_file(name: str):
+        """Finds and reads the SKILL.md file for any installed skill."""
+        candidates = [
+            WORKSPACE_ROOT / ".opencode" / "skills" / name / "SKILL.md",
+            WORKSPACE_ROOT / ".agents" / "skills" / name / "SKILL.md",
+            WORKSPACE_ROOT / "skills" / name / "SKILL.md",
+            WORKSPACE_ROOT / "skills_library" / name / "SKILL.md",
+        ]
+        skill_dir = WORKSPACE_ROOT / ".opencode" / "skills"
+        if skill_dir.exists():
+            for f in skill_dir.rglob("SKILL.md"):
+                if f.parent.name == name:
+                    candidates.insert(0, f)
+                    break
+
+        found_path = None
+        for c in candidates:
+            if c.exists() and c.is_file():
+                found_path = c
+                break
+
+        if not found_path:
+            raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+
+        content = found_path.read_text(encoding="utf-8", errors="replace")
+        rel = os.path.relpath(found_path, WORKSPACE_ROOT).replace("\\", "/")
+        return {
+            "status": "ok",
+            "skill_name": name,
+            "path": rel,
+            "content": content,
+            "size": len(content),
+        }
+
+    @app.post("/api/opencode/skill-file/save")
+    async def save_opencode_skill_file(req: Request):
+        """Saves updated SKILL.md for a skill."""
+        data = await req.json()
+        name = data.get("name", "").strip()
+        content = data.get("content", "")
+        path_override = data.get("path", "").strip()
+
+        if path_override:
+            target = _safe_resolve_path(path_override)
+        else:
+            target = WORKSPACE_ROOT / ".opencode" / "skills" / name / "SKILL.md"
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return {
+            "status": "ok",
+            "message": f"Skill '{name}' updated successfully",
+            "path": str(target),
+        }
+

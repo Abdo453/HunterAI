@@ -226,7 +226,7 @@ class WorldEliteOrchestrator:
         port_scanner = self.tool_registry.get("port_scanner")
         if port_scanner:
             try:
-                scan_result = await asyncio.get_event_loop().run_in_executor(
+                scan_result = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: port_scanner(target=target, phase="recon")
                 )
                 recon_data["port_scan"] = str(scan_result)[:1000]

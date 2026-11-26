@@ -52,8 +52,7 @@ class FlagStore:
     def _all_sorted(self) -> List[FlagCandidate]:
         return sorted(
             self._by_fp.values(),
-            key=lambda c: (c.confidence, c.found_at),
-            reverse=True)
+            key=lambda c: (-c.confidence, c.found_at))
 
     # ── عمليات ────────────────────────────────────────────────────────────
     def add(self, candidate: FlagCandidate) -> bool:

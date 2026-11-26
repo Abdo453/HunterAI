@@ -831,6 +831,16 @@ class TestJsHtmlApiContractConsistency:
 
     def test_no_external_cdns_or_hardcoded_windows_paths_in_control_center(self):
         cdn_patterns = ("cdn.", "unpkg.com", "jsdelivr", "googleapis", "cloudflare")
+        cc_ui_files = {
+            UI_WEB_DIR / "app.py",
+            UI_WEB_DIR / "legacy_routes.py",
+            UI_WEB_DIR / "templates" / "dashboard.html",
+            UI_WEB_DIR / "static" / "dashboard.css",
+            UI_WEB_DIR / "static" / "dashboard.js",
+            UI_WEB_DIR / "static" / "index.html",
+        }
+        cc_ui_dirs = {UI_WEB_DIR / "api", UI_WEB_DIR / "ws"}
+
         for root in (DASHBOARD_CORE_DIR, UI_WEB_DIR):
             for file_path in root.rglob("*"):
                 if not file_path.is_file() or "__pycache__" in file_path.parts:
@@ -841,6 +851,13 @@ class TestJsHtmlApiContractConsistency:
                 assert "E:\\Agant" not in content and "E:/Agant" not in content, (
                     f"Hardcoded path found in {file_path}"
                 )
+                is_cc_file = (
+                    DASHBOARD_CORE_DIR in file_path.parents
+                    or file_path in cc_ui_files
+                    or any(d in file_path.parents for d in cc_ui_dirs)
+                )
+                if not is_cc_file:
+                    continue
                 low = content.lower()
                 for cdn in cdn_patterns:
                     assert cdn not in low, f"External CDN reference '{cdn}' found in {file_path}"

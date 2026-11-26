@@ -424,3 +424,18 @@ class ToolOutputNormalizer:
                 graph.add_relationship(ep_id, sink_id, "POTENTIAL_SINK", {"evidence_level": sig.initial_evidence_level.code})
 
         return graph
+
+    @classmethod
+    def ingest_and_adjudicate(
+        cls,
+        signals: List[NormalizedSecuritySignal],
+        court: Any,
+        graph: Optional[SIRGraph] = None,
+        threshold: float = 0.8,
+    ):
+        """Compiles signals into SIRGraph and submits high-confidence nodes to EvidenceCourt."""
+        from core.bridges.sir_to_court import submit_sir_to_court
+
+        sir_graph = cls.ingest_to_sir(signals, graph=graph)
+        judgments = submit_sir_to_court(sir_graph, court, threshold=threshold)
+        return sir_graph, judgments

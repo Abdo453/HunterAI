@@ -102,7 +102,7 @@ class TaskDependencyGraph:
             "nodes": {tid: node.to_dict() for tid, node in self._nodes.items()},
             "edges": {tid: list(deps) for tid, deps in self._edges.items()},
         }
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._write_json, path, data)
 
     def _write_json(self, path: Path, data: Dict[str, Any]) -> None:
