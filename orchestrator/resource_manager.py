@@ -1,170 +1,159 @@
+"""Resource Manager — Delegates Local GPU Lock Scheduling to Canonical GPUScheduler.
+
+Preserves the legacy ``ResourceManager`` API (``exclusive_gpu``, ``run_local_model``,
+``run_sequential``, ``status``, ``is_gpu_free``) while delegating all GPU lock
+serialization, priority scheduling, and auto-unload lifecycle to the process-wide
+``core.llm.gpu_scheduler.GPUScheduler`` singleton.
+
+Supports zero-arg ``ResourceManager()`` construction (fixing previous crashes in
+``core/exploit_factory.py`` and ``agents/refining_agent.py``).
 """
-Resource Manager — GPU Lock System
-ضمان موديل محلي واحد فقط على الـ GPU في أي وقت
-API Models تشتغل بدون قيود (no local GPU)
-"""
-import asyncio
-import logging
-import time
+from __future__ import annotations
+
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+import logging
+from typing import Any, AsyncIterator, Callable, Dict, Optional
+
+from core.llm.gpu_scheduler import (
+    GPUScheduler,
+    PRIORITY_BACKGROUND,
+    get_gpu_scheduler,
+)
+from core.llm.manifest import get_model_manifest
 from models.ollama_manager import OllamaManager
 
 log = logging.getLogger("resource_manager")
 
 
-@dataclass
-class GPUStatus:
-    locked: bool = False
-    current_model: Optional[str] = None
-    lock_time: float = 0.0
-    queue_length: int = 0
-    total_runs: int = 0
-    total_unloads: int = 0
-
-
 class ResourceManager:
-    """
-    قفل GPU حصري — Local Model Scheduler
-    
-    القاعدة الأساسية:
-    - موديل محلي واحد فقط على GPU في أي وقت
-    - بعد انتهاء المهمة → unload → تحرير القفل
-    - API Models تشتغل بالتوازي بدون قيود
-    """
+    """Process-wide GPU scheduler shim preserving legacy ``ResourceManager`` callers."""
 
-    def __init__(self, ollama_manager: OllamaManager):
-        self.ollama = ollama_manager
-        self._gpu_lock = asyncio.Lock()
-        self._status = GPUStatus()
-        self._queue: asyncio.Queue = asyncio.Queue()
+    def __init__(
+        self,
+        ollama_manager: Optional[OllamaManager] = None,
+        *,
+        scheduler: Optional[GPUScheduler] = None,
+    ) -> None:
+        self.ollama: OllamaManager = ollama_manager or OllamaManager()
+        self._scheduler: GPUScheduler = scheduler or get_gpu_scheduler()
 
     @asynccontextmanager
-    async def exclusive_gpu(self, model_name: str):
-        """
-        Context manager للاستخدام الحصري للـ GPU
-
-        Usage:
-            async with resource_manager.exclusive_gpu("qwen2.5-coder:14b") as gpu:
-                result = await gpu.run(...)
-        """
-        queue_pos = self._status.queue_length
-        log.info(f"[GPU] Requesting lock for: {model_name} (queue: {queue_pos})")
-
-        async with self._gpu_lock:
-            self._status.locked = True
-            self._status.current_model = model_name
-            self._status.lock_time = time.time()
-            self._status.total_runs += 1
-            self._status.queue_length = max(0, self._status.queue_length - 1)
-
-            log.info(f"[GPU] Lock acquired: {model_name}")
-
-            try:
-                yield self.ollama
-            finally:
-                # تفريغ الموديل وتحرير القفل
-                log.info(f"[GPU] Releasing + unloading: {model_name}")
-                if self.ollama and hasattr(self.ollama, "unload_model"):
-                    try:
-                        await self.ollama.unload_model(model_name)
-                    except Exception:
-                        pass
-                await asyncio.sleep(0.5)  # ضمان استقرار الذاكرة
-                self._status.locked = False
-                self._status.current_model = None
-                self._status.total_unloads += 1
-                log.info(f"[GPU] Lock released. Total runs: {self._status.total_runs}")
+    async def exclusive_gpu(
+        self,
+        model_name: str,
+        *,
+        priority: int = PRIORITY_BACKGROUND,
+        keep_alive: Optional[int] = None,
+        unload_on_release: Optional[bool] = None,
+    ) -> AsyncIterator[OllamaManager]:
+        """Acquire exclusive GPU access via the process-wide ``GPUScheduler``."""
+        log.info("[GPU] Requesting lock for: %s", model_name)
+        async with self._scheduler.acquire(
+            model_name,
+            priority=priority,
+            keep_alive=keep_alive,
+            ollama_manager=self.ollama,
+            unload_on_release=unload_on_release,
+        ):
+            log.info("[GPU] Lock acquired: %s", model_name)
+            yield self.ollama
+            log.info("[GPU] Releasing lease for: %s", model_name)
 
     async def run_local_model(
         self,
         model_name: str,
         messages: list,
         temperature: float = 0.3,
-        num_ctx: int = 4096,
-        progress_cb=None
+        num_ctx: Optional[int] = None,
+        progress_cb: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        *,
+        priority: int = PRIORITY_BACKGROUND,
+        keep_alive: Optional[int] = None,
     ) -> str:
-        """
-        تشغيل موديل محلي بشكل حصري على الـ GPU
-        يحجز القفل → يشغّل → يفرّغ تلقائياً
-        """
+        """Run a local model exclusively on the GPU via ``GPUScheduler``."""
         if not self.ollama:
             log.warning("Ollama client instance not configured / offline")
             return ""
 
-        self._status.queue_length += 1
+        manifest = get_model_manifest()
+        eff_ctx = int(num_ctx) if (num_ctx and num_ctx > 0) else manifest.context_window_for(model_name, default=8192)
+        eff_keep_alive = self._scheduler.default_keep_alive if keep_alive is None else max(0, int(keep_alive))
 
         if progress_cb:
             await progress_cb({
                 "event": "gpu_queued",
                 "model": model_name,
-                "queue": self._status.queue_length
+                "queue": self._scheduler.status().get("queue_length", 0) + 1,
             })
 
-        async with self.exclusive_gpu(model_name) as ollama:
+        async with self.exclusive_gpu(
+            model_name,
+            priority=priority,
+            keep_alive=eff_keep_alive,
+        ) as ollama:
             if progress_cb:
                 await progress_cb({
                     "event": "gpu_active",
-                    "model": model_name
+                    "model": model_name,
                 })
 
-            async def _on_token(token: str):
+            async def _on_token(token: str) -> None:
                 if progress_cb:
                     try:
                         await progress_cb({
                             "event": "chat_token",
                             "token": token,
-                            "model": model_name
+                            "model": model_name,
                         })
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
             result = await ollama.chat_stream(
                 model_name=model_name,
                 messages=messages,
-                keep_alive=0,  # تفريغ فوري بعد الانتهاء
+                keep_alive=eff_keep_alive,
                 temperature=temperature,
-                num_ctx=num_ctx,
-                token_cb=_on_token
+                num_ctx=eff_ctx,
+                token_cb=_on_token,
             )
 
             if progress_cb:
                 await progress_cb({
                     "event": "gpu_done",
                     "model": model_name,
-                    "chars": len(result)
+                    "chars": len(result),
                 })
 
             return result
 
     async def run_sequential(
         self,
-        tasks: list,  # [{"model": str, "messages": list, "name": str}]
-        progress_cb=None
+        tasks: list,
+        progress_cb: Optional[Callable[[Dict[str, Any]], Any]] = None,
     ) -> Dict[str, str]:
-        """
-        تشغيل موديلات محلية بالتتابع — كل موديل يُنهي ويُفرَّغ قبل التالي
-        """
-        results = {}
+        """Run local model tasks sequentially under the shared ``GPUScheduler``."""
+        results: Dict[str, str] = {}
         for task in tasks:
             model = task["model"]
             name = task.get("name", model)
             messages = task["messages"]
             temperature = task.get("temperature", 0.3)
+            num_ctx = task.get("num_ctx")
 
             if progress_cb:
                 await progress_cb({
                     "event": "sequential_step",
                     "step": name,
-                    "model": model
+                    "model": model,
                 })
 
             result = await self.run_local_model(
                 model_name=model,
                 messages=messages,
                 temperature=temperature,
-                progress_cb=progress_cb
+                num_ctx=num_ctx,
+                progress_cb=progress_cb,
+                keep_alive=0,
             )
             results[name] = result
 
@@ -172,15 +161,10 @@ class ResourceManager:
 
     @property
     def status(self) -> dict:
-        elapsed = time.time() - self._status.lock_time if self._status.locked else 0
-        return {
-            "locked": self._status.locked,
-            "current_model": self._status.current_model,
-            "elapsed_seconds": round(elapsed, 1),
-            "queue_length": self._status.queue_length,
-            "total_runs": self._status.total_runs,
-            "total_unloads": self._status.total_unloads,
-        }
+        return self._scheduler.status()
 
     def is_gpu_free(self) -> bool:
-        return not self._gpu_lock.locked()
+        return not self._scheduler.is_locked()
+
+
+__all__ = ["ResourceManager"]

@@ -323,42 +323,34 @@ class CognitiveCouncil:
         temperature: float = 0.2,
         timeout: int = 15,
     ) -> str:
-        """Asynchronously queries an individual model in the council via Ollama HTTP API."""
+        """Delegate Cognitive Council queries through canonical ``core.llm_router.LLMRouter``."""
         if self._online_status is False:
             return ""
 
+        from core.llm_router import LLMRouter
+
         model_name = self._resolve_model(role)
-        url = f"{self.ollama_host}/api/chat"
-        payload = {
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "stream": False,
-            "keep_alive": "5m",
-            "options": {
-                "temperature": temperature,
-                "num_ctx": 4096,
-            }
-        }
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-
-        loop = asyncio.get_running_loop()
-
-        def _do_http():
-            try:
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    res = json.loads(resp.read().decode("utf-8"))
-                    self._online_status = True
-                    return res.get("message", {}).get("content", "").strip()
-            except Exception as e:
-                if self._online_status is None:
-                    logger.debug(f"[Council] Ollama query failed for {role.value} ({e})")
-                return ""
-
-        return await loop.run_in_executor(None, _do_http)
+        router = LLMRouter(ollama_host=self.ollama_host, policy="local_only")
+        try:
+            res = await asyncio.wait_for(
+                router.complete(
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    prefer=f"local:{model_name}",
+                    role="deep_analyst",
+                ),
+                timeout=float(timeout),
+            )
+            if res and res.content:
+                self._online_status = True
+                return res.content.strip()
+            return ""
+        except Exception as e:
+            if self._online_status is None:
+                logger.debug("[Council] LLMRouter local query failed for %s (%s)", role.value, e)
+            return ""
 
     # ── 1. DIALECTIC DEBATE WORKFLOW ──────────────────────────────────────────
     async def debate_hypothesis(

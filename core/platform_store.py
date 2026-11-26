@@ -2295,6 +2295,102 @@ class PlatformStore:
                 "total_cost_usd": round(float(row["total_cost_usd"]), 6),
             }
 
+    def summarize_costs_breakdown(
+        self,
+        *,
+        run_id: Optional[str] = None,
+        engagement_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return full persisted cost ledger breakdown across runs, providers, models, and roles."""
+        clauses: List[str] = []
+        params: List[Any] = []
+        if run_id:
+            clauses.append("run_id = ?")
+            params.append(run_id)
+        if engagement_id:
+            clauses.append("engagement_id = ?")
+            params.append(engagement_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        today_str = time.strftime("%Y-%m-%d")
+        global_input = 0
+        global_output = 0
+        global_usd = 0.0
+        today_usd = 0.0
+        calls = 0
+
+        by_run: Dict[str, Dict[str, Any]] = {}
+        by_provider: Dict[str, Dict[str, Any]] = {}
+        by_model: Dict[str, Dict[str, Any]] = {}
+        by_role: Dict[str, Dict[str, Any]] = {}
+
+        def _bump(bucket: Dict[str, Dict[str, Any]], key: str, inp: int, outp: int, usd: float) -> None:
+            if not key:
+                return
+            slot = bucket.setdefault(
+                key,
+                {"usd": 0.0, "input_tokens": 0, "output_tokens": 0, "tokens": 0, "calls": 0},
+            )
+            slot["usd"] = round(slot["usd"] + usd, 6)
+            slot["input_tokens"] += inp
+            slot["output_tokens"] += outp
+            slot["tokens"] += inp + outp
+            slot["calls"] += 1
+
+        with self._lock:
+            rows = self._conn.execute(
+                f"""
+                SELECT run_id, provider, model, input_tokens, output_tokens, cost_usd,
+                       metadata_json, created_at
+                FROM cost_ledger {where}
+                ORDER BY created_at ASC
+                """,
+                params,
+            ).fetchall()
+
+        for row in rows:
+            inp = int(row["input_tokens"] or 0)
+            outp = int(row["output_tokens"] or 0)
+            usd = float(row["cost_usd"] or 0.0)
+            meta = _json_loads(row["metadata_json"], {})
+            role = str(meta.get("role") or "general") if isinstance(meta, dict) else "general"
+            rid = str(row["run_id"] or "")
+            prov = str(row["provider"] or "unknown")
+            mdl = str(row["model"] or "unknown")
+
+            calls += 1
+            global_input += inp
+            global_output += outp
+            global_usd += usd
+
+            try:
+                if time.strftime("%Y-%m-%d", time.localtime(float(row["created_at"]))) == today_str:
+                    today_usd += usd
+            except (TypeError, ValueError, OSError):
+                pass
+
+            if rid:
+                _bump(by_run, rid, inp, outp, usd)
+            _bump(by_provider, prov, inp, outp, usd)
+            _bump(by_model, mdl, inp, outp, usd)
+            _bump(by_role, role, inp, outp, usd)
+
+        return {
+            "global_usd": round(global_usd, 6),
+            "global_tokens": global_input + global_output,
+            "input_tokens": global_input,
+            "output_tokens": global_output,
+            "calls": calls,
+            "today_usd": round(today_usd, 6),
+            "by_run": by_run,
+            "by_provider": by_provider,
+            "by_model": by_model,
+            "by_role": by_role,
+        }
+
+    async def arecord_cost_entry(self, **kwargs: Any) -> Dict[str, Any]:
+        return await asyncio.to_thread(self.record_cost_entry, **kwargs)
+
     # ── Async to_thread & WithoutCancel Bounded Finalization Helpers ─────────
 
     async def aget_context(self) -> Dict[str, Any]:

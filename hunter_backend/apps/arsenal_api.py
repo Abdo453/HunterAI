@@ -1570,8 +1570,196 @@ class BurpAnalysisView(APIView):
         return ok_json(res)
 
 
+def _collect_capture_store_transactions(
+    limit: int = 50,
+    target_filter: str = "",
+) -> List[Dict[str, Any]]:
+    """Query real structured HTTP transaction rows from active ``CaptureStore`` instances."""
+    from core.secret_sanitizer import SecretSanitizer
+    import hunter_backend.runtime as _rt
+
+    stores: List[Any] = []
+    for getter in (
+        lambda: getattr(_rt.get_burp_gateway(), "capture_store", None),
+        lambda: getattr(_rt.get_burp_sensor_bridge(), "capture_store", None),
+        lambda: getattr(getattr(_rt.get_burp_sensor_bridge(), "sensor", None), "capture_store", None),
+        lambda: getattr(_rt.get_burp_bridge(), "capture_store", None),
+    ):
+        try:
+            cs = getter()
+            if cs is not None and cs not in stores:
+                stores.append(cs)
+        except Exception:  # noqa: BLE001
+            continue
+
+    rows: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    filt = (target_filter or "").strip().lower()
+
+    def _normalize_row(raw: Any) -> Optional[Dict[str, Any]]:
+        if isinstance(raw, dict):
+            tx_id = str(raw.get("id") or raw.get("tx_id") or raw.get("request_id") or "")
+            url = str(raw.get("url") or "")
+            parsed = urlparse(url) if url else None
+            host = str(raw.get("host") or raw.get("target_host") or (parsed.hostname if parsed else "") or "")
+            path = str(raw.get("path") or (parsed.path if parsed else "") or "/")
+            if parsed and parsed.query and "?" not in path:
+                path = f"{path}?{parsed.query}"
+            method = str(raw.get("method") or "GET").upper()
+            status = int(raw.get("status") or raw.get("response_status") or raw.get("status_code") or 0)
+            resp_body = str(raw.get("resp_body") or raw.get("response_body") or "")
+            length = int(raw.get("length") if raw.get("length") is not None else len(resp_body.encode("utf-8", errors="ignore")))
+            ts = raw.get("timestamp") or raw.get("time") or time.time()
+            req_headers = raw.get("request_headers") or raw.get("req_headers") or raw.get("headers") or {}
+            resp_headers = raw.get("response_headers") or raw.get("resp_headers") or {}
+            tool_source = str(raw.get("tool_source") or raw.get("source") or "proxy")
+            req_body = str(raw.get("req_body") or raw.get("request_body") or "")
+        else:
+            tx_id = str(getattr(raw, "tx_id", "") or getattr(raw, "request_id", "") or "")
+            url = str(getattr(raw, "url", "") or "")
+            parsed = urlparse(url) if url else None
+            host = str((parsed.hostname if parsed else "") or getattr(raw, "target_host", "") or "")
+            path = str((parsed.path if parsed else "") or "/")
+            if parsed and parsed.query:
+                path = f"{path}?{parsed.query}"
+            method = str(getattr(raw, "method", "GET") or "GET").upper()
+            status = int(getattr(raw, "status_code", 0) or 0)
+            resp_body = str(getattr(raw, "resp_body", "") or "")
+            length = len(resp_body.encode("utf-8", errors="ignore"))
+            ts = getattr(raw, "timestamp", time.time())
+            req_headers = dict(getattr(raw, "req_headers", None) or {})
+            resp_headers = dict(getattr(raw, "resp_headers", None) or {})
+            tool_source = str(getattr(raw, "tool_source", "proxy") or "proxy")
+            req_body = str(getattr(raw, "req_body", "") or "")
+
+        if not url and not host:
+            return None
+        if filt and filt not in url.lower() and filt not in host.lower():
+            return None
+        if tx_id and tx_id in seen_ids:
+            return None
+        if tx_id:
+            seen_ids.add(tx_id)
+
+        ts_float = float(ts) if isinstance(ts, (int, float)) else time.time()
+        iso_time = (
+            ts
+            if isinstance(ts, str)
+            else datetime.fromtimestamp(ts_float, tz=timezone.utc).isoformat()
+        )
+        return {
+            "id": tx_id or f"tx_{len(rows) + 1}",
+            "tx_id": tx_id or f"tx_{len(rows) + 1}",
+            "time": iso_time,
+            "timestamp": ts_float,
+            "method": method,
+            "host": host,
+            "path": path,
+            "url": url or f"https://{host}{path}",
+            "status": status,
+            "response_status": status,
+            "length": length,
+            "tool_source": tool_source,
+            "request_headers": SecretSanitizer.sanitize_data(req_headers),
+            "response_headers": SecretSanitizer.sanitize_data(resp_headers),
+            "request_body_preview": SecretSanitizer.sanitize_text(req_body)[:400],
+            "response_body_preview": SecretSanitizer.sanitize_text(resp_body)[:400],
+        }
+
+    for cs in stores:
+        # 1. Prefer structured query helper if provided by CaptureStore
+        for helper_name in ("list_structured_transactions", "query_transactions", "list_transactions"):
+            helper = getattr(cs, helper_name, None)
+            if callable(helper):
+                try:
+                    fetched = helper(limit=limit)
+                    for item in fetched or []:
+                        norm = _normalize_row(item)
+                        if norm is not None:
+                            rows.append(norm)
+                except TypeError:
+                    try:
+                        fetched = helper()
+                        for item in fetched or []:
+                            norm = _normalize_row(item)
+                            if norm is not None:
+                                rows.append(norm)
+                    except Exception:  # noqa: BLE001
+                        pass
+                except Exception:  # noqa: BLE001
+                    pass
+
+        # 2. Direct in-memory CaptureStore.transactions dict
+        tx_map = getattr(cs, "transactions", None)
+        if isinstance(tx_map, dict):
+            for tx in tx_map.values():
+                norm = _normalize_row(tx)
+                if norm is not None:
+                    rows.append(norm)
+
+        # 3. Persisted requests/*.json + responses/*.json files on disk
+        root_dir = getattr(cs, "root_dir", None)
+        if root_dir is not None:
+            req_dir = Path(root_dir) / "requests"
+            resp_dir = Path(root_dir) / "responses"
+            if req_dir.is_dir():
+                req_files = sorted(req_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+                for rf in req_files[: max(limit, 50)]:
+                    try:
+                        rdata = json.loads(rf.read_text(encoding="utf-8", errors="replace"))
+                        if not isinstance(rdata, dict):
+                            continue
+                        resp_data: Dict[str, Any] = {}
+                        resp_file = resp_dir / rf.name
+                        if resp_file.is_file():
+                            loaded_resp = json.loads(resp_file.read_text(encoding="utf-8", errors="replace"))
+                            if isinstance(loaded_resp, dict):
+                                resp_data = loaded_resp
+                        merged = {
+                            **rdata,
+                            "status_code": resp_data.get("status_code", rdata.get("status_code", 0)),
+                            "resp_headers": resp_data.get("headers", {}),
+                            "resp_body": resp_data.get("body", ""),
+                            "req_headers": rdata.get("headers", {}),
+                            "req_body": rdata.get("body", ""),
+                        }
+                        norm = _normalize_row(merged)
+                        if norm is not None:
+                            rows.append(norm)
+                    except Exception:  # noqa: BLE001
+                        continue
+
+    rows.sort(key=lambda r: float(r.get("timestamp") or 0.0), reverse=True)
+    return rows[:limit]
+
+
+class SystemHardwareView(APIView):
+    """GET /api/system/hardware — live CPU, RAM, GPU/VRAM, Ollama ps & hardware profile."""
+
+    def get(self, request: Any) -> Any:
+        from core.llm.hardware_monitor import get_hardware_monitor
+
+        include_ollama = str(request.GET.get("include_ollama", "1")).strip().lower() not in {"0", "false", "no"}
+        snap = get_hardware_monitor().snapshot(include_ollama=include_ollama)
+        return ok_json(snap)
+
+
 class BurpStatusView(APIView):
     def get(self, request: Any) -> Any:
+        proxy_host = (os.getenv("BURP_PROXY_HOST") or "127.0.0.1").strip() or "127.0.0.1"
+        try:
+            proxy_port = int(os.getenv("BURP_PROXY_PORT", "8080"))
+        except ValueError:
+            proxy_port = 8080
+        agent_host = (os.getenv("BURP_AGENT_HOST") or "127.0.0.1").strip() or "127.0.0.1"
+        try:
+            agent_port = int(os.getenv("BURP_AGENT_PORT", "8085"))
+        except ValueError:
+            agent_port = 8085
+
+        proxy_reachable = is_tcp_reachable(proxy_host, proxy_port, timeout=0.15)
+        agent_reachable = is_tcp_reachable(agent_host, agent_port, timeout=0.15)
+
         try:
             stats = get_burp_agent().get_stats()
         except Exception:
@@ -1580,9 +1768,24 @@ class BurpStatusView(APIView):
             gw_health = await_sync(get_burp_bridge().health_check())
         except Exception as exc:
             gw_health = {"online": False, "error": str(exc)}
+
+        gw_online = bool(isinstance(gw_health, dict) and (gw_health.get("online") or gw_health.get("status") == "ok"))
+        online = bool(proxy_reachable or agent_reachable or gw_online)
         return ok_json(
             {
-                "online": True,
+                "online": online,
+                "proxy": {
+                    "host": proxy_host,
+                    "port": proxy_port,
+                    "reachable": proxy_reachable,
+                    "status": "online" if proxy_reachable else "offline",
+                },
+                "agent": {
+                    "host": agent_host,
+                    "port": agent_port,
+                    "reachable": agent_reachable,
+                    "status": "online" if agent_reachable else "offline",
+                },
                 "stats": json.loads(json.dumps(stats, default=str)),
                 "gateway": json.loads(json.dumps(gw_health, default=str)),
             }
@@ -1592,12 +1795,16 @@ class BurpStatusView(APIView):
 class BurpTrafficView(APIView):
     def get(self, request: Any) -> Any:
         limit = parse_query_int(request.GET.get("limit"), 50, max_value=500)
-        endpoints: List[Any] = []
-        try:
-            endpoints = list(get_burp_agent().db.list_endpoints(None) or [])[:limit]
-        except Exception:
-            endpoints = []
-        return ok_json({"traffic": endpoints, "items": endpoints, "count": len(endpoints)})
+        target_filter = (request.GET.get("target") or request.GET.get("host") or "").strip()
+        rows = _collect_capture_store_transactions(limit=limit, target_filter=target_filter)
+        return ok_json(
+            {
+                "traffic": rows,
+                "items": rows,
+                "count": len(rows),
+                "source": "capture_store",
+            }
+        )
 
 
 def _parse_raw_http_request(raw_request: str, override_url: str = "") -> Tuple[str, str, Dict[str, str], Optional[str]]:

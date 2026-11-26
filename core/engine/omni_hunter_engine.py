@@ -37,13 +37,18 @@ from core.cognitive.mission_critic import (
 
 
 import asyncio
+import concurrent.futures
+import json
 import logging
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Awaitable, Dict, List, Optional, Sequence, Set, Tuple, TypeVar
+
+from core.llm.gpu_scheduler import GPUScheduler, PRIORITY_BACKGROUND, get_gpu_scheduler
+from core.runtime.agent_manager import AgentManager
 
 from core.contracts.task_contracts import (
     AgentTeam,
@@ -352,6 +357,10 @@ class OmniHunterEngine:
         self.interceptor_gate = ToolInterceptorGate(allowed_scope=config.scope_domains)
         self.dependency_planner = DependencyChainPlanner(task_id=config.engagement_id, graph=self.dual_graph)
 
+        # Bounded async concurrency primitives (Phase 6: eliminates nested asyncio.run)
+        self.agent_manager = AgentManager(max_concurrent_agents=5)
+        self.gpu_scheduler: GPUScheduler = get_gpu_scheduler()
+
         # Dynamic attack surface inventory
         self.surface: Dict[str, Any] = {
             "domains": list(config.scope_domains),
@@ -508,6 +517,39 @@ class OmniHunterEngine:
             return False
         return True
 
+    # ── Bounded Async Execution Helpers (Phase 6) ──────────────────────────────
+
+    @staticmethod
+    def _run_sync_compat(coro: Awaitable[Any]) -> Any:
+        """Sync compatibility bridge for legacy callers; safe even inside a running loop."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)  # type: ignore[arg-type]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+
+    async def _bounded_gather(
+        self,
+        coros: Sequence[Awaitable[Any]],
+        *,
+        use_gpu: bool = False,
+        gpu_model: str = "omni-worker",
+    ) -> List[Any]:
+        """Run coroutines concurrently under ``AgentManager`` semaphore (+ optional ``GPUScheduler``)."""
+        if not coros:
+            return []
+        sem = self.agent_manager._get_semaphore()
+
+        async def _guarded(coro: Awaitable[Any]) -> Any:
+            async with sem:
+                if use_gpu:
+                    async with self.gpu_scheduler.acquire(gpu_model, priority=PRIORITY_BACKGROUND):
+                        return await coro
+                return await coro
+
+        return list(await asyncio.gather(*(_guarded(c) for c in coros), return_exceptions=True))
+
     # ── Phase Executors ────────────────────────────────────────────────────────
 
     def _run_recon_phase(self) -> None:
@@ -624,7 +666,7 @@ class OmniHunterEngine:
 
         self._save_checkpoint()
 
-    def _run_web_phase(self) -> None:
+    async def _run_web_phase_async(self) -> None:
         logger.info("[OmniHunter] ── Phase 3: WEB ENDPOINT DISCOVERY & DOM ──")
         default_scheme = "http" if self.config.target_url.startswith("http://") else "https"
         hosts = self.surface["live_hosts"][:5] or [
@@ -751,7 +793,7 @@ class OmniHunterEngine:
                         })
                         logger.info("[OmniHunter] Queued Cross-Session IDOR Candidate: %s", idor.get("url"))
 
-                # Automated DOM XSS Exploration against candidate endpoints
+                # Automated DOM XSS Exploration against candidate endpoints (bounded async)
                 try:
                     from skills.browser.dom_xss_hunter.skill import DOMXSSHunterSkill
                     from skills.base_skill import SkillContext
@@ -769,8 +811,9 @@ class OmniHunterEngine:
                         }
                     )
                     dom_skill = DOMXSSHunterSkill()
-                    dom_res = asyncio.run(dom_skill.execute(dom_ctx))
-                    if dom_res.findings:
+                    dom_results = await self._bounded_gather([dom_skill.execute(dom_ctx)])
+                    dom_res = dom_results[0] if dom_results and not isinstance(dom_results[0], BaseException) else None
+                    if dom_res and dom_res.findings:
                         for df in dom_res.findings:
                             self._emit_candidate_finding({
                                 "vuln_class": "DOM_XSS",
@@ -789,7 +832,10 @@ class OmniHunterEngine:
 
         self._save_checkpoint()
 
-    def _run_api_phase(self) -> None:
+    def _run_web_phase(self) -> None:
+        self._run_sync_compat(self._run_web_phase_async())
+
+    async def _run_api_phase_async(self) -> None:
         logger.info("[OmniHunter] ── Phase 4: API & SCHEMA REASONING ──")
         target = self.config.target_url
         clean = target.replace("https://", "").replace("http://", "").split("/")[0]
@@ -840,9 +886,10 @@ class OmniHunterEngine:
                 from core.workspace_manager import WorkspaceManager
                 from tools.tool_manager import ToolManager
 
-                # 0. Professional Burp Log & Traffic Inspector
+                # 0 & 1. Burp Log Inspector + Request Mutation in bounded asyncio.gather
                 try:
                     from skills.burp.burp_log_inspector.skill import BurpLogInspectorSkill
+
                     insp_ctx = SkillContext(
                         target=self.config.target_url,
                         session_id=self.config.engagement_id,
@@ -851,11 +898,25 @@ class OmniHunterEngine:
                         extra={
                             "log_file": getattr(self.config, "burp_log_file", None),
                             "burp_port": 8085,
-                        }
+                        },
+                    )
+                    mut_ctx = SkillContext(
+                        target=self.config.target_url,
+                        session_id=self.config.engagement_id,
+                        workspace=WorkspaceManager(self.config.snapshot_dir),
+                        tool_manager=ToolManager(),
+                        extra={"requests": [{"url": ep, "method": "GET"} for ep in self.surface["endpoints"][:8]]},
                     )
                     insp_skill = BurpLogInspectorSkill()
-                    insp_res = asyncio.run(insp_skill.execute(insp_ctx))
-                    if insp_res.success and (
+                    mut_skill = RequestMutatorSkill()
+                    burp_batch = await self._bounded_gather([
+                        insp_skill.execute(insp_ctx),
+                        mut_skill.execute(mut_ctx),
+                    ])
+                    insp_res = burp_batch[0] if not isinstance(burp_batch[0], BaseException) else None
+                    mut_res = burp_batch[1] if not isinstance(burp_batch[1], BaseException) else None
+
+                    if insp_res and insp_res.success and (
                         not insp_res.metadata.get("synthetic_fallback") or self.config.force_tool_fallback
                     ):
                         for new_ep in insp_res.metadata.get("discovered_endpoints", []):
@@ -876,23 +937,13 @@ class OmniHunterEngine:
                                 "evidence": bf.get("evidence", ""),
                                 "timestamp": time.time(),
                             })
-                        logger.info("[OmniHunter] BurpLogInspector ingested %d endpoints and %d findings",
-                                    len(insp_res.metadata.get("discovered_endpoints", [])), len(insp_res.findings))
-                except Exception as insp_err:
-                    logger.debug("[OmniHunter] BurpLogInspector note: %s", insp_err)
+                        logger.info(
+                            "[OmniHunter] BurpLogInspector ingested %d endpoints and %d findings",
+                            len(insp_res.metadata.get("discovered_endpoints", [])),
+                            len(insp_res.findings),
+                        )
 
-                # 1. Burp Request Mutation & Differential Analysis
-                try:
-                    mut_ctx = SkillContext(
-                        target=self.config.target_url,
-                        session_id=self.config.engagement_id,
-                        workspace=WorkspaceManager(self.config.snapshot_dir),
-                        tool_manager=ToolManager(),
-                        extra={"requests": [{"url": ep, "method": "GET"} for ep in self.surface["endpoints"][:8]]}
-                    )
-                    mut_skill = RequestMutatorSkill()
-                    mut_res = asyncio.run(mut_skill.execute(mut_ctx))
-                    if mut_res.findings:
+                    if mut_res and mut_res.findings:
                         for mf in mut_res.findings:
                             self._emit_candidate_finding({
                                 "vuln_class": "BUSINESS_LOGIC_MUTATION",
@@ -903,10 +954,10 @@ class OmniHunterEngine:
                                 "evidence": mf.get("description", "Differential status code anomaly"),
                                 "timestamp": time.time(),
                             })
-                except Exception as mut_err:
-                    logger.debug("[OmniHunter] RequestMutator note: %s", mut_err)
+                except Exception as insp_err:
+                    logger.debug("[OmniHunter] Burp inspector/mutator note: %s", insp_err)
 
-                # 2. Elite Vulnerability Autonomous Probers (11 endpoint skills + Subdomain Takeover)
+                # 2. Elite Vulnerability Autonomous Probers (bounded asyncio.gather)
                 elite_skills = [
                     HTTPSmugglingSkill(),
                     CachePoisoningSkill(),
@@ -921,35 +972,45 @@ class OmniHunterEngine:
                     LLMPromptInjectionSkill(),
                 ]
                 endpoints_to_probe = self.surface["endpoints"][:6] or [self.config.target_url]
+                skill_jobs: List[Tuple[str, Any]] = []
+                skill_coros: List[Awaitable[Any]] = []
                 for ep_url in endpoints_to_probe:
                     for sk in elite_skills:
-                        try:
-                            sk_res = asyncio.run(sk.run(ep_url, param_name=""))
-                            is_fallback = bool(getattr(sk_res, "fallback_used", False)) or (
-                                "Synthetic/Offline" in str(getattr(sk_res, "title", ""))
-                            )
-                            if sk_res.verified and not is_fallback:
-                                self._emit_candidate_finding({
-                                    "vuln_class": sk_res.vuln_type.upper(),
-                                    "target": ep_url,
-                                    "verdict": "CANDIDATE",
-                                    "confidence": sk_res.confidence,
-                                    "title": sk_res.title,
-                                    "evidence": sk_res.evidence,
-                                    "payload": sk_res.payload_used,
-                                    "cwe": sk_res.cwe,
-                                    "timestamp": time.time(),
-                                })
-                                logger.info("[OmniHunter] Queued Elite Skill Candidate: %s on %s", sk_res.vuln_type, ep_url)
-                        except Exception:
-                            pass
+                        skill_jobs.append((ep_url, sk))
+                        skill_coros.append(sk.run(ep_url, param_name=""))
 
-                # 3. Subdomain Takeover Verification on discovered subdomains
+                elite_results = await self._bounded_gather(skill_coros)
+                for (ep_url, _sk), sk_res in zip(skill_jobs, elite_results):
+                    if isinstance(sk_res, BaseException) or sk_res is None:
+                        continue
+                    is_fallback = bool(getattr(sk_res, "fallback_used", False)) or (
+                        "Synthetic/Offline" in str(getattr(sk_res, "title", ""))
+                    )
+                    if getattr(sk_res, "verified", False) and not is_fallback:
+                        self._emit_candidate_finding({
+                            "vuln_class": sk_res.vuln_type.upper(),
+                            "target": ep_url,
+                            "verdict": "CANDIDATE",
+                            "confidence": sk_res.confidence,
+                            "title": sk_res.title,
+                            "evidence": sk_res.evidence,
+                            "payload": sk_res.payload_used,
+                            "cwe": sk_res.cwe,
+                            "timestamp": time.time(),
+                        })
+                        logger.info("[OmniHunter] Queued Elite Skill Candidate: %s on %s", sk_res.vuln_type, ep_url)
+
+                # 3. Subdomain Takeover Verification (bounded asyncio.gather)
                 takeover_skill = SubdomainTakeoverSkill()
-                for sub_host in (self.surface.get("subdomains") or [])[:6]:
-                    try:
-                        to_res = asyncio.run(takeover_skill.run(sub_host, param_name="host"))
-                        if to_res.verified:
+                sub_hosts = list((self.surface.get("subdomains") or [])[:6])
+                if sub_hosts:
+                    to_results = await self._bounded_gather(
+                        [takeover_skill.run(sub_host, param_name="host") for sub_host in sub_hosts]
+                    )
+                    for sub_host, to_res in zip(sub_hosts, to_results):
+                        if isinstance(to_res, BaseException) or to_res is None:
+                            continue
+                        if getattr(to_res, "verified", False):
                             self._emit_candidate_finding({
                                 "vuln_class": "SUBDOMAIN_TAKEOVER",
                                 "target": sub_host,
@@ -961,30 +1022,37 @@ class OmniHunterEngine:
                                 "cwe": to_res.cwe,
                                 "timestamp": time.time(),
                             })
-                    except Exception:
-                        pass
 
-                # 4. High-Precision Concurrency & Race Condition Prober
+                # 4. High-Precision Concurrency & Race Condition Prober (bounded asyncio.gather)
                 from core.business_logic.race_condition_engine import RaceConditionEngine
                 race_engine = RaceConditionEngine()
-                for ep_url in endpoints_to_probe:
-                    if any(kw in ep_url.lower() for kw in ["redeem", "cart", "coupon", "transfer", "like", "vote", "apply", "checkout", "login", "register", "order"]):
-                        try:
-                            race_res = asyncio.run(race_engine.run_synchronized_race(ep_url, method="POST", concurrency=8))
-                            if race_res.is_vulnerable and race_res.violation_report:
-                                self._emit_candidate_finding({
-                                    "vuln_class": "RACE_CONDITION",
-                                    "target": ep_url,
-                                    "verdict": "CANDIDATE",
-                                    "confidence": 0.65,
-                                    "title": race_res.violation_report.invariant_name,
-                                    "evidence": race_res.evidence,
-                                    "payload": race_res.violation_report.payload_mutation,
-                                    "cwe": "CWE-362",
-                                    "timestamp": time.time(),
-                                })
-                        except Exception:
-                            pass
+                race_endpoints = [
+                    ep_url
+                    for ep_url in endpoints_to_probe
+                    if any(
+                        kw in ep_url.lower()
+                        for kw in ["redeem", "cart", "coupon", "transfer", "like", "vote", "apply", "checkout", "login", "register", "order"]
+                    )
+                ]
+                if race_endpoints:
+                    race_results = await self._bounded_gather(
+                        [race_engine.run_synchronized_race(ep_url, method="POST", concurrency=8) for ep_url in race_endpoints]
+                    )
+                    for ep_url, race_res in zip(race_endpoints, race_results):
+                        if isinstance(race_res, BaseException) or race_res is None:
+                            continue
+                        if getattr(race_res, "is_vulnerable", False) and getattr(race_res, "violation_report", None):
+                            self._emit_candidate_finding({
+                                "vuln_class": "RACE_CONDITION",
+                                "target": ep_url,
+                                "verdict": "CANDIDATE",
+                                "confidence": 0.65,
+                                "title": race_res.violation_report.invariant_name,
+                                "evidence": race_res.evidence,
+                                "payload": race_res.violation_report.payload_mutation,
+                                "cwe": "CWE-362",
+                                "timestamp": time.time(),
+                            })
 
                 # 5. Mass Assignment & Privilege Escalation Prober
                 from core.business_logic.privilege_escalation_engine import PrivilegeEscalationEngine, AuthContext
@@ -1016,7 +1084,10 @@ class OmniHunterEngine:
 
         self._save_checkpoint()
 
-    def _run_javascript_phase(self) -> None:
+    def _run_api_phase(self) -> None:
+        self._run_sync_compat(self._run_api_phase_async())
+
+    async def _run_javascript_phase_async(self) -> None:
         logger.info("[OmniHunter] ── Phase 5: JAVASCRIPT BUNDLE UNPACKING & SECRET MINING ──")
         from core.recon.js_secret_miner import JSSecretMiner
         from core.recon.param_miner import ParamMiner
@@ -1076,14 +1147,22 @@ class OmniHunterEngine:
                 try:
                     from agents.skills.registry import bootstrap_builtin_skills
                     reg = bootstrap_builtin_skills()
+                    param_jobs: List[Tuple[str, str]] = []
+                    param_coros: List[Awaitable[Any]] = []
                     for pt in param_targets[:10]:
                         pt_dict = pt.to_dict() if hasattr(pt, "to_dict") else (pt if isinstance(pt, dict) else {})
                         p_url = pt_dict.get("url") or pt_dict.get("endpoint") or self.config.target_url
                         p_name = pt_dict.get("param") or pt_dict.get("name") or ""
                         if not p_name:
                             continue
-                        sk_res = asyncio.run(reg.run_best(p_url, p_name, proxy=self.config.proxy))
-                        if sk_res and getattr(sk_res, "verified", False):
+                        param_jobs.append((p_url, p_name))
+                        param_coros.append(reg.run_best(p_url, p_name, proxy=self.config.proxy))
+
+                    param_results = await self._bounded_gather(param_coros)
+                    for (p_url, p_name), sk_res in zip(param_jobs, param_results):
+                        if isinstance(sk_res, BaseException) or sk_res is None:
+                            continue
+                        if getattr(sk_res, "verified", False):
                             is_fb = bool(getattr(sk_res, "fallback_used", False)) or (
                                 "Synthetic/Offline" in str(getattr(sk_res, "title", ""))
                             )
@@ -1100,14 +1179,21 @@ class OmniHunterEngine:
                                     "cwe": getattr(sk_res, "cwe", "CWE-000"),
                                     "timestamp": time.time(),
                                 })
-                                logger.info("[OmniHunter] SkillRegistry queued candidate %s on %s (%s)",
-                                            getattr(sk_res, "vuln_type", "vuln"), p_url, p_name)
+                                logger.info(
+                                    "[OmniHunter] SkillRegistry queued candidate %s on %s (%s)",
+                                    getattr(sk_res, "vuln_type", "vuln"),
+                                    p_url,
+                                    p_name,
+                                )
                 except Exception as reg_err:
                     logger.debug("[OmniHunter] SkillRegistry parameter routing note: %s", reg_err)
 
         self._save_checkpoint()
 
-    def _run_verification_phase(self) -> None:
+    def _run_javascript_phase(self) -> None:
+        self._run_sync_compat(self._run_javascript_phase_async())
+
+    async def _run_verification_phase_async(self) -> None:
         logger.info("[OmniHunter] ── Phase 6: ADVERSARIAL VERIFICATION & REFUTATION ──")
         if hasattr(self.scheduler, "_tasks") and isinstance(self.scheduler._tasks, dict):
             task_list = list(self.scheduler._tasks.values())
@@ -1210,14 +1296,23 @@ class OmniHunterEngine:
                     extra={"findings": self.confirmed_findings}
                 )
                 ec_skill = ExploitChainBuilderSkill()
-                ec_res = asyncio.run(ec_skill.execute(ec_ctx))
-                self.exploit_chains = ec_res.metadata.get("chains", [])
+                ec_results = await self._bounded_gather(
+                    [ec_skill.execute(ec_ctx)],
+                    use_gpu=True,
+                    gpu_model="exploit-chain-builder",
+                )
+                ec_res = ec_results[0] if ec_results and not isinstance(ec_results[0], BaseException) else None
+                if ec_res is not None:
+                    self.exploit_chains = ec_res.metadata.get("chains", [])
                 if self.exploit_chains:
                     logger.info("[OmniHunter] Successfully assembled %d multi-step exploit chains!", len(self.exploit_chains))
             except Exception as ec_err:
                 logger.debug("[OmniHunter] ExploitChainBuilder note: %s", ec_err)
 
         self._save_checkpoint()
+
+    def _run_verification_phase(self) -> None:
+        self._run_sync_compat(self._run_verification_phase_async())
 
     def _run_adjudication_phase(self) -> None:
         logger.info("[OmniHunter] ── Phase 7: EVIDENCE COURT FINAL ADJUDICATION ──")
@@ -1325,8 +1420,13 @@ class OmniHunterEngine:
     # ── Main Autonomous Loop ───────────────────────────────────────────────────
 
     def run(self) -> AssessmentResult:
+        """Sync compatibility wrapper around ``run_async()`` for legacy callers."""
+        return self._run_sync_compat(self.run_async())
+
+    async def run_async(self) -> AssessmentResult:
         """
-        Runs the full autonomous OODA pentesting loop.
+        Runs the full autonomous OODA pentesting loop natively asynchronously
+        with ``asyncio.gather`` bounded by ``GPUScheduler`` & ``AgentManager`` semaphores.
         """
         self._start_time = time.time()
         logger.info(
@@ -1365,10 +1465,10 @@ class OmniHunterEngine:
         executors = {
             AssessmentPhase.RECON:        self._run_recon_phase,
             AssessmentPhase.NETWORK:      self._run_network_phase,
-            AssessmentPhase.WEB:          self._run_web_phase,
-            AssessmentPhase.API:          self._run_api_phase,
-            AssessmentPhase.JAVASCRIPT:   self._run_javascript_phase,
-            AssessmentPhase.VERIFICATION: self._run_verification_phase,
+            AssessmentPhase.WEB:          self._run_web_phase_async,
+            AssessmentPhase.API:          self._run_api_phase_async,
+            AssessmentPhase.JAVASCRIPT:   self._run_javascript_phase_async,
+            AssessmentPhase.VERIFICATION: self._run_verification_phase_async,
             AssessmentPhase.ADJUDICATION: self._run_adjudication_phase,
         }
 
@@ -1385,7 +1485,6 @@ class OmniHunterEngine:
                 lessons=self._persistent_lessons,
             )
             if phase not in phase_queue:
-                # planner picked a phase already executed or out of queue; fall back to head
                 phase = phase_queue.pop(0)
             else:
                 phase_queue.remove(phase)
@@ -1413,11 +1512,14 @@ class OmniHunterEngine:
             executor = executors.get(phase)
             if executor:
                 try:
-                    executor()
+                    if asyncio.iscoroutinefunction(executor):
+                        await executor()
+                    else:
+                        executor()
                 except Exception as exc:
                     logger.exception("[OmniHunter] Error in phase %s: %s — continuing loop.", phase, exc)
 
-            # ── 7-Stage Cognitive Agent Cycle (Observe → Think → Plan → Act → Parse → Update Graph → Decide) ──
+            # ── 7-Stage Cognitive Agent Cycle (bounded by GPUScheduler + AgentManager) ──
             try:
                 from skills.agent_core.reasoning_loop.skill import ReasoningLoopSkill
                 from skills.base_skill import SkillContext
@@ -1443,20 +1545,26 @@ class OmniHunterEngine:
                     },
                 )
                 rl_skill = ReasoningLoopSkill()
-                rl_res = asyncio.run(rl_skill.execute(rl_ctx))
-                if rl_res.raw_output.get("target_graph"):
-                    self.surface["target_graph"] = json.loads(rl_res.raw_output["target_graph"])
-                if rl_res.raw_output.get("decision"):
-                    dec_obj = json.loads(rl_res.raw_output["decision"])
-                    self.surface.setdefault("cognitive_decisions", []).append(dec_obj)
-                    logger.info(
-                        "[OmniHunter] [Observe→Think→Plan→Act→Parse→UpdateGraph→Decide] Phase=%s | Graph(nodes=%s, edges=%s) | Decision=%s (%s)",
-                        phase.value,
-                        rl_res.metadata.get("graph_summary", {}).get("nodes", 0),
-                        rl_res.metadata.get("graph_summary", {}).get("edges", 0),
-                        dec_obj.get("decision"),
-                        dec_obj.get("arabic_decision"),
-                    )
+                rl_results = await self._bounded_gather(
+                    [rl_skill.execute(rl_ctx)],
+                    use_gpu=True,
+                    gpu_model="reasoning-loop",
+                )
+                rl_res = rl_results[0] if rl_results and not isinstance(rl_results[0], BaseException) else None
+                if rl_res is not None:
+                    if rl_res.raw_output.get("target_graph"):
+                        self.surface["target_graph"] = json.loads(rl_res.raw_output["target_graph"])
+                    if rl_res.raw_output.get("decision"):
+                        dec_obj = json.loads(rl_res.raw_output["decision"])
+                        self.surface.setdefault("cognitive_decisions", []).append(dec_obj)
+                        logger.info(
+                            "[OmniHunter] [Observe→Think→Plan→Act→Parse→UpdateGraph→Decide] Phase=%s | Graph(nodes=%s, edges=%s) | Decision=%s (%s)",
+                            phase.value,
+                            rl_res.metadata.get("graph_summary", {}).get("nodes", 0),
+                            rl_res.metadata.get("graph_summary", {}).get("edges", 0),
+                            dec_obj.get("decision"),
+                            dec_obj.get("arabic_decision"),
+                        )
             except Exception as rl_err:
                 logger.debug("[OmniHunter] 7-stage reasoning loop trace skipped: %s", rl_err)
 

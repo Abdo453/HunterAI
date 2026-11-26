@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from django.http import JsonResponse
 from django.urls import path
+from django.views.decorators.csrf import csrf_exempt
 
 from hunter_backend.apps import (
     arsenal_api,
@@ -12,6 +14,32 @@ from hunter_backend.apps import (
     operations_api,
     platform_api,
 )
+
+
+def _lazy_intelligence_view(view_attr: str):
+    """Lazy view dispatcher onto ``hunter_backend.apps.intelligence_api``.
+
+    Allows ``urls.py`` to mount newly introduced views (e.g. ``VulnIntel*View``
+    implemented in the parallel Phase 5 branch) without import-time coupling.
+    """
+
+    @csrf_exempt
+    def _dispatch(request, *args, **kwargs):
+        view_obj = getattr(intelligence_api, view_attr, None)
+        if view_obj is None:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "status": "UNAVAILABLE",
+                    "error": f"{view_attr} is not available in hunter_backend.apps.intelligence_api",
+                },
+                status=503,
+            )
+        handler = view_obj.as_view() if hasattr(view_obj, "as_view") else view_obj
+        return handler(request, *args, **kwargs)
+
+    _dispatch.__name__ = f"lazy_{view_attr}"
+    return _dispatch
 
 urlpatterns = [
     # Top-level UI compatibility redirects / API index
@@ -160,6 +188,11 @@ urlpatterns = [
     path("api/burp/artifacts", arsenal_api.BurpArtifactsView.as_view()),
     path("api/burp/evidence", arsenal_api.BurpEvidenceView.as_view()),
     path("api/burp/sensory_events", arsenal_api.BurpSensoryEventsView.as_view()),
+    path("api/system/hardware", arsenal_api.SystemHardwareView.as_view()),
+    path("api/vuln-intel/search", _lazy_intelligence_view("VulnIntelSearchView")),
+    path("api/vuln-intel/coverage", _lazy_intelligence_view("VulnIntelCoverageView")),
+    path("api/vuln-intel/triage", _lazy_intelligence_view("VulnIntelTriageView")),
+    path("api/vuln-intel/sync", _lazy_intelligence_view("VulnIntelSyncView")),
     path("api/arsenal/tools", arsenal_api.ArsenalToolsView.as_view()),
     path("api/arsenal/tool/<str:tool_name>", arsenal_api.ArsenalToolDetailView.as_view()),
     path("api/arsenal/run", arsenal_api.arsenal_run_view),

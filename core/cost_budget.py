@@ -1,19 +1,19 @@
-"""مراقبة التكلفة وسِقف الميزانية (Cost Budget) — Phase 3.
+"""مراقبة التكلفة وسِقف الميزانية (Cost Budget) — Phase 3 & Phase 6 persistent breakdown.
 
 يحل النقص في عدم وجود سقف تكلفة فعلي:
 - جدول أسعار لكل نموذج (USD لكل 1M tokens) — محلي وسحابي
-- دفتر حسابات لكل run / solver / يوم
+- دفتر حسابات لكل run / solver / provider / model / role / يوم
 - circuit breaker: is_over_budget(scope) يوقف الجر عند التجاوز
 - تقدير التكلفة من token counts حتى للنماذج المحلية (سعر مُهيّأ)
 
-يتكامل مع system prompt: أي استدعاء LLM جديد يمرّ من charge_call() قبل الإرسال.
+يتكامل مع LLMRouter و PlatformStore.cost_ledger لتسجيل كل استدعاء وإرجاع إحصاءات دقيقة.
 """
 from __future__ import annotations
 
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -27,33 +27,57 @@ class ModelPrice:
     output_per_m: float
 
     def cost(self, input_tokens: int, output_tokens: int) -> float:
-        return (input_tokens / 1_000_000 * self.input_per_m
-                + output_tokens / 1_000_000 * self.output_per_m)
+        return (
+            input_tokens / 1_000_000 * self.input_per_m
+            + output_tokens / 1_000_000 * self.output_per_m
+        )
 
 
 # جدول أسعار افتراضي — قابل للتحديث عبر set_price / config
 DEFAULT_PRICES: Dict[str, ModelPrice] = {
-    # محلي (تقديري)
+    # محلي (تقديري — صفر تكلفة سحابية)
     "qwen2.5-coder:14b": ModelPrice(0.0, 0.0),
+    "qwen2.5-coder:14b-tools": ModelPrice(0.0, 0.0),
+    "qwen2.5-coder:7b": ModelPrice(0.0, 0.0),
+    "qwen2.5-coder:3b": ModelPrice(0.0, 0.0),
+    "qwen2.5:14b": ModelPrice(0.0, 0.0),
     "qwen3:8b": ModelPrice(0.0, 0.0),
+    "qwen3:14b": ModelPrice(0.0, 0.0),
     "xploiter/pentester:latest": ModelPrice(0.0, 0.0),
+    "xploiter/pentester": ModelPrice(0.0, 0.0),
+    "WhiteRabbitNeo/Llama-3.1-WhiteRabbitNeo-2-8B:latest": ModelPrice(0.0, 0.0),
+    "WhiteRabbitNeo": ModelPrice(0.0, 0.0),
+    "local-model": ModelPrice(0.0, 0.0),
     # سحابي (قائمة عامة محدثة)
     "claude-sonnet-4-5": ModelPrice(3.0, 15.0),
     "claude-opus-4-1": ModelPrice(15.0, 75.0),
     "claude-haiku-4-5": ModelPrice(1.0, 5.0),
+    "claude-3-5-sonnet-20241022": ModelPrice(3.0, 15.0),
+    "claude-3-5-haiku-20241022": ModelPrice(0.80, 4.0),
+    "anthropic/claude-3.5-sonnet": ModelPrice(3.0, 15.0),
     "gpt-5": ModelPrice(1.25, 10.0),
     "gpt-5-mini": ModelPrice(0.25, 2.0),
     "gpt-4o": ModelPrice(2.5, 10.0),
+    "gpt-4o-mini": ModelPrice(0.15, 0.60),
+    "o3-mini": ModelPrice(1.10, 4.40),
+    "deepseek-chat": ModelPrice(0.27, 1.10),
+    "deepseek-reasoner": ModelPrice(0.55, 2.19),
     "deepseek-v4-flash": ModelPrice(0.07, 0.28),
     "deepseek-v4-pro": ModelPrice(0.55, 2.19),
     "gemini-2.5-pro": ModelPrice(1.25, 10.0),
     "gemini-2.5-flash": ModelPrice(0.30, 2.50),
+    "gemini-2.0-flash": ModelPrice(0.10, 0.40),
+    "google/gemini-2.5-flash": ModelPrice(0.30, 2.50),
+    "llama-3.3-70b-versatile": ModelPrice(0.59, 0.79),
+    "nvidia/nemotron-3-ultra-550b-a55b": ModelPrice(0.60, 2.40),
+    "nvidia/nemotron-3-super-120b-a12b": ModelPrice(0.30, 1.20),
+    "taskade-ai": ModelPrice(0.20, 0.80),
 }
 
 
 @dataclass
 class Ledger:
-    """دفتر حسابات لنطاق واحد (run/solver/day)."""
+    """دفتر حسابات لنطاق واحد (run/solver/provider/model/role/day)."""
 
     usd: float = 0.0
     input_tokens: int = 0
@@ -72,6 +96,16 @@ class Ledger:
         self.output_tokens += outp
         self.calls += 1
         return c
+
+    def to_summary(self) -> Dict[str, Any]:
+        return {
+            "usd": round(self.usd, 6),
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "tokens": self.input_tokens + self.output_tokens,
+            "calls": self.calls,
+            "unpriced_calls": self.unpriced_calls,
+        }
 
 
 @dataclass
@@ -99,6 +133,9 @@ class CostController:
         self._global = Ledger()
         self._by_run: Dict[str, Ledger] = {}
         self._by_solver: Dict[str, Ledger] = {}
+        self._by_provider: Dict[str, Ledger] = {}
+        self._by_model: Dict[str, Ledger] = {}
+        self._by_role: Dict[str, Ledger] = {}
         self._by_day: Dict[str, Ledger] = {}
         self._day_window = time.strftime("%Y-%m-%d")
 
@@ -106,17 +143,33 @@ class CostController:
     def set_price(self, model: str, input_per_m: float, output_per_m: float) -> None:
         self.prices[model] = ModelPrice(input_per_m, output_per_m)
 
-    def price_for(self, model: str) -> Optional[ModelPrice]:
-        return self.prices.get(model)
+    def price_for(self, model: str, *, provider: str = "") -> Optional[ModelPrice]:
+        if model in self.prices:
+            return self.prices[model]
+        # Strip explicit local: / ollama/ prefix for local zero-cost inference
+        if provider.strip().lower() in ("ollama", "local", "lm_studio", "lmstudio"):
+            return ModelPrice(0.0, 0.0)
+        if model.startswith(("local:", "ollama/")):
+            return ModelPrice(0.0, 0.0)
+        return None
 
     # ── تسجيل الاستهلاك ───────────────────────────────────────────────────
     def _day_key(self) -> str:
         today = time.strftime("%Y-%m-%d")
         if today != self._day_window:
-            # نافذة يوم جديد: نبدأ دفتر اليوم جديدًا
             self._day_window = today
             self._by_day.pop(today, None)
         return today
+
+    @staticmethod
+    def _acc(bucket: Dict[str, Ledger], key: str, cost: float, inp: int, outp: int) -> None:
+        if not key:
+            return
+        led = bucket.setdefault(key, Ledger())
+        led.usd += cost
+        led.input_tokens += inp
+        led.output_tokens += outp
+        led.calls += 1
 
     def charge_call(
         self,
@@ -126,41 +179,40 @@ class CostController:
         output_tokens: int,
         run_id: str = "",
         solver_id: str = "",
+        provider: str = "",
+        role: str = "",
         reported_cost_usd: Optional[float] = None,
     ) -> Optional[float]:
-        """تسجيل استدعاء واحد؛ يعود بالتكلفة أو None إن النموذج غير مُسعّر.
-
-        reported_cost_usd: إذا أبلغ المحرك بتكلفته الفعلية تُستخدم بدل التقدير.
-        """
-        price = self.price_for(model)
+        """تسجيل استدعاء واحد؛ يعود بالتكلفة أو None إن النموذج غير مُسعّر."""
+        inp = max(0, int(input_tokens))
+        outp = max(0, int(output_tokens))
+        price = self.price_for(model, provider=provider)
         with self._lock:
             cost = reported_cost_usd
             if cost is None and price is not None:
-                cost = price.cost(input_tokens, output_tokens)
+                cost = price.cost(inp, outp)
             if cost is None:
                 self._global.unpriced_calls += 1
                 if run_id:
                     self._by_run.setdefault(run_id, Ledger()).unpriced_calls += 1
+                if provider:
+                    self._by_provider.setdefault(provider, Ledger()).unpriced_calls += 1
+                if model:
+                    self._by_model.setdefault(model, Ledger()).unpriced_calls += 1
+                if role:
+                    self._by_role.setdefault(role, Ledger()).unpriced_calls += 1
                 return None
+
             self._global.usd += cost
-            self._global.input_tokens += input_tokens
-            self._global.output_tokens += output_tokens
+            self._global.input_tokens += inp
+            self._global.output_tokens += outp
             self._global.calls += 1
-            if run_id:
-                led = self._by_run.setdefault(run_id, Ledger())
-                led.usd += cost
-                led.input_tokens += input_tokens
-                led.output_tokens += output_tokens
-                led.calls += 1
-            if solver_id:
-                led = self._by_solver.setdefault(solver_id, Ledger())
-                led.usd += cost
-                led.input_tokens += input_tokens
-                led.output_tokens += output_tokens
-                led.calls += 1
-            day = self._by_day.setdefault(self._day_key(), Ledger())
-            day.usd += cost
-            day.calls += 1
+            self._acc(self._by_run, run_id, cost, inp, outp)
+            self._acc(self._by_solver, solver_id, cost, inp, outp)
+            self._acc(self._by_provider, provider, cost, inp, outp)
+            self._acc(self._by_model, model, cost, inp, outp)
+            self._acc(self._by_role, role, cost, inp, outp)
+            self._acc(self._by_day, self._day_key(), cost, inp, outp)
 
         snapshot = self.snapshot()
         if self.on_update is not None:
@@ -171,28 +223,45 @@ class CostController:
         return cost
 
     # ── circuit breaker ───────────────────────────────────────────────────
-    def is_over_budget(self, scope: str = "global", *, run_id: str = "",
-                       solver_id: str = "") -> bool:
+    def is_over_budget(
+        self,
+        scope: str = "global",
+        *,
+        run_id: str = "",
+        solver_id: str = "",
+    ) -> bool:
         """scope: 'global' | 'run' | 'solver' | 'day'."""
         with self._lock:
             if scope == "global":
-                return (self.budget.per_run_usd is not None
-                        and self._global.usd >= self.budget.per_run_usd) or (
+                return (
+                    self.budget.per_run_usd is not None
+                    and self._global.usd >= self.budget.per_run_usd
+                ) or (
                     self.budget.per_day_usd is not None
                     and self._by_day.get(self._day_key(), Ledger()).usd
-                    >= self.budget.per_day_usd)
+                    >= self.budget.per_day_usd
+                )
             if scope == "run":
                 led = self._by_run.get(run_id)
-                return (self.budget.per_run_usd is not None and led is not None
-                        and led.usd >= self.budget.per_run_usd)
+                return (
+                    self.budget.per_run_usd is not None
+                    and led is not None
+                    and led.usd >= self.budget.per_run_usd
+                )
             if scope == "solver":
                 led = self._by_solver.get(solver_id)
-                return (self.budget.per_solver_usd is not None and led is not None
-                        and led.usd >= self.budget.per_solver_usd)
+                return (
+                    self.budget.per_solver_usd is not None
+                    and led is not None
+                    and led.usd >= self.budget.per_solver_usd
+                )
             if scope == "day":
                 led = self._by_day.get(self._day_key())
-                return (self.budget.per_day_usd is not None and led is not None
-                        and led.usd >= self.budget.per_day_usd)
+                return (
+                    self.budget.per_day_usd is not None
+                    and led is not None
+                    and led.usd >= self.budget.per_day_usd
+                )
         return False
 
     def remaining_usd(self, scope: str = "global", *, run_id: str = "") -> Optional[float]:
@@ -223,12 +292,18 @@ class CostController:
             return {
                 "global_usd": round(self._global.usd, 6),
                 "global_tokens": self._global.input_tokens + self._global.output_tokens,
+                "input_tokens": self._global.input_tokens,
+                "output_tokens": self._global.output_tokens,
                 "calls": self._global.calls,
                 "unpriced_calls": self._global.unpriced_calls,
                 "by_run": {k: round(v.usd, 6) for k, v in self._by_run.items()},
                 "by_solver": {k: round(v.usd, 6) for k, v in self._by_solver.items()},
+                "by_provider": {k: v.to_summary() for k, v in self._by_provider.items()},
+                "by_model": {k: v.to_summary() for k, v in self._by_model.items()},
+                "by_role": {k: v.to_summary() for k, v in self._by_role.items()},
                 "today_usd": round(
-                    self._by_day.get(self._day_key(), Ledger()).usd, 6),
+                    self._by_day.get(self._day_key(), Ledger()).usd, 6
+                ),
                 "budget": {
                     "per_run_usd": self.budget.per_run_usd,
                     "per_solver_usd": self.budget.per_solver_usd,

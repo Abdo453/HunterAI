@@ -197,6 +197,147 @@ class StubProvider(AgentProvider):
         return False
 
 
+class LLMRouterProvider(AgentProvider):
+    """Thin forwarding shim delegating ``AgentProvider`` execution to ``core.llm_router``."""
+
+    def __init__(
+        self,
+        provider: str = "router",
+        model: str = "auto",
+        *,
+        prefer: Optional[str] = None,
+        timeout_s: float = 120.0,
+    ) -> None:
+        super().__init__(provider, model, timeout_s=timeout_s)
+        self._prefer = prefer
+
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            provider=self.provider,
+            model=self.model,
+            supports_tool_calling=True,
+            supports_streaming=True,
+            supports_json_mode=True,
+        )
+
+    async def health_check(self) -> ProviderHealth:
+        from core.llm_router import get_llm_router
+
+        t0 = time.time()
+        try:
+            cat = await get_llm_router().catalog()
+            healthy = bool(cat.get("cloud_available") or cat.get("local_available"))
+            return ProviderHealth(
+                healthy=healthy,
+                provider=self.provider,
+                model=self.model,
+                latency_s=round(time.time() - t0, 3),
+                error=None if healthy else "no cloud or local models available",
+            )
+        except Exception as exc:  # noqa: BLE001
+            return ProviderHealth(
+                healthy=False,
+                provider=self.provider,
+                model=self.model,
+                latency_s=round(time.time() - t0, 3),
+                error=self._mask_error(exc),
+            )
+
+    def _effective_prefer(self, request: ProviderRequest) -> Optional[str]:
+        if self._prefer:
+            return self._prefer
+        if request.model and request.model.startswith(("api:", "local:")):
+            return request.model
+        return None
+
+    async def execute(self, request: ProviderRequest) -> ProviderResponse:
+        from core.llm_router import get_llm_router
+
+        t0 = time.time()
+        if request.run_id:
+            self._register_cancel(request.run_id)
+        try:
+            res = await asyncio.wait_for(
+                get_llm_router().complete(
+                    request.messages,
+                    prefer=self._effective_prefer(request),
+                    run_id=request.run_id,
+                ),
+                timeout=request.timeout_s or self.timeout_s,
+            )
+            ok = bool(res and res.content and not res.error)
+            return ProviderResponse(
+                ok=ok,
+                content=res.content if res else "",
+                model=res.model_name if res else self.model,
+                provider=res.role if res else self.provider,
+                output_tokens=int(getattr(res, "tokens_used", 0) or 0),
+                latency_s=round(time.time() - t0, 3),
+                error=res.error if res else "empty response",
+            )
+        except Exception as exc:  # noqa: BLE001
+            return ProviderResponse(
+                ok=False,
+                model=self.model,
+                provider=self.provider,
+                latency_s=round(time.time() - t0, 3),
+                error=self._mask_error(exc),
+            )
+
+    async def stream(
+        self,
+        request: ProviderRequest,
+        on_chunk: Callable[[str], None],
+    ) -> ProviderResponse:
+        from core.llm_router import get_llm_router
+
+        t0 = time.time()
+        if request.run_id:
+            self._register_cancel(request.run_id)
+
+        async def _on_tok(delta: str) -> None:
+            if on_chunk:
+                out = on_chunk(delta)
+                if asyncio.iscoroutine(out):
+                    await out
+
+        try:
+            res = await asyncio.wait_for(
+                get_llm_router().complete_stream(
+                    request.messages,
+                    prefer=self._effective_prefer(request),
+                    on_token=_on_tok,
+                    run_id=request.run_id,
+                ),
+                timeout=request.timeout_s or self.timeout_s,
+            )
+            ok = bool(res and res.content and not res.error)
+            return ProviderResponse(
+                ok=ok,
+                content=res.content if res else "",
+                model=res.model_name if res else self.model,
+                provider=res.role if res else self.provider,
+                output_tokens=int(getattr(res, "tokens_used", 0) or 0),
+                latency_s=round(time.time() - t0, 3),
+                error=res.error if res else "empty response",
+            )
+        except Exception as exc:  # noqa: BLE001
+            return ProviderResponse(
+                ok=False,
+                model=self.model,
+                provider=self.provider,
+                latency_s=round(time.time() - t0, 3),
+                error=self._mask_error(exc),
+            )
+
+    def cancel(self, run_id: str) -> bool:
+        ev = self._cancelled.get(run_id)
+        if ev is not None:
+            ev.set()
+            return True
+        return False
+
+
 # سجل مزوّدين مشترك (يُحقن في الجدولة وليس حالة عامة إلزامية)
 _PROVIDERS: Dict[str, AgentProvider] = {}
 
@@ -206,7 +347,11 @@ def register_provider(name: str, provider: AgentProvider) -> None:
 
 
 def get_provider(name: str) -> Optional[AgentProvider]:
-    return _PROVIDERS.get(name)
+    if name in _PROVIDERS:
+        return _PROVIDERS[name]
+    if name in ("default", "router", "llm_router"):
+        return LLMRouterProvider()
+    return None
 
 
 def list_providers() -> List[str]:

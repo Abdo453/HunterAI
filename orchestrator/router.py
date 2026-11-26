@@ -253,7 +253,6 @@ class ModelRouter:
             model_name="qwen-coder-pro:14b",
             messages=qwen_messages,
             temperature=0.2,
-            num_ctx=4096,
             progress_cb=self.cb
         )
         results["qwen_initial"] = qwen_result
@@ -293,7 +292,6 @@ class ModelRouter:
                 model_name="qwen-coder-pro:14b",
                 messages=qwen_final_messages,
                 temperature=0.2,
-                num_ctx=4096,
                 progress_cb=self.cb
             )
             results["qwen_final"] = qwen_final
@@ -401,104 +399,28 @@ class ModelRouter:
     # ────────────────────────────────────────────────────────────
 
     async def _call_security_api(self, code_context: str, prompt: str) -> str:
-        """
-        استدعاء API خارجي للاستشارات الأمنية
-        بدون استخدام GPU المحلي
-        """
-        # 1. Gemini
-        gemini_key = os.getenv("GEMINI_API_KEY")
-        if gemini_key:
-            from models.api.gemini_provider import GeminiProvider
-            try:
-                gm = GeminiProvider(model="gemini-2.5-flash")
-                resp = await gm.generate(f"Context:\n{code_context}\n\nTask: {prompt}", system_prompt="You are an expert security consultant.")
-                if resp and resp.content:
-                    return resp.content
-            except Exception as e:
-                log.warning(f"Gemini API call failed: {e}")
+        """Delegate external security consultation through canonical ``core.llm_router.LLMRouter``."""
+        from core.llm_router import get_llm_router
 
-        # 2. حاول Groq أولاً (مجاني وسريع)
-        groq_key = os.getenv("GROQ_API_KEY")
-        if groq_key:
-            return await self._groq_call(prompt, code_context)
+        router = get_llm_router()
+        if router.policy == "local_only":
+            return "External security API disabled under HUNTER_LLM_POLICY=local_only."
 
-        # 3. ثم OpenRouter
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
-        if openrouter_key:
-            return await self._openrouter_call(prompt, code_context)
+        messages = [
+            {"role": "system", "content": "You are an expert security consultant."},
+            {"role": "user", "content": f"Context:\n{code_context}\n\nTask: {prompt}"},
+        ]
+        try:
+            resp = await router.complete(messages, role="deep_analyst")
+            if resp and resp.content:
+                return resp.content
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Canonical LLMRouter security consultation failed: %s", exc)
 
-        # 4. ثم OpenAI
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key:
-            return await self._openai_call(prompt, code_context)
-
-        # Fallback — لا يوجد API
         return (
             "No external security API available. "
             "Add GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY to .env for security consultations."
         )
-
-
-    async def _groq_call(self, prompt: str, context: str) -> str:
-        import httpx
-        key = os.getenv("GROQ_API_KEY")
-        try:
-            async with httpx.AsyncClient(timeout=30) as c:
-                r = await c.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {key}"},
-                    json={
-                        "model": "llama-3.3-70b-versatile",
-                        "messages": [
-                            {"role": "system", "content": "You are an expert security consultant."},
-                            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {prompt}"}
-                        ],
-                        "max_tokens": 1000
-                    }
-                )
-                return r.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            return f"Groq API error: {e}"
-
-    async def _openrouter_call(self, prompt: str, context: str) -> str:
-        import httpx
-        key = os.getenv("OPENROUTER_API_KEY")
-        try:
-            async with httpx.AsyncClient(timeout=30) as c:
-                r = await c.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {key}"},
-                    json={
-                        "model": "anthropic/claude-3-haiku",
-                        "messages": [
-                            {"role": "system", "content": "You are an expert security consultant."},
-                            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {prompt}"}
-                        ]
-                    }
-                )
-                return r.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            return f"OpenRouter API error: {e}"
-
-    async def _openai_call(self, prompt: str, context: str) -> str:
-        import httpx
-        key = os.getenv("OPENAI_API_KEY")
-        try:
-            async with httpx.AsyncClient(timeout=30) as c:
-                r = await c.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {key}"},
-                    json={
-                        "model": "gpt-4o-mini",
-                        "messages": [
-                            {"role": "system", "content": "You are an expert security consultant."},
-                            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {prompt}"}
-                        ]
-                    }
-                )
-                return r.json()["choices"][0]["message"]["content"]
-        except Exception as e:
-            return f"OpenAI API error: {e}"
 
     def _merge_security(self, wrn: str, xploiter: str) -> str:
         return (
