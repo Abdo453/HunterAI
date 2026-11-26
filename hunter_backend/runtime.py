@@ -535,6 +535,10 @@ async def _run_pipeline_task(
         if target in _active_pipelines:
             _active_pipelines[target]["phase"] = "RECON"
 
+        phase_delay = float(os.environ.get("HUNTER_PIPELINE_PHASE_DELAY_S", "0.35"))
+        if phase_delay > 0:
+            await asyncio.sleep(phase_delay)
+
         if handle is not None and await handle.wait_if_paused():
             return
         if GLOBAL_RUN_CONTROLLER.should_stop(run_id):
@@ -552,6 +556,13 @@ async def _run_pipeline_task(
             source="pipeline",
             payload={"in_scope": guard.in_scope, "out_of_scope": guard.out_of_scope},
         )
+        if phase_delay > 0:
+            await asyncio.sleep(phase_delay)
+        if handle is not None and await handle.wait_if_paused():
+            return
+        if GLOBAL_RUN_CONTROLLER.should_stop(run_id):
+            store.update_run(run_id, status="stopped", finished_at=time.time())
+            return
 
         store.update_run(
             run_id,
