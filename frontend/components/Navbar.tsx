@@ -131,8 +131,8 @@ export default function Navbar({ mobileNavOpen = false, onToggleMobileNav }: Nav
       const msgKey =
         check.reason === "empty"
           ? "nav.scopeInvalidEmpty"
-          : check.reason === "blocked_local"
-            ? "nav.scopeInvalidLocal"
+          : check.reason === "blocked_metadata"
+            ? "nav.scopeInvalidMetadata"
             : check.reason === "out_of_scope"
               ? "nav.scopeOutOfScope"
               : check.reason === "not_in_scope"

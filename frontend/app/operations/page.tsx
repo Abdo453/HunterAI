@@ -72,6 +72,7 @@ export default function OperationsPage() {
   const [inScopeCsv, setInScopeCsv] = useState<string>("");
   const [outScopeCsv, setOutScopeCsv] = useState<string>("");
   const [targetMsg, setTargetMsg] = useState<string>("");
+  const [targetMsgError, setTargetMsgError] = useState<boolean>(false);
   const [probeUrl, setProbeUrl] = useState<string>("");
   const [scopeCheck, setScopeCheck] = useState<{ allowed?: boolean; reason?: string } | null>(null);
 
@@ -128,6 +129,7 @@ export default function OperationsPage() {
   const handleSaveTarget = async (e: React.FormEvent) => {
     e.preventDefault();
     setTargetMsg("");
+    setTargetMsgError(false);
     const inScope = inScopeCsv.split(",").map((s) => s.trim()).filter(Boolean);
     const outScope = outScopeCsv.split(",").map((s) => s.trim()).filter(Boolean);
     const res = await createEngagement({
@@ -138,6 +140,7 @@ export default function OperationsPage() {
       set_active: true,
     });
     if (!res.ok) {
+      setTargetMsgError(true);
       setTargetMsg(res.error || "Failed");
       return;
     }
@@ -155,6 +158,7 @@ export default function OperationsPage() {
     setTargetUrl("");
     setInScopeCsv("");
     setOutScopeCsv("");
+    setTargetMsgError(false);
     setTargetMsg(t("common.save"));
   };
 
@@ -169,7 +173,11 @@ export default function OperationsPage() {
         out_of_scope: selectedEngagement?.out_of_scope,
       },
     });
-    if (res.ok && res.data) setScopeCheck(res.data);
+    if (res.ok && res.data) {
+      setScopeCheck(res.data);
+    } else if (res.error) {
+      setScopeCheck({ allowed: false, reason: res.error });
+    }
   };
 
   const handleIssueGrant = async (e: React.FormEvent) => {
@@ -287,7 +295,14 @@ export default function OperationsPage() {
               >
                 {t("targets.saveTarget")}
               </button>
-              {targetMsg && <span className="font-mono text-sentinel-success">{targetMsg}</span>}
+              {targetMsg && (
+                <span
+                  role={targetMsgError ? "alert" : "status"}
+                  className={`font-mono ${targetMsgError ? "text-sentinel-danger" : "text-sentinel-success"}`}
+                >
+                  {targetMsg}
+                </span>
+              )}
             </div>
           </form>
 

@@ -254,40 +254,72 @@ export interface EngagementCreateInput {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function isPrivateOrLocalHost(host: string): boolean {
+function parseIpv4Int(host: string): number | null {
+  const parts = host.split(".");
+  if (parts.length !== 4) return null;
+  let val = 0;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const n = Number.parseInt(part, 10);
+    if (n < 0 || n > 255) return null;
+    val = ((val << 8) | n) >>> 0;
+  }
+  return val;
+}
+
+function isIpLiteral(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, "");
+  return parseIpv4Int(h) !== null || h.includes(":");
+}
+
+function isCloudMetadataHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "").split("%")[0];
+  return (
+    h === "metadata.google.internal" ||
+    h === "metadata.internal" ||
+    h === "instance-data" ||
+    h === "100.100.100.200" ||
+    h === "fd00:ec2::254" ||
+    h === "0.0.0.0" ||
+    h === "::" ||
+    h === "::ffff:0.0.0.0" ||
+    h === "::ffff:0:0" ||
+    /^169\.254\./.test(h) ||
+    h.startsWith("::ffff:169.254.") ||
+    h.startsWith("::ffff:a9fe:")
+  );
+}
+
+function isPublicFqdn(host: string): boolean {
   const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!h || !h.includes(".") || h.includes(":")) return false;
+  if (isIpLiteral(h)) return false;
   if (
     h === "localhost" ||
+    h.endsWith(".localhost") ||
     h.endsWith(".local") ||
+    h.endsWith(".localdomain") ||
     h.endsWith(".internal") ||
-    h === "metadata.google.internal" ||
-    h === "0.0.0.0" ||
-    h === "::1" ||
-    h === "::" ||
-    h.startsWith("::ffff:127.") ||
-    h.startsWith("::ffff:169.254.") ||
-    h.startsWith("::ffff:10.") ||
-    h.startsWith("::ffff:192.168.") ||
-    /^::ffff:172\.(1[6-9]|2\d|3[01])\./.test(h)
+    h.endsWith(".intranet") ||
+    h.endsWith(".corp") ||
+    h.endsWith(".home") ||
+    h.endsWith(".lan") ||
+    h.endsWith(".arpa") ||
+    h === "instance-data"
   ) {
-    return true;
+    return false;
   }
-  // Decimal integer, hex, octal, or shorthand loopback forms
-  if (/^\d+$/.test(h) || /^0x[0-9a-f]+$/i.test(h) || /^127(?:\.\d+){0,3}$/.test(h)) {
-    return true;
-  }
-  if (/^10\./.test(h)) return true;
-  if (/^169\.254\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-  if (/^(fe80|fc00|fd00):/i.test(h)) return true;
-  return false;
+  const labels = h.split(".");
+  if (labels.length < 2) return false;
+  const tld = labels[labels.length - 1];
+  if (!/^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/.test(tld)) return false;
+  return labels.every((lbl) => /^[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$/.test(lbl));
 }
 
 export type TargetValidationReason =
   | "empty"
   | "invalid_format"
-  | "blocked_local"
+  | "blocked_metadata"
   | "out_of_scope"
   | "not_in_scope";
 
@@ -298,19 +330,79 @@ export interface TargetValidationResult {
   reason?: TargetValidationReason;
 }
 
-function matchesScopePattern(hostname: string, pattern: string): boolean {
-  const clean = pattern
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .split("/")[0]
-    .split(":")[0];
+function extractPatternHost(rawPattern: string): { host: string; hasNonRootPath: boolean } {
+  let clean = rawPattern.trim().toLowerCase().replace(/^https?:\/\//, "");
+  const slashIdx = clean.indexOf("/");
+  let hasNonRootPath = false;
+  if (slashIdx !== -1) {
+    const rest = clean.slice(slashIdx);
+    hasNonRootPath = rest !== "/" && !rest.startsWith("/?") && !rest.startsWith("/#");
+    clean = clean.slice(0, slashIdx);
+  }
+  clean = clean.split("?")[0].split("#")[0];
+  if (clean.includes("@")) {
+    clean = clean.slice(clean.lastIndexOf("@") + 1);
+  }
+  if (clean.startsWith("[")) {
+    const end = clean.indexOf("]");
+    return { host: end !== -1 ? clean.slice(1, end) : clean.slice(1), hasNonRootPath };
+  }
+  const firstColon = clean.indexOf(":");
+  if (firstColon !== -1 && clean.indexOf(":", firstColon + 1) === -1) {
+    clean = clean.slice(0, firstColon);
+  }
+  return { host: clean, hasNonRootPath };
+}
+
+function matchesScopePattern(hostname: string, pattern: string, isExclusion = false): boolean {
+  const normHost = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const raw = pattern.trim().toLowerCase();
+  if (!normHost || !raw) return false;
+  if (raw === "*") return true;
+
+  const noScheme = raw.replace(/^https?:\/\//, "");
+  const cidrMatch = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\/(\d{1,2})$/.exec(noScheme);
+  if (cidrMatch) {
+    const netInt = parseIpv4Int(cidrMatch[1]);
+    const hostInt = parseIpv4Int(normHost);
+    const prefix = Number.parseInt(cidrMatch[2], 10);
+    if (netInt !== null && hostInt !== null && prefix >= 0 && prefix <= 32) {
+      const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+      return (hostInt & mask) === (netInt & mask);
+    }
+    return false;
+  }
+
+  const { host: clean, hasNonRootPath } = extractPatternHost(noScheme);
   if (!clean) return false;
+  if (isExclusion && hasNonRootPath) {
+    return false;
+  }
+
+  if (isIpLiteral(clean)) {
+    return normHost === clean;
+  }
   if (clean.startsWith("*.")) {
     const base = clean.slice(2);
-    return hostname === base || hostname.endsWith(`.${base}`);
+    return normHost === base || normHost.endsWith(`.${base}`);
   }
-  return hostname === clean || hostname.endsWith(`.${clean}`);
+  return normHost === clean || normHost.endsWith(`.${clean}`);
+}
+
+function prepareUrlCandidate(trimmed: string): string {
+  if (trimmed.includes("://")) {
+    return trimmed;
+  }
+  if (!trimmed.startsWith("[")) {
+    const slashIdx = trimmed.indexOf("/");
+    const authority = slashIdx === -1 ? trimmed : trimmed.slice(0, slashIdx);
+    const colonCount = (authority.match(/:/g) || []).length;
+    if (colonCount >= 2 && /^[0-9a-f:%.]+$/i.test(authority)) {
+      const rest = slashIdx === -1 ? "" : trimmed.slice(slashIdx);
+      return `https://[${authority}]${rest}`;
+    }
+  }
+  return `https://${trimmed}`;
 }
 
 export function validateScanTarget(
@@ -327,7 +419,7 @@ export function validateScanTarget(
 
   let parsed: URL;
   try {
-    parsed = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+    parsed = new URL(prepareUrlCandidate(trimmed));
   } catch {
     return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
   }
@@ -336,28 +428,47 @@ export function validateScanTarget(
     return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
   }
 
-  const hostname = parsed.hostname.toLowerCase();
-  if (!hostname || (!hostname.includes(".") && !hostname.includes(":"))) {
+  const rawHostname = parsed.hostname.toLowerCase();
+  const hostname = rawHostname.replace(/^\[|\]$/g, "");
+  if (!hostname) {
+    return { valid: false, normalizedTarget: "", hostname: "", reason: "invalid_format" };
+  }
+
+  if (isCloudMetadataHost(hostname)) {
+    return { valid: false, normalizedTarget: hostname, hostname, reason: "blocked_metadata" };
+  }
+
+  if (hostname !== "localhost" && !hostname.includes(".") && !hostname.includes(":")) {
     return { valid: false, normalizedTarget: "", hostname, reason: "invalid_format" };
   }
 
-  if (isPrivateOrLocalHost(hostname)) {
-    return { valid: false, normalizedTarget: hostname, hostname, reason: "blocked_local" };
-  }
+  const hasExplicitScheme = trimmed.includes("://");
+  const hasExplicitPathOrQuery =
+    (parsed.pathname && parsed.pathname !== "/") || Boolean(parsed.search);
+  const pathSuffix = hasExplicitPathOrQuery
+    ? `${parsed.pathname}${parsed.search}`
+    : trimmed.endsWith("/")
+      ? "/"
+      : "";
+  const normalizedTarget = hasExplicitScheme
+    ? `${parsed.protocol}//${parsed.host}${pathSuffix}`
+    : parsed.port || hasExplicitPathOrQuery
+      ? `${parsed.host}${pathSuffix}`
+      : rawHostname;
 
   if (engagement) {
-    if (engagement.out_of_scope.some((rule) => matchesScopePattern(hostname, rule))) {
-      return { valid: false, normalizedTarget: hostname, hostname, reason: "out_of_scope" };
+    if (engagement.out_of_scope.some((rule) => matchesScopePattern(hostname, rule, true))) {
+      return { valid: false, normalizedTarget, hostname, reason: "out_of_scope" };
     }
     if (
       engagement.in_scope.length > 0 &&
-      !engagement.in_scope.some((rule) => matchesScopePattern(hostname, rule))
+      !engagement.in_scope.some((rule) => matchesScopePattern(hostname, rule, false))
     ) {
-      return { valid: false, normalizedTarget: hostname, hostname, reason: "not_in_scope" };
+      return { valid: false, normalizedTarget, hostname, reason: "not_in_scope" };
     }
   }
 
-  return { valid: true, normalizedTarget: hostname, hostname };
+  return { valid: true, normalizedTarget, hostname };
 }
 
 function fingerprintData(value: unknown): string {
@@ -1558,13 +1669,18 @@ export function PlatformProvider({ children }: { children: React.ReactNode }) {
         return { ok: res.ok, error: res.error, via: "go_core" };
       }
 
+      const defaultScope = selectedEngagement
+        ? selectedEngagement.in_scope?.length
+          ? selectedEngagement.in_scope
+          : undefined
+        : isPublicFqdn(check.hostname)
+          ? [check.hostname]
+          : undefined;
+
       const res = await launchMission({
         kind: "pipeline",
         target: check.normalizedTarget,
-        scope:
-          selectedEngagement?.in_scope?.length
-            ? selectedEngagement.in_scope
-            : [check.normalizedTarget],
+        scope: defaultScope,
       });
       return { ok: res.ok, error: res.error, via: "django_pipeline" };
     },
