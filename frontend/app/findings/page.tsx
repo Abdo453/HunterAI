@@ -3,17 +3,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FileText,
-  Layers,
   RefreshCw,
   Archive,
   X,
-  ExternalLink,
+  Download,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import FindingsTable from "@/components/FindingsTable";
+import EvidenceCourtDrawer from "@/components/EvidenceCourtDrawer";
+import VulnIntelPanel from "@/components/VulnIntelPanel";
+import { EvidenceLedgerResponse } from "@/lib/api-types";
 import { usePlatform } from "@/lib/platform-context";
 import { useI18n } from "@/lib/i18n";
 import { renderSafeMarkdown } from "@/lib/sanitize";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface ResultReportItem {
   id: string;
@@ -56,14 +60,8 @@ interface SnapshotSummary {
   modified: string;
 }
 
-interface EvidenceLedgerResponse {
-  counts?: Record<string, number>;
-  runs?: string[];
-  recent?: Record<string, Array<Record<string, unknown>>>;
-}
-
 export default function FindingsPage() {
-  const { apiJson } = usePlatform();
+  const { apiJson, hunterFetch, inspectedEvidenceId, setInspectedEvidenceId } = usePlatform();
   const { t } = useI18n();
 
   const [classificationFilter, setClassificationFilter] = useState<string>("ALL");
@@ -72,9 +70,14 @@ export default function FindingsPage() {
   const [reports, setReports] = useState<EnhancedReportFile[]>([]);
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [ledger, setLedger] = useState<EvidenceLedgerResponse | null>(null);
-  const [activeEntity, setActiveEntity] = useState<string>("court_verdict");
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string>("");
 
   const [openedDossier, setOpenedDossier] = useState<{ title: string; markdown: string } | null>(null);
+  const [inspectedSnapshot, setInspectedSnapshot] = useState<SnapshotSummary | null>(null);
+
+  const dossierTrapRef = useFocusTrap(Boolean(openedDossier), () => setOpenedDossier(null));
+  const snapshotTrapRef = useFocusTrap(Boolean(inspectedSnapshot), () => setInspectedSnapshot(null));
 
   const loadAll = useCallback(async () => {
     const [resR, sessR, repR, snapR, ledR] = await Promise.all([
@@ -203,28 +206,59 @@ export default function FindingsPage() {
 
   const openReportDossier = async (filename: string) => {
     if (!filename) return;
-    const res = await fetch(`/api/enhanced/reports/${encodeURIComponent(filename)}`, {
-      credentials: "include",
-    });
-    const rawTxt = await res.text();
-    let markdown = rawTxt;
+    setExportError("");
     try {
-      const parsed = JSON.parse(rawTxt) as { content?: unknown };
-      if (parsed && typeof parsed === "object" && typeof parsed.content === "string") {
-        markdown = parsed.content;
+      const res = await hunterFetch(`/api/enhanced/reports/${encodeURIComponent(filename)}`);
+      if (!res.ok) {
+        setExportError(`HTTP ${res.status}`);
+        return;
       }
-    } catch {
-      // Non-JSON raw markdown body
+      const rawTxt = await res.text();
+      let markdown = rawTxt;
+      try {
+        const parsed = JSON.parse(rawTxt) as { content?: unknown };
+        if (parsed && typeof parsed === "object" && typeof parsed.content === "string") {
+          markdown = parsed.content;
+        }
+      } catch {
+        // Raw markdown body
+      }
+      setOpenedDossier({ title: filename, markdown });
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : t("common.error"));
     }
-    setOpenedDossier({ title: filename, markdown });
+  };
+
+  // Authenticated session export via hunterFetch + Blob download (preserves Bearer auth)
+  const downloadSessionExport = async (sessionId: string, fmt: "hackerone" | "executive" | "md" | "json") => {
+    const key = `${sessionId}:${fmt}`;
+    setExportingKey(key);
+    setExportError("");
+    try {
+      const res = await hunterFetch(`/api/report/${encodeURIComponent(sessionId)}/${fmt}`);
+      if (!res.ok) {
+        setExportError(`HTTP ${res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const ext = fmt === "executive" ? "html" : fmt === "json" ? "json" : "md";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `hunterai-${sessionId}-${fmt}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : t("common.error"));
+    } finally {
+      setExportingKey(null);
+    }
   };
 
   const dossierHtml = useMemo(() => {
     if (!openedDossier) return "";
     return renderSafeMarkdown(openedDossier.markdown);
   }, [openedDossier]);
-
-  const ledgerEntities = useMemo(() => Object.keys(ledger?.counts || {}), [ledger]);
 
   return (
     <div className="space-y-5">
@@ -270,7 +304,7 @@ export default function FindingsPage() {
         </button>
       </div>
 
-      {/* Go Core FindingsTable + Reports Explorer */}
+      {/* Findings Table (Multi-Format Exporter) + Reports Explorer */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
         <div className="xl:col-span-6">
           <FindingsTable />
@@ -280,7 +314,7 @@ export default function FindingsPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border-subtle">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-sentinel-success" />
-              <h2 className="text-sm font-semibold text-ink-primary">{t("findings.explorerTitle")}</h2>
+              <h1 className="text-sm font-semibold text-ink-primary">{t("findings.explorerTitle")}</h1>
             </div>
             <button
               type="button"
@@ -291,6 +325,12 @@ export default function FindingsPage() {
               <span>{t("common.refresh")}</span>
             </button>
           </div>
+
+          {exportError && (
+            <div role="alert" className="px-3 py-1.5 rounded bg-sentinel-danger/10 border border-sentinel-danger/40 text-sentinel-danger text-xs">
+              {exportError}
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto space-y-3 pe-1">
             {filteredResults.length > 0 && (
@@ -321,28 +361,31 @@ export default function FindingsPage() {
               </div>
             )}
 
-            {/* Session Reports (H1 / HTML / MD / JSON) */}
+            {/* Authenticated Session Reports */}
             {sessions.length > 0 && (
               <div className="pt-2 border-t border-border-subtle space-y-1.5">
-                <div className="text-xs font-semibold text-ink-secondary">Session Exports</div>
+                <div className="text-xs font-semibold text-ink-secondary">{t("findings.sessionExportsTitle")}</div>
                 {sessions.slice(0, 10).map((s, idx) => (
                   <div key={`${s.id || "session"}-${idx}`} className="p-2.5 rounded bg-inset border border-border-subtle flex flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="font-mono ltr-isolate truncate text-ink-primary">
                       {s.target || s.id} ({s.findings_count ?? 0})
                     </span>
                     <div className="flex items-center gap-1.5 font-mono">
-                      {(["hackerone", "executive", "md", "json"] as const).map((fmt) => (
-                        <a
-                          key={fmt}
-                          href={`/api/report/${encodeURIComponent(s.id)}/${fmt}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2 py-0.5 rounded border border-border-subtle bg-elevated hover:border-sentinel-primary text-sentinel-primary inline-flex items-center gap-1 text-[11px]"
-                        >
-                          <span>{fmt === "executive" ? "HTML" : fmt.toUpperCase()}</span>
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      ))}
+                      {(["hackerone", "executive", "md", "json"] as const).map((fmt) => {
+                        const busy = exportingKey === `${s.id}:${fmt}`;
+                        return (
+                          <button
+                            key={fmt}
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void downloadSessionExport(s.id, fmt)}
+                            className="px-2 py-0.5 rounded border border-border-subtle bg-elevated hover:border-sentinel-primary text-sentinel-primary inline-flex items-center gap-1 text-[11px] disabled:opacity-50"
+                          >
+                            {busy ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Download className="w-2.5 h-2.5" />}
+                            <span>{fmt === "executive" ? "HTML" : fmt.toUpperCase()}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -352,14 +395,14 @@ export default function FindingsPage() {
             {/* Markdown Master Dossiers */}
             {reports.length > 0 && (
               <div className="pt-2 border-t border-border-subtle space-y-1.5">
-                <div className="text-xs font-semibold text-ink-secondary">Generated Dossiers (.md)</div>
+                <div className="text-xs font-semibold text-ink-secondary">{t("findings.generatedDossiersTitle")}</div>
                 {reports.slice(0, 10).map((r, idx) => (
                   <div key={`${r.filename || "report"}-${idx}`} className="p-2 rounded bg-inset border border-border-subtle flex items-center justify-between gap-2 text-xs">
                     <span className="font-mono ltr-isolate truncate text-ink-secondary">{r.filename}</span>
                     <button
                       type="button"
                       onClick={() => void openReportDossier(r.filename)}
-                      className="px-2 py-1 rounded border border-border-subtle bg-elevated text-sentinel-primary flex items-center gap-1 shrink-0"
+                      className="px-2 py-1 rounded border border-border-subtle bg-elevated hover:border-sentinel-primary text-sentinel-primary flex items-center gap-1 shrink-0"
                     >
                       <FileText className="w-3 h-3" />
                       <span>{t("common.details")}</span>
@@ -376,49 +419,29 @@ export default function FindingsPage() {
         </section>
       </div>
 
-      {/* Evidence Ledger & Snapshots */}
+      {/* 7-State Evidence Court Workbench + Snapshots */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <section className="lg:col-span-8 sentinel-surface p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border-subtle">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-sentinel-primary" />
-              <h2 className="text-sm font-semibold text-ink-primary">Evidence Ledger</h2>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {ledgerEntities.map((ent, idx) => (
-                <button
-                  key={`${ent}-${idx}`}
-                  type="button"
-                  onClick={() => setActiveEntity(ent)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-mono border ${
-                    activeEntity === ent
-                      ? "bg-[var(--accent-primary-bg)] text-sentinel-primary border-[var(--accent-primary)]/40"
-                      : "bg-elevated text-ink-muted border-border-subtle"
-                  }`}
-                >
-                  {ent} ({ledger?.counts?.[ent] ?? 0})
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <pre dir="ltr" className="ltr-isolate p-3 rounded bg-inset border border-border-subtle font-mono text-[11px] text-ink-secondary max-h-60 overflow-auto">
-            {JSON.stringify(ledger?.recent?.[activeEntity] || [], null, 2)}
-          </pre>
-        </section>
+        <div className="lg:col-span-8">
+          <EvidenceCourtDrawer embedded ledger={ledger} />
+        </div>
 
         <section className="lg:col-span-4 sentinel-surface p-4 space-y-3">
           <div className="flex items-center gap-2 pb-2 border-b border-border-subtle">
             <Archive className="w-4 h-4 text-sentinel-ai" />
-            <h2 className="text-sm font-semibold text-ink-primary">Checkpoints & Snapshots</h2>
+            <h2 className="text-sm font-semibold text-ink-primary">{t("findings.snapshotsTitle")}</h2>
           </div>
 
           {snapshots.length === 0 ? (
             <div className="py-8 text-center text-xs text-ink-muted">{t("common.noData")}</div>
           ) : (
-            <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="space-y-2 max-h-72 overflow-y-auto">
               {snapshots.map((sn, idx) => (
-                <div key={`${sn.filename || sn.snapshot_id || "snapshot"}-${idx}`} className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1">
+                <button
+                  key={`${sn.filename || sn.snapshot_id || "snapshot"}-${idx}`}
+                  type="button"
+                  onClick={() => setInspectedSnapshot(sn)}
+                  className="w-full text-start p-2.5 rounded bg-elevated border border-border-subtle hover:border-sentinel-primary text-xs space-y-1 transition-colors"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono font-semibold text-ink-primary ltr-isolate truncate">
                       {sn.snapshot_id}
@@ -428,14 +451,26 @@ export default function FindingsPage() {
                     </span>
                   </div>
                   <div className="font-mono text-[11px] text-ink-muted ltr-isolate">
-                    {sn.target} · {sn.phase} · {sn.findings_count} findings
+                    {sn.target} · {sn.phase} · {sn.findings_count} {t("runs.findingsTab")}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </section>
       </div>
+
+      {/* Local Vulnerability Intelligence (NVD/OSV/KEV/CWE/ATT&CK) */}
+      <VulnIntelPanel />
+
+      {/* Copilot Ref Evidence Court Slide-Over */}
+      {inspectedEvidenceId && (
+        <EvidenceCourtDrawer
+          ledger={ledger}
+          selectedId={inspectedEvidenceId}
+          onClose={() => setInspectedEvidenceId(null)}
+        />
+      )}
 
       {/* DOMPurify Sanitized Dossier Modal */}
       {openedDossier && (
@@ -444,9 +479,11 @@ export default function FindingsPage() {
           onClick={() => setOpenedDossier(null)}
         >
           <div
+            ref={dossierTrapRef}
             role="dialog"
             aria-modal="true"
             aria-label={openedDossier.title}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-3xl max-h-[82vh] bg-surface border border-border-strong rounded-xl shadow-sentinelMd flex flex-col overflow-hidden"
           >
@@ -456,7 +493,7 @@ export default function FindingsPage() {
                 type="button"
                 onClick={() => setOpenedDossier(null)}
                 aria-label={t("common.close")}
-                className="h-8 w-8 rounded border border-border-subtle bg-elevated text-ink-primary flex items-center justify-center"
+                className="min-h-[44px] min-w-[44px] sm:min-h-[32px] sm:min-w-[32px] rounded border border-border-subtle bg-elevated text-ink-primary flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -466,6 +503,65 @@ export default function FindingsPage() {
                 className="sentinel-prose"
                 dangerouslySetInnerHTML={{ __html: dossierHtml }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snapshot Detail Modal */}
+      {inspectedSnapshot && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-[1px]"
+          onClick={() => setInspectedSnapshot(null)}
+        >
+          <div
+            ref={snapshotTrapRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={inspectedSnapshot.snapshot_id}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-surface border border-border-strong rounded-xl shadow-sentinelMd overflow-hidden"
+          >
+            <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-ink-primary font-mono ltr-isolate truncate">
+                {inspectedSnapshot.snapshot_id}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setInspectedSnapshot(null)}
+                aria-label={t("common.close")}
+                className="h-8 w-8 rounded border border-border-subtle bg-elevated text-ink-primary flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-3 text-xs">
+              <div className="p-2.5 rounded bg-inset border border-border-subtle">
+                <div className="text-ink-muted">{t("common.target")}</div>
+                <div className="font-mono text-ink-primary ltr-isolate mt-0.5">{inspectedSnapshot.target || "—"}</div>
+              </div>
+              <div className="p-2.5 rounded bg-inset border border-border-subtle">
+                <div className="text-ink-muted">{t("runs.activePhase")}</div>
+                <div className="font-mono text-ink-primary mt-0.5">{inspectedSnapshot.phase || "—"}</div>
+              </div>
+              <div className="p-2.5 rounded bg-inset border border-border-subtle">
+                <div className="text-ink-muted">{t("runs.coverage")}</div>
+                <div className="font-mono text-sentinel-success tabular-nums mt-0.5">
+                  {Math.round(inspectedSnapshot.coverage_pct || 0)}%
+                </div>
+              </div>
+              <div className="p-2.5 rounded bg-inset border border-border-subtle">
+                <div className="text-ink-muted">{t("runs.findingsTab")}</div>
+                <div className="font-mono text-ink-primary tabular-nums mt-0.5">{inspectedSnapshot.findings_count}</div>
+              </div>
+              <div className="col-span-2 p-2.5 rounded bg-inset border border-border-subtle">
+                <div className="text-ink-muted">{t("findings.snapshotFileLabel")}</div>
+                <div className="font-mono text-ink-secondary ltr-isolate mt-0.5 break-all">
+                  {inspectedSnapshot.filename}
+                  {inspectedSnapshot.modified ? ` · ${inspectedSnapshot.modified}` : ""}
+                </div>
+              </div>
             </div>
           </div>
         </div>

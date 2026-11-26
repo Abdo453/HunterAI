@@ -15,10 +15,10 @@ export default function StatsCards() {
   ).length;
 
   const activeRunsCount = runs.filter((r) =>
-    ["running", "paused", "pending"].includes((r.status || "").toLowerCase())
+    ["running", "paused", "pending", "queued", "waiting"].includes((r.status || "").toLowerCase())
   ).length;
   const activeTasksCount = tasks.filter((tk) =>
-    ["RUNNING", "PENDING"].includes((tk.status || "").toUpperCase())
+    ["RUNNING", "PENDING", "QUEUED"].includes((tk.status || "").toUpperCase())
   ).length;
   const activeExecutionCount = activeRunsCount + activeTasksCount;
 
@@ -26,15 +26,15 @@ export default function StatsCards() {
   const allOffline = goOffline && hunterHubHealth.status === "offline";
 
   const indexedAssetsValue =
-    goOffline && stats.total_assets === 0 && assets.length === 0
+    allOffline
       ? t("status.offline")
       : (stats.total_assets || assets.length).toLocaleString();
 
   const liveEndpointsValue =
-    goOffline && assets.length === 0 ? t("status.offline") : liveEndpointsCount.toLocaleString();
+    allOffline ? t("status.offline") : liveEndpointsCount.toLocaleString();
 
   const findingsValue =
-    goOffline && stats.total_findings === 0 && findings.length === 0
+    allOffline
       ? t("status.offline")
       : (stats.total_findings || findings.length).toLocaleString();
 
@@ -49,8 +49,8 @@ export default function StatsCards() {
       desc: t("stats.assetsDesc"),
       icon: Globe,
       iconColor: "text-sentinel-primary",
-      accentBg: "bg-[var(--accent-primary-bg)]",
-      offline: goOffline && assets.length === 0,
+      accentBg: "bg-sentinel-primary/15",
+      offline: allOffline,
     },
     {
       label: t("stats.endpointsLabel"),
@@ -58,8 +58,8 @@ export default function StatsCards() {
       desc: t("stats.endpointsDesc"),
       icon: Server,
       iconColor: "text-sentinel-success",
-      accentBg: "bg-[var(--accent-success-bg)]",
-      offline: goOffline && assets.length === 0,
+      accentBg: "bg-sentinel-success/15",
+      offline: allOffline,
     },
     {
       label: t("stats.findingsLabel"),
@@ -67,8 +67,8 @@ export default function StatsCards() {
       desc: t("stats.findingsDesc"),
       icon: ShieldAlert,
       iconColor: "text-sentinel-warning",
-      accentBg: "bg-[var(--accent-warning-bg)]",
-      offline: goOffline && findings.length === 0,
+      accentBg: "bg-sentinel-warning/15",
+      offline: allOffline,
     },
     {
       label: t("stats.runsLabel"),
@@ -76,13 +76,16 @@ export default function StatsCards() {
       desc: t("stats.runsDesc"),
       icon: Cpu,
       iconColor: "text-sentinel-ai",
-      accentBg: "bg-[var(--accent-ai-bg)]",
+      accentBg: "bg-sentinel-ai/15",
       offline: allOffline,
     },
   ];
 
   return (
-    <section aria-label="Telemetry Summary" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <section
+      aria-label={t("stats.sectionAriaLabel")}
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+    >
       {cards.map((card) => {
         const Icon = card.icon;
         return (

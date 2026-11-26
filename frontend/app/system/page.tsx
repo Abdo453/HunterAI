@@ -9,9 +9,16 @@ import {
   Save,
   RefreshCw,
   Loader2,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
+import HardwareTelemetryCard from "@/components/HardwareTelemetryCard";
+import TokenCostPanel from "@/components/TokenCostPanel";
 import { usePlatform } from "@/lib/platform-context";
 import { useI18n } from "@/lib/i18n";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { sanitizePlainTerminalText } from "@/lib/terminal-sanitizer";
 
 interface DiagnosticCheck {
   component: string;
@@ -52,10 +59,16 @@ interface EnvSettingsData {
   providers?: string[];
   default_provider?: string;
   default_model?: string;
+  ollama_host?: string;
   keys?: Record<string, { configured?: boolean; key_masked?: string | null }>;
 }
 
-const POLICIES = ["cloud_first", "local_first", "local_only", "cloud_only"] as const;
+const POLICIES = ["balanced", "cloud_first", "local_first", "local_only", "cloud_only"] as const;
+
+function isModelHealthy(status: string): boolean {
+  const upper = status.toUpperCase();
+  return upper === "READY" || upper === "RUNNING" || upper.startsWith("CONFIGURED") || upper === "ONLINE";
+}
 
 export default function SystemPage() {
   const { apiJson } = usePlatform();
@@ -69,13 +82,17 @@ export default function SystemPage() {
   const [burpPort, setBurpPort] = useState<number>(8085);
   const [maxAgents, setMaxAgents] = useState<number>(5);
   const [rateRps, setRateRps] = useState<number>(2.0);
-  const [llmPolicy, setLlmPolicy] = useState<string>("cloud_first");
+  const [llmPolicy, setLlmPolicy] = useState<string>("balanced");
   const [defaultModel, setDefaultModel] = useState<string>("auto");
+  const [settingsDirty, setSettingsDirty] = useState<boolean>(false);
   const [ctrlSettings, setCtrlSettings] = useState<ControlSettingsData | null>(null);
   const [envSettings, setEnvSettings] = useState<EnvSettingsData | null>(null);
   const [settingsMsg, setSettingsMsg] = useState<string>("");
 
-  // Key Updater (write-only)
+  // Provider defaults & write-only API key updater (separate so saving a key NEVER clobbers HUNTER_DEFAULT_PROVIDER)
+  const [defaultProviderInput, setDefaultProviderInput] = useState<string>("");
+  const [ollamaHostInput, setOllamaHostInput] = useState<string>("");
+  const [providerMsg, setProviderMsg] = useState<string>("");
   const [keyProvider, setKeyProvider] = useState<string>("nvidia");
   const [keyValue, setKeyValue] = useState<string>("");
   const [keyMsg, setKeyMsg] = useState<string>("");
@@ -84,7 +101,14 @@ export default function SystemPage() {
   const [diagReport, setDiagReport] = useState<DiagnosticsReport | null>(null);
   const [readinessJson, setReadinessJson] = useState<Record<string, unknown> | null>(null);
   const [installPlan, setInstallPlan] = useState<Record<string, unknown> | null>(null);
+  const [showRawReadiness, setShowRawReadiness] = useState<boolean>(false);
+  const [showRawPlan, setShowRawPlan] = useState<boolean>(false);
   const [runningDiag, setRunningDiag] = useState<boolean>(false);
+
+  useUnsavedChangesGuard({
+    isDirty: settingsDirty,
+    message: t("settings.unsavedWarning"),
+  });
 
   const loadSystemData = useCallback(async () => {
     const [modR, catR, cSetR, eSetR, planR] = await Promise.all([
@@ -112,8 +136,13 @@ export default function SystemPage() {
       if (typeof s.rate_limit_rps === "number") setRateRps(s.rate_limit_rps);
       if (s.llm_policy) setLlmPolicy(s.llm_policy);
       if (s.default_model) setDefaultModel(s.default_model);
+      setSettingsDirty(false);
     }
-    if (eSetR.ok && eSetR.data) setEnvSettings(eSetR.data);
+    if (eSetR.ok && eSetR.data) {
+      setEnvSettings(eSetR.data);
+      if (eSetR.data.default_provider) setDefaultProviderInput(eSetR.data.default_provider);
+      if (eSetR.data.ollama_host) setOllamaHostInput(eSetR.data.ollama_host);
+    }
     if (planR.ok && planR.data) setInstallPlan(planR.data);
   }, [apiJson]);
 
@@ -135,19 +164,41 @@ export default function SystemPage() {
         default_model: defaultModel,
       },
     });
-    setSettingsMsg(res.ok ? `${t("common.save")} (${(res.data?.updated || []).join(", ")})` : res.error || "Save failed");
+    if (res.ok) {
+      setSettingsDirty(false);
+      setSettingsMsg(`${t("common.save")} (${(res.data?.updated || []).join(", ")})`);
+    } else {
+      setSettingsMsg(res.error || t("common.error"));
+    }
   };
 
+  // Send {[keyProvider]: keyValue} WITHOUT `provider` field so HUNTER_DEFAULT_PROVIDER is NEVER clobbered!
   const saveApiKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!keyValue.trim()) return;
     setKeyMsg("");
     const res = await apiJson<{ note?: string; error?: string }>("/api/settings/save", {
       method: "POST",
-      body: { provider: keyProvider, api_key: keyValue.trim() },
+      body: { [keyProvider]: keyValue.trim() },
     });
     setKeyValue("");
-    setKeyMsg(res.ok ? res.data?.note || "Saved" : res.error || res.data?.error || "Failed");
+    setKeyMsg(res.ok ? res.data?.note || t("settings.keySavedOk") : res.error || res.data?.error || t("common.error"));
+    await loadSystemData();
+  };
+
+  const saveProviderDefaults = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProviderMsg("");
+    const payload: Record<string, string> = {};
+    if (defaultProviderInput.trim()) payload.default_provider = defaultProviderInput.trim();
+    if (ollamaHostInput.trim()) payload.ollama_host = ollamaHostInput.trim();
+    if (Object.keys(payload).length === 0) return;
+
+    const res = await apiJson<{ note?: string; error?: string }>("/api/settings/save", {
+      method: "POST",
+      body: payload,
+    });
+    setProviderMsg(res.ok ? res.data?.note || t("common.save") : res.error || res.data?.error || t("common.error"));
     await loadSystemData();
   };
 
@@ -164,8 +215,25 @@ export default function SystemPage() {
 
   const maskedEntries = Object.entries(envSettings?.keys || {});
 
+  // Parse structured install plan rows if available
+  const installSteps = Array.isArray(installPlan?.missing_tools)
+    ? (installPlan.missing_tools as Array<Record<string, unknown> | string>)
+    : Array.isArray(installPlan?.steps)
+      ? (installPlan.steps as Array<Record<string, unknown> | string>)
+      : [];
+
   return (
     <div className="space-y-5">
+      {/* Live Hardware Telemetry + Persisted Token Cost Breakdown */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <div className="xl:col-span-6">
+          <HardwareTelemetryCard />
+        </div>
+        <div className="xl:col-span-6">
+          <TokenCostPanel />
+        </div>
+      </div>
+
       {/* AI Models + Routing Policy */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <section className="lg:col-span-7 sentinel-surface p-4 space-y-3">
@@ -202,7 +270,7 @@ export default function SystemPage() {
                     <td className="py-1.5 px-3">
                       <span
                         className={
-                          m.status === "RUNNING" || m.status.startsWith("CONFIGURED")
+                          isModelHealthy(m.status || "")
                             ? "text-sentinel-success"
                             : "text-sentinel-warning"
                         }
@@ -210,7 +278,9 @@ export default function SystemPage() {
                         {m.status}
                       </span>
                     </td>
-                    <td className="py-1.5 px-3 text-ink-muted">{m.is_local ? "Local" : "Cloud"}</td>
+                    <td className="py-1.5 px-3 text-ink-muted">
+                      {m.is_local ? t("models.localPrivateBadge") : t("models.cloudFallbackBadge")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -219,18 +289,29 @@ export default function SystemPage() {
         </section>
 
         <section className="lg:col-span-5 sentinel-surface p-4 space-y-3">
-          <div className="flex items-center gap-2 pb-2 border-b border-border-subtle">
-            <Save className="w-4 h-4 text-sentinel-primary" />
-            <h2 className="text-sm font-semibold text-ink-primary">{t("models.defaultSettingsTitle")}</h2>
+          <div className="flex items-center justify-between gap-2 pb-2 border-b border-border-subtle">
+            <div className="flex items-center gap-2">
+              <Save className="w-4 h-4 text-sentinel-primary" />
+              <h2 className="text-sm font-semibold text-ink-primary">{t("models.defaultSettingsTitle")}</h2>
+            </div>
+            {settingsDirty && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-sentinel-warning/15 text-sentinel-warning border border-sentinel-warning/35">
+                <AlertTriangle className="w-3 h-3" />
+                <span>{t("editor.modifiedBadge")}</span>
+              </span>
+            )}
           </div>
 
           <form onSubmit={saveControlSettings} className="space-y-2.5 text-xs">
             <div className="space-y-1">
-              <label htmlFor="sys-policy" className="text-ink-muted">Routing Policy</label>
+              <label htmlFor="sys-policy" className="text-ink-muted">{t("settings.routingPolicyLabel")}</label>
               <select
                 id="sys-policy"
                 value={llmPolicy}
-                onChange={(e) => setLlmPolicy(e.target.value)}
+                onChange={(e) => {
+                  setLlmPolicy(e.target.value);
+                  setSettingsDirty(true);
+                }}
                 className="w-full h-9 px-2.5 rounded bg-inset border border-border-subtle font-mono"
               >
                 {POLICIES.map((p) => (
@@ -244,7 +325,10 @@ export default function SystemPage() {
               <select
                 id="sys-model"
                 value={defaultModel}
-                onChange={(e) => setDefaultModel(e.target.value)}
+                onChange={(e) => {
+                  setDefaultModel(e.target.value);
+                  setSettingsDirty(true);
+                }}
                 className="w-full h-9 px-2.5 rounded bg-inset border border-border-subtle font-mono"
               >
                 <option value="auto">auto</option>
@@ -262,7 +346,10 @@ export default function SystemPage() {
                   type="text"
                   dir="ltr"
                   value={proxyUrl}
-                  onChange={(e) => setProxyUrl(e.target.value)}
+                  onChange={(e) => {
+                    setProxyUrl(e.target.value);
+                    setSettingsDirty(true);
+                  }}
                   className="ltr-isolate w-full h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
                 />
               </div>
@@ -272,7 +359,10 @@ export default function SystemPage() {
                   id="sys-burp-port"
                   type="number"
                   value={burpPort}
-                  onChange={(e) => setBurpPort(Number(e.target.value) || 8085)}
+                  onChange={(e) => {
+                    setBurpPort(Number(e.target.value) || 8085);
+                    setSettingsDirty(true);
+                  }}
                   className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono ltr-isolate"
                 />
               </div>
@@ -282,18 +372,24 @@ export default function SystemPage() {
                   id="sys-agents"
                   type="number"
                   value={maxAgents}
-                  onChange={(e) => setMaxAgents(Number(e.target.value) || 5)}
+                  onChange={(e) => {
+                    setMaxAgents(Number(e.target.value) || 5);
+                    setSettingsDirty(true);
+                  }}
                   className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono ltr-isolate"
                 />
               </div>
               <div className="space-y-1">
-                <label htmlFor="sys-rps" className="text-ink-muted">Rate Limit (RPS)</label>
+                <label htmlFor="sys-rps" className="text-ink-muted">{t("settings.rateLimitRps")}</label>
                 <input
                   id="sys-rps"
                   type="number"
                   step="0.5"
                   value={rateRps}
-                  onChange={(e) => setRateRps(Number(e.target.value) || 2)}
+                  onChange={(e) => {
+                    setRateRps(Number(e.target.value) || 2);
+                    setSettingsDirty(true);
+                  }}
                   className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono ltr-isolate"
                 />
               </div>
@@ -302,7 +398,7 @@ export default function SystemPage() {
             <div className="flex items-center justify-between pt-1">
               <button
                 type="submit"
-                className="h-9 px-4 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold"
+                className="min-h-[44px] sm:min-h-[36px] px-4 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold"
               >
                 {t("settings.saveSettings")}
               </button>
@@ -328,7 +424,7 @@ export default function SystemPage() {
                 <div key={prov} className="p-2 rounded bg-elevated border border-border-subtle flex items-center justify-between">
                   <span className="text-ink-primary">{prov}</span>
                   <span className={info.configured ? "text-sentinel-success" : "text-ink-muted"}>
-                    {info.configured ? info.key_masked || "SET" : "MISSING"}
+                    {info.configured ? info.key_masked || t("states.configured") : t("states.missing")}
                   </span>
                 </div>
               ))
@@ -336,19 +432,19 @@ export default function SystemPage() {
               <>
                 <div className="p-2 rounded bg-elevated border border-border-subtle flex justify-between">
                   <span>gemini</span>
-                  <span>{ctrlSettings?.has_gemini_key ? "SET" : "MISSING"}</span>
+                  <span>{ctrlSettings?.has_gemini_key ? t("states.configured") : t("states.missing")}</span>
                 </div>
                 <div className="p-2 rounded bg-elevated border border-border-subtle flex justify-between">
                   <span>deepseek</span>
-                  <span>{ctrlSettings?.has_deepseek_key ? "SET" : "MISSING"}</span>
+                  <span>{ctrlSettings?.has_deepseek_key ? t("states.configured") : t("states.missing")}</span>
                 </div>
                 <div className="p-2 rounded bg-elevated border border-border-subtle flex justify-between">
                   <span>nvidia</span>
-                  <span>{ctrlSettings?.has_nvidia_key ? "SET" : "MISSING"}</span>
+                  <span>{ctrlSettings?.has_nvidia_key ? t("states.configured") : t("states.missing")}</span>
                 </div>
                 <div className="p-2 rounded bg-elevated border border-border-subtle flex justify-between">
                   <span>openai</span>
-                  <span>{ctrlSettings?.has_openai_key ? "SET" : "MISSING"}</span>
+                  <span>{ctrlSettings?.has_openai_key ? t("states.configured") : t("states.missing")}</span>
                 </div>
               </>
             )}
@@ -358,6 +454,7 @@ export default function SystemPage() {
             <select
               value={keyProvider}
               onChange={(e) => setKeyProvider(e.target.value)}
+              aria-label={t("models.colProvider")}
               className="h-8 px-2 rounded bg-inset border border-border-subtle font-mono"
             >
               {Array.from(
@@ -371,7 +468,8 @@ export default function SystemPage() {
               dir="ltr"
               value={keyValue}
               onChange={(e) => setKeyValue(e.target.value)}
-              placeholder="Write-only API key..."
+              placeholder={t("settings.writeOnlyKeyPlaceholder")}
+              aria-label={t("settings.writeOnlyKeyPlaceholder")}
               className="ltr-isolate flex-1 min-w-[140px] h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
             />
             <button type="submit" className="h-8 px-3 rounded bg-elevated border border-border-strong font-semibold">
@@ -379,6 +477,37 @@ export default function SystemPage() {
             </button>
           </form>
           {keyMsg && <div className="text-xs font-mono text-sentinel-success">{keyMsg}</div>}
+
+          {/* Explicit Default Provider & Ollama Host (never silently modified by API key updates) */}
+          <form onSubmit={saveProviderDefaults} className="space-y-2 pt-2 border-t border-border-subtle text-xs">
+            <div className="font-semibold text-ink-secondary">{t("settings.providerDefaultsTitle")}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="text"
+                dir="ltr"
+                value={defaultProviderInput}
+                onChange={(e) => setDefaultProviderInput(e.target.value)}
+                placeholder={t("settings.defaultProviderPlaceholder")}
+                aria-label={t("settings.defaultProviderPlaceholder")}
+                className="ltr-isolate h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
+              />
+              <input
+                type="text"
+                dir="ltr"
+                value={ollamaHostInput}
+                onChange={(e) => setOllamaHostInput(e.target.value)}
+                placeholder="http://127.0.0.1:11434"
+                aria-label={t("settings.ollamaHostLabel")}
+                className="ltr-isolate h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="submit" className="h-8 px-3 rounded bg-elevated border border-border-strong font-semibold">
+                {t("settings.applyProviderDefaults")}
+              </button>
+              {providerMsg && <span className="font-mono text-sentinel-success">{providerMsg}</span>}
+            </div>
+          </form>
         </section>
 
         <section className="lg:col-span-7 sentinel-surface p-4 space-y-3">
@@ -389,7 +518,7 @@ export default function SystemPage() {
             </div>
             <div className="flex items-center gap-2">
               {diagReport?.health_score !== undefined && (
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-[var(--accent-success-bg)] text-sentinel-success">
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-sentinel-success/15 text-sentinel-success border border-sentinel-success/35">
                   {diagReport.health_score}% ({diagReport.score_label})
                 </span>
               )}
@@ -397,7 +526,7 @@ export default function SystemPage() {
                 type="button"
                 disabled={runningDiag}
                 onClick={() => void runDiagnostics()}
-                className="h-8 px-3 rounded bg-sentinel-primary text-sentinel-onAccent text-xs font-semibold flex items-center gap-1.5"
+                className="min-h-[44px] sm:min-h-[32px] px-3 rounded bg-sentinel-primary text-sentinel-onAccent text-xs font-semibold flex items-center gap-1.5"
               >
                 {runningDiag && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 <span>{t("diagnostics.runFullCheck")}</span>
@@ -442,23 +571,92 @@ export default function SystemPage() {
             <div className="py-8 text-center text-xs text-ink-muted">{t("diagnostics.emptyDiagnostics")}</div>
           )}
 
+          {/* Structured Readiness Summary + Collapsible Raw JSON */}
           {readinessJson && (
-            <pre dir="ltr" className="ltr-isolate p-2.5 rounded bg-inset border border-border-subtle font-mono text-[11px] max-h-36 overflow-auto">
-              {JSON.stringify(readinessJson, null, 2)}
-            </pre>
+            <div className="space-y-2 pt-2 border-t border-border-subtle">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                {Object.entries(readinessJson)
+                  .filter(([, v]) => typeof v !== "object" || v === null)
+                  .slice(0, 6)
+                  .map(([k, v]) => (
+                    <div key={k} className="p-2 rounded bg-elevated border border-border-subtle">
+                      <div className="text-[10px] font-mono text-ink-muted truncate">{k}</div>
+                      <div className="font-mono text-ink-primary ltr-isolate truncate">{String(v)}</div>
+                    </div>
+                  ))}
+              </div>
+              <button
+                type="button"
+                aria-expanded={showRawReadiness}
+                onClick={() => setShowRawReadiness((p) => !p)}
+                className="text-[11px] font-mono text-ink-muted hover:text-ink-primary flex items-center gap-1"
+              >
+                {showRawReadiness ? (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
+                )}
+                <span>{t("diagnostics.toggleRawJson")}</span>
+              </button>
+              {showRawReadiness && (
+                <pre dir="ltr" className="ltr-isolate p-2.5 rounded bg-inset border border-border-subtle font-mono text-[11px] max-h-40 overflow-auto">
+                  {sanitizePlainTerminalText(JSON.stringify(readinessJson, null, 2))}
+                </pre>
+              )}
+            </div>
           )}
         </section>
       </div>
 
-      {/* Install Plan */}
-      <section className="sentinel-surface p-4 space-y-2">
-        <div className="flex items-center gap-2 pb-2 border-b border-border-subtle">
-          <PackageCheck className="w-4 h-4 text-sentinel-primary" />
-          <h2 className="text-sm font-semibold text-ink-primary">Tool Installation Plan</h2>
+      {/* Structured Tool Installation Plan */}
+      <section className="sentinel-surface p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-border-subtle">
+          <div className="flex items-center gap-2">
+            <PackageCheck className="w-4 h-4 text-sentinel-primary" />
+            <h2 className="text-sm font-semibold text-ink-primary">{t("diagnostics.installPlanTitle")}</h2>
+          </div>
+          <button
+            type="button"
+            aria-expanded={showRawPlan}
+            onClick={() => setShowRawPlan((p) => !p)}
+            className="text-xs font-mono text-ink-muted hover:text-ink-primary flex items-center gap-1"
+          >
+            {showRawPlan ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
+            )}
+            <span>{t("diagnostics.toggleRawJson")}</span>
+          </button>
         </div>
-        <pre dir="ltr" className="ltr-isolate p-3 rounded bg-inset border border-border-subtle font-mono text-[11px] text-ink-secondary max-h-52 overflow-auto">
-          {JSON.stringify(installPlan || { plan: null }, null, 2)}
-        </pre>
+
+        {installSteps.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+            {installSteps.slice(0, 12).map((step, idx) => {
+              const label =
+                typeof step === "string"
+                  ? step
+                  : String(step.tool || step.name || step.command || `Step ${idx + 1}`);
+              const cmd = typeof step === "object" && step ? String(step.command || step.install_cmd || "") : "";
+              return (
+                <div key={`${label}-${idx}`} className="p-2.5 rounded bg-inset border border-border-subtle space-y-1">
+                  <div className="font-mono font-semibold text-ink-primary ltr-isolate">{label}</div>
+                  {cmd && <div className="font-mono text-[11px] text-ink-muted ltr-isolate truncate">{cmd}</div>}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-xs text-ink-secondary">
+            {installPlan ? t("diagnostics.installPlanReady") : t("common.noData")}
+          </div>
+        )}
+
+        {showRawPlan && (
+          <pre dir="ltr" className="ltr-isolate p-3 rounded bg-inset border border-border-subtle font-mono text-[11px] text-ink-secondary max-h-52 overflow-auto">
+            {sanitizePlainTerminalText(JSON.stringify(installPlan || { plan: null }, null, 2))}
+          </pre>
+        )}
       </section>
     </div>
   );

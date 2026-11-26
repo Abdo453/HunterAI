@@ -26,6 +26,9 @@ export const metadata: Metadata = {
     "Autonomous Multi-Agent Security Platform (Go Core + PostgreSQL + Django ASGI Hub + Next.js 15)",
 };
 
+// Static blocking bootstrap executed before first paint to eliminate Dark/LTR FOUC.
+const PREHYDRATION_SCRIPT = `(function(){try{var p=new URLSearchParams(window.location.search);var qT=(p.get('theme')||'').trim().toLowerCase();var sT=(window.localStorage.getItem('hunterai_theme')||window.localStorage.getItem('theme')||'').trim().toLowerCase();var t=(qT==='light'||qT==='dark')?qT:((sT==='light'||sT==='dark')?sT:'dark');var qL=(p.get('lang')||'').trim().toLowerCase();var sL=(window.localStorage.getItem('hunterai_lang')||window.localStorage.getItem('lang')||'').trim().toLowerCase();var l=(qL==='ar'||qL==='en')?qL:((sL==='ar'||sL==='en')?sL:'en');var el=document.documentElement;el.setAttribute('data-theme',t);el.setAttribute('lang',l);el.setAttribute('dir',l==='ar'?'rtl':'ltr');}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,6 +36,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" dir="ltr" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script id="sentinel-prehydrate">{PREHYDRATION_SCRIPT}</script>
+      </head>
       <body className="min-h-screen bg-canvas text-ink-primary antialiased">
         <ThemeProvider>
           <I18nProvider>

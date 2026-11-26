@@ -6,16 +6,24 @@ import {
   Sparkles,
   Wrench,
   Cpu,
-  Server,
   Box,
   Play,
   Loader2,
   Send,
   Wand2,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+import McpManagerModal from "@/components/McpManagerModal";
 import { usePlatform } from "@/lib/platform-context";
 import { useI18n } from "@/lib/i18n";
 import { renderSafeMarkdown } from "@/lib/sanitize";
+import { sanitizePlainTerminalText } from "@/lib/terminal-sanitizer";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface AgentItem {
   id: string;
@@ -46,6 +54,16 @@ interface CliEngineItem {
   supports_streaming?: boolean;
 }
 
+interface ToolTestOutcome {
+  toolName: string;
+  ok: boolean;
+  status: "PASS" | "FAIL";
+  returncode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  message?: string;
+}
+
 const ELITE_PROBERS = [
   "http_smuggling",
   "cache_poisoning",
@@ -54,6 +72,8 @@ const ELITE_PROBERS = [
   "path_traversal",
   "jwt_advanced",
 ];
+
+const SKILLS_PAGE_SIZE = 24;
 
 export default function ArsenalPage() {
   const { selectedEngagement, apiJson } = usePlatform();
@@ -67,39 +87,42 @@ export default function ArsenalPage() {
 
   const [skills, setSkills] = useState<SkillCatalogItem[]>([]);
   const [skillFilter, setSkillFilter] = useState<string>("");
+  const [skillPage, setSkillPage] = useState<number>(1);
   const [eliteSkill, setEliteSkill] = useState<string>(ELITE_PROBERS[0]);
   const [eliteTarget, setEliteTarget] = useState<string>("");
   const [eliteResult, setEliteResult] = useState<Record<string, unknown> | null>(null);
 
   const [tools, setTools] = useState<KaliToolItem[]>([]);
   const [toolFilter, setToolFilter] = useState<string>("");
-  const [toolTestOut, setToolTestOut] = useState<string>("");
+  const [toolTestResult, setToolTestResult] = useState<ToolTestOutcome | null>(null);
+  const [testingToolName, setTestingToolName] = useState<string | null>(null);
+  const [inspectedTool, setInspectedTool] = useState<{ name: string; detail: Record<string, unknown> } | null>(null);
+  const toolModalTrapRef = useFocusTrap(Boolean(inspectedTool), () => setInspectedTool(null));
+
   const [synthTool, setSynthTool] = useState<string>("nuclei");
   const [synthTarget, setSynthTarget] = useState<string>("");
   const [synthWaf, setSynthWaf] = useState<string>("");
   const [synthResult, setSynthResult] = useState<Record<string, unknown> | null>(null);
 
+  // Wordlist Explorer
+  const [wordlistRoots, setWordlistRoots] = useState<string[]>([]);
+  const [wordlistQuery, setWordlistQuery] = useState<string>("");
+  const [wordlistMatches, setWordlistMatches] = useState<Array<Record<string, unknown>>>([]);
+
   const [engines, setEngines] = useState<CliEngineItem[]>([]);
   const [selfcheckOut, setSelfcheckOut] = useState<Record<string, unknown> | null>(null);
-  const [mcpStatus, setMcpStatus] = useState<Record<string, unknown> | null>(null);
-  const [mcpServers, setMcpServers] = useState<Array<Record<string, unknown>>>([]);
-  const [mcpServerId, setMcpServerId] = useState<string>("hunter-arsenal");
-  const [mcpToolName, setMcpToolName] = useState<string>("");
-  const [mcpArgsJson, setMcpArgsJson] = useState<string>("{}");
-  const [mcpCallOut, setMcpCallOut] = useState<Record<string, unknown> | null>(null);
   const [sandboxStatus, setSandboxStatus] = useState<Record<string, unknown> | null>(null);
   const [sandboxCmd, setSandboxCmd] = useState<string>("python --version");
   const [sandboxOut, setSandboxOut] = useState<Record<string, unknown> | null>(null);
 
   const loadArsenal = useCallback(async () => {
-    const [agR, skR, tlR, engR, mcpR, mcpListR, sbR] = await Promise.all([
+    const [agR, skR, tlR, engR, sbR, wlR] = await Promise.all([
       apiJson<{ agents?: AgentItem[] }>("/api/control/agents"),
       apiJson<{ skills?: SkillCatalogItem[] }>("/api/skills/catalog"),
       apiJson<{ tools?: KaliToolItem[] }>("/api/control/tools"),
       apiJson<{ engines?: CliEngineItem[] }>("/api/engines"),
-      apiJson<Record<string, unknown>>("/api/opencode/mcp-status"),
-      apiJson<{ servers?: Array<Record<string, unknown>> }>("/api/mcp/servers"),
       apiJson<Record<string, unknown>>("/api/sandbox/health"),
+      apiJson<{ roots?: string[]; available?: string[] }>("/api/wordlists/roots"),
     ]);
     if (agR.ok && Array.isArray(agR.data?.agents)) {
       const normalizedAgents = agR.data.agents
@@ -158,9 +181,15 @@ export default function ArsenalPage() {
       setTools(normalizedTools);
     }
     if (engR.ok && Array.isArray(engR.data?.engines)) setEngines(engR.data.engines);
-    if (mcpR.ok && mcpR.data) setMcpStatus(mcpR.data);
-    if (mcpListR.ok && Array.isArray(mcpListR.data?.servers)) setMcpServers(mcpListR.data.servers);
     if (sbR.ok && sbR.data) setSandboxStatus(sbR.data);
+    if (wlR.ok && wlR.data) {
+      const roots = Array.isArray(wlR.data.roots)
+        ? wlR.data.roots
+        : Array.isArray(wlR.data.available)
+          ? wlR.data.available
+          : [];
+      setWordlistRoots(roots.map(String));
+    }
   }, [apiJson, selectedAgentId]);
 
   useEffect(() => {
@@ -180,7 +209,7 @@ export default function ArsenalPage() {
       },
     });
     setAgentSending(false);
-    setAgentReplyMd(res.ok ? res.data?.response || res.data?.reply || "" : res.error || res.data?.message || "Error");
+    setAgentReplyMd(res.ok ? res.data?.response || res.data?.reply || "" : res.error || res.data?.message || t("common.error"));
   };
 
   const runEliteProber = async (e: React.FormEvent) => {
@@ -193,12 +222,47 @@ export default function ArsenalPage() {
     setEliteResult(res.data || { error: res.error });
   };
 
+  // Truthful PASS/FAIL with stdout, stderr & returncode — never masks failures as PASS
   const testTool = async (toolName: string) => {
-    const res = await apiJson<{ output?: string; message?: string }>("/api/control/tools/test", {
+    setTestingToolName(toolName);
+    const res = await apiJson<{
+      ok?: boolean;
+      status?: string;
+      returncode?: number | null;
+      stdout?: string;
+      stderr?: string;
+      output?: string;
+      message?: string;
+      error?: string;
+    }>("/api/control/tools/test", {
       method: "POST",
       body: { tool_name: toolName },
     });
-    setToolTestOut(res.ok ? res.data?.output || "PASS" : res.error || res.data?.message || "Failed");
+    setTestingToolName(null);
+    const passed = Boolean(
+      res.ok &&
+        res.data?.ok !== false &&
+        (res.data?.status ? res.data.status.toUpperCase() === "PASS" : true)
+    );
+    setToolTestResult({
+      toolName,
+      ok: passed,
+      status: passed ? "PASS" : "FAIL",
+      returncode: typeof res.data?.returncode === "number" ? res.data.returncode : null,
+      stdout: res.data?.stdout || res.data?.output || "",
+      stderr: res.data?.stderr || res.data?.error || (!passed ? res.error : "") || "",
+      message: res.data?.message || "",
+    });
+  };
+
+  const inspectToolSpec = async (toolName: string) => {
+    const res = await apiJson<Record<string, unknown>>(
+      `/api/arsenal/tool/${encodeURIComponent(toolName)}`
+    );
+    setInspectedTool({
+      name: toolName,
+      detail: res.data || { error: res.error || t("common.noData") },
+    });
   };
 
   const synthesizeCommand = async (e: React.FormEvent) => {
@@ -209,6 +273,24 @@ export default function ArsenalPage() {
       body: { tool_name: synthTool.trim(), target: tgt, waf_name: synthWaf.trim() || null },
     });
     setSynthResult(res.data || { error: res.error });
+  };
+
+  const resolveWordlist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wordlistQuery.trim()) return;
+    const res = await apiJson<{ results?: Array<Record<string, unknown>>; matches?: Array<Record<string, unknown>> }>(
+      `/api/wordlists/resolve?q=${encodeURIComponent(wordlistQuery.trim())}`
+    );
+    if (res.ok && res.data) {
+      const list = Array.isArray(res.data.results)
+        ? res.data.results
+        : Array.isArray(res.data.matches)
+          ? res.data.matches
+          : [res.data as unknown as Record<string, unknown>];
+      setWordlistMatches(list);
+    } else {
+      setWordlistMatches([{ error: res.error || t("common.noData") }]);
+    }
   };
 
   const runEngineSelfcheck = async () => {
@@ -230,33 +312,23 @@ export default function ArsenalPage() {
     if (res.data) setSandboxOut(res.data);
   };
 
-  const invokeMcpTool = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mcpServerId.trim() || !mcpToolName.trim()) return;
-    let parsedArgs: Record<string, unknown> = {};
-    try {
-      parsedArgs = JSON.parse(mcpArgsJson || "{}") as Record<string, unknown>;
-    } catch {
-      setMcpCallOut({ ok: false, error: "Invalid JSON arguments" });
-      return;
-    }
-    const res = await apiJson<Record<string, unknown>>("/api/mcp/call", {
-      method: "POST",
-      body: {
-        server_id: mcpServerId.trim(),
-        tool_name: mcpToolName.trim(),
-        arguments: parsedArgs,
-      },
-    });
-    setMcpCallOut(res.data || { ok: false, error: res.error });
-  };
-
   const filteredSkills = useMemo(() => {
     const q = skillFilter.trim().toLowerCase();
     return skills.filter(
-      (s) => !q || s.name.toLowerCase().includes(q) || (s.category || "").toLowerCase().includes(q)
+      (s) =>
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        (s.category || "").toLowerCase().includes(q) ||
+        (s.description || "").toLowerCase().includes(q)
     );
   }, [skills, skillFilter]);
+
+  const skillTotalPages = Math.max(1, Math.ceil(filteredSkills.length / SKILLS_PAGE_SIZE));
+  const safeSkillPage = Math.min(skillPage, skillTotalPages);
+  const pagedSkills = useMemo(() => {
+    const start = (safeSkillPage - 1) * SKILLS_PAGE_SIZE;
+    return filteredSkills.slice(start, start + SKILLS_PAGE_SIZE);
+  }, [filteredSkills, safeSkillPage]);
 
   const filteredTools = useMemo(() => {
     const q = toolFilter.trim().toLowerCase();
@@ -275,7 +347,7 @@ export default function ArsenalPage() {
               <Bot className="w-4 h-4 text-sentinel-ai" />
               <h1 className="text-sm font-semibold text-ink-primary">{t("sections.agents")}</h1>
             </div>
-            <span className="text-xs font-mono text-ink-muted">{agents.length}</span>
+            <span className="text-xs font-mono text-ink-muted tabular-nums">{agents.length}</span>
           </div>
 
           <div className="space-y-1.5 max-h-72 overflow-y-auto pe-1">
@@ -286,11 +358,14 @@ export default function ArsenalPage() {
                 onClick={() => setSelectedAgentId(ag.id)}
                 className={`w-full p-2.5 rounded border text-start text-xs space-y-1 transition-colors ${
                   selectedAgentId === ag.id
-                    ? "bg-[var(--accent-ai-bg)] border-sentinel-ai text-ink-primary"
+                    ? "bg-sentinel-ai/15 border-sentinel-ai text-ink-primary"
                     : "bg-elevated border-border-subtle hover:border-border-strong text-ink-secondary"
                 }`}
               >
-                <div className="font-mono font-semibold text-ink-primary">{ag.name}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono font-semibold text-ink-primary">{ag.name}</span>
+                  <span className="text-[10px] font-mono text-sentinel-success uppercase">{ag.status}</span>
+                </div>
                 <div className="text-[11px] text-ink-muted line-clamp-2">{ag.description}</div>
               </button>
             ))}
@@ -300,7 +375,7 @@ export default function ArsenalPage() {
         <section className="lg:col-span-7 sentinel-surface p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
             <span className="text-sm font-semibold text-ink-primary">
-              Direct Specialist Chat ({selectedAgentId || "none"})
+              {t("arsenal.directChatTitle")} ({selectedAgentId || t("arsenal.noneSelected")})
             </span>
           </div>
 
@@ -309,15 +384,16 @@ export default function ArsenalPage() {
               type="text"
               value={agentPrompt}
               onChange={(e) => setAgentPrompt(e.target.value)}
-              placeholder="Send targeted security task to specialist agent..."
+              placeholder={t("arsenal.agentPromptPlaceholder")}
+              aria-label={t("arsenal.agentPromptPlaceholder")}
               className="flex-1 h-9 px-3 rounded bg-inset border border-border-subtle"
             />
             <button
               type="submit"
               disabled={agentSending || !selectedAgentId}
-              className="h-9 px-3.5 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold flex items-center gap-1.5 disabled:opacity-50"
+              className="min-h-[44px] sm:min-h-[36px] px-3.5 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold flex items-center gap-1.5 disabled:opacity-50"
             >
-              {agentSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              {agentSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 rtl:rotate-180" />}
               <span>{t("common.submit")}</span>
             </button>
           </form>
@@ -329,33 +405,37 @@ export default function ArsenalPage() {
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-xs text-ink-muted py-10">
-              Select a specialist agent and issue an instruction.
+              {t("arsenal.selectAgentHint")}
             </div>
           )}
         </section>
       </div>
 
-      {/* Skills Matrix + 6 Elite Exploit Probers */}
+      {/* Paginated Skills Matrix + 6 Elite Exploit Probers */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <section className="lg:col-span-7 sentinel-surface p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border-subtle">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-sentinel-primary" />
               <h2 className="text-sm font-semibold text-ink-primary">
-                {t("sections.skills")} ({skills.length})
+                {t("sections.skills")} ({filteredSkills.length})
               </h2>
             </div>
             <input
               type="search"
               value={skillFilter}
-              onChange={(e) => setSkillFilter(e.target.value)}
+              onChange={(e) => {
+                setSkillFilter(e.target.value);
+                setSkillPage(1);
+              }}
               placeholder={t("common.search")}
+              aria-label={t("common.search")}
               className="h-8 px-2.5 rounded bg-inset border border-border-subtle text-xs"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pe-1">
-            {filteredSkills.slice(0, 80).map((sk, idx) => (
+            {pagedSkills.map((sk, idx) => (
               <div
                 key={`${sk.name || "skill"}-${sk.layer || sk.category || ""}-${idx}`}
                 className="p-2.5 rounded bg-elevated border border-border-subtle text-xs space-y-1"
@@ -370,18 +450,47 @@ export default function ArsenalPage() {
               </div>
             ))}
           </div>
+
+          {skillTotalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle text-xs">
+              <span className="font-mono text-ink-muted tabular-nums">
+                {t("graph.pageOf", { page: safeSkillPage, total: skillTotalPages })}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={safeSkillPage <= 1}
+                  onClick={() => setSkillPage((p) => Math.max(1, p - 1))}
+                  className="h-7 px-2 rounded border border-border-subtle bg-elevated text-ink-primary disabled:opacity-40 flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 rtl:rotate-180" />
+                  <span>{t("graph.prevPage")}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={safeSkillPage >= skillTotalPages}
+                  onClick={() => setSkillPage((p) => Math.min(skillTotalPages, p + 1))}
+                  className="h-7 px-2 rounded border border-border-subtle bg-elevated text-ink-primary disabled:opacity-40 flex items-center gap-1"
+                >
+                  <span>{t("graph.nextPage")}</span>
+                  <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="lg:col-span-5 sentinel-surface p-4 space-y-3">
           <div className="flex items-center gap-2 pb-2 border-b border-border-subtle">
             <Play className="w-4 h-4 text-sentinel-danger" />
-            <h2 className="text-sm font-semibold text-ink-primary">6 Elite Exploit Probers</h2>
+            <h2 className="text-sm font-semibold text-ink-primary">{t("arsenal.eliteProbersTitle")}</h2>
           </div>
 
           <form onSubmit={runEliteProber} className="space-y-2 text-xs">
             <select
               value={eliteSkill}
               onChange={(e) => setEliteSkill(e.target.value)}
+              aria-label={t("arsenal.eliteProbersTitle")}
               className="w-full h-9 px-2.5 rounded bg-inset border border-border-subtle font-mono"
             >
               {ELITE_PROBERS.map((p) => (
@@ -395,11 +504,12 @@ export default function ArsenalPage() {
                 value={eliteTarget}
                 onChange={(e) => setEliteTarget(e.target.value)}
                 placeholder="https://example.com/endpoint"
+                aria-label={t("common.target")}
                 className="ltr-isolate flex-1 h-9 px-3 rounded bg-inset border border-border-subtle font-mono"
               />
               <button
                 type="submit"
-                className="h-9 px-3 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold"
+                className="min-h-[44px] sm:min-h-[36px] px-3 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold"
               >
                 {t("common.run")}
               </button>
@@ -408,9 +518,40 @@ export default function ArsenalPage() {
 
           {eliteResult && (
             <pre dir="ltr" className="ltr-isolate p-2.5 rounded bg-inset border border-border-subtle font-mono text-[11px] max-h-40 overflow-auto">
-              {JSON.stringify(eliteResult, null, 2)}
+              {sanitizePlainTerminalText(JSON.stringify(eliteResult, null, 2))}
             </pre>
           )}
+
+          {/* Cognitive Wordlist Explorer */}
+          <div className="pt-2 border-t border-border-subtle space-y-2">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="font-semibold text-ink-secondary flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-sentinel-primary" />
+                <span>{t("arsenal.wordlistTitle")}</span>
+              </span>
+              <span className="font-mono text-[10px] text-ink-muted tabular-nums">
+                {wordlistRoots.length} {t("arsenal.wordlistRoots")}
+              </span>
+            </div>
+            <form onSubmit={resolveWordlist} className="flex gap-2 text-xs">
+              <input
+                type="text"
+                value={wordlistQuery}
+                onChange={(e) => setWordlistQuery(e.target.value)}
+                placeholder={t("arsenal.wordlistPlaceholder")}
+                aria-label={t("arsenal.wordlistPlaceholder")}
+                className="flex-1 h-8 px-2.5 rounded bg-inset border border-border-subtle"
+              />
+              <button type="submit" className="h-8 px-2.5 rounded bg-elevated border border-border-strong font-semibold">
+                {t("common.search")}
+              </button>
+            </form>
+            {wordlistMatches.length > 0 && (
+              <pre dir="ltr" className="ltr-isolate p-2 rounded bg-inset border border-border-subtle font-mono text-[10px] max-h-28 overflow-auto">
+                {sanitizePlainTerminalText(JSON.stringify(wordlistMatches, null, 2))}
+              </pre>
+            )}
+          </div>
         </section>
       </div>
 
@@ -427,6 +568,7 @@ export default function ArsenalPage() {
               value={toolFilter}
               onChange={(e) => setToolFilter(e.target.value)}
               placeholder={t("tools.searchToolsPlaceholder")}
+              aria-label={t("tools.searchToolsPlaceholder")}
               className="h-8 px-2.5 rounded bg-inset border border-border-subtle text-xs"
             />
           </div>
@@ -442,21 +584,29 @@ export default function ArsenalPage() {
               </thead>
               <tbody className="divide-y divide-border-subtle font-mono">
                 {filteredTools.map((tl, idx) => (
-                  <tr key={`${tl.name || "tool"}-${idx}`} className="ltr-isolate">
-                    <td className="py-1.5 px-3 text-ink-primary">{tl.name}</td>
+                  <tr key={`${tl.name || "tool"}-${idx}`} className="ltr-isolate hover:bg-elevated/50">
+                    <td className="py-1.5 px-3">
+                      <button
+                        type="button"
+                        onClick={() => void inspectToolSpec(tl.name)}
+                        className="text-sentinel-primary hover:underline text-start"
+                      >
+                        {tl.name}
+                      </button>
+                    </td>
                     <td className="py-1.5 px-3">
                       <span className={tl.installed ? "text-sentinel-success" : "text-ink-muted"}>
-                        {tl.installed ? "INSTALLED" : "MISSING"}
+                        {tl.installed ? t("arsenal.toolInstalled") : t("states.missing")}
                       </span>
                     </td>
                     <td className="py-1.5 px-3">
                       <button
                         type="button"
-                        disabled={!tl.installed}
+                        disabled={testingToolName === tl.name}
                         onClick={() => void testTool(tl.name)}
-                        className="px-2 py-0.5 rounded bg-elevated border border-border-subtle disabled:opacity-40"
+                        className="px-2 py-0.5 rounded bg-elevated border border-border-subtle hover:border-sentinel-primary disabled:opacity-40"
                       >
-                        {t("tools.checkHealth")}
+                        {testingToolName === tl.name ? t("states.checking") : t("tools.checkHealth")}
                       </button>
                     </td>
                   </tr>
@@ -465,10 +615,41 @@ export default function ArsenalPage() {
             </table>
           </div>
 
-          {toolTestOut && (
-            <pre dir="ltr" className="ltr-isolate p-2.5 rounded bg-inset border border-border-subtle font-mono text-[11px] max-h-24 overflow-auto">
-              {toolTestOut}
-            </pre>
+          {toolTestResult && (
+            <div
+              data-testid="tool-test-result"
+              className={`p-3 rounded border text-xs space-y-1.5 ${
+                toolTestResult.ok
+                  ? "border-sentinel-success/40 bg-sentinel-success/10"
+                  : "border-sentinel-danger/40 bg-sentinel-danger/10"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 font-mono font-semibold">
+                <span className="flex items-center gap-1.5">
+                  {toolTestResult.ok ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-sentinel-success" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 text-sentinel-danger" />
+                  )}
+                  <span className={toolTestResult.ok ? "text-sentinel-success" : "text-sentinel-danger"}>
+                    {toolTestResult.toolName} · {toolTestResult.status}
+                  </span>
+                </span>
+                {typeof toolTestResult.returncode === "number" && (
+                  <span className="text-ink-muted tabular-nums">exit={toolTestResult.returncode}</span>
+                )}
+              </div>
+              {toolTestResult.stdout && (
+                <pre dir="ltr" className="ltr-isolate p-2 rounded bg-inset border border-border-subtle font-mono text-[11px] text-ink-primary max-h-24 overflow-auto">
+                  {sanitizePlainTerminalText(toolTestResult.stdout)}
+                </pre>
+              )}
+              {toolTestResult.stderr && (
+                <pre dir="ltr" className="ltr-isolate p-2 rounded bg-inset border border-border-subtle font-mono text-[11px] text-sentinel-danger max-h-24 overflow-auto">
+                  {sanitizePlainTerminalText(toolTestResult.stderr)}
+                </pre>
+              )}
+            </div>
           )}
         </section>
 
@@ -485,6 +666,7 @@ export default function ArsenalPage() {
                 value={synthTool}
                 onChange={(e) => setSynthTool(e.target.value)}
                 placeholder="nuclei"
+                aria-label={t("tools.colTool")}
                 className="ltr-isolate h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
               />
               <input
@@ -492,7 +674,8 @@ export default function ArsenalPage() {
                 dir="ltr"
                 value={synthWaf}
                 onChange={(e) => setSynthWaf(e.target.value)}
-                placeholder="WAF (e.g. Cloudflare)"
+                placeholder={t("tools.wafLabel")}
+                aria-label={t("tools.wafLabel")}
                 className="ltr-isolate h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
               />
             </div>
@@ -503,36 +686,40 @@ export default function ArsenalPage() {
                 value={synthTarget}
                 onChange={(e) => setSynthTarget(e.target.value)}
                 placeholder="https://example.com"
+                aria-label={t("common.target")}
                 className="ltr-isolate flex-1 h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
               />
               <button type="submit" className="h-8 px-3 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold">
-                Synthesize
+                {t("arsenal.synthesizeBtn")}
               </button>
             </div>
           </form>
 
           {synthResult && (
             <pre dir="ltr" className="ltr-isolate p-2.5 rounded bg-inset border border-border-subtle font-mono text-[11px] max-h-40 overflow-auto">
-              {JSON.stringify(synthResult, null, 2)}
+              {sanitizePlainTerminalText(JSON.stringify(synthResult, null, 2))}
             </pre>
           )}
         </section>
       </div>
 
-      {/* CLI Engines, MCP Servers & Sandbox */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* Structured MCP Manager Modal & Cards */}
+      <McpManagerModal />
+
+      {/* CLI Engines & Local Sandbox */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <section className="sentinel-surface p-4 space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
             <div className="flex items-center gap-2">
               <Cpu className="w-4 h-4 text-sentinel-primary" />
-              <h2 className="text-sm font-semibold text-ink-primary">CLI Engines</h2>
+              <h2 className="text-sm font-semibold text-ink-primary">{t("arsenal.cliEnginesTitle")}</h2>
             </div>
             <button
               type="button"
               onClick={() => void runEngineSelfcheck()}
               className="h-7 px-2 rounded border border-border-subtle bg-elevated text-xs font-mono"
             >
-              Selfcheck
+              {t("arsenal.selfcheckBtn")}
             </button>
           </div>
           <div className="space-y-1.5 text-xs">
@@ -545,62 +732,19 @@ export default function ArsenalPage() {
           </div>
           {selfcheckOut && (
             <pre dir="ltr" className="ltr-isolate p-2 rounded bg-inset border border-border-subtle font-mono text-[10px] max-h-32 overflow-auto">
-              {JSON.stringify(selfcheckOut, null, 2)}
+              {sanitizePlainTerminalText(JSON.stringify(selfcheckOut, null, 2))}
             </pre>
           )}
-        </section>
-
-        <section className="sentinel-surface p-4 space-y-3">
-          <div className="flex items-center gap-2 pb-2 border-b border-border-subtle">
-            <Server className="w-4 h-4 text-sentinel-success" />
-            <h2 className="text-sm font-semibold text-ink-primary">{t("mcp.title")}</h2>
-          </div>
-          <form onSubmit={invokeMcpTool} className="space-y-2 text-xs">
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                dir="ltr"
-                value={mcpServerId}
-                onChange={(e) => setMcpServerId(e.target.value)}
-                placeholder="server_id"
-                className="ltr-isolate h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
-              />
-              <input
-                type="text"
-                dir="ltr"
-                value={mcpToolName}
-                onChange={(e) => setMcpToolName(e.target.value)}
-                placeholder="tool_name"
-                className="ltr-isolate h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                dir="ltr"
-                value={mcpArgsJson}
-                onChange={(e) => setMcpArgsJson(e.target.value)}
-                placeholder="{}"
-                className="ltr-isolate flex-1 h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
-              />
-              <button type="submit" className="h-8 px-3 rounded bg-elevated border border-border-strong font-semibold">
-                {t("mcp.callTool")}
-              </button>
-            </div>
-          </form>
-          <pre dir="ltr" className="ltr-isolate p-2.5 rounded bg-inset border border-border-subtle font-mono text-[11px] max-h-36 overflow-auto">
-            {JSON.stringify(mcpCallOut || { opencode_mcp: mcpStatus, registered_servers: mcpServers }, null, 2)}
-          </pre>
         </section>
 
         <section className="sentinel-surface p-4 space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
             <div className="flex items-center gap-2">
               <Box className="w-4 h-4 text-sentinel-ai" />
-              <h2 className="text-sm font-semibold text-ink-primary">Local Sandbox</h2>
+              <h2 className="text-sm font-semibold text-ink-primary">{t("arsenal.sandboxTitle")}</h2>
             </div>
-            <span className="font-mono text-xs text-sentinel-success">
-              {sandboxStatus?.ok ? "READY" : "CHECK"}
+            <span className={`font-mono text-xs ${sandboxStatus?.ok ? "text-sentinel-success" : "text-sentinel-warning"}`}>
+              {sandboxStatus?.ok ? t("states.ready") : t("states.checking")}
             </span>
           </div>
           <form onSubmit={runSandbox} className="flex gap-2 text-xs">
@@ -609,6 +753,7 @@ export default function ArsenalPage() {
               dir="ltr"
               value={sandboxCmd}
               onChange={(e) => setSandboxCmd(e.target.value)}
+              aria-label={t("arsenal.sandboxTitle")}
               className="ltr-isolate flex-1 h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono"
             />
             <button type="submit" className="h-8 px-3 rounded bg-elevated border border-border-strong font-semibold">
@@ -617,11 +762,46 @@ export default function ArsenalPage() {
           </form>
           {sandboxOut && (
             <pre dir="ltr" className="ltr-isolate p-2 rounded bg-inset border border-border-subtle font-mono text-[11px] max-h-40 overflow-auto">
-              {JSON.stringify(sandboxOut, null, 2)}
+              {sanitizePlainTerminalText(JSON.stringify(sandboxOut, null, 2))}
             </pre>
           )}
         </section>
       </div>
+
+      {/* Tool Spec Inspector Modal */}
+      {inspectedTool && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-[1px]"
+          onClick={() => setInspectedTool(null)}
+        >
+          <div
+            ref={toolModalTrapRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={inspectedTool.name}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl max-h-[80vh] bg-surface border border-border-strong rounded-xl shadow-sentinelMd flex flex-col overflow-hidden"
+          >
+            <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
+              <h3 className="text-sm font-semibold font-mono text-ink-primary ltr-isolate">
+                {inspectedTool.name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setInspectedTool(null)}
+                aria-label={t("common.close")}
+                className="h-8 w-8 rounded border border-border-subtle bg-elevated text-ink-primary flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <pre dir="ltr" className="ltr-isolate flex-1 overflow-auto p-4 font-mono text-[11px] text-ink-secondary">
+              {sanitizePlainTerminalText(JSON.stringify(inspectedTool.detail, null, 2))}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

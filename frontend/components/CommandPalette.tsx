@@ -2,11 +2,22 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, X, ArrowRight, Loader2, Sparkles, Moon, Sun, Languages, Bot } from "lucide-react";
+import {
+  Search,
+  X,
+  ArrowRight,
+  Loader2,
+  Sparkles,
+  Moon,
+  Sun,
+  Languages,
+  Bot,
+} from "lucide-react";
 import { CopilotRef, usePlatform } from "@/lib/platform-context";
 import { NAV_ROUTES } from "@/components/AppShell";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface SearchHit {
   kind: string;
@@ -39,27 +50,28 @@ export default function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const trapRef = useFocusTrap(
+    commandPaletteOpen,
+    () => setCommandPaletteOpen(false),
+    { initialFocusRef: inputRef }
+  );
 
   useEffect(() => {
     const onGlobalKey = (ev: KeyboardEvent) => {
       if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
         ev.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
-      } else if (ev.key === "Escape" && commandPaletteOpen) {
-        ev.preventDefault();
-        setCommandPaletteOpen(false);
       }
     };
     window.addEventListener("keydown", onGlobalKey);
     return () => window.removeEventListener("keydown", onGlobalKey);
-  }, [commandPaletteOpen, setCommandPaletteOpen]);
+  }, [setCommandPaletteOpen]);
 
   useEffect(() => {
     if (commandPaletteOpen) {
       setQuery("");
       setHits([]);
       setSelectedIndex(0);
-      window.setTimeout(() => inputRef.current?.focus(), 20);
     }
   }, [commandPaletteOpen]);
 
@@ -123,7 +135,7 @@ export default function CommandPalette() {
       },
       {
         id: "act:lang",
-        title: lang === "ar" ? "Switch to English (LTR)" : "التبديل إلى العربية (RTL)",
+        title: lang === "ar" ? t("palette.switchEn") : t("palette.switchAr"),
         subtitle: t("common.language"),
         run: toggleLang,
       },
@@ -192,9 +204,11 @@ export default function CommandPalette() {
       onClick={() => setCommandPaletteOpen(false)}
     >
       <div
+        ref={trapRef}
         role="dialog"
         aria-modal="true"
         aria-label={t("nav.commandPalette")}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-2xl rounded-xl border border-border-strong bg-surface shadow-sentinelMd overflow-hidden flex flex-col max-h-[75vh]"
       >
@@ -218,7 +232,7 @@ export default function CommandPalette() {
             type="button"
             onClick={() => setCommandPaletteOpen(false)}
             aria-label={t("common.close")}
-            className="min-h-[36px] min-w-[36px] rounded border border-border-subtle bg-elevated text-ink-muted hover:text-ink-primary flex items-center justify-center"
+            className="min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] rounded border border-border-subtle bg-elevated text-ink-muted hover:text-ink-primary flex items-center justify-center"
           >
             <X className="w-4 h-4" />
           </button>
@@ -227,7 +241,11 @@ export default function CommandPalette() {
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {entries.length === 0 ? (
             <div className="py-8 text-center text-xs text-ink-muted">
-              {loading ? t("palette.searching") : query.trim() ? t("palette.noResults") : t("palette.emptyQuery")}
+              {loading
+                ? t("palette.searching")
+                : query.trim()
+                  ? t("palette.noResults")
+                  : t("palette.emptyQuery")}
             </div>
           ) : (
             entries.map((item, idx) => {
@@ -240,13 +258,17 @@ export default function CommandPalette() {
                   onClick={() => executeEntry(item)}
                   className={`w-full min-h-[44px] px-3 py-2 rounded-md text-start flex items-center justify-between gap-3 transition-colors ${
                     selected
-                      ? "bg-[var(--accent-primary-bg)] border border-[var(--accent-primary)]/40 text-ink-primary"
+                      ? "bg-sentinel-primary/15 border border-sentinel-primary/40 text-ink-primary"
                       : "hover:bg-elevated border border-transparent text-ink-secondary"
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     {item.kind === "action" && item.id === "act:theme" ? (
-                      theme === "dark" ? <Sun className="w-4 h-4 text-sentinel-warning shrink-0" /> : <Moon className="w-4 h-4 text-sentinel-primary shrink-0" />
+                      theme === "dark" ? (
+                        <Sun className="w-4 h-4 text-sentinel-warning shrink-0" />
+                      ) : (
+                        <Moon className="w-4 h-4 text-sentinel-primary shrink-0" />
+                      )
                     ) : item.kind === "action" && item.id === "act:lang" ? (
                       <Languages className="w-4 h-4 text-sentinel-primary shrink-0" />
                     ) : item.kind === "action" && item.id === "act:copilot" ? (
@@ -254,7 +276,7 @@ export default function CommandPalette() {
                     ) : item.kind === "hit" ? (
                       <Sparkles className="w-4 h-4 text-sentinel-success shrink-0" />
                     ) : (
-                      <ArrowRight className="w-4 h-4 text-sentinel-primary shrink-0" />
+                      <ArrowRight className="w-4 h-4 text-sentinel-primary shrink-0 rtl:rotate-180" />
                     )}
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-ink-primary truncate">
@@ -278,7 +300,9 @@ export default function CommandPalette() {
         <div className="px-4 py-2 border-t border-border-subtle bg-elevated/60 text-[11px] font-mono text-ink-muted flex items-center justify-between">
           <span>{t("palette.shortcutHint")}</span>
           {query.trim() && (
-            <span className="tabular-nums">{hits.length} hits</span>
+            <span className="tabular-nums">
+              {t("palette.hitsCount", { count: hits.length })}
+            </span>
           )}
         </div>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ShieldAlert,
   CheckCircle2,
@@ -12,13 +12,25 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Printer,
 } from "lucide-react";
 import { FindingRecord, usePlatform } from "@/lib/platform-context";
+import { normalizeCourtVerdict } from "@/lib/api-types";
 import { useI18n } from "@/lib/i18n";
-import { renderSafeMarkdown, safeHref } from "@/lib/sanitize";
+import { escapeHtml, renderSafeMarkdown, safeHref } from "@/lib/sanitize";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 type SeverityFilter = "ALL" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 type SortField = "cvss" | "confidence";
+type ExportFormat =
+  | "hackerone"
+  | "bugcrowd"
+  | "intigriti"
+  | "immunefi"
+  | "sarif"
+  | "html"
+  | "md"
+  | "json";
 
 const SEVERITY_LEVELS: SeverityFilter[] = [
   "ALL",
@@ -32,11 +44,11 @@ const SEVERITY_LEVELS: SeverityFilter[] = [
 function getSeverityBadgeClass(severity: string): string {
   switch (severity.toUpperCase()) {
     case "CRITICAL":
-      return "bg-[var(--accent-danger-bg)] text-sentinel-danger border-[var(--accent-danger)]/40";
+      return "bg-sentinel-danger/15 text-sentinel-danger border-sentinel-danger/40";
     case "HIGH":
-      return "bg-[var(--accent-warning-bg)] text-sentinel-warning border-[var(--accent-warning)]/40";
+      return "bg-sentinel-warning/15 text-sentinel-warning border-sentinel-warning/40";
     case "MEDIUM":
-      return "bg-[var(--accent-primary-bg)] text-sentinel-primary border-[var(--accent-primary)]/40";
+      return "bg-sentinel-primary/15 text-sentinel-primary border-sentinel-primary/40";
     default:
       return "bg-inset text-ink-secondary border-border-subtle";
   }
@@ -54,9 +66,9 @@ function triggerDownload(filename: string, content: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-function buildFindingMarkdown(items: FindingRecord[]): string {
+function buildBountyMarkdown(items: FindingRecord[], platformLabel: string): string {
   const lines: string[] = [
-    "# ARTEX-Pro Vulnerability Findings Report",
+    `# ARTEX-Pro Vulnerability Report (${platformLabel})`,
     "",
     `Generated: ${new Date().toISOString()}`,
     `Total Findings: ${items.length}`,
@@ -65,13 +77,16 @@ function buildFindingMarkdown(items: FindingRecord[]): string {
   for (const f of items) {
     lines.push(`## [${f.severity}] ${f.title}`);
     lines.push(`- **ID:** \`${f.id}\``);
+    lines.push(`- **Platform Template:** ${platformLabel}`);
     lines.push(`- **Vulnerability Class:** \`${f.vuln_class}\``);
-    lines.push(`- **CVSS Score:** ${f.cvss_score.toFixed(1)} | **Confidence:** ${Math.round(f.confidence * 100)}%`);
-    lines.push(`- **Status:** ${f.status}`);
-    if (f.endpoint) lines.push(`- **Endpoint:** \`${f.endpoint}\``);
+    lines.push(
+      `- **CVSS Score:** ${f.cvss_score.toFixed(1)} | **Confidence:** ${Math.round(f.confidence * 100)}%`
+    );
+    lines.push(`- **Court Verdict:** ${normalizeCourtVerdict(f.status)}`);
+    if (f.endpoint) lines.push(`- **Affected Asset / Endpoint:** \`${f.endpoint}\``);
     if (f.evidence) {
       lines.push("");
-      lines.push("### Evidence / PoC");
+      lines.push("### Steps to Reproduce & Proof");
       lines.push("```");
       lines.push(f.evidence);
       lines.push("```");
@@ -79,6 +94,78 @@ function buildFindingMarkdown(items: FindingRecord[]): string {
     lines.push("");
   }
   return lines.join("\n");
+}
+
+function buildSarif(items: FindingRecord[]): string {
+  return JSON.stringify(
+    {
+      $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+      version: "2.1.0",
+      runs: [
+        {
+          tool: {
+            driver: {
+              name: "ARTEX-Pro",
+              informationUri: "https://localhost",
+              rules: Array.from(new Set(items.map((f) => f.vuln_class))).map((vc) => ({
+                id: vc,
+                shortDescription: { text: vc },
+              })),
+            },
+          },
+          results: items.map((f) => ({
+            ruleId: f.vuln_class,
+            level:
+              f.severity === "CRITICAL" || f.severity === "HIGH"
+                ? "error"
+                : f.severity === "MEDIUM"
+                  ? "warning"
+                  : "note",
+            message: { text: `${f.title} (${normalizeCourtVerdict(f.status)})` },
+            locations: [
+              {
+                physicalLocation: {
+                  artifactLocation: { uri: f.endpoint || "target" },
+                },
+              },
+            ],
+          })),
+        },
+      ],
+    },
+    null,
+    2
+  );
+}
+
+function buildEscapedHtmlReport(items: FindingRecord[]): string {
+  const rows = items
+    .map(
+      (f) => `
+      <article style="border:1px solid #cbd5e1;border-radius:8px;padding:14px;margin-bottom:14px;">
+        <h2 style="margin:0 0 6px;font-size:16px;">[${escapeHtml(f.severity)}] ${escapeHtml(f.title)}</h2>
+        <p style="margin:0 0 8px;font-size:12px;color:#475569;">
+          ID: <code>${escapeHtml(f.id)}</code> &middot; Class: <code>${escapeHtml(f.vuln_class)}</code>
+          &middot; CVSS: ${escapeHtml(f.cvss_score.toFixed(1))} &middot; Verdict: ${escapeHtml(normalizeCourtVerdict(f.status))}
+        </p>
+        ${f.endpoint ? `<p style="margin:0 0 8px;font-size:12px;"><strong>Endpoint:</strong> <code>${escapeHtml(f.endpoint)}</code></p>` : ""}
+        ${f.evidence ? `<pre style="background:#f1f5f9;padding:10px;border-radius:6px;overflow:auto;font-size:11px;">${escapeHtml(f.evidence)}</pre>` : ""}
+      </article>`
+    )
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ARTEX-Pro Security Report</title>
+</head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:920px;margin:24px auto;padding:0 16px;color:#0f172a;">
+  <h1>ARTEX-Pro Vulnerability Findings Report</h1>
+  <p style="font-size:12px;color:#475569;">Generated: ${escapeHtml(new Date().toISOString())} &middot; Findings: ${items.length}</p>
+  ${rows}
+</body>
+</html>`;
 }
 
 function buildFindingDetailMarkdown(f: FindingRecord): string {
@@ -109,17 +196,9 @@ export default function FindingsTable() {
   const [sortBy, setSortBy] = useState<SortField>("cvss");
   const [sortDesc, setSortDesc] = useState<boolean>(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("hackerone");
 
-  useEffect(() => {
-    if (!inspectedFinding) return;
-    const onKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        setInspectedFinding(null);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [inspectedFinding, setInspectedFinding]);
+  const drawerTrapRef = useFocusTrap(Boolean(inspectedFinding), () => setInspectedFinding(null));
 
   const countsBySeverity = useMemo(() => {
     const counts: Record<SeverityFilter, number> = {
@@ -181,6 +260,54 @@ export default function FindingsTable() {
     }
   };
 
+  const handleExport = (fmt: ExportFormat) => {
+    if (filteredFindings.length === 0) return;
+    if (fmt === "json") {
+      triggerDownload(
+        "artex-findings.json",
+        JSON.stringify(filteredFindings, null, 2),
+        "application/json"
+      );
+      return;
+    }
+    if (fmt === "sarif") {
+      triggerDownload("artex-findings.sarif.json", buildSarif(filteredFindings), "application/sarif+json");
+      return;
+    }
+    if (fmt === "html") {
+      triggerDownload(
+        "artex-findings.html",
+        buildEscapedHtmlReport(filteredFindings),
+        "text/html;charset=utf-8"
+      );
+      return;
+    }
+    const labelMap: Record<string, string> = {
+      hackerone: "HackerOne",
+      bugcrowd: "Bugcrowd",
+      intigriti: "Intigriti",
+      immunefi: "Immunefi",
+      md: "Markdown",
+    };
+    triggerDownload(
+      `artex-findings-${fmt}.md`,
+      buildBountyMarkdown(filteredFindings, labelMap[fmt] || "Markdown"),
+      "text/markdown;charset=utf-8"
+    );
+  };
+
+  const handlePrintPdf = () => {
+    if (filteredFindings.length === 0) return;
+    const html = buildEscapedHtmlReport(filteredFindings);
+    const win = window.open("", "_blank", "noopener,noreferrer");
+    if (!win) return;
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
   const sanitizedDrawerHtml = useMemo(() => {
     if (!inspectedFinding) return "";
     const md = buildFindingDetailMarkdown(inspectedFinding);
@@ -194,7 +321,7 @@ export default function FindingsTable() {
       aria-labelledby="findings-heading"
       className="sentinel-surface p-4 flex flex-col gap-3 h-[540px]"
     >
-      {/* Header */}
+      {/* Header + Multi-Format Exporter */}
       <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border-subtle">
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-4 h-4 text-sentinel-warning" />
@@ -206,37 +333,43 @@ export default function FindingsTable() {
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <select
+            value={exportFormat}
+            onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+            aria-label={t("findings.exportFormatLabel")}
+            className="h-8 px-2 rounded bg-inset border border-border-subtle text-xs font-mono text-ink-primary"
+          >
+            <option value="hackerone">HackerOne (.md)</option>
+            <option value="bugcrowd">Bugcrowd (.md)</option>
+            <option value="intigriti">Intigriti (.md)</option>
+            <option value="immunefi">Immunefi (.md)</option>
+            <option value="sarif">SARIF 2.1.0</option>
+            <option value="html">HTML</option>
+            <option value="md">Markdown</option>
+            <option value="json">JSON</option>
+          </select>
+
           <button
             type="button"
             disabled={filteredFindings.length === 0}
-            onClick={() =>
-              triggerDownload(
-                "artex-findings.json",
-                JSON.stringify(filteredFindings, null, 2),
-                "application/json"
-              )
-            }
-            className="h-8 px-2.5 rounded border border-border-subtle bg-elevated hover:border-border-strong text-xs text-ink-secondary hover:text-ink-primary flex items-center gap-1 disabled:opacity-40"
+            onClick={() => handleExport(exportFormat)}
+            className="h-8 px-2.5 rounded border border-border-subtle bg-elevated hover:border-border-strong text-xs text-ink-primary flex items-center gap-1 disabled:opacity-40"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>{t("findings.downloadJson")}</span>
+            <Download className="w-3.5 h-3.5 text-sentinel-primary" />
+            <span>{t("common.export")}</span>
           </button>
 
           <button
             type="button"
             disabled={filteredFindings.length === 0}
-            onClick={() =>
-              triggerDownload(
-                "artex-findings.md",
-                buildFindingMarkdown(filteredFindings),
-                "text/markdown;charset=utf-8"
-              )
-            }
+            onClick={handlePrintPdf}
+            aria-label={t("findings.printPdf")}
+            title={t("findings.printPdf")}
             className="h-8 px-2.5 rounded border border-border-subtle bg-elevated hover:border-border-strong text-xs text-ink-secondary hover:text-ink-primary flex items-center gap-1 disabled:opacity-40"
           >
-            <FileText className="w-3.5 h-3.5" />
-            <span>{t("findings.downloadMd")}</span>
+            <Printer className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">PDF</span>
           </button>
         </div>
       </div>
@@ -252,7 +385,7 @@ export default function FindingsTable() {
               aria-pressed={severityFilter === sev}
               className={`px-2 py-1 rounded text-[11px] font-mono tabular-nums border transition-colors ${
                 severityFilter === sev
-                  ? "border-sentinel-primary bg-[var(--accent-primary-bg)] text-sentinel-primary"
+                  ? "border-sentinel-primary bg-sentinel-primary/15 text-sentinel-primary"
                   : "border-border-subtle bg-elevated text-ink-muted hover:text-ink-primary"
               }`}
             >
@@ -280,7 +413,7 @@ export default function FindingsTable() {
             aria-pressed={sortBy === "cvss"}
             className={`h-8 px-2.5 rounded border text-xs font-mono flex items-center gap-1 ${
               sortBy === "cvss"
-                ? "border-sentinel-primary bg-[var(--accent-primary-bg)] text-sentinel-primary"
+                ? "border-sentinel-primary bg-sentinel-primary/15 text-sentinel-primary"
                 : "border-border-subtle bg-elevated text-ink-secondary"
             }`}
           >
@@ -294,7 +427,7 @@ export default function FindingsTable() {
             aria-pressed={sortBy === "confidence"}
             className={`h-8 px-2.5 rounded border text-xs font-mono flex items-center gap-1 ${
               sortBy === "confidence"
-                ? "border-sentinel-primary bg-[var(--accent-primary-bg)] text-sentinel-primary"
+                ? "border-sentinel-primary bg-sentinel-primary/15 text-sentinel-primary"
                 : "border-border-subtle bg-elevated text-ink-secondary"
             }`}
           >
@@ -313,38 +446,41 @@ export default function FindingsTable() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-2 pe-1">
-          {filteredFindings.map((f, idx) => (
-            <button
-              key={`${f.id || f.title || "finding"}-${idx}`}
-              type="button"
-              onClick={() => setInspectedFinding(f)}
-              className="w-full text-start p-3 rounded-md bg-elevated border border-border-subtle hover:border-border-strong transition-colors flex flex-col gap-1.5"
-            >
-              <div className="flex items-start justify-between gap-2 w-full">
-                <div className="flex flex-wrap items-center gap-2 min-w-0">
-                  <span
-                    className={`ltr-isolate text-[11px] font-mono tabular-nums px-2 py-0.5 rounded border font-semibold ${getSeverityBadgeClass(f.severity)}`}
-                  >
-                    {f.severity} {f.cvss_score.toFixed(1)}
-                  </span>
-                  <span className="font-semibold text-xs text-ink-primary truncate">
-                    {f.title}
+          {filteredFindings.map((f, idx) => {
+            const verdict = normalizeCourtVerdict(f.status);
+            return (
+              <button
+                key={`${f.id || f.title || "finding"}-${idx}`}
+                type="button"
+                onClick={() => setInspectedFinding(f)}
+                className="w-full text-start p-3 rounded-md bg-elevated border border-border-subtle hover:border-border-strong transition-colors flex flex-col gap-1.5"
+              >
+                <div className="flex items-start justify-between gap-2 w-full">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span
+                      className={`ltr-isolate text-[11px] font-mono tabular-nums px-2 py-0.5 rounded border font-semibold ${getSeverityBadgeClass(f.severity)}`}
+                    >
+                      {f.severity} {f.cvss_score.toFixed(1)}
+                    </span>
+                    <span className="font-semibold text-xs text-ink-primary truncate">
+                      {f.title}
+                    </span>
+                  </div>
+
+                  <span className="ltr-isolate text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-inset text-sentinel-success border border-border-subtle shrink-0">
+                    {verdict} · {Math.round(f.confidence * 100)}%
                   </span>
                 </div>
 
-                <span className="ltr-isolate text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-inset text-sentinel-success border border-border-subtle shrink-0">
-                  {f.status} · {Math.round(f.confidence * 100)}%
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-ink-muted w-full">
-                <span className="ltr-isolate truncate max-w-[72%] text-ink-secondary">
-                  {f.endpoint || f.vuln_class}
-                </span>
-                <span className="ltr-isolate text-[11px] text-ink-muted">{f.vuln_class}</span>
-              </div>
-            </button>
-          ))}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-ink-muted w-full">
+                  <span className="ltr-isolate truncate max-w-[72%] text-ink-secondary">
+                    {f.endpoint || f.vuln_class}
+                  </span>
+                  <span className="ltr-isolate text-[11px] text-ink-muted">{f.vuln_class}</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -355,9 +491,11 @@ export default function FindingsTable() {
           onClick={() => setInspectedFinding(null)}
         >
           <div
+            ref={drawerTrapRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="finding-drawer-title"
+            tabIndex={-1}
             className="w-full max-w-xl h-full bg-surface border-s border-border-subtle shadow-sentinelMd flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
@@ -370,7 +508,7 @@ export default function FindingsTable() {
                     {inspectedFinding.severity} · CVSS {inspectedFinding.cvss_score.toFixed(1)}
                   </span>
                   <span className="text-xs font-mono px-2 py-0.5 rounded bg-elevated border border-border-subtle text-ink-secondary">
-                    {inspectedFinding.status}
+                    {normalizeCourtVerdict(inspectedFinding.status)}
                   </span>
                 </div>
                 <h3 id="finding-drawer-title" className="text-base font-semibold text-ink-primary">
@@ -382,7 +520,7 @@ export default function FindingsTable() {
                 type="button"
                 onClick={() => setInspectedFinding(null)}
                 aria-label={t("common.close")}
-                className="h-8 w-8 rounded border border-border-subtle bg-elevated text-ink-secondary hover:text-ink-primary flex items-center justify-center shrink-0"
+                className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:h-8 lg:w-8 rounded border border-border-subtle bg-elevated text-ink-secondary hover:text-ink-primary flex items-center justify-center shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -414,7 +552,11 @@ export default function FindingsTable() {
                         onClick={() => void handleCopy(inspectedFinding.endpoint, "ep")}
                         className="text-xs text-sentinel-primary hover:underline flex items-center gap-1"
                       >
-                        {copiedId === "ep" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        {copiedId === "ep" ? (
+                          <Check className="w-3 h-3" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
                         <span>{copiedId === "ep" ? t("common.copied") : t("common.copy")}</span>
                       </button>
                     )}
@@ -446,13 +588,13 @@ export default function FindingsTable() {
                     onClick={() =>
                       triggerDownload(
                         `finding-${inspectedFinding.id}.md`,
-                        buildFindingMarkdown([inspectedFinding]),
+                        buildBountyMarkdown([inspectedFinding], "HackerOne"),
                         "text/markdown;charset=utf-8"
                       )
                     }
                     className="h-7 px-2 rounded border border-border-subtle bg-elevated text-xs text-ink-secondary hover:text-ink-primary flex items-center gap-1"
                   >
-                    <Download className="w-3 h-3" />
+                    <FileText className="w-3 h-3" />
                     <span>{t("findings.downloadMd")}</span>
                   </button>
                 </div>

@@ -54,7 +54,8 @@
       "lightTheme": "الفاتح (Paper Slate)",
       "switchToArabic": "العربية",
       "switchToEnglish": "English",
-      "skipToContent": "انتقل إلى المحتوى الرئيسي"
+      "skipToContent": "انتقل إلى المحتوى الرئيسي",
+      "error": "خطأ"
     },
     "navGroups": {
       "command": "القيادة والمراقبة",
@@ -174,7 +175,26 @@
       "approvalQueued": "تم إنشاء طلب موافقة",
       "policyBlocked": "محظور بواسطة محرك السياسات",
       "noConversations": "ابدأ محادثة جديدة لتحليل الأصول والثغرات أثناء تشغيل الفحوصات.",
-      "refMissing": "السجل المشار إليه غير محمّل في العرض الحالي."
+      "refMissing": "السجل المشار إليه غير محمّل في العرض الحالي.",
+      "autoFollowRun": "متابعة المهمة النشطة تلقائياً",
+      "capThinking": "تفكير",
+      "capTools": "أدوات",
+      "charsUnit": "حرف",
+      "citationsTitle": "الاستشهادات والمراجع",
+      "conversationSelect": "سلسلة محادثة المساعد",
+      "defaultSessionTitle": "تحقيق أمني جديد",
+      "localOnlyLock": "محلي فقط",
+      "localOnlyLockHint": "النماذج السحابية مقفلة أثناء تفعيل سياسة local_only.",
+      "missionScope": "المهمة",
+      "resizeDrawer": "تغيير عرض نافذة المساعد",
+      "roleCopilot": "المساعد الذكي",
+      "roleOperator": "المشغّل",
+      "stopBtn": "إيقاف البث",
+      "stoppedTag": "متوقف",
+      "streamError": "انقطع البث المباشر.",
+      "thinkingLabel": "مسار التفكير",
+      "unreadMessages": "{count} رسائل جديدة",
+      "uploadFailed": "فشل رفع المرفق"
     },
     "runs": {
       "title": "مهمات الفحص والتشغيلات المستقلة",
@@ -206,7 +226,28 @@
       "phaseAdjudication": "التحكيم",
       "phaseReport": "التقرير",
       "presetsHeading": "أهداف تدريب ومختبرات سريعة (نقرة واحدة)",
-      "presetsHint": "بيئات فحص مصرح بها ومختبرات محلية جاهزة"
+      "presetsHint": "بيئات فحص مصرح بها ومختبرات محلية جاهزة",
+      "archiveTitle": "المهمات المُدارة وأرشيف التشغيل",
+      "checkpointBadge": "نقطة استعادة",
+      "cliEngineLabel": "محرك CLI",
+      "colKind": "النوع",
+      "colRunId": "معرّف التشغيل",
+      "controlFailed": "تعذر التحكم في تشغيل المهمة.",
+      "coverageTargetLabel": "هدف التغطية",
+      "dispatchedOk": "تم إرسال المهمة.",
+      "kindEngine": "عامل محرك CLI",
+      "kindGoCore": "ماسح نواة Go",
+      "kindMission": "مهمة مستقلة",
+      "kindOmni": "OmniHunter (دورة كاملة)",
+      "kindPipeline": "مسار الاستطلاع",
+      "launchFailed": "فشل إطلاق المهمة.",
+      "proxyOptional": "البروكسي (اختياري)",
+      "recoverRun": "استعادة",
+      "resizeWorkspace": "تغيير تقسيم مساحة عمل المهمة",
+      "searchArchivePlaceholder": "ابحث في المهمات بالمعرّف أو الهدف أو المرحلة...",
+      "startedRun": "تم بدء التشغيل {id}",
+      "taskPromptLabel": "تعليمات المهمة",
+      "taskPromptPlaceholder": "تعليمات لمحرك CLI المستقل..."
     },
     "approvals": {
       "title": "بوابة الموافقات الحية",
@@ -231,7 +272,16 @@
       "rejectBtn": "رفض",
       "deciding": "جارِ التنفيذ...",
       "emptyPending": "لا توجد طلبات موافقة معلقة حالياً.",
-      "offlineNotice": "مركز Django Hub غير متصل — تعذر جلب طلبات الموافقة."
+      "offlineNotice": "مركز Django Hub غير متصل — تعذر جلب طلبات الموافقة.",
+      "commandArgsLabel": "الأمر والمعاملات",
+      "decidedByLabel": "صاحب القرار",
+      "decisionFailed": "تعذر تطبيق قرار الموافقة.",
+      "decisionNoteLabel": "ملاحظة القرار",
+      "digestLabel": "بصمة المقترح",
+      "executedLabel": "تم التنفيذ",
+      "executionOutput": "مخرجات التنفيذ",
+      "notExecutedLabel": "لم يُنفّذ",
+      "noteLabel": "ملاحظة"
     },
     "targets": {
       "title": "إدارة الأهداف ومساحات العمل",
@@ -256,7 +306,11 @@
       "presetGroupPublic": "أهداف تدريب عامة مصرح بها",
       "presetGroupLocal": "مختبرات وحاويات محلية",
       "presetBadgePublic": "عام",
-      "presetBadgeLab": "مختبر"
+      "presetBadgeLab": "مختبر",
+      "savedFromOps": "معتمد من وحدة العمليات",
+      "savedSuccess": "تم حفظ مساحة عمل الهدف.",
+      "scopeMatched": "متطابق (ضمن النطاق)",
+      "scopeOutside": "خارج نطاق مساحة العمل"
     },
     "redteam": {
       "title": "مركز قيادة Red Team وقوائم الفحص",
@@ -297,7 +351,18 @@
       "leadNew": "جديد",
       "leadInvestigating": "قيد الفحص",
       "leadReported": "مُبلّغ",
-      "leadKilled": "مستبعد"
+      "leadKilled": "مستبعد",
+      "grantIssued": "تم إصدار التفويض {id}",
+      "grantRevoked": "تم إلغاء التفويض",
+      "leadEvidencePlaceholder": "إشارة أمنية أو ملاحظة على نقطة نهاية...",
+      "leadSkillPlaceholder": "المهارة",
+      "missingLabel": "النواقص",
+      "proofJsonInvalid": "حمولة الإثبات يجب أن تكون كائن JSON صالحاً.",
+      "proofPayloadPlaceholder": "حمولة proof_payload اختيارية بصيغة JSON لمحكمة الأدلة",
+      "recommendationPlaceholder": "توصية المعالجة (اختياري)",
+      "reproPlaceholder": "خطوات إعادة الإنتاج (اختياري)",
+      "scoreLabel": "النتيجة",
+      "signatureValid": "توقيع HMAC سليم"
     },
     "findings": {
       "title": "سجل الثغرات الموثقة وبوابة التحقق",
@@ -333,7 +398,13 @@
       "cvssLabel": "تقييم CVSS",
       "confidenceLabel": "درجة الثقة",
       "evidenceLabel": "الأدلة وخطوات الإثبات (PoC)",
-      "noEvidence": "لم يتم تسجيل تفاصيل إثبات نصية لهذه الثغرة."
+      "noEvidence": "لم يتم تسجيل تفاصيل إثبات نصية لهذه الثغرة.",
+      "exportFormatLabel": "تنسيق التصدير",
+      "generatedDossiersTitle": "التقارير المفصلة المولّدة (.md)",
+      "printPdf": "طباعة / PDF",
+      "sessionExportsTitle": "تصدير جلسات الفحص الموثّقة",
+      "snapshotFileLabel": "ملف اللقطة",
+      "snapshotsTitle": "نقاط الاستعادة واللقطات"
     },
     "assets": {
       "title": "الأصول المكتشفة وخريطة سطح الهجوم",
@@ -412,7 +483,11 @@
       "inspectorTitle": "محلل سجلات Burp (XML / JSON / HAR)",
       "pasteTrafficPlaceholder": "الصق سجل Burp XML أو JSON هنا للفحص...",
       "inspectLogs": "تحليل السجلات",
-      "minRiskLabel": "الحد الأدنى لدرجة الخطورة"
+      "minRiskLabel": "الحد الأدنى لدرجة الخطورة",
+      "colHost": "المضيف",
+      "colLength": "الحجم",
+      "colMethod": "الطريقة",
+      "colPath": "المسار"
     },
     "browser": {
       "title": "إدارة متصفح الأتمتة التفاعلي",
@@ -425,7 +500,8 @@
       "emptyPages": "لا توجد جلسات تصفح مفتوحة حالياً.",
       "diagnosticAlert": "تنبيه فحص المتصفح",
       "exploreUrlPlaceholder": "أدخل رابطاً للاستكشاف عبر Playwright...",
-      "launchExplore": "بدء الاستكشاف"
+      "launchExplore": "بدء الاستكشاف",
+      "screenshotLabel": "لقطة المتصفح"
     },
     "tools": {
       "title": "ترسانة الأدوات الهجومية",
@@ -449,7 +525,19 @@
       "endpointLabel": "نقطة النهاية",
       "callTool": "استدعاء الأداة",
       "emptyServers": "لا توجد خوادم MCP مسجلة.",
-      "addServer": "إضافة خادم MCP"
+      "addServer": "إضافة خادم MCP",
+      "argsCsvPlaceholder": "المعاملات (مفصولة بفاصلة)",
+      "argsLabel": "المعاملات",
+      "consentRequired": "أكّد بصمة SHA-256 قبل تسجيل خادم MCP هذا.",
+      "fingerprintConsentLabel": "لقد تحققت من بصمة SHA-256 هذه وأوافق على تسجيل الخادم.",
+      "fingerprintTitle": "بصمة خادم SHA-256",
+      "invalidJson": "صيغة معاملات JSON غير صالحة.",
+      "pinnedVersionRequired": "استخدم إصداراً مثبتاً (مثل pkg@1.2.3) بدلاً من latest.",
+      "probeBtn": "فحص",
+      "requiredFieldsError": "معرّف الخادم واسم العرض مطلوبان.",
+      "saveFailed": "فشل تسجيل خادم MCP.",
+      "serverIdPlaceholder": "معرّف الخادم",
+      "toolNamePlaceholder": "اسم الأداة"
     },
     "models": {
       "title": "إدارة نماذج الذكاء الاصطناعي",
@@ -491,7 +579,10 @@
       "colComponent": "المكون أو الخدمة",
       "colStatus": "الحالة",
       "colMessage": "الرسالة والنتيجة",
-      "emptyDiagnostics": "اضغط تشغيل الفحص الكامل لتحديث حالة النظام."
+      "emptyDiagnostics": "اضغط تشغيل الفحص الكامل لتحديث حالة النظام.",
+      "installPlanReady": "جميع الأدوات المفحوصة جاهزة حالياً ولا توجد خطوات تثبيت مطلوبة.",
+      "installPlanTitle": "خطة تثبيت الأدوات",
+      "toggleRawJson": "إظهار / إخفاء JSON الخام"
     },
     "settings": {
       "title": "الإعدادات والسياسات الأمنية",
@@ -509,7 +600,16 @@
       "localhostGuardValue": "بتحكم المشغّل (جميع الأهداف الصالحة مسموحة)",
       "preferencesTitle": "تفضيلات الواجهة",
       "interfaceLanguage": "لغة الواجهة",
-      "interfaceTheme": "سمة الواجهة"
+      "interfaceTheme": "سمة الواجهة",
+      "applyProviderDefaults": "تطبيق الافتراضيات",
+      "defaultProviderPlaceholder": "المزوّد الافتراضي (مثل ollama أو nvidia)",
+      "keySavedOk": "تم حفظ مفتاح API دون تغيير المزوّد الافتراضي.",
+      "ollamaHostLabel": "رابط خادم Ollama",
+      "providerDefaultsTitle": "المزوّد الافتراضي وخادم Ollama",
+      "rateLimitRps": "حد الطلبات (طلب/ثانية)",
+      "routingPolicyLabel": "سياسة التوجيه",
+      "unsavedWarning": "لديك تغييرات غير محفوظة في إعدادات النظام.",
+      "writeOnlyKeyPlaceholder": "مفتاح API (للكتابة فقط)..."
     },
     "states": {
       "online": "متصل",
@@ -564,7 +664,11 @@
       "presetsBtn": "أمثلة",
       "presetsAriaLabel": "اختيار هدف تدريبي أو مختبر جاهز",
       "presetsTitle": "أهداف الفحص التدريبية والمختبرات",
-      "presetsSubtitle": "انقر لتعبئة حقل الهدف فوراً"
+      "presetsSubtitle": "انقر لتعبئة حقل الهدف فوراً",
+      "copilotShortcut": "المساعد",
+      "mobileNav": "قائمة التنقل للهاتف",
+      "primaryNav": "التنقل الرئيسي",
+      "scanDispatched": "تم إرسال الفحص للهدف {target} عبر {engine}"
     },
     "routes": {
       "overview": "القيادة والأهداف",
@@ -582,7 +686,10 @@
       "emptyQuery": "اكتب للبحث عبر المنصة أو اختر صفحة للانتقال الفوري.",
       "noResults": "لا توجد نتائج مطابقة.",
       "searching": "جارِ البحث عبر المنصة...",
-      "shortcutHint": "Ctrl+K للفتح · Esc للإغلاق · Enter للتنفيذ"
+      "shortcutHint": "Ctrl+K للفتح · Esc للإغلاق · Enter للتنفيذ",
+      "hitsCount": "{count} نتائج",
+      "switchAr": "التبديل إلى العربية (RTL)",
+      "switchEn": "التبديل إلى الإنجليزية (LTR)"
     },
     "status": {
       "connected": "متصل",
@@ -603,7 +710,8 @@
       "findingsLabel": "الثغرات المصنفة",
       "findingsDesc": "نتائج موثقة ومحققة",
       "runsLabel": "التشغيلات والمهام النشطة",
-      "runsDesc": "مهام Django Hub ونواة Go الحية"
+      "runsDesc": "مهام Django Hub ونواة Go الحية",
+      "sectionAriaLabel": "ملخص قياسات المنصة"
     },
     "graph": {
       "title": "طوبولوجيا سطح الهجوم والجدول المزدوج",
@@ -629,7 +737,8 @@
       "inspectorTitle": "مفتش الأصل التفصيلي",
       "attributesJson": "خصائص JSON الكاملة (Attributes)",
       "openUrl": "فتح الرابط",
-      "noAttributes": "لا توجد خصائص إضافية مسجلة."
+      "noAttributes": "لا توجد خصائص إضافية مسجلة.",
+      "displayModeAria": "نمط عرض الأصول"
     },
     "console": {
       "title": "وحدة التحكم المباشرة وسجل التدقيق",
@@ -638,7 +747,11 @@
       "pausedLabel": "متوقف مؤقتاً",
       "clearBtn": "مسح",
       "levelAll": "الكل",
-      "emptyLogs": "لا توجد أحداث مسجلة في الجلسة الحالية."
+      "emptyLogs": "لا توجد أحداث مسجلة في الجلسة الحالية.",
+      "newLinesBadge": "{count} سطور جديدة",
+      "nextMatch": "التطابق التالي",
+      "prevMatch": "التطابق السابق",
+      "searchPlaceholder": "بحث وتصفية في سجلات الطرفية..."
     },
     "studio": {
       "save": "حفظ",
@@ -675,7 +788,172 @@
       "runSkill": "تشغيل المهارة",
       "createFile": "إنشاء ملف",
       "newFilePlaceholder": "مثال: scratch/probe.py",
-      "runSnippet": "تشغيل في الطرفية"
+      "runSnippet": "تشغيل في الطرفية",
+      "discardBtn": "تجاهل التغييرات",
+      "httpResponsePlaceholder": "تظهر استجابة HTTP هنا...",
+      "noTraffic": "لم يتم تسجيل حركة HTTP معترضة بعد.",
+      "readFailed": "فشل قراءة ملف مساحة العمل.",
+      "sastAuditBtn": "تشغيل فحص CodeIntel SAST",
+      "sastCodePlaceholder": "الصق الكود المصدري أو اتركه فارغاً لفحص التبويب المفتوح...",
+      "sastHint": "ينفّذ تحليلاً أمنياً ساكناً موثّقاً عبر /api/static/audit.",
+      "sastTitle": "محلل CodeIntel SAST الساكن",
+      "saveFailed": "فشل حفظ الملف: ",
+      "savedFile": "تم الحفظ: ",
+      "sendingReq": "جارِ إرسال طلب HTTP...",
+      "tabBurp": "Burp",
+      "tabFiles": "الملفات",
+      "tabSast": "SAST",
+      "tabSkills": "المهارات",
+      "tabTools": "الأدوات",
+      "unsavedTitle": "تغييرات غير محفوظة",
+      "unsavedWarning": "لديك تعديلات غير محفوظة في هذا الملف. سيؤدي إغلاقه إلى فقدانها."
+    },
+    "arsenal": {
+      "agentPromptPlaceholder": "أرسل مهمة أمنية محددة إلى الوكيل المتخصص...",
+      "cliEnginesTitle": "محركات الوكلاء الطرفية (CLI)",
+      "directChatTitle": "محادثة مباشرة مع الوكيل المتخصص",
+      "eliteProbersTitle": "مسبارات الاستغلال الستة المتقدمة",
+      "noneSelected": "غير محدد",
+      "sandboxTitle": "بيئة التنفيذ المعزولة (Sandbox)",
+      "selectAgentHint": "اختر وكيلاً متخصصاً ثم أرسل تعليماتك للبدء.",
+      "selfcheckBtn": "فحص ذاتي",
+      "synthesizeBtn": "توليد الأمر",
+      "toolInstalled": "مثبّت",
+      "wordlistPlaceholder": "ابحث في قوائم الكلمات (مثل: graphql، jwt، api)...",
+      "wordlistRoots": "جذور",
+      "wordlistTitle": "محلل قوائم الكلمات الذكي"
+    },
+    "auth": {
+      "forbiddenTitle": "مطلوب صلاحية مشغّل معتمد",
+      "invalidToken": "تم رفض رمز المصادقة.",
+      "requiredDesc": "أدخل رمز المشغّل المحلي لفتح عمليات التعديل والتحكم المحمية.",
+      "requiredTitle": "مطلوب مصادقة المنصة",
+      "tokenPlaceholder": "الصق رمز المشغّل (Bearer Token)...",
+      "unlockBtn": "مصادقة"
+    },
+    "budget": {
+      "breakdownLabel": "تفصيل التكلفة",
+      "byModel": "حسب النموذج",
+      "byProvider": "حسب المزوّد",
+      "byRole": "حسب الدور",
+      "byRun": "حسب المهمة",
+      "chartAriaLabel": "مخطط توزيع الرموز والتكلفة بالدولار",
+      "dailyLimit": "الحد اليومي (دولار)",
+      "emptyLedger": "لم يُسجّل أي إنفاق للنماذج حتى الآن.",
+      "filterPlaceholder": "تصفية المزودين أو النماذج أو المهمات...",
+      "limitsBtn": "الحدود",
+      "noCap": "بدون حد",
+      "perRunLimit": "الحد لكل مهمة (دولار)",
+      "perSolverLimit": "الحد لكل محلل (دولار)",
+      "saveError": "فشل حفظ حدود الميزانية.",
+      "savedLimits": "تم حفظ حدود الميزانية.",
+      "title": "قياسات الرموز والتكلفة",
+      "todaySpend": "إنفاق اليوم",
+      "totalCalls": "استدعاءات النماذج",
+      "totalSpend": "إجمالي الإنفاق",
+      "totalTokens": "إجمالي الرموز"
+    },
+    "court": {
+      "emptyVerdicts": "لا توجد أحكام مسجلة في محكمة الأدلة بعد.",
+      "evidenceRecord": "سجل دليل",
+      "proofLabel": "البرهان السببي والدليل",
+      "rationaleLabel": "تعليل الحكم",
+      "reasonCodeLabel": "رمز السبب",
+      "recordsSuffix": "سجلات",
+      "replayBtn": "إعادة التحقق",
+      "replayFailed": "فشلت إعادة التحقق.",
+      "replayResultTitle": "نتيجة إعادة التحقق",
+      "selectPrompt": "اختر سجل حكم لاستعراض برهانه السببي.",
+      "stateFilters": "تصفية حسب حالة حكم محكمة الأدلة",
+      "title": "منصة محكمة الأدلة (7 حالات)",
+      "untitledVerdict": "حكم بدون عنوان",
+      "verdictLabel": "الحكم"
+    },
+    "errorBoundary": {
+      "reload": "إعادة تحميل الصفحة",
+      "retry": "إعادة المحاولة",
+      "subtitle": "حدث خطأ غير متوقع أثناء عرض هذه الواجهة. مهمات الخادم الخلفي لم تتأثر.",
+      "title": "تعذر عرض هذه الواجهة مؤقتاً"
+    },
+    "hardware": {
+      "contextWindow": "السياق",
+      "cpuLabel": "حمل المعالج",
+      "cpuOnlyHost": "مضيف معالج فقط (بدون GPU)",
+      "gpuAvailable": "بطاقة الرسوميات نشطة",
+      "keepAlive": "مدة البقاء",
+      "noLoadedModels": "لا توجد نماذج Ollama محمّلة في الذاكرة.",
+      "ollamaModels": "نماذج Ollama المحمّلة",
+      "ramLabel": "ذاكرة النظام RAM",
+      "title": "قياسات العتاد وبطاقة الرسوميات الحية",
+      "vramLabel": "ذاكرة الرسوميات VRAM"
+    },
+    "intercept": {
+      "bypass403Title": "مولّد تجاوز حظر 403",
+      "dorksTitle": "استعلامات Google و GitHub",
+      "generateBtn": "توليد",
+      "jsMinerPlaceholder": "الصق مقتطف حزمة JavaScript هنا...",
+      "jsMinerTitle": "منقّب الأسرار ومسارات JS",
+      "mineBtn": "استخراج الأسرار",
+      "mutateBtn": "توليد المتغيرات"
+    },
+    "notifications": {
+      "empty": "لا توجد إشعارات منصة حتى الآن.",
+      "markAllRead": "تحديد الكل كمقروء",
+      "markRead": "تحديد كمقروء",
+      "systemNotice": "إشعار نظام",
+      "title": "الإشعارات"
+    },
+    "stream": {
+      "connecting": "جارِ الاتصال بالبث...",
+      "live": "بث مباشر",
+      "offline": "البث متوقف",
+      "reconnectNow": "إعادة الاتصال بالبث المباشر",
+      "reconnecting": "جارِ إعادة الاتصال...",
+      "reconnectingAttempt": "إعادة اتصال (#{attempt})",
+      "retryBtn": "إعادة"
+    },
+    "surface": {
+      "baselineStatus": "حالة المرجع",
+      "computeDiffBtn": "حساب التفاضل السببي",
+      "diffComparatorTitle": "مقارن الاستجابات التفاضلي (/api/analyzer/diff)",
+      "edgesCount": "روابط",
+      "emitTestStep": "إصدار خطوة اختبار",
+      "mutatedStatus": "حالة الاختبار",
+      "riskLabel": "المخاطرة",
+      "simulatedTag": "محاكاة",
+      "swarmRosterTitle": "تشكيلة الوكلاء (Swarm)",
+      "swarmStandbyEmpty": "لا توجد تشغيلات نشطة في تشكيلة الوكلاء (وضع الاستعداد).",
+      "verdictsCount": "أحكام"
+    },
+    "taskTree": {
+      "allTasks": "كل المهام",
+      "empty": "لا توجد مهام أو مهام فرعية مسجلة بعد.",
+      "filterByTask": "تصفية السجلات حسب المهمة",
+      "filtered": "مصفّى",
+      "goWorkerGroup": "قائمة مهام نواة Go",
+      "searchPlaceholder": "ابحث في المهام والمهام الفرعية...",
+      "title": "شجرة مهام المهمة"
+    },
+    "vulnIntel": {
+      "advisoriesCount": "نشرات أمنية",
+      "completenessLabel": "الاكتمال",
+      "ecosystemPlaceholder": "النظام البيئي (مثل npm أو pypi)",
+      "emptyDbBadge": "قاعدة محلية فارغة",
+      "emptyDbHint": "قاعدة بيانات استخبارات الثغرات المحلية فارغة حالياً. قم بالمزامنة لجلب NVD/OSV/KEV.",
+      "noMatches": "لم يتم العثور على نشرات أمنية مطابقة.",
+      "packagesPlaceholder": "قائمة الحزم أو JSON (مثل openssl@3.0.1)",
+      "runTriageBtn": "تشغيل فرز الحزم",
+      "schemaVersion": "المخطط",
+      "searchPlaceholder": "ابحث برقم CVE أو CWE أو الحزمة...",
+      "storedRecords": "السجلات المخزّنة",
+      "syncNote": "يزامن بيانات NVD و OSV و KEV و CWE و ATT&CK المحلية.",
+      "syncNowBtn": "مزامنة المصادر",
+      "syncPreviewBtn": "معاينة المزامنة",
+      "tabCoverage": "التغطية والمزامنة",
+      "tabSearch": "بحث النشرات",
+      "tabTriage": "فرز الحزم",
+      "title": "استخبارات الثغرات المحلية (NVD · OSV · KEV · CWE)",
+      "triageStatus": "نتيجة الفرز"
     }
   },
   "en": {
@@ -733,7 +1011,8 @@
       "lightTheme": "Light (Paper Slate)",
       "switchToArabic": "العربية",
       "switchToEnglish": "English",
-      "skipToContent": "Skip to main content"
+      "skipToContent": "Skip to main content",
+      "error": "Error"
     },
     "navGroups": {
       "command": "Command & Telemetry",
@@ -853,7 +1132,26 @@
       "approvalQueued": "Approval Request Created",
       "policyBlocked": "Blocked by PolicyEngine",
       "noConversations": "Start a session to query live telemetry concurrently while scans execute.",
-      "refMissing": "Referenced record is not loaded in the current dataset."
+      "refMissing": "Referenced record is not loaded in the current dataset.",
+      "autoFollowRun": "Auto-follow active mission",
+      "capThinking": "Thinking",
+      "capTools": "Tools",
+      "charsUnit": "chars",
+      "citationsTitle": "Citations & Grounding",
+      "conversationSelect": "Copilot conversation thread",
+      "defaultSessionTitle": "New Investigation",
+      "localOnlyLock": "LOCAL ONLY",
+      "localOnlyLockHint": "Cloud models are locked while routing policy is set to local_only.",
+      "missionScope": "Mission",
+      "resizeDrawer": "Resize Copilot drawer",
+      "roleCopilot": "COPILOT",
+      "roleOperator": "OPERATOR",
+      "stopBtn": "Stop streaming",
+      "stoppedTag": "Stopped",
+      "streamError": "Streaming interrupted.",
+      "thinkingLabel": "Reasoning Trace",
+      "unreadMessages": "{count} new messages",
+      "uploadFailed": "Attachment upload failed"
     },
     "runs": {
       "title": "Autonomous Missions & Runs",
@@ -885,7 +1183,28 @@
       "phaseAdjudication": "Adjudication",
       "phaseReport": "Report",
       "presetsHeading": "1-Click Practice & Lab Targets",
-      "presetsHint": "Authorized public demos and local containers"
+      "presetsHint": "Authorized public demos and local containers",
+      "archiveTitle": "Managed Runs & Mission Archive",
+      "checkpointBadge": "Checkpoint",
+      "cliEngineLabel": "CLI Engine",
+      "colKind": "Kind",
+      "colRunId": "Run ID",
+      "controlFailed": "Failed to control mission run.",
+      "coverageTargetLabel": "Coverage Target",
+      "dispatchedOk": "Mission dispatched.",
+      "kindEngine": "CLI Engine Worker",
+      "kindGoCore": "Go Core Scanner",
+      "kindMission": "Autonomous Mission",
+      "kindOmni": "OmniHunter (Full Loop)",
+      "kindPipeline": "Recon Pipeline",
+      "launchFailed": "Mission launch failed.",
+      "proxyOptional": "Proxy (Optional)",
+      "recoverRun": "Recover",
+      "resizeWorkspace": "Resize mission workspace split",
+      "searchArchivePlaceholder": "Search runs by ID, target, or phase...",
+      "startedRun": "Started {id}",
+      "taskPromptLabel": "Task Prompt",
+      "taskPromptPlaceholder": "Instruction for autonomous CLI engine..."
     },
     "approvals": {
       "title": "Live Policy Approvals",
@@ -910,7 +1229,16 @@
       "rejectBtn": "Reject",
       "deciding": "Applying...",
       "emptyPending": "No pending approval requests.",
-      "offlineNotice": "Django Hub is offline — approvals queue unavailable."
+      "offlineNotice": "Django Hub is offline — approvals queue unavailable.",
+      "commandArgsLabel": "Command / Arguments",
+      "decidedByLabel": "Decided by",
+      "decisionFailed": "Failed to apply approval decision.",
+      "decisionNoteLabel": "Decision Note",
+      "digestLabel": "Proposal Digest",
+      "executedLabel": "Executed",
+      "executionOutput": "Execution Output",
+      "notExecutedLabel": "Not Executed",
+      "noteLabel": "Note"
     },
     "targets": {
       "title": "Targets & Project Workspaces",
@@ -935,7 +1263,11 @@
       "presetGroupPublic": "Public Authorized Practice Targets",
       "presetGroupLocal": "Local & Container Labs",
       "presetBadgePublic": "Public",
-      "presetBadgeLab": "Lab"
+      "presetBadgeLab": "Lab",
+      "savedFromOps": "Authorized from Operations Console",
+      "savedSuccess": "Target workspace saved.",
+      "scopeMatched": "MATCHED (IN-SCOPE)",
+      "scopeOutside": "OUTSIDE WORKSPACE SCOPE"
     },
     "redteam": {
       "title": "Red Team Cockpit & Security Checklists",
@@ -976,7 +1308,18 @@
       "leadNew": "New",
       "leadInvestigating": "Investigating",
       "leadReported": "Reported",
-      "leadKilled": "Killed"
+      "leadKilled": "Killed",
+      "grantIssued": "Issued {id}",
+      "grantRevoked": "Grant revoked",
+      "leadEvidencePlaceholder": "Signal or endpoint observation...",
+      "leadSkillPlaceholder": "skill",
+      "missingLabel": "Missing",
+      "proofJsonInvalid": "Proof payload must be a valid JSON object.",
+      "proofPayloadPlaceholder": "Optional EvidenceCourt proof_payload JSON (e.g. {\"proof_strength\":\"E3\"})",
+      "recommendationPlaceholder": "Remediation recommendation (optional)",
+      "reproPlaceholder": "Reproducibility steps (optional)",
+      "scoreLabel": "Score",
+      "signatureValid": "HMAC Verified"
     },
     "findings": {
       "title": "Validated Findings & Dossier",
@@ -1012,7 +1355,13 @@
       "cvssLabel": "CVSS Score",
       "confidenceLabel": "Confidence",
       "evidenceLabel": "Evidence & PoC",
-      "noEvidence": "No textual evidence or PoC payload recorded."
+      "noEvidence": "No textual evidence or PoC payload recorded.",
+      "exportFormatLabel": "Export format",
+      "generatedDossiersTitle": "Generated Dossiers (.md)",
+      "printPdf": "Print / PDF",
+      "sessionExportsTitle": "Authenticated Session Exports",
+      "snapshotFileLabel": "Snapshot Artifact",
+      "snapshotsTitle": "Checkpoints & Snapshots"
     },
     "assets": {
       "title": "Discovered Assets & Attack Surface",
@@ -1091,7 +1440,11 @@
       "inspectorTitle": "Burp Log Inspector (XML / JSON / HAR)",
       "pasteTrafficPlaceholder": "Paste raw Burp XML or JSON export to inspect...",
       "inspectLogs": "Inspect Logs",
-      "minRiskLabel": "Minimum Risk Score"
+      "minRiskLabel": "Minimum Risk Score",
+      "colHost": "Host",
+      "colLength": "Size",
+      "colMethod": "Method",
+      "colPath": "Path"
     },
     "browser": {
       "title": "Interactive Browser Manager",
@@ -1104,7 +1457,8 @@
       "emptyPages": "No active browser sessions open right now.",
       "diagnosticAlert": "Browser Diagnostic Notice",
       "exploreUrlPlaceholder": "Enter URL to explore with Playwright...",
-      "launchExplore": "Launch Browser Explore"
+      "launchExplore": "Launch Browser Explore",
+      "screenshotLabel": "Browser Capture"
     },
     "tools": {
       "title": "Offensive Tools Arsenal",
@@ -1128,7 +1482,19 @@
       "endpointLabel": "Endpoint",
       "callTool": "Invoke Tool",
       "emptyServers": "No MCP servers configured.",
-      "addServer": "Add MCP Server"
+      "addServer": "Add MCP Server",
+      "argsCsvPlaceholder": "Arguments (comma-separated)",
+      "argsLabel": "Arguments",
+      "consentRequired": "Confirm the SHA-256 fingerprint before registering this MCP server.",
+      "fingerprintConsentLabel": "I have verified this SHA-256 server fingerprint and approve registration.",
+      "fingerprintTitle": "SHA-256 Server Fingerprint",
+      "invalidJson": "Invalid JSON arguments.",
+      "pinnedVersionRequired": "Use a pinned package version (e.g. pkg@1.2.3) instead of unpinned latest.",
+      "probeBtn": "Probe",
+      "requiredFieldsError": "Server ID and display name are required.",
+      "saveFailed": "Failed to register MCP server.",
+      "serverIdPlaceholder": "server-id",
+      "toolNamePlaceholder": "tool_name"
     },
     "models": {
       "title": "AI Models Manager",
@@ -1170,7 +1536,10 @@
       "colComponent": "Component / Service",
       "colStatus": "Status",
       "colMessage": "Result & Details",
-      "emptyDiagnostics": "Run a full check to inspect system readiness."
+      "emptyDiagnostics": "Run a full check to inspect system readiness.",
+      "installPlanReady": "All audited tools are currently satisfied or no install steps required.",
+      "installPlanTitle": "Tool Installation Plan",
+      "toggleRawJson": "Toggle Raw JSON"
     },
     "settings": {
       "title": "Settings & Security Policies",
@@ -1188,7 +1557,16 @@
       "localhostGuardValue": "Operator-Driven (All Valid Targets Permitted)",
       "preferencesTitle": "Interface Preferences",
       "interfaceLanguage": "Interface Language",
-      "interfaceTheme": "Interface Theme"
+      "interfaceTheme": "Interface Theme",
+      "applyProviderDefaults": "Apply Defaults",
+      "defaultProviderPlaceholder": "Default provider (e.g. ollama, nvidia)",
+      "keySavedOk": "API key saved without changing default provider.",
+      "ollamaHostLabel": "Ollama Host URL",
+      "providerDefaultsTitle": "Default Provider & Ollama Host",
+      "rateLimitRps": "Rate Limit (RPS)",
+      "routingPolicyLabel": "Routing Policy",
+      "unsavedWarning": "You have unsaved system configuration changes.",
+      "writeOnlyKeyPlaceholder": "Write-only API key..."
     },
     "states": {
       "online": "Online",
@@ -1243,7 +1621,11 @@
       "presetsBtn": "Presets",
       "presetsAriaLabel": "Choose an example practice or local lab target",
       "presetsTitle": "Practice & Lab Target Presets",
-      "presetsSubtitle": "Click any target to populate the launcher"
+      "presetsSubtitle": "Click any target to populate the launcher",
+      "copilotShortcut": "Copilot",
+      "mobileNav": "Mobile navigation drawer",
+      "primaryNav": "Primary navigation",
+      "scanDispatched": "Dispatched scan for {target} via {engine}"
     },
     "routes": {
       "overview": "Command Overview",
@@ -1261,7 +1643,10 @@
       "emptyQuery": "Type to query live telemetry across the platform or pick a destination.",
       "noResults": "No matching records found.",
       "searching": "Searching platform stores...",
-      "shortcutHint": "Ctrl+K to toggle · Esc to close · Enter to open"
+      "shortcutHint": "Ctrl+K to toggle · Esc to close · Enter to open",
+      "hitsCount": "{count} matches",
+      "switchAr": "Switch to Arabic (RTL)",
+      "switchEn": "Switch to English (LTR)"
     },
     "status": {
       "connected": "Connected",
@@ -1282,7 +1667,8 @@
       "findingsLabel": "Triaged Findings",
       "findingsDesc": "Recorded vulnerability leads",
       "runsLabel": "Active Runs & Tasks",
-      "runsDesc": "Live Django runs & Go worker tasks"
+      "runsDesc": "Live Django runs & Go worker tasks",
+      "sectionAriaLabel": "Platform telemetry summary"
     },
     "graph": {
       "title": "Attack Surface Topology & Dual View",
@@ -1308,7 +1694,8 @@
       "inspectorTitle": "Asset Inspector",
       "attributesJson": "Full Attributes JSON",
       "openUrl": "Open URL",
-      "noAttributes": "No structured attributes recorded."
+      "noAttributes": "No structured attributes recorded.",
+      "displayModeAria": "Asset view mode"
     },
     "console": {
       "title": "Live Execution Console & Audit Stream",
@@ -1317,7 +1704,11 @@
       "pausedLabel": "Paused",
       "clearBtn": "Clear",
       "levelAll": "All",
-      "emptyLogs": "No events recorded in this session yet."
+      "emptyLogs": "No events recorded in this session yet.",
+      "newLinesBadge": "{count} new lines",
+      "nextMatch": "Next match",
+      "prevMatch": "Previous match",
+      "searchPlaceholder": "Filter or search console logs..."
     },
     "studio": {
       "save": "Save",
@@ -1354,7 +1745,172 @@
       "runSkill": "Run Skill",
       "createFile": "New File",
       "newFilePlaceholder": "e.g. scratch/probe.py",
-      "runSnippet": "Run in Terminal"
+      "runSnippet": "Run in Terminal",
+      "discardBtn": "Discard Changes",
+      "httpResponsePlaceholder": "HTTP response appears here...",
+      "noTraffic": "No intercepted HTTP traffic recorded yet.",
+      "readFailed": "Failed to read workspace file.",
+      "sastAuditBtn": "Run CodeIntel SAST",
+      "sastCodePlaceholder": "Paste source code or leave blank to audit active editor tab...",
+      "sastHint": "Runs authenticated static security analysis via /api/static/audit.",
+      "sastTitle": "CodeIntel SAST Analyzer",
+      "saveFailed": "Failed to save file: ",
+      "savedFile": "Saved: ",
+      "sendingReq": "Sending HTTP request...",
+      "tabBurp": "Burp",
+      "tabFiles": "Files",
+      "tabSast": "SAST",
+      "tabSkills": "Skills",
+      "tabTools": "Tools",
+      "unsavedTitle": "Unsaved Changes",
+      "unsavedWarning": "You have unsaved edits in this file. Closing it will discard your changes."
+    },
+    "arsenal": {
+      "agentPromptPlaceholder": "Send targeted security task to specialist agent...",
+      "cliEnginesTitle": "CLI Agent Engines",
+      "directChatTitle": "Direct Specialist Chat",
+      "eliteProbersTitle": "6 Elite Exploit Probers",
+      "noneSelected": "none",
+      "sandboxTitle": "Local Execution Sandbox",
+      "selectAgentHint": "Select a specialist agent and issue an instruction.",
+      "selfcheckBtn": "Self-Check",
+      "synthesizeBtn": "Synthesize",
+      "toolInstalled": "INSTALLED",
+      "wordlistPlaceholder": "Search wordlists (e.g. graphql, jwt, api)...",
+      "wordlistRoots": "roots",
+      "wordlistTitle": "Cognitive Wordlist Resolver"
+    },
+    "auth": {
+      "forbiddenTitle": "Operator Authorization Required",
+      "invalidToken": "Authentication token was rejected.",
+      "requiredDesc": "Provide your configured local operator API token to unlock protected platform mutations.",
+      "requiredTitle": "Platform Authentication Required",
+      "tokenPlaceholder": "Paste operator Bearer token...",
+      "unlockBtn": "Authenticate"
+    },
+    "budget": {
+      "breakdownLabel": "Cost Breakdown",
+      "byModel": "By Model",
+      "byProvider": "By Provider",
+      "byRole": "By Role",
+      "byRun": "By Mission",
+      "chartAriaLabel": "Token and USD spend distribution chart",
+      "dailyLimit": "Daily Limit (USD)",
+      "emptyLedger": "No persisted LLM spend recorded yet.",
+      "filterPlaceholder": "Filter providers, models, or missions...",
+      "limitsBtn": "Caps",
+      "noCap": "No cap",
+      "perRunLimit": "Per Run Limit (USD)",
+      "perSolverLimit": "Per Solver Limit (USD)",
+      "saveError": "Failed to save budget limits.",
+      "savedLimits": "Budget limits saved.",
+      "title": "Token & Cost Telemetry",
+      "todaySpend": "Today Spend",
+      "totalCalls": "LLM Calls",
+      "totalSpend": "Total Spend",
+      "totalTokens": "Total Tokens"
+    },
+    "court": {
+      "emptyVerdicts": "No Evidence Court verdicts recorded yet.",
+      "evidenceRecord": "Evidence Record",
+      "proofLabel": "Causal Proof & Evidence",
+      "rationaleLabel": "Adjudication Rationale",
+      "reasonCodeLabel": "Reason Code",
+      "recordsSuffix": "records",
+      "replayBtn": "Replay Verification",
+      "replayFailed": "Replay verification failed.",
+      "replayResultTitle": "Replay Verification Output",
+      "selectPrompt": "Select a verdict record to inspect its causal proof.",
+      "stateFilters": "Filter by Evidence Court verdict state",
+      "title": "Evidence Court Workbench",
+      "untitledVerdict": "Untitled Verdict",
+      "verdictLabel": "Verdict"
+    },
+    "errorBoundary": {
+      "reload": "Reload Page",
+      "retry": "Try Again",
+      "subtitle": "An unexpected rendering error occurred in this workspace view. Your backend missions remain unaffected.",
+      "title": "Workspace View Interrupted"
+    },
+    "hardware": {
+      "contextWindow": "Context",
+      "cpuLabel": "CPU Load",
+      "cpuOnlyHost": "CPU-Only Host (No GPU)",
+      "gpuAvailable": "GPU Active",
+      "keepAlive": "Keep-Alive",
+      "noLoadedModels": "No Ollama models loaded in VRAM.",
+      "ollamaModels": "Loaded Ollama Models",
+      "ramLabel": "System RAM",
+      "title": "Live Host & GPU Telemetry",
+      "vramLabel": "GPU VRAM"
+    },
+    "intercept": {
+      "bypass403Title": "403 Bypass Generator",
+      "dorksTitle": "Google & GitHub Dorks",
+      "generateBtn": "Generate",
+      "jsMinerPlaceholder": "Paste JavaScript bundle snippet...",
+      "jsMinerTitle": "JS Secret & Route Miner",
+      "mineBtn": "Mine Secrets",
+      "mutateBtn": "Mutate"
+    },
+    "notifications": {
+      "empty": "No platform notifications yet.",
+      "markAllRead": "Mark all read",
+      "markRead": "Mark read",
+      "systemNotice": "System Notice",
+      "title": "Notifications"
+    },
+    "stream": {
+      "connecting": "Connecting SSE...",
+      "live": "Live SSE",
+      "offline": "Stream Offline",
+      "reconnectNow": "Reconnect live event stream",
+      "reconnecting": "Reconnecting...",
+      "reconnectingAttempt": "Reconnecting (#{attempt})",
+      "retryBtn": "Retry"
+    },
+    "surface": {
+      "baselineStatus": "Baseline Status",
+      "computeDiffBtn": "Compute Causal Diff",
+      "diffComparatorTitle": "Differential Response Comparator (/api/analyzer/diff)",
+      "edgesCount": "Edges",
+      "emitTestStep": "Emit Test Step",
+      "mutatedStatus": "Mutated Status",
+      "riskLabel": "Risk",
+      "simulatedTag": "SIMULATED",
+      "swarmRosterTitle": "Swarm Roster",
+      "swarmStandbyEmpty": "No active runs in swarm roster (STANDBY).",
+      "verdictsCount": "verdicts"
+    },
+    "taskTree": {
+      "allTasks": "All Tasks",
+      "empty": "No mission tasks or subtasks recorded yet.",
+      "filterByTask": "Filter logs by task",
+      "filtered": "Filtered",
+      "goWorkerGroup": "Go Core Worker Queue",
+      "searchPlaceholder": "Search tasks & subtasks...",
+      "title": "Mission Task Tree"
+    },
+    "vulnIntel": {
+      "advisoriesCount": "advisories",
+      "completenessLabel": "Completeness",
+      "ecosystemPlaceholder": "Ecosystem (e.g. npm, pypi, composer)",
+      "emptyDbBadge": "EMPTY LOCAL DB",
+      "emptyDbHint": "Local vulnerability intelligence database is currently empty. Trigger sync or ingest NVD/OSV/KEV feeds.",
+      "noMatches": "No matching advisories found.",
+      "packagesPlaceholder": "Packages JSON or lines (e.g. openssl@3.0.1)",
+      "runTriageBtn": "Run Package Triage",
+      "schemaVersion": "Schema",
+      "searchPlaceholder": "Search CVE, CWE, vendor, or package...",
+      "storedRecords": "Stored Records",
+      "syncNote": "Synchronizes local offline NVD, OSV, KEV, CWE, and ATT&CK intelligence metadata.",
+      "syncNowBtn": "Sync Feeds",
+      "syncPreviewBtn": "Dry-Run Sync",
+      "tabCoverage": "Coverage & Sync",
+      "tabSearch": "Advisories Search",
+      "tabTriage": "Package Triage",
+      "title": "Vulnerability Intelligence (NVD · OSV · KEV · CWE)",
+      "triageStatus": "Triage Result"
     }
   }
 }

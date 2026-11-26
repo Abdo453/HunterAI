@@ -35,7 +35,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       const params = new URLSearchParams(window.location.search);
       const qTheme = normalizeTheme(params.get("theme"));
-      const stored = normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY));
+      const stored =
+        normalizeTheme(window.localStorage.getItem(THEME_STORAGE_KEY)) ||
+        normalizeTheme(window.localStorage.getItem("theme"));
       if (qTheme) {
         resolved = qTheme;
         window.localStorage.setItem(THEME_STORAGE_KEY, qTheme);
@@ -49,7 +51,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyDomTheme(resolved);
 
     const onStorage = (ev: StorageEvent) => {
-      if (ev.key === THEME_STORAGE_KEY) {
+      if (ev.key === THEME_STORAGE_KEY || ev.key === "theme") {
         const next = normalizeTheme(ev.newValue);
         if (next) {
           setThemeState(next);
@@ -67,11 +69,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       applyDomTheme(next);
       try {
         window.localStorage.setItem(THEME_STORAGE_KEY, next);
-        const url = new URL(window.location.href);
-        url.searchParams.set("theme", next);
-        window.history.replaceState(null, "", url.toString());
       } catch {
-        // Ignore storage or history errors in restricted contexts
+        // Ignore storage errors in restricted contexts
       }
     },
     [applyDomTheme]

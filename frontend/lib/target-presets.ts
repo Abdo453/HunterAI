@@ -108,6 +108,6 @@ export function getPresetDescription(preset: TargetPreset, lang: "ar" | "en"): s
 
 export function getPresetCategoryBadgeClasses(category: TargetPresetCategory): string {
   return category === "public_demo"
-    ? "border-[var(--accent-primary)]/35 bg-[var(--accent-primary-bg)] text-sentinel-primary"
-    : "border-[var(--accent-warning)]/35 bg-[var(--accent-warning-bg)] text-sentinel-warning";
+    ? "border-sentinel-primary/35 bg-sentinel-primary/15 text-sentinel-primary"
+    : "border-sentinel-warning/35 bg-sentinel-warning/15 text-sentinel-warning";
 }

@@ -28,6 +28,7 @@ import { AssetRecord, usePlatform } from "@/lib/platform-context";
 import { useTheme } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
 import { safeHref } from "@/lib/sanitize";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 const DEFAULT_CLUSTER_WINDOW = 8;
 const TABLE_PAGE_SIZE = 10;
@@ -46,17 +47,17 @@ type TopologyNode = Node<AssetNodeData>;
 function getKindColor(kind: string): string {
   switch (kind.toUpperCase()) {
     case "SUBDOMAIN":
-      return "var(--accent-primary)";
+      return "rgb(var(--accent-primary))";
     case "ENDPOINT":
     case "API":
-      return "var(--accent-success)";
+      return "rgb(var(--accent-success))";
     case "PORT":
     case "IP":
-      return "var(--accent-warning)";
+      return "rgb(var(--accent-warning))";
     case "TECH":
-      return "var(--accent-ai)";
+      return "rgb(var(--accent-ai))";
     default:
-      return "var(--border-strong)";
+      return "rgb(var(--border-strong))";
   }
 }
 
@@ -73,18 +74,9 @@ export default function AssetDualGraph() {
   const [page, setPage] = useState<number>(1);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const rootTarget = selectedEngagement?.target || targetDomain || "target";
+  const drawerTrapRef = useFocusTrap(Boolean(inspectedAsset), () => setInspectedAsset(null));
 
-  useEffect(() => {
-    if (!inspectedAsset) return;
-    const onKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        setInspectedAsset(null);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [inspectedAsset, setInspectedAsset]);
+  const rootTarget = selectedEngagement?.target || targetDomain || "target";
 
   const kindsList = useMemo(() => {
     const counts = new Map<string, number>();
@@ -116,7 +108,6 @@ export default function AssetDualGraph() {
     });
   }, [assets, kindFilter, searchQuery]);
 
-  // Reset pagination cleanly when filters change
   useEffect(() => {
     setPage(1);
   }, [kindFilter, searchQuery, assets.length]);
@@ -128,7 +119,6 @@ export default function AssetDualGraph() {
     return filteredAssets.slice(start, start + TABLE_PAGE_SIZE);
   }, [filteredAssets, safePage]);
 
-  // Build hierarchical React Flow graph: Root Target -> Asset Kind Clusters -> Assets/Endpoints
   const { nodes, edges, shownCount } = useMemo(() => {
     const grouped = new Map<string, AssetRecord[]>();
     for (const a of filteredAssets) {
@@ -184,8 +174,8 @@ export default function AssetDualGraph() {
           totalInCluster: items.length,
         },
         style: {
-          background: "var(--bg-elevated)",
-          color: "var(--text-primary)",
+          background: "rgb(var(--bg-elevated))",
+          color: "rgb(var(--text-primary))",
           border: `1px solid ${kindAccent}`,
           borderRadius: "8px",
           fontFamily: "var(--font-mono)",
@@ -201,7 +191,7 @@ export default function AssetDualGraph() {
         id: `edge:${rootId}->${clusterId}`,
         source: rootId,
         target: clusterId,
-        style: { stroke: "var(--border-strong)", strokeWidth: 1.5 },
+        style: { stroke: "rgb(var(--border-strong))", strokeWidth: 1.5 },
       });
 
       visibleItems.forEach((asset, idx) => {
@@ -222,10 +212,10 @@ export default function AssetDualGraph() {
             asset,
           },
           style: {
-            background: "var(--bg-surface)",
-            color: statusCode ? "var(--accent-success)" : "var(--text-primary)",
+            background: "rgb(var(--bg-surface))",
+            color: statusCode ? "rgb(var(--accent-success))" : "rgb(var(--text-primary))",
             border: `1px solid ${
-              statusCode ? "var(--accent-success)" : "var(--border-subtle)"
+              statusCode ? "rgb(var(--accent-success))" : "rgb(var(--border-subtle))"
             }`,
             borderRadius: "6px",
             fontFamily: "var(--font-mono)",
@@ -240,7 +230,7 @@ export default function AssetDualGraph() {
           id: `edge:${clusterId}->${leafId}`,
           source: clusterId,
           target: leafId,
-          style: { stroke: "var(--border-subtle)", strokeWidth: 1.25 },
+          style: { stroke: "rgb(var(--border-subtle))", strokeWidth: 1.25 },
         });
       });
 
@@ -262,8 +252,8 @@ export default function AssetDualGraph() {
       },
       style: {
         background: "var(--accent-primary-bg)",
-        color: "var(--accent-primary)",
-        border: "1px solid var(--accent-primary)",
+        color: "rgb(var(--accent-primary))",
+        border: "1px solid rgb(var(--accent-primary))",
         borderRadius: "8px",
         fontFamily: "var(--font-mono)",
         fontSize: "12px",
@@ -325,7 +315,7 @@ export default function AssetDualGraph() {
 
         <div
           role="tablist"
-          aria-label="Asset display mode"
+          aria-label={t("graph.displayModeAria")}
           className="flex items-center gap-1 bg-inset p-1 rounded-md border border-border-subtle"
         >
           <button
@@ -381,7 +371,7 @@ export default function AssetDualGraph() {
             aria-pressed={kindFilter === "ALL"}
             className={`px-2 py-1 rounded text-[11px] font-mono tabular-nums border transition-colors ${
               kindFilter === "ALL"
-                ? "border-sentinel-primary bg-[var(--accent-primary-bg)] text-sentinel-primary"
+                ? "border-sentinel-primary bg-sentinel-primary/15 text-sentinel-primary"
                 : "border-border-subtle bg-elevated text-ink-muted hover:text-ink-primary"
             }`}
           >
@@ -396,7 +386,7 @@ export default function AssetDualGraph() {
               aria-pressed={kindFilter === kind}
               className={`px-2 py-1 rounded text-[11px] font-mono tabular-nums border transition-colors ${
                 kindFilter === kind
-                  ? "border-sentinel-primary bg-[var(--accent-primary-bg)] text-sentinel-primary"
+                  ? "border-sentinel-primary bg-sentinel-primary/15 text-sentinel-primary"
                   : "border-border-subtle bg-elevated text-ink-muted hover:text-ink-primary"
               }`}
             >
@@ -417,7 +407,8 @@ export default function AssetDualGraph() {
         <div className="flex-1 flex flex-col gap-2 min-h-0">
           <div className="flex items-center justify-between text-[11px] font-mono text-ink-muted px-0.5">
             <span>
-              {t("graph.rootLabel")}: <strong className="text-ink-primary ltr-isolate">{rootTarget}</strong>
+              {t("graph.rootLabel")}:{" "}
+              <strong className="text-ink-primary ltr-isolate">{rootTarget}</strong>
             </span>
             <span className="tabular-nums">
               {t("graph.showingWindow", { shown: shownCount, total: filteredAssets.length })}
@@ -456,7 +447,9 @@ export default function AssetDualGraph() {
                   if (data.nodeType === "cluster") return theme === "dark" ? "#a78bfa" : "#6d28d9";
                   return theme === "dark" ? "#34d399" : "#047857";
                 }}
-                maskColor={theme === "dark" ? "rgba(11, 15, 23, 0.72)" : "rgba(248, 250, 252, 0.75)"}
+                maskColor={
+                  theme === "dark" ? "rgba(11, 15, 23, 0.72)" : "rgba(248, 250, 252, 0.75)"
+                }
               />
             </ReactFlow>
           </div>
@@ -476,7 +469,8 @@ export default function AssetDualGraph() {
               <tbody className="divide-y divide-border-subtle">
                 {pagedAssets.map((asset, idx) => {
                   const statusCode = asset.attributes?.status_code;
-                  const title = typeof asset.attributes?.title === "string" ? asset.attributes.title : "";
+                  const title =
+                    typeof asset.attributes?.title === "string" ? asset.attributes.title : "";
                   const tech = Array.isArray(asset.attributes?.tech)
                     ? asset.attributes.tech.slice(0, 2).join(", ")
                     : "";
@@ -502,7 +496,7 @@ export default function AssetDualGraph() {
                       </td>
                       <td className="py-2 px-3 font-mono tabular-nums ltr-isolate whitespace-nowrap">
                         {statusCode ? (
-                          <span className="px-1.5 py-0.5 rounded bg-[var(--accent-success-bg)] text-sentinel-success border border-[var(--accent-success)]/30">
+                          <span className="px-1.5 py-0.5 rounded bg-sentinel-success/15 text-sentinel-success border border-sentinel-success/35">
                             {String(statusCode)}
                           </span>
                         ) : (
@@ -532,7 +526,7 @@ export default function AssetDualGraph() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 className="h-7 px-2.5 rounded border border-border-subtle bg-elevated text-ink-primary disabled:opacity-40 flex items-center gap-1"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="w-3.5 h-3.5 rtl:rotate-180" />
                 <span>{t("graph.prevPage")}</span>
               </button>
               <button
@@ -542,7 +536,7 @@ export default function AssetDualGraph() {
                 className="h-7 px-2.5 rounded border border-border-subtle bg-elevated text-ink-primary disabled:opacity-40 flex items-center gap-1"
               >
                 <span>{t("graph.nextPage")}</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
               </button>
             </div>
           </div>
@@ -556,20 +550,22 @@ export default function AssetDualGraph() {
           onClick={() => setInspectedAsset(null)}
         >
           <div
+            ref={drawerTrapRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="asset-inspector-title"
+            tabIndex={-1}
             className="w-full max-w-lg h-full bg-surface border-s border-border-subtle shadow-sentinelMd flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 border-b border-border-subtle flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-[var(--accent-primary-bg)] text-sentinel-primary border border-[var(--accent-primary)]/30">
+                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-sentinel-primary/15 text-sentinel-primary border border-sentinel-primary/35">
                     {inspectedAsset.kind}
                   </span>
                   {inspectedAsset.attributes?.status_code !== undefined && (
-                    <span className="text-xs font-mono tabular-nums px-2 py-0.5 rounded bg-[var(--accent-success-bg)] text-sentinel-success border border-[var(--accent-success)]/30 ltr-isolate">
+                    <span className="text-xs font-mono tabular-nums px-2 py-0.5 rounded bg-sentinel-success/15 text-sentinel-success border border-sentinel-success/35 ltr-isolate">
                       HTTP {String(inspectedAsset.attributes.status_code)}
                     </span>
                   )}
@@ -586,7 +582,7 @@ export default function AssetDualGraph() {
                 type="button"
                 onClick={() => setInspectedAsset(null)}
                 aria-label={t("common.close")}
-                className="h-8 w-8 rounded border border-border-subtle bg-elevated text-ink-secondary hover:text-ink-primary flex items-center justify-center shrink-0"
+                className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 lg:h-8 lg:w-8 rounded border border-border-subtle bg-elevated text-ink-secondary hover:text-ink-primary flex items-center justify-center shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -599,7 +595,11 @@ export default function AssetDualGraph() {
                   onClick={() => void handleCopyJson(inspectedAsset.value, "val")}
                   className="h-8 px-3 rounded border border-border-subtle bg-elevated hover:border-border-strong text-xs text-ink-primary flex items-center gap-1.5"
                 >
-                  {copiedId === "val" ? <Check className="w-3.5 h-3.5 text-sentinel-success" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedId === "val" ? (
+                    <Check className="w-3.5 h-3.5 text-sentinel-success" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
                   <span>{copiedId === "val" ? t("common.copied") : t("common.copy")}</span>
                 </button>
 
@@ -608,7 +608,7 @@ export default function AssetDualGraph() {
                     href={inspectedLiveUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="h-8 px-3 rounded border border-[var(--accent-primary)]/40 bg-[var(--accent-primary-bg)] text-sentinel-primary text-xs font-medium flex items-center gap-1.5"
+                    className="h-8 px-3 rounded border border-sentinel-primary/40 bg-sentinel-primary/15 text-sentinel-primary text-xs font-medium flex items-center gap-1.5"
                   >
                     <span>{t("graph.openUrl")}</span>
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -631,7 +631,11 @@ export default function AssetDualGraph() {
                     }
                     className="text-sentinel-primary hover:underline flex items-center gap-1"
                   >
-                    {copiedId === "json" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    {copiedId === "json" ? (
+                      <Check className="w-3 h-3" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
                     <span>{copiedId === "json" ? t("common.copied") : t("common.copy")}</span>
                   </button>
                 </div>

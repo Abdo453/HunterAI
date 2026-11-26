@@ -16,38 +16,34 @@ import {
   Terminal,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   RefreshCw,
   Folder,
+  FolderOpen,
   FileCode,
   Loader2,
+  ShieldAlert,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  BurpStatusResponse,
+  BurpTrafficItem,
+  EditorTreeItem,
+  StaticAuditResponse,
+} from "@/lib/api-types";
 import { usePlatform } from "@/lib/platform-context";
 import { useTheme } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
 import { renderSafeMarkdown } from "@/lib/sanitize";
-
-interface TreeItem {
-  type: "directory" | "file" | string;
-  name: string;
-  path: string;
-  ext?: string;
-  parent?: string | null;
-}
+import { sanitizePlainTerminalText } from "@/lib/terminal-sanitizer";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface SkillSummary {
   name: string;
   pack?: string;
   kind?: string;
   description?: string;
-}
-
-interface TrafficRow {
-  id: string;
-  method: string;
-  host: string;
-  path: string;
-  status: number;
-  scheme?: string;
 }
 
 interface StudioTab {
@@ -96,6 +92,58 @@ type WindowWithMonaco = Window & {
   monaco?: MonacoNamespace;
 };
 
+interface FolderTreeNode {
+  name: string;
+  path: string;
+  isDir: boolean;
+  children: FolderTreeNode[];
+}
+
+function isDirectoryItem(item: EditorTreeItem): boolean {
+  const norm = String(item.type || "").toLowerCase();
+  return Boolean(item.is_dir) || norm === "dir" || norm === "directory";
+}
+
+function buildHierarchyTree(items: EditorTreeItem[]): FolderTreeNode[] {
+  const rootMap = new Map<string, FolderTreeNode>();
+  const ensureNode = (path: string, isDir: boolean, explicitName?: string): FolderTreeNode => {
+    const clean = path.replace(/^\/+|\/+$/g, "");
+    const existing = rootMap.get(clean);
+    if (existing) {
+      if (isDir) existing.isDir = true;
+      return existing;
+    }
+    const parts = clean.split("/");
+    const name = explicitName || parts[parts.length - 1] || clean;
+    const node: FolderTreeNode = { name, path: clean, isDir, children: [] };
+    rootMap.set(clean, node);
+    if (parts.length > 1) {
+      const parentPath = parts.slice(0, -1).join("/");
+      const parent = ensureNode(parentPath, true);
+      if (!parent.children.some((c) => c.path === clean)) {
+        parent.children.push(node);
+      }
+    }
+    return node;
+  };
+
+  for (const item of items) {
+    if (!item.path) continue;
+    ensureNode(item.path, isDirectoryItem(item), item.name);
+  }
+
+  const sortTree = (nodes: FolderTreeNode[]): FolderTreeNode[] =>
+    nodes
+      .sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      })
+      .map((n) => ({ ...n, children: sortTree(n.children) }));
+
+  const topLevel = Array.from(rootMap.values()).filter((n) => !n.path.includes("/"));
+  return sortTree(topLevel);
+}
+
 const EXT_TO_LANG: Record<string, string> = {
   py: "python",
   js: "javascript",
@@ -137,21 +185,30 @@ export default function StudioPage() {
     selectedEngagementId,
     repeaterDraft,
     setRepeaterDraft,
+    studioOpenPath,
+    setStudioOpenPath,
     apiJson,
   } = usePlatform();
   const { theme } = useTheme();
   const { t } = useI18n();
 
-  const [activityTab, setActivityTab] = useState<"explorer" | "skills" | "burp" | "tools">("explorer");
-  const [treeItems, setTreeItems] = useState<TreeItem[]>([]);
+  const [activityTab, setActivityTab] = useState<"explorer" | "skills" | "burp" | "sast" | "tools">("explorer");
+  const [treeItems, setTreeItems] = useState<EditorTreeItem[]>([]);
+  const [expandedDirs, setExpandedDirs] = useState<Record<string, boolean>>({});
+  const [loadedDirs, setLoadedDirs] = useState<Record<string, boolean>>({});
   const [fileFilter, setFileFilter] = useState<string>("");
   const [newFilePath, setNewFilePath] = useState<string>("");
 
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillFilter, setSkillFilter] = useState<string>("");
-  const [traffic, setTraffic] = useState<TrafficRow[]>([]);
+  const [traffic, setTraffic] = useState<BurpTrafficItem[]>([]);
   const [burpProxyOnline, setBurpProxyOnline] = useState<boolean>(false);
   const [tools, setTools] = useState<Array<{ name: string; installed: boolean }>>([]);
+
+  // CodeIntel SAST State
+  const [sastCode, setSastCode] = useState<string>("");
+  const [sastRunning, setSastRunning] = useState<boolean>(false);
+  const [sastResult, setSastResult] = useState<StaticAuditResponse | null>(null);
 
   const [tabs, setTabs] = useState<StudioTab[]>([
     {
@@ -183,14 +240,23 @@ export default function StudioPage() {
   const [dockTab, setDockTab] = useState<"term" | "burp">("term");
   const [termCmd, setTermCmd] = useState<string>("");
   const [dockLogs, setDockLogs] = useState<string[]>([
-    "[*] Security Studio ready. Self-hosted Monaco + Burp Repeater + Terminal.",
+    "[*] Security Studio ready. Self-hosted Monaco + Burp Repeater + CodeIntel SAST + Terminal.",
   ]);
   const [sensoryEvents, setSensoryEvents] = useState<Array<Record<string, unknown>>>([]);
 
   const monacoContainerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MonacoEditorInstance | null>(null);
+  const modelCacheRef = useRef<Map<string, MonacoModel>>(new Map());
   const activeTabRef = useRef<string>(activeTabId);
   const tabsRef = useRef<StudioTab[]>(tabs);
+  const syncingModelRef = useRef<boolean>(false);
+
+  const hasDirtyTabs = useMemo(() => tabs.some((tb) => Boolean(tb.dirty)), [tabs]);
+  const unsavedGuard = useUnsavedChangesGuard({
+    isDirty: hasDirtyTabs,
+    message: t("studio.unsavedWarning"),
+  });
+  const discardModalTrapRef = useFocusTrap(unsavedGuard.hasPendingPrompt, unsavedGuard.cancelDiscard);
 
   useEffect(() => {
     activeTabRef.current = activeTabId;
@@ -201,35 +267,17 @@ export default function StudioPage() {
   }, [tabs]);
 
   const appendDock = useCallback((line: string) => {
-    setDockLogs((prev) => [...prev.slice(-199), line]);
+    const clean = sanitizePlainTerminalText(line);
+    setDockLogs((prev) => [...prev.slice(-199), clean]);
   }, []);
-
-  // Honor ?tab=repeater and incoming repeaterDraft from /intercept
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("tab") === "repeater") {
-        setActiveTabId("special:repeater");
-      }
-    } catch {
-      // Ignore URL errors
-    }
-    if (repeaterDraft) {
-      setRepRaw(repeaterDraft.rawRequest);
-      if (repeaterDraft.targetUrl) setRepUrl(repeaterDraft.targetUrl);
-      if (typeof repeaterDraft.useProxy === "boolean") setRepUseProxy(repeaterDraft.useProxy);
-      setActiveTabId("special:repeater");
-      setRepeaterDraft(null);
-    }
-  }, [repeaterDraft, setRepeaterDraft]);
 
   // Load Sidebar Data
   const loadSidebarData = useCallback(async () => {
     const [treeR, skR, burpStR, burpTrR, toolsR, sensR] = await Promise.all([
-      apiJson<{ items?: TreeItem[]; entries?: Array<TreeItem & { is_dir?: boolean }> }>("/api/editor/tree"),
+      apiJson<{ items?: EditorTreeItem[]; entries?: EditorTreeItem[] }>("/api/editor/tree"),
       apiJson<{ skills?: SkillSummary[] }>("/api/opencode/skills"),
-      apiJson<{ proxy?: { online?: boolean } }>("/api/burp/status"),
-      apiJson<{ items?: TrafficRow[] }>("/api/burp/traffic?limit=30"),
+      apiJson<BurpStatusResponse>("/api/burp/status"),
+      apiJson<{ items?: BurpTrafficItem[]; traffic?: BurpTrafficItem[] }>("/api/burp/traffic?limit=30"),
       apiJson<{ tools?: Array<{ name: string; installed: boolean } | string> }>("/api/control/tools"),
       apiJson<{ events?: Array<Record<string, unknown>> }>("/api/burp/sensory_events"),
     ]);
@@ -241,9 +289,10 @@ export default function StudioPage() {
     if (treeR.ok && rawTree) {
       setTreeItems(
         rawTree
-          .filter((it): it is TreeItem & { is_dir?: boolean } => Boolean(it && typeof it === "object" && it.path))
+          .filter((it): it is EditorTreeItem => Boolean(it && typeof it === "object" && it.path))
           .map((it) => ({
-            type: it.type || (it.is_dir ? "directory" : "file"),
+            type: isDirectoryItem(it) ? "directory" : "file",
+            is_dir: isDirectoryItem(it),
             name: String(it.name || it.path),
             path: String(it.path),
             ext: it.ext,
@@ -252,8 +301,23 @@ export default function StudioPage() {
       );
     }
     if (skR.ok && Array.isArray(skR.data?.skills)) setSkills(skR.data.skills);
-    if (burpStR.ok && burpStR.data?.proxy) setBurpProxyOnline(Boolean(burpStR.data.proxy.online));
-    if (burpTrR.ok && Array.isArray(burpTrR.data?.items)) setTraffic(burpTrR.data.items);
+    if (burpStR.ok && burpStR.data?.proxy) {
+      setBurpProxyOnline(
+        Boolean(
+          burpStR.data.proxy.reachable ||
+            burpStR.data.proxy.online ||
+            burpStR.data.proxy.status === "online"
+        )
+      );
+    }
+    if (burpTrR.ok && burpTrR.data) {
+      const list = Array.isArray(burpTrR.data.items)
+        ? burpTrR.data.items
+        : Array.isArray(burpTrR.data.traffic)
+          ? burpTrR.data.traffic
+          : [];
+      setTraffic(list);
+    }
     if (toolsR.ok && Array.isArray(toolsR.data?.tools)) {
       setTools(
         toolsR.data.tools
@@ -277,6 +341,42 @@ export default function StudioPage() {
     void loadSidebarData();
   }, [loadSidebarData]);
 
+  // Expand/collapse folder lazily without ever calling /api/editor/file on a directory
+  const toggleDirectory = async (dirPath: string) => {
+    const nextOpen = !expandedDirs[dirPath];
+    setExpandedDirs((prev) => ({ ...prev, [dirPath]: nextOpen }));
+    if (nextOpen && !loadedDirs[dirPath]) {
+      setLoadedDirs((prev) => ({ ...prev, [dirPath]: true }));
+      const res = await apiJson<{ items?: EditorTreeItem[]; entries?: EditorTreeItem[] }>(
+        `/api/editor/tree?folder=${encodeURIComponent(dirPath)}`
+      );
+      const rawChildren = Array.isArray(res.data?.items)
+        ? res.data.items
+        : Array.isArray(res.data?.entries)
+          ? res.data.entries
+          : [];
+      if (res.ok && rawChildren.length > 0) {
+        setTreeItems((prev) => {
+          const existing = new Set(prev.map((p) => p.path));
+          const additions: EditorTreeItem[] = [];
+          for (const child of rawChildren) {
+            if (!child?.path || existing.has(child.path)) continue;
+            existing.add(child.path);
+            additions.push({
+              type: isDirectoryItem(child) ? "directory" : "file",
+              is_dir: isDirectoryItem(child),
+              name: String(child.name || child.path),
+              path: String(child.path),
+              ext: child.ext,
+              parent: child.parent,
+            });
+          }
+          return additions.length > 0 ? [...prev, ...additions] : prev;
+        });
+      }
+    }
+  };
+
   // Open workspace file or SKILL.md in a Monaco tab
   const openFileTab = useCallback(
     async (path: string, opts?: { isSkill?: boolean; skillName?: string }) => {
@@ -286,9 +386,10 @@ export default function StudioPage() {
         return;
       }
 
-      const url = opts?.isSkill && opts.skillName
-        ? `/api/opencode/skill-file?name=${encodeURIComponent(opts.skillName)}`
-        : `/api/editor/file?path=${encodeURIComponent(path)}`;
+      const url =
+        opts?.isSkill && opts.skillName
+          ? `/api/opencode/skill-file?name=${encodeURIComponent(opts.skillName)}`
+          : `/api/editor/file?path=${encodeURIComponent(path)}`;
       const res = await apiJson<{ status?: string; content?: string; path?: string; extension?: string }>(url);
       if (!res.ok || !res.data) {
         setStatusNotice(res.error || t("studio.readFailed"));
@@ -307,11 +408,39 @@ export default function StudioPage() {
         extension: ext,
         dirty: false,
       };
-      setTabs((prev) => [...prev, nextTab]);
+      setTabs((prev) => (prev.some((tb) => tb.id === actualPath) ? prev : [...prev, nextTab]));
       setActiveTabId(actualPath);
     },
     [apiJson, t]
   );
+
+  // Honor ?tab=repeater, ?file=..., studioOpenPath (Copilot file ref), and repeaterDraft
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "repeater") {
+        setActiveTabId("special:repeater");
+      }
+      const fileParam = params.get("file");
+      if (fileParam) {
+        void openFileTab(fileParam);
+      }
+    } catch {
+      // Ignore URL errors
+    }
+    if (repeaterDraft) {
+      setRepRaw(repeaterDraft.rawRequest);
+      if (repeaterDraft.targetUrl) setRepUrl(repeaterDraft.targetUrl);
+      if (typeof repeaterDraft.useProxy === "boolean") setRepUseProxy(repeaterDraft.useProxy);
+      setActiveTabId("special:repeater");
+      setRepeaterDraft(null);
+    }
+    if (studioOpenPath) {
+      const targetPath = studioOpenPath;
+      setStudioOpenPath(null);
+      void openFileTab(targetPath);
+    }
+  }, [repeaterDraft, setRepeaterDraft, studioOpenPath, setStudioOpenPath, openFileTab]);
 
   const saveTab = useCallback(
     async (tabId?: string) => {
@@ -319,20 +448,24 @@ export default function StudioPage() {
       const current = tabsRef.current.find((tb) => tb.id === id);
       if (!current || current.isSpecial) return;
 
+      const cachedModel = modelCacheRef.current.get(id);
       const content =
-        id === activeTabRef.current && editorRef.current
-          ? editorRef.current.getValue()
-          : current.content;
+        cachedModel
+          ? cachedModel.getValue()
+          : id === activeTabRef.current && editorRef.current
+            ? editorRef.current.getValue()
+            : current.content;
 
-      const res = current.isSkill && current.skillName
-        ? await apiJson<{ status?: string }>("/api/opencode/skill-file/save", {
-            method: "POST",
-            body: { name: current.skillName, path: current.path, content },
-          })
-        : await apiJson<{ status?: string }>("/api/editor/file/save", {
-            method: "POST",
-            body: { path: current.path, content },
-          });
+      const res =
+        current.isSkill && current.skillName
+          ? await apiJson<{ status?: string }>("/api/opencode/skill-file/save", {
+              method: "POST",
+              body: { name: current.skillName, path: current.path, content },
+            })
+          : await apiJson<{ status?: string }>("/api/editor/file/save", {
+              method: "POST",
+              body: { path: current.path, content },
+            });
 
       if (!res.ok) {
         setStatusNotice(`${t("studio.saveFailed")}${res.error || ""}`);
@@ -367,6 +500,7 @@ export default function StudioPage() {
           scrollBeyondLastLine: false,
         });
         editor.onDidChangeModelContent(() => {
+          if (syncingModelRef.current) return;
           const curId = activeTabRef.current;
           if (!curId || curId.startsWith("special:")) return;
           const val = editor.getValue();
@@ -382,9 +516,7 @@ export default function StudioPage() {
       });
     };
 
-    if (win.monaco) {
-      initEditor();
-    } else if (win.require) {
+    if (win.monaco || win.require) {
       initEditor();
     } else {
       const existing = document.querySelector<HTMLScriptElement>('script[data-monaco-loader="1"]');
@@ -405,8 +537,13 @@ export default function StudioPage() {
       }
     }
 
+    const cache = modelCacheRef.current;
     return () => {
       cancelled = true;
+      for (const model of cache.values()) {
+        model.dispose();
+      }
+      cache.clear();
       if (editorRef.current) {
         editorRef.current.dispose();
         editorRef.current = null;
@@ -423,21 +560,29 @@ export default function StudioPage() {
     }
   }, [theme]);
 
-  // Swap Monaco model cleanly whenever active code tab switches
   const activeTab = useMemo(
     () => tabs.find((tb) => tb.id === activeTabId) || tabs[0],
     [tabs, activeTabId]
   );
 
+  // Per-tab Monaco model cache preserves undo/redo buffers across tab switches
   useEffect(() => {
     if (!monacoReady || !editorRef.current || !activeTab || activeTab.isSpecial) return;
     const win = window as unknown as WindowWithMonaco;
     if (!win.monaco?.editor) return;
-    const langId = EXT_TO_LANG[activeTab.extension] || "plaintext";
-    const oldModel = editorRef.current.getModel();
-    const newModel = win.monaco.editor.createModel(activeTab.content || "", langId);
-    editorRef.current.setModel(newModel);
-    if (oldModel) oldModel.dispose();
+
+    let cached = modelCacheRef.current.get(activeTab.id);
+    if (!cached) {
+      const langId = EXT_TO_LANG[activeTab.extension] || "plaintext";
+      cached = win.monaco.editor.createModel(activeTab.content || "", langId);
+      modelCacheRef.current.set(activeTab.id, cached);
+    }
+    syncingModelRef.current = true;
+    try {
+      editorRef.current.setModel(cached);
+    } finally {
+      syncingModelRef.current = false;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId, monacoReady]);
 
@@ -450,7 +595,7 @@ export default function StudioPage() {
       body: { path: clean, type: "file", content: "# Created in Security Studio\n" },
     });
     if (!res.ok) {
-      setStatusNotice(res.error || "Create failed");
+      setStatusNotice(res.error || t("studio.saveFailed"));
       return;
     }
     setNewFilePath("");
@@ -458,8 +603,13 @@ export default function StudioPage() {
     await openFileTab(clean);
   };
 
-  const closeTab = (id: string) => {
+  const performCloseTab = (id: string) => {
     if (id === "special:repeater") return;
+    const cached = modelCacheRef.current.get(id);
+    if (cached) {
+      modelCacheRef.current.delete(id);
+      cached.dispose();
+    }
     setTabs((prev) => {
       const next = prev.filter((tb) => tb.id !== id);
       if (activeTabId === id) {
@@ -467,6 +617,37 @@ export default function StudioPage() {
       }
       return next;
     });
+  };
+
+  const closeTab = (tb: StudioTab) => {
+    if (tb.isSpecial) return;
+    if (tb.dirty) {
+      unsavedGuard.requestAction(() => performCloseTab(tb.id));
+      return;
+    }
+    performCloseTab(tb.id);
+  };
+
+  const runCodeIntelSast = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const sourceCode =
+      sastCode.trim() ||
+      (activeTab && !activeTab.isSpecial
+        ? modelCacheRef.current.get(activeTab.id)?.getValue() || activeTab.content
+        : "");
+    if (!sourceCode.trim()) return;
+    setSastRunning(true);
+    setSastResult(null);
+    const res = await apiJson<StaticAuditResponse>("/api/static/audit", {
+      method: "POST",
+      body: {
+        source_code: sourceCode,
+        target_name: activeTab && !activeTab.isSpecial ? activeTab.path : selectedEngagement?.target || "studio_snippet",
+        context: selectedEngagement?.name || "Security Studio CodeIntel SAST",
+      },
+    });
+    setSastRunning(false);
+    setSastResult(res.data || { ok: false, error: res.error || t("common.error") });
   };
 
   const sendRepeater = async () => {
@@ -493,7 +674,7 @@ export default function StudioPage() {
     setRepSending(false);
     if (!res.ok || !res.data || res.data.status !== "ok") {
       setRepStatusMeta("ERR");
-      setRepResponse(res.error || res.data?.message || "Request failed");
+      setRepResponse(res.error || res.data?.message || t("common.error"));
       return;
     }
     setRepStatusMeta(`${res.data.status_code} ${res.data.reason || ""} · ${res.data.elapsed_ms}ms · ${res.data.bytes}B`);
@@ -509,7 +690,7 @@ export default function StudioPage() {
       body: { raw_request: repRaw, raw_response: repResponse, skill_category: "web-api-security" },
     });
     setRepAuditing(false);
-    setRepAuditMd(res.ok ? res.data?.analysis || "" : res.error || "Audit failed");
+    setRepAuditMd(res.ok ? res.data?.analysis || "" : res.error || t("common.error"));
   };
 
   const runTerminal = async (overrideCmd?: string) => {
@@ -547,9 +728,14 @@ export default function StudioPage() {
     appendDock(res.ok ? `[OK] ${res.data?.job_id || "done"} ${res.data?.output || ""}` : `[!] ${res.error}`);
   };
 
-  const filteredTree = useMemo(() => {
+  const hierarchyTree = useMemo(() => buildHierarchyTree(treeItems), [treeItems]);
+
+  const filteredFlatTree = useMemo(() => {
     const q = fileFilter.trim().toLowerCase();
-    return treeItems.filter((it) => !q || it.path.toLowerCase().includes(q)).slice(0, 250);
+    if (!q) return [];
+    return treeItems
+      .filter((it) => !isDirectoryItem(it) && it.path.toLowerCase().includes(q))
+      .slice(0, 200);
   }, [treeItems, fileFilter]);
 
   const filteredSkills = useMemo(() => {
@@ -561,20 +747,80 @@ export default function StudioPage() {
 
   const auditHtml = useMemo(() => (repAuditMd ? renderSafeMarkdown(repAuditMd) : ""), [repAuditMd]);
 
+  const renderTreeNodes = (nodes: FolderTreeNode[], depth = 0): React.ReactNode =>
+    nodes.map((node) => {
+      const isOpen = Boolean(expandedDirs[node.path]);
+      if (node.isDir) {
+        return (
+          <div key={node.path}>
+            <button
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() => void toggleDirectory(node.path)}
+              style={{ paddingInlineStart: `${8 + depth * 12}px` }}
+              className="w-full pe-2 py-1 rounded text-start flex items-center gap-1.5 font-mono text-[11px] ltr-isolate hover:bg-elevated text-ink-secondary"
+            >
+              {isOpen ? (
+                <ChevronDown className="w-3 h-3 shrink-0 text-ink-muted" />
+              ) : (
+                <ChevronRight className="w-3 h-3 shrink-0 text-ink-muted rtl:rotate-180" />
+              )}
+              {isOpen ? (
+                <FolderOpen className="w-3.5 h-3.5 shrink-0 text-sentinel-warning" />
+              ) : (
+                <Folder className="w-3.5 h-3.5 shrink-0 text-sentinel-warning" />
+              )}
+              <span className="truncate">{node.name}</span>
+            </button>
+            {isOpen && node.children.length > 0 && (
+              <div className="space-y-0.5">{renderTreeNodes(node.children, depth + 1)}</div>
+            )}
+          </div>
+        );
+      }
+      return (
+        <button
+          key={node.path}
+          type="button"
+          onClick={() => void openFileTab(node.path)}
+          style={{ paddingInlineStart: `${22 + depth * 12}px` }}
+          className={`w-full pe-2 py-1 rounded text-start flex items-center gap-1.5 font-mono text-[11px] ltr-isolate truncate ${
+            activeTabId === node.path
+              ? "bg-sentinel-primary/15 text-sentinel-primary"
+              : "hover:bg-elevated text-ink-secondary"
+          }`}
+        >
+          <FileCode className="w-3.5 h-3.5 shrink-0 text-sentinel-primary" />
+          <span className="truncate">{node.name}</span>
+        </button>
+      );
+    });
+
+  const sastFindings = Array.isArray(sastResult?.findings)
+    ? sastResult.findings
+    : Array.isArray(sastResult?.issues)
+      ? sastResult.issues
+      : [];
+
   return (
     <div className="flex-1 flex flex-col min-h-[calc(100vh-56px)] bg-canvas">
       {/* Studio Toolbar */}
       <div className="px-4 py-2 border-b border-border-subtle bg-surface flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-ink-primary">{t("routes.studio")}</span>
+          <h1 className="font-semibold text-ink-primary">{t("routes.studio")}</h1>
+          {hasDirtyTabs && (
+            <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-sentinel-warning/15 text-sentinel-warning border border-sentinel-warning/35">
+              {t("editor.modifiedBadge")}
+            </span>
+          )}
           {statusNotice && (
-            <span className="font-mono text-sentinel-primary bg-[var(--accent-primary-bg)] px-2 py-0.5 rounded">
+            <span className="font-mono text-sentinel-primary bg-sentinel-primary/15 px-2 py-0.5 rounded">
               {statusNotice}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             disabled={!activeTab || activeTab.isSpecial}
@@ -584,6 +830,21 @@ export default function StudioPage() {
             <Save className="w-3.5 h-3.5 text-sentinel-success" />
             <span>{t("studio.save")}</span>
           </button>
+
+          {activeTab && !activeTab.isSpecial && (
+            <button
+              type="button"
+              disabled={sastRunning}
+              onClick={() => {
+                setActivityTab("sast");
+                void runCodeIntelSast();
+              }}
+              className="h-8 px-3 rounded border border-sentinel-ai/40 bg-sentinel-ai/15 text-sentinel-ai font-semibold flex items-center gap-1.5 disabled:opacity-40"
+            >
+              {sastRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+              <span>{t("studio.sastAuditBtn")}</span>
+            </button>
+          )}
 
           {activeTab && !activeTab.isSpecial && activeTab.extension === "py" && (
             <button
@@ -599,7 +860,7 @@ export default function StudioPage() {
           <button
             type="button"
             onClick={() => setActiveTabId("special:repeater")}
-            className="h-8 px-3 rounded border border-[var(--accent-warning)]/40 bg-[var(--accent-warning-bg)] text-sentinel-warning font-semibold flex items-center gap-1.5"
+            className="h-8 px-3 rounded border border-sentinel-warning/40 bg-sentinel-warning/15 text-sentinel-warning font-semibold flex items-center gap-1.5"
           >
             <Shield className="w-3.5 h-3.5" />
             <span>{t("studio.repeater")}</span>
@@ -610,14 +871,15 @@ export default function StudioPage() {
       {/* Main Split: Activity Rail + Side Drawer + Editor/Repeater */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Compact Activity + Drawer Pane */}
-        <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-e border-border-subtle bg-surface flex flex-col max-h-72 lg:max-h-none">
-          <div className="p-1.5 border-b border-border-subtle grid grid-cols-4 gap-1 bg-inset">
+        <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-e border-border-subtle bg-surface flex flex-col max-h-80 lg:max-h-none">
+          <div className="p-1.5 border-b border-border-subtle grid grid-cols-5 gap-1 bg-inset">
             {(
               [
-                { id: "explorer", icon: Files, label: "Files" },
-                { id: "skills", icon: Sparkles, label: "Skills" },
-                { id: "burp", icon: Shield, label: "Burp" },
-                { id: "tools", icon: Wrench, label: "Tools" },
+                { id: "explorer", icon: Files, labelKey: "studio.tabFiles" },
+                { id: "skills", icon: Sparkles, labelKey: "studio.tabSkills" },
+                { id: "burp", icon: Shield, labelKey: "studio.tabBurp" },
+                { id: "sast", icon: ShieldAlert, labelKey: "studio.tabSast" },
+                { id: "tools", icon: Wrench, labelKey: "studio.tabTools" },
               ] as const
             ).map((btn) => {
               const Icon = btn.icon;
@@ -626,14 +888,15 @@ export default function StudioPage() {
                   key={btn.id}
                   type="button"
                   onClick={() => setActivityTab(btn.id)}
-                  className={`py-1.5 px-2 rounded text-[11px] font-medium flex items-center justify-center gap-1 ${
+                  title={t(btn.labelKey)}
+                  className={`py-1.5 px-1.5 rounded text-[11px] font-medium flex flex-col items-center justify-center gap-0.5 ${
                     activityTab === btn.id
                       ? "bg-elevated text-sentinel-primary border border-border-subtle"
                       : "text-ink-muted hover:text-ink-primary"
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
-                  <span>{btn.label}</span>
+                  <span className="truncate max-w-full">{t(btn.labelKey)}</span>
                 </button>
               );
             })}
@@ -649,6 +912,7 @@ export default function StudioPage() {
                     value={newFilePath}
                     onChange={(e) => setNewFilePath(e.target.value)}
                     placeholder={t("studio.newFilePlaceholder")}
+                    aria-label={t("studio.newFilePlaceholder")}
                     className="ltr-isolate flex-1 min-w-0 h-8 px-2 rounded bg-inset border border-border-subtle font-mono text-[11px]"
                   />
                   <button
@@ -665,30 +929,30 @@ export default function StudioPage() {
                   value={fileFilter}
                   onChange={(e) => setFileFilter(e.target.value)}
                   placeholder={t("studio.searchFiles")}
+                  aria-label={t("studio.searchFiles")}
                   className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle text-xs"
                 />
 
                 <div className="space-y-0.5">
-                  {filteredTree.map((item, idx) => (
-                    <button
-                      key={`${item.path || item.name || "entry"}-${idx}`}
-                      type="button"
-                      disabled={item.type === "directory"}
-                      onClick={() => void openFileTab(item.path)}
-                      className={`w-full px-2 py-1 rounded text-start flex items-center gap-1.5 font-mono text-[11px] ltr-isolate truncate ${
-                        activeTabId === item.path
-                          ? "bg-[var(--accent-primary-bg)] text-sentinel-primary"
-                          : "hover:bg-elevated text-ink-secondary disabled:opacity-60"
-                      }`}
-                    >
-                      {item.type === "directory" ? (
-                        <Folder className="w-3.5 h-3.5 shrink-0 text-sentinel-warning" />
-                      ) : (
+                  {fileFilter.trim() ? (
+                    filteredFlatTree.map((item, idx) => (
+                      <button
+                        key={`${item.path}-${idx}`}
+                        type="button"
+                        onClick={() => void openFileTab(item.path)}
+                        className={`w-full px-2 py-1 rounded text-start flex items-center gap-1.5 font-mono text-[11px] ltr-isolate truncate ${
+                          activeTabId === item.path
+                            ? "bg-sentinel-primary/15 text-sentinel-primary"
+                            : "hover:bg-elevated text-ink-secondary"
+                        }`}
+                      >
                         <FileCode className="w-3.5 h-3.5 shrink-0 text-sentinel-primary" />
-                      )}
-                      <span className="truncate">{item.path}</span>
-                    </button>
-                  ))}
+                        <span className="truncate">{item.path}</span>
+                      </button>
+                    ))
+                  ) : (
+                    renderTreeNodes(hierarchyTree)
+                  )}
                 </div>
               </>
             )}
@@ -700,6 +964,7 @@ export default function StudioPage() {
                   value={skillFilter}
                   onChange={(e) => setSkillFilter(e.target.value)}
                   placeholder={t("studio.searchSkills")}
+                  aria-label={t("studio.searchSkills")}
                   className="w-full h-8 px-2.5 rounded bg-inset border border-border-subtle text-xs"
                 />
                 {filteredSkills.map((sk, idx) => (
@@ -717,7 +982,7 @@ export default function StudioPage() {
                       <button
                         type="button"
                         onClick={() => void runSkillQuick(sk.name)}
-                        className="px-2 py-0.5 rounded bg-[var(--accent-primary-bg)] text-sentinel-primary text-[11px] border border-[var(--accent-primary)]/35"
+                        className="px-2 py-0.5 rounded bg-sentinel-primary/15 text-sentinel-primary text-[11px] border border-sentinel-primary/35"
                       >
                         {t("studio.runSkill")}
                       </button>
@@ -730,9 +995,9 @@ export default function StudioPage() {
             {activityTab === "burp" && (
               <>
                 <div className="p-2 rounded bg-elevated border border-border-subtle flex items-center justify-between">
-                  <span className="font-mono">Proxy 8080</span>
+                  <span className="font-mono">{t("burp.proxyPortLabel")} 8080</span>
                   <span className={burpProxyOnline ? "text-sentinel-success font-mono" : "text-sentinel-warning font-mono"}>
-                    {burpProxyOnline ? "ONLINE" : "OFFLINE"}
+                    {burpProxyOnline ? t("states.online") : t("states.offline")}
                   </span>
                 </div>
                 {traffic.length === 0 ? (
@@ -746,18 +1011,75 @@ export default function StudioPage() {
                         const scheme = tx.scheme || "http";
                         const raw = `${tx.method} ${tx.path} HTTP/1.1\nHost: ${tx.host}\nUser-Agent: HunterAI-Studio/2.0\n\n`;
                         setRepRaw(raw);
-                        setRepUrl(`${scheme}://${tx.host}${tx.path}`);
+                        setRepUrl(tx.url || `${scheme}://${tx.host}${tx.path}`);
                         setActiveTabId("special:repeater");
                       }}
                       className="w-full p-2 rounded bg-inset border border-border-subtle hover:border-sentinel-primary text-start font-mono text-[11px] ltr-isolate flex items-center justify-between gap-2"
                     >
                       <span className="text-sentinel-primary shrink-0">{tx.method}</span>
                       <span className="truncate flex-1">{tx.host}{tx.path}</span>
-                      <span className="text-ink-muted">{tx.status}</span>
+                      <span className="text-ink-muted">{tx.status || tx.response_status}</span>
                     </button>
                   ))
                 )}
               </>
+            )}
+
+            {activityTab === "sast" && (
+              <div className="space-y-2">
+                <div className="font-semibold text-ink-primary">{t("studio.sastTitle")}</div>
+                <p className="text-[11px] text-ink-muted">{t("studio.sastHint")}</p>
+                <form onSubmit={runCodeIntelSast} className="space-y-2">
+                  <textarea
+                    rows={5}
+                    dir="ltr"
+                    value={sastCode}
+                    onChange={(e) => setSastCode(e.target.value)}
+                    placeholder={t("studio.sastCodePlaceholder")}
+                    aria-label={t("studio.sastCodePlaceholder")}
+                    className="ltr-isolate w-full p-2 rounded bg-inset border border-border-subtle font-mono text-[11px]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sastRunning}
+                    className="w-full h-8 px-3 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {sastRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                    <span>{t("studio.sastAuditBtn")}</span>
+                  </button>
+                </form>
+
+                {sastResult && (
+                  <div className="space-y-1.5 pt-1">
+                    {sastResult.error && (
+                      <div className="p-2 rounded bg-sentinel-danger/10 border border-sentinel-danger/40 text-sentinel-danger text-[11px]">
+                        {sastResult.error}
+                      </div>
+                    )}
+                    {sastResult.summary && (
+                      <div className="p-2 rounded bg-elevated border border-border-subtle text-[11px] text-ink-primary">
+                        {sastResult.summary}
+                      </div>
+                    )}
+                    {sastFindings.length > 0 ? (
+                      sastFindings.map((item, idx) => (
+                        <div key={idx} className="p-2 rounded bg-inset border border-border-subtle space-y-0.5 text-[11px]">
+                          <div className="font-mono font-semibold text-sentinel-warning">
+                            {String(item.title || item.rule || item.type || "Finding")}
+                          </div>
+                          <div className="text-ink-secondary">
+                            {String(item.message || item.description || JSON.stringify(item))}
+                          </div>
+                        </div>
+                      ))
+                    ) : !sastResult.error ? (
+                      <pre dir="ltr" className="ltr-isolate p-2 rounded bg-inset border border-border-subtle font-mono text-[10px] max-h-40 overflow-auto">
+                        {sanitizePlainTerminalText(JSON.stringify(sastResult, null, 2))}
+                      </pre>
+                    ) : null}
+                  </div>
+                )}
+              </div>
             )}
 
             {activityTab === "tools" && (
@@ -771,7 +1093,7 @@ export default function StudioPage() {
                   >
                     <span>{tl.name}</span>
                     <span className={tl.installed ? "text-sentinel-success" : "text-ink-muted"}>
-                      {tl.installed ? "READY" : "MISSING"}
+                      {tl.installed ? t("states.ready") : t("states.missing")}
                     </span>
                   </button>
                 ))}
@@ -806,8 +1128,8 @@ export default function StudioPage() {
                   {!tb.isSpecial && (
                     <button
                       type="button"
-                      onClick={() => closeTab(tb.id)}
-                      aria-label={`Close ${tb.name}`}
+                      onClick={() => closeTab(tb)}
+                      aria-label={`${t("common.close")} ${tb.name}`}
                       className="text-ink-muted hover:text-sentinel-danger"
                     >
                       <X className="w-3 h-3" />
@@ -820,7 +1142,6 @@ export default function StudioPage() {
 
           {/* Editor Canvas */}
           <div className="flex-1 relative min-h-[340px]">
-            {/* Monaco Container kept mounted so model switching stays fast */}
             <div
               ref={monacoContainerRef}
               dir="ltr"
@@ -837,11 +1158,13 @@ export default function StudioPage() {
                     value={repUrl}
                     onChange={(e) => setRepUrl(e.target.value)}
                     placeholder="https://target.example/api"
+                    aria-label={t("common.target")}
                     className="ltr-isolate flex-1 min-w-[200px] h-9 px-3 rounded bg-inset border border-border-subtle font-mono"
                   />
 
                   <select
                     defaultValue=""
+                    aria-label={t("burp.loadPreset")}
                     onChange={(e) => {
                       const p = REPEATER_PRESETS[e.target.value];
                       if (p) {
@@ -851,7 +1174,7 @@ export default function StudioPage() {
                     }}
                     className="h-9 px-2.5 rounded bg-elevated border border-border-subtle font-mono"
                   >
-                    <option value="">Load Preset...</option>
+                    <option value="">{t("burp.loadPreset")}...</option>
                     <option value="get">GET Probe</option>
                     <option value="post_json">POST JSON</option>
                     <option value="idor">IDOR Probe</option>
@@ -870,9 +1193,9 @@ export default function StudioPage() {
                     type="button"
                     disabled={repSending}
                     onClick={() => void sendRepeater()}
-                    className="h-9 px-3.5 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold flex items-center gap-1.5 disabled:opacity-50"
+                    className="min-h-[44px] sm:min-h-[36px] px-3.5 rounded bg-sentinel-primary text-sentinel-onAccent font-semibold flex items-center gap-1.5 disabled:opacity-50"
                   >
-                    {repSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    {repSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 rtl:rotate-180" />}
                     <span>{t("studio.sendRequest")}</span>
                   </button>
                 </div>
@@ -885,6 +1208,7 @@ export default function StudioPage() {
                       dir="ltr"
                       value={repRaw}
                       onChange={(e) => setRepRaw(e.target.value)}
+                      aria-label={t("studio.rawRequest")}
                       className="ltr-isolate w-full p-3 rounded-md bg-inset border border-border-subtle font-mono text-xs leading-relaxed"
                     />
                   </div>
@@ -918,7 +1242,7 @@ export default function StudioPage() {
                           type="button"
                           disabled={repAuditing || !repResponse}
                           onClick={() => void auditRepeater()}
-                          className="h-7 px-2.5 rounded border border-sentinel-ai bg-[var(--accent-ai-bg)] text-sentinel-ai font-semibold flex items-center gap-1 disabled:opacity-40"
+                          className="h-7 px-2.5 rounded border border-sentinel-ai bg-sentinel-ai/15 text-sentinel-ai font-semibold flex items-center gap-1 disabled:opacity-40"
                         >
                           {repAuditing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                           <span>{t("studio.aiAudit")}</span>
@@ -931,7 +1255,8 @@ export default function StudioPage() {
                       readOnly
                       dir="ltr"
                       value={repResponse}
-                      placeholder="HTTP response appears here..."
+                      placeholder={t("studio.httpResponsePlaceholder")}
+                      aria-label={t("studio.httpResponse")}
                       className="ltr-isolate w-full p-3 rounded-md bg-inset border border-border-subtle font-mono text-xs leading-relaxed text-ink-secondary"
                     />
                   </div>
@@ -953,6 +1278,7 @@ export default function StudioPage() {
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
+                  aria-expanded={dockOpen}
                   onClick={() => setDockOpen((p) => !p)}
                   className="flex items-center gap-1 font-mono font-semibold text-ink-primary"
                 >
@@ -970,7 +1296,7 @@ export default function StudioPage() {
                     dockTab === "term" ? "bg-surface text-sentinel-primary border border-border-subtle" : "text-ink-muted"
                   }`}
                 >
-                  Terminal
+                  {t("opencode.dockTerminal")}
                 </button>
                 <button
                   type="button"
@@ -1019,6 +1345,7 @@ export default function StudioPage() {
                         value={termCmd}
                         onChange={(e) => setTermCmd(e.target.value)}
                         placeholder={t("opencode.terminalPlaceholder")}
+                        aria-label={t("opencode.terminalPlaceholder")}
                         className="ltr-isolate flex-1 h-8 px-2.5 rounded bg-inset border border-border-subtle font-mono text-xs"
                       />
                       <button
@@ -1031,7 +1358,7 @@ export default function StudioPage() {
                   </>
                 ) : (
                   <pre dir="ltr" className="ltr-isolate h-36 overflow-y-auto rounded bg-inset border border-border-subtle p-2 font-mono text-[11px] text-ink-secondary">
-                    {JSON.stringify(sensoryEvents, null, 2)}
+                    {sanitizePlainTerminalText(JSON.stringify(sensoryEvents, null, 2))}
                   </pre>
                 )}
               </div>
@@ -1039,6 +1366,46 @@ export default function StudioPage() {
           </div>
         </div>
       </div>
+
+      {/* Unsaved Changes Confirmation Dialog */}
+      {unsavedGuard.hasPendingPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-[1px]"
+          onClick={unsavedGuard.cancelDiscard}
+        >
+          <div
+            ref={discardModalTrapRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("studio.unsavedTitle")}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-surface border border-border-strong rounded-xl shadow-sentinelMd p-4 space-y-3"
+          >
+            <div className="flex items-center gap-2 text-sentinel-warning">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <h3 className="text-sm font-semibold text-ink-primary">{t("studio.unsavedTitle")}</h3>
+            </div>
+            <p className="text-xs text-ink-secondary">{t("studio.unsavedWarning")}</p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={unsavedGuard.cancelDiscard}
+                className="h-8 px-3 rounded border border-border-subtle bg-elevated text-xs text-ink-primary"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={unsavedGuard.confirmDiscard}
+                className="h-8 px-3 rounded bg-sentinel-danger text-white text-xs font-semibold"
+              >
+                {t("studio.discardBtn")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
