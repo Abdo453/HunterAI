@@ -596,7 +596,23 @@ def test_django_phase2_api_contract_parity(tmp_path: Path, monkeypatch) -> None:
             # Traversal still blocked with 403
             assert client.get("/api/editor/tree", params={"folder": "../../etc"}).status_code == 403
 
-            # 12. /api/control/seven-gate/evaluate returns top-level fields AND evaluation wrapper + field mapping
+            # 12. /api/control/seven-gate/evaluate enforces Phase 3 canonical EvidenceCourt proof
+            # Prose-only without deterministic proof fails closed
+            sg_prose = client.post(
+                "/api/control/seven-gate/evaluate",
+                json={
+                    "title": "Unverified Prose Claim",
+                    "asset": "https://example.com/api/v1/orders/1002",
+                    "poc": "GET https://example.com/api/v1/orders/1002 returned 200 OK.",
+                    "impact": "Potential disclosure",
+                    "vulnerability_class": "idor",
+                    "in_scope": ["example.com"],
+                },
+            )
+            assert sg_prose.status_code == 200
+            assert sg_prose.json()["passed"] is False
+
+            # Proof-backed finding with deterministic EvidenceCourt payload + remediation + scope passes
             sg_resp = client.post(
                 "/api/control/seven-gate/evaluate",
                 json={
@@ -605,7 +621,15 @@ def test_django_phase2_api_contract_parity(tmp_path: Path, monkeypatch) -> None:
                     "poc": "GET https://example.com/api/v1/orders/1002 with Session A token returns Session B invoice JSON.",
                     "impact": "Cross-tenant PII and invoice disclosure across accounts.",
                     "vulnerability_class": "idor",
+                    "recommendation": "Enforce server-side tenant ownership validation on every order lookup.",
                     "in_scope": ["example.com"],
+                    "proof_payload": {
+                        "proof_kind": "token",
+                        "payload": "order_id=1002",
+                        "expected_token": "tenant_b_invoice_9981",
+                        "response_text": '{"owner":"tenant_b","invoice":"tenant_b_invoice_9981"}',
+                        "baseline_text": '{"owner":"tenant_a","invoice":"tenant_a_invoice_1001"}',
+                    },
                 },
             )
             assert sg_resp.status_code == 200

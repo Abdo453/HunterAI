@@ -181,6 +181,7 @@ class SevenGateReq(BaseModel):
     recommendation: Optional[str] = None
     severity: Optional[str] = None
     in_scope: Optional[List[str]] = None
+    proof_payload: Optional[Dict[str, Any]] = None
 
 
 class TelemetryStepReq(BaseModel):
@@ -1059,17 +1060,16 @@ class ControlSevenGateEvaluateView(APIView):
             "url": req.asset.strip(),
             "target": target_host,
             "evidence": evidence_text,
+            "poc": req.poc.strip(),
             "reason": req.impact.strip(),
             "type": (req.vulnerability_class or "idor").strip(),
-            "recommendation": (
-                req.recommendation.strip()
-                if req.recommendation
-                else f"Enforce strict authorization and validation controls for {(req.vulnerability_class or 'this finding').strip()} on {req.asset.strip()}."
-            ),
+            "recommendation": req.recommendation.strip() if req.recommendation else "",
             "tool": "seven_question_gate_api",
         }
         if req.severity:
             finding_payload["severity"] = req.severity.strip()
+        if req.proof_payload is not None:
+            finding_payload["proof_payload"] = req.proof_payload
 
         gate = SevenQuestionGate()
         result = gate.evaluate_finding(finding_payload, in_scope_list=req.in_scope)
@@ -1084,6 +1084,8 @@ class ControlSevenGateEvaluateView(APIView):
                 "ok": True,
                 "passed": bool(payload.get("passed", False)),
                 "score": payload.get("score", 0.0),
+                "canonical_verdict": payload.get("canonical_verdict", "UNVERIFIED"),
+                "proof_strength": payload.get("proof_strength", "NONE"),
                 "missing_items": list(payload.get("missing_items") or []),
                 "triage_statement": str(payload.get("triage_statement") or ""),
                 "answers": payload.get("answers") or {},
