@@ -433,14 +433,9 @@ def test_unified_pentest_cli_parser_and_urls() -> None:
 
 @pytest.mark.asyncio
 async def test_whitenoise_serves_static_assets() -> None:
-    sample_monaco = Path(__file__).resolve().parent.parent / "ui" / "web" / "static" / "vendor" / "monaco" / "vs" / "loader.js"
-    sample_appjs = Path(__file__).resolve().parent.parent / "ui" / "web" / "static" / "app.js"
+    sample_monaco = Path(__file__).resolve().parent.parent / "frontend" / "public" / "vendor" / "monaco" / "vs" / "loader.js"
+    assert sample_monaco.is_file()
     async with _make_asgi_client() as client:
-        if sample_appjs.is_file():
-            r_js = await client.get("/static/app.js")
-            assert r_js.status_code == 200
-            assert len(r_js.content) > 0
-        if sample_monaco.is_file():
-            r_monaco = await client.get("/static/vendor/monaco/vs/loader.js")
-            assert r_monaco.status_code == 200
-            assert len(r_monaco.content) > 0
+        r_monaco = await client.get("/static/vendor/monaco/vs/loader.js")
+        assert r_monaco.status_code == 200
+        assert len(r_monaco.content) > 0

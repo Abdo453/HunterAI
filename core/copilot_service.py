@@ -421,7 +421,7 @@ def collect_live_context(
     # Assets (read-only)
     assets: List[Dict[str, Any]] = []
     try:
-        from ui.web.app import get_burp_gateway
+        from hunter_backend.runtime import get_burp_gateway
 
         gw = get_burp_gateway()
         if gw and getattr(gw, "attack_surface_graph", None):

@@ -110,7 +110,7 @@ STATIC_ROOT = str(BASE_DIR / "data" / "staticfiles")
 STATICFILES_DIRS = [
     str(p)
     for p in (
-        BASE_DIR / "ui" / "web" / "static",
+        BASE_DIR / "frontend" / "public",
         BASE_DIR / "hunter_backend" / "static",
     )
     if p.is_dir()

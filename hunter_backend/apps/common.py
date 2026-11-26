@@ -533,6 +533,30 @@ def redact_settings_map(mapping: Dict[str, str]) -> Dict[str, Any]:
     return out
 
 
+def _resolve_router_prefer(provider: Optional[str], model: Optional[str]) -> Optional[str]:
+    """Map optional provider/model hints onto LLMRouter.complete(prefer=...)."""
+    prov = (provider or "").strip().lower()
+    mdl = (model or "").strip()
+    if mdl.startswith(("local:", "api:")):
+        return mdl
+    if prov in {"ollama", "local"} and mdl:
+        return f"local:{mdl}"
+    if prov and prov not in {"auto", "ollama", "local"}:
+        return f"api:{prov}:{mdl}" if mdl else None
+    return None
+
+
+def _run_coro_sync(coro: Any) -> Any:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 def call_provider_sync(
     prompt: str,
     *,
@@ -545,15 +569,19 @@ def call_provider_sync(
         from core.llm_router import get_llm_router
 
         router = get_llm_router()
-        resp = router.chat(
-            prompt=prompt,
-            system=system_prompt or "You are HunterAI Bug Bounty Assistant.",
-            provider=provider,
-            model=model,
+        prefer = _resolve_router_prefer(provider, model)
+        msgs = [{"role": "user", "content": prompt}]
+        resp = _run_coro_sync(
+            router.complete(
+                msgs,
+                prefer=prefer,
+                system_prompt=system_prompt or "You are HunterAI Bug Bounty Assistant.",
+            )
         )
-        if isinstance(resp, dict):
-            return str(resp.get("content") or resp.get("response") or resp)
-        return str(resp)
+        if resp and getattr(resp, "content", ""):
+            return str(resp.content)
+        err = getattr(resp, "error", "") if resp else ""
+        return f"AI provider unavailable ({err or 'empty response'}). Check Settings / Ollama or API key."
     except Exception as exc:
         return f"AI provider unavailable ({exc}). Check Settings / Ollama or API key."
 
@@ -565,14 +593,24 @@ async def call_ai(
     model: Optional[str] = None,
     system_prompt: str = "",
 ) -> str:
-    """Async wrapper around ``call_provider_sync`` for native async views."""
-    return await asyncio.to_thread(
-        call_provider_sync,
-        prompt,
-        provider=provider,
-        model=model,
-        system_prompt=system_prompt,
-    )
+    """Async LLM invocation directly on the active event loop via LLMRouter."""
+    try:
+        from core.llm_router import get_llm_router
+
+        router = get_llm_router()
+        prefer = _resolve_router_prefer(provider, model)
+        msgs = [{"role": "user", "content": prompt}]
+        resp = await router.complete(
+            msgs,
+            prefer=prefer,
+            system_prompt=system_prompt or "You are HunterAI Bug Bounty Assistant.",
+        )
+        if resp and getattr(resp, "content", ""):
+            return str(resp.content)
+        err = getattr(resp, "error", "") if resp else ""
+        return f"AI provider unavailable ({err or 'empty response'}). Check Settings / Ollama or API key."
+    except Exception as exc:
+        return f"AI provider unavailable ({exc}). Check Settings / Ollama or API key."
 
 
 def load_agent_context(max_chars: int = 3500) -> str:
