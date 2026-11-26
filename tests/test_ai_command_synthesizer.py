@@ -207,7 +207,11 @@ def test_dynamic_tool_agent_synthesizes_command():
     )
 
     res = agent.execute(target="https://portal.example.com", context=ctx, deliberate=False)
-    assert res.success is True
+    # Phase 3 truthfulness: force_fallback=True never synthesizes fake tool output;
+    # returns UNAVAILABLE while still attaching the synthesized command plan.
+    assert res.success is False
+    assert res.used_fallback is False
+    assert res.structured_data["status"] == "UNAVAILABLE"
     assert "ai_command_synthesis" in res.structured_data
     synth_data = res.structured_data["ai_command_synthesis"]
     assert synth_data["tool_name"] == "nuclei"

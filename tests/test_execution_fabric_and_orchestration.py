@@ -48,7 +48,20 @@ class TestExecutionFabricAndOrchestration:
 
     @pytest.mark.asyncio
     async def test_browser_controller_navigation_and_dom_extraction(self):
-        controller = BrowserController(proxy_url="http://127.0.0.1:8080")
+        # Phase 3 truthfulness: default controller without reachable target fails closed (no fake HTML).
+        offline_ctrl = BrowserController(proxy_url="http://127.0.0.1:1", timeout=0.5)
+        offline_res = await offline_ctrl.navigate("https://lab.internal/portal")
+        assert offline_res.status == "UNAVAILABLE"
+        assert offline_res.status_code == 0
+
+        # Explicit test transport verifies navigation, DOM extraction, and proxy tracking.
+        controller = BrowserController(
+            proxy_url="http://127.0.0.1:8080",
+            transport_fn=lambda url, hdrs: (
+                200,
+                "<html><head><title>Lab Portal</title></head><body><h1>Portal</h1><form action='/login'></form></body></html>",
+            ),
+        )
         result = await controller.navigate("https://lab.internal/portal")
 
         assert result.status_code == 200

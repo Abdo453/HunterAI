@@ -222,7 +222,7 @@ def test_tool_interceptor_gate_safety():
     # 2. Block out-of-scope target
     allowed3, reason3 = gate.evaluate_pre_tool_use("httpx", {"target": "http://malicious-external-bank.com"})
     assert allowed3 is False
-    assert "outside the authorized scope" in reason3.lower()
+    assert "outside" in reason3.lower() and "authorized scope" in reason3.lower()
 
     # 3. Allow authorized in-scope tool call
     allowed4, reason4 = gate.evaluate_pre_tool_use("nmap", {"target": "http://127.0.0.1:8080", "command": "nmap -sV 127.0.0.1"})

@@ -605,7 +605,11 @@ def test_playbook_execution_runs_a_registered_tool(tmp_path: Path):
 def test_playbook_execution_hands_unregistered_tools_to_the_operator(tmp_path: Path):
     grant_path = make_grant(tmp_path)
     policy = PermissionPolicy.from_grant(grant_path, Profile.RED_TEAM, secret=SECRET)
-    registry = ToolRegistry(policy_engine=policy.engine)
+    # Phase 4 unified ToolRegistry loads config/tools.catalog.yaml by default (which registers assetfinder);
+    # supply an empty catalog file so only core tools are registered and assetfinder stays unregistered.
+    empty_catalog = tmp_path / "empty_tools.yaml"
+    empty_catalog.write_text("tools: []\n", encoding="utf-8")
+    registry = ToolRegistry(policy_engine=policy.engine, config_path=str(empty_catalog))
     controller = make_controller(tmp_path, policy=policy, registry=registry)
     runner = PlaybookRunner(probe=lambda name: f"/usr/bin/{name}")
     steps = runner.plan("example.com", stage_keys=["passive_subdomains"])

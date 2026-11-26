@@ -120,10 +120,14 @@ class TestLedgerUIWiring:
     def test_html_elements_exist(self):
         from pathlib import Path
 
-        tsx = Path("frontend/app/findings/page.tsx").read_text(encoding="utf-8")
-        assert "court_verdict" in tsx
-        assert "ledgerEntities" in tsx
-        assert "ledger?.counts" in tsx
+        page_tsx = Path("frontend/app/findings/page.tsx").read_text(encoding="utf-8")
+        drawer_tsx = Path("frontend/components/EvidenceCourtDrawer.tsx").read_text(encoding="utf-8")
+        combined = page_tsx + "\n" + drawer_tsx
+        assert "EvidenceCourtDrawer" in page_tsx
+        assert "court_verdict" in combined
+        assert "ledger?.recent?.court_verdict" in combined
+        assert "ledger?.recent?.evidence" in combined
+        assert "COURT_VERDICT_STATES" in combined
 
     def test_js_functions_exist(self):
         from pathlib import Path

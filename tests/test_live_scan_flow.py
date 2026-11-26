@@ -95,11 +95,15 @@ def isolated_scan_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for d in (data_dir, reports_dir, data_dir / "sessions", ev_dir):
         d.mkdir(parents=True, exist_ok=True)
 
+    import core.runtime.orchestrator as rt_orch
+
     monkeypatch.setenv("HUNTER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("HUNTER_PLATFORM_DB_PATH", str(db_file))
     monkeypatch.setenv("HUNTER_PIPELINE_PHASE_DELAY_S", "0.02")
     monkeypatch.setattr(rt, "DATA_DIR", data_dir)
     monkeypatch.setattr(rt, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(rt_orch, "_DATA_DIR", data_dir)
+    monkeypatch.setattr(rt_orch, "_REPORTS_DIR", reports_dir)
     monkeypatch.setattr(ops_api, "DATA_DIR", data_dir)
     monkeypatch.setattr(ops_api, "REPORTS_DIR", reports_dir)
     monkeypatch.setattr(arsenal_api, "DATA_DIR", data_dir)

@@ -68,7 +68,7 @@ def test_opencode_api_mcp_status_endpoint(client):
 
 
 def test_opencode_api_execute_endpoint(client):
-    """Verify POST /api/opencode/execute dispatches skill execution cleanly."""
+    """Verify POST /api/opencode/execute truthfully reports UNAVAILABLE for markdown prompt skills (Phase 5)."""
     payload = {
         "skill_name": "hunterai-redteam",
         "target": "example.com"
@@ -76,10 +76,11 @@ def test_opencode_api_execute_endpoint(client):
     response = client.post("/api/opencode/execute", json=payload)
     assert response.status_code == 200
     data = response.json()
-    assert data.get("status") in ["ok", "success"]
+    assert data.get("status") == "UNAVAILABLE"
+    assert data.get("ok") is False
+    assert data.get("executed") is False
     assert data.get("skill") == "hunterai-redteam"
     assert data.get("target") == "example.com"
-    assert "job_id" in data
 
 
 def test_cognitive_wordlists_resolve_api(client):

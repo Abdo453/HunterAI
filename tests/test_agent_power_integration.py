@@ -159,7 +159,8 @@ def test_7_question_validation_gate_filters_noise():
     gate.safety_loop.kg.add_in_scope("example.com")
     gate.safety_loop.kg.add_in_scope(target_url)
 
-    verified_finding = {
+    # Bare caller-set boolean flags without DERIVED proof_payload MUST NOT pass (Phase 3 Evidence Court)
+    declared_only_finding = {
         "title": "Example SQL Injection",
         "target": target_url,
         "evidence": {
@@ -174,8 +175,26 @@ def test_7_question_validation_gate_filters_noise():
             "severity": "high",
         }
     }
+    result_declared = gate.validate(declared_only_finding)
+    assert result_declared.status.value != "PROVEN"
+    assert result_declared.proof_strength in ("DECLARED", "REFUTED")
+
+    # Finding backed by engine-verifiable DERIVED proof_payload passes all 7 gates
+    verified_finding = {
+        **declared_only_finding,
+        "evidence": {
+            **declared_only_finding["evidence"],
+            "vuln_class": "sqli",
+            "proof_payload": {
+                "artifact_type": "sqli",
+                "response_text": "ERROR: PostgreSQL 15.4 syntax error at or near ''",
+                "baseline_text": "Search results: 12 items",
+            },
+        },
+    }
     result_verified = gate.validate(verified_finding)
     assert result_verified.status.value == "PROVEN"
+    assert result_verified.proof_strength == "DERIVED"
     assert result_verified.confidence == 1.0
     assert len(result_verified.gates) == 7
 

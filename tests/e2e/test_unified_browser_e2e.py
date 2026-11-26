@@ -18,6 +18,10 @@ from .conftest import (
     save_verification_screenshot,
 )
 
+# Browser E2E tests boot live Next.js + Django ASGI + Chromium (requires frontend/node_modules).
+# Marked slow so `-m "not slow"` skips live stack boot while `pytest tests/e2e/` runs them directly.
+pytestmark = pytest.mark.slow
+
 
 def _wait_ui_ready(page: Page, url: str) -> None:
     """Navigate to *url* and wait until React hydration & initial data settle."""

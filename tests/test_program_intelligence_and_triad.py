@@ -136,15 +136,42 @@ async def test_local_triad_agent_routing():
 # ── 3. ORCHESTRATOR INTEGRATION TEST ──────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_orchestrator_program_metadata_and_reports():
+async def test_orchestrator_program_metadata_and_reports(monkeypatch):
     """Verify orchestrator discovers program metadata, saves it in 00_scope, and writes VDP/BBP deliverables"""
+    from core.program_intelligence import ProgramIntelligence
+    from core.readiness.checker import ReadinessReport
+    from hunter_ai.pipeline.schemas import ProgramMetadata, ProgramPlatform, ProgramType, ProgramVisibility
+
+    async def _mock_gate(gate_data, target="local-env", session_id="test", **kwargs):
+        return ReadinessReport(target=target, session_id=session_id, results=[], strict=False)
+
+    async def _mock_program(domain, proxy=None):
+        return ProgramMetadata(
+            domain=domain,
+            program_type=ProgramType.VDP,
+            platform=ProgramPlatform.SELF_HOSTED,
+            visibility=ProgramVisibility.PUBLIC,
+            contact_email=f"security@{domain}",
+        )
+
+    monkeypatch.setattr("hunter_ai.pipeline.pipeline_orchestrator.run_mission_gate", _mock_gate)
+    monkeypatch.setattr("core.readiness.save_readiness_artifact", lambda *a, **kw: None)
+    monkeypatch.setattr(ProgramIntelligence, "discover_program", staticmethod(_mock_program))
+
     orch = HunterPipelineOrchestrator(
         target="scanme.nmap.org",
         profile="passive",
         authorized=False,
         workflow="recon",
         allow_no_ai=True,  # بيئة اختبار بلا Ollama — وضع الاستدلال الحتمي
+        skip_ai_probe=True,
+        dry_run=True,
     )
+    monkeypatch.setattr(orch.tm, "is_available", lambda _tool: False)
+    async def _mock_exec(tool_name, params, eng_mgr, stage, input_source=""):
+        return ([f"api.{orch.domain}"] if "crt" in tool_name or "subfinder" in tool_name else []), None
+    monkeypatch.setattr(orch.master_tools, "execute_artifact", _mock_exec)
+
     res = await orch.run()
     assert res["status"] == "completed"
 

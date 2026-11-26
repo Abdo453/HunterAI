@@ -203,9 +203,18 @@ def test_research_controller_modify_request():
     assert "action=delete" in mutated.url
 
 
+def _mock_http_transport(req: CanonicalRequest) -> CanonicalResponse:
+    """Explicit test transport injected into BurpResearchController (Phase 3 removed default mock fallback)."""
+    return CanonicalResponse(
+        status_code=200,
+        headers={"Content-Type": "application/json", "X-Test-Transport": "1"},
+        body=json.dumps({"ok": True, "url": req.url, "method": req.method}),
+    )
+
+
 def test_research_controller_replay_success():
     guard = ScopeGuard(in_scope=["api.target.local"])
-    ctrl = BurpResearchController(scope_guard=guard)
+    ctrl = BurpResearchController(scope_guard=guard, transport_fn=_mock_http_transport)
 
     base_tx = CanonicalTransaction(
         tx_id="tx_orig",
@@ -443,6 +452,7 @@ def test_burp_gateway_research_endpoints():
 
     scope = ScopeGuard(in_scope=["api.target.local"])
     gw = BurpGateway(scope_engine=scope)
+    gw.research_controller._http_transport_fn = _mock_http_transport
     client = TestClient(gw.app)
 
     # Seed an ingested transaction in the gateway
@@ -492,6 +502,7 @@ def test_burp_gateway_research_endpoints():
 
 def test_burp_sensor_research_integration():
     sensor = BurpSensor()
+    sensor.research_controller._http_transport_fn = _mock_http_transport
     assert hasattr(sensor, "research_controller")
     assert hasattr(sensor, "experiment_queue")
     assert hasattr(sensor, "event_stream")
@@ -539,6 +550,7 @@ def test_bcsl_experiment_contract_submission_success():
 
     guard = ScopeGuard(in_scope=["api.target.local"])
     bcsl = BurpControlSensorLayer(scope_guard=guard)
+    bcsl.controller._http_transport_fn = _mock_http_transport
 
     # Seed baseline
     base_tx = CanonicalTransaction(
@@ -607,6 +619,7 @@ def test_bcsl_gateway_endpoint_integration():
 
     scope = ScopeGuard(in_scope=["api.target.local"])
     gw = BurpGateway(scope_engine=scope)
+    gw.research_controller._http_transport_fn = _mock_http_transport
     client = TestClient(gw.app)
 
     # Seed baseline

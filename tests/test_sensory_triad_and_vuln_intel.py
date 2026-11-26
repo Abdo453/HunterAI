@@ -334,7 +334,14 @@ def test_burp_extension_non_blocking_queue_auth_header_and_task_poller(monkeypat
             return _FakeUrlResp(json.dumps({"tasks": polled_tasks}).encode("utf-8"))
         return _FakeUrlResp(b'{"status":"OK"}')
 
-    monkeypatch.setattr(ext_mod.urllib2, "urlopen", fake_urlopen)
+    import urllib.request
+
+    # Defensively isolate from any prior Jython/BurpTestHarness Urllib2Shim pollution in sys.modules
+    monkeypatch.setattr(
+        ext_mod,
+        "urllib2",
+        SimpleNamespace(Request=urllib.request.Request, urlopen=fake_urlopen),
+    )
 
     repeater_calls: List[tuple] = []
     http_exec_calls: List[tuple] = []
