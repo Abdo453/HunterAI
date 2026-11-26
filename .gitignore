@@ -110,6 +110,7 @@ snapshots/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+*.tsbuildinfo
 
 # Go binaries
 backend/bin/
