@@ -280,19 +280,22 @@ def test_hunter_agent_manager_e2e_mission(tmp_path):
 
 def test_fastapi_hunter_endpoints():
     async def _run():
-        from ui.web.app import app
+        from hunter_backend.asgi import application
         from httpx import ASGITransport, AsyncClient
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        transport = ASGITransport(app=application)
+        async with AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as ac:
             # 1. List contracts
             r_contracts = await ac.get("/api/hunter/contracts")
             assert r_contracts.status_code == 200
             data_contracts = r_contracts.json()
             assert data_contracts["registered_agents_count"] == 3
 
-            # 2. Execute mission
-            r_mission = await ac.post("/api/hunter/mission/execute", json={"target_url": "api.testtarget.local"})
+            # 2. Execute mission (explicit scope required under Django governance)
+            r_mission = await ac.post(
+                "/api/hunter/mission/execute",
+                json={"target_url": "api.testtarget.local", "scope": ["api.testtarget.local"]},
+            )
             assert r_mission.status_code == 200
             data_mission = r_mission.json()
             assert data_mission["status"] == "completed"

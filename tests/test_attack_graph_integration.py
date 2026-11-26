@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import httpx
 
 from core.brain.autonomous_brain import AutonomousBrain
-from ui.web.app import app
+from hunter_backend.asgi import application
 
 
 def test_autonomous_brain_attack_graph_attached():
@@ -21,8 +21,8 @@ def test_autonomous_brain_attack_graph_attached():
 
 @pytest.mark.asyncio
 async def test_rest_api_attack_graph_snapshot():
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
         res = await client.get("/api/attack_graph/snapshot")
         assert res.status_code == 200
         data = res.json()
@@ -34,8 +34,8 @@ async def test_rest_api_attack_graph_snapshot():
 
 @pytest.mark.asyncio
 async def test_rest_api_multi_agent_analyze():
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
         payload = {"target": "testcorp.local"}
         res = await client.post("/api/multi_agent/analyze", json=payload)
         assert res.status_code == 200

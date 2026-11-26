@@ -8,7 +8,7 @@ Verifies:
 """
 import pytest
 from core.methodology_kb import MethodologyKB
-from ui.web.app import app
+from hunter_backend.asgi import application
 import httpx
 
 
@@ -87,8 +87,8 @@ class TestMethodologyKB:
 
     @pytest.mark.asyncio
     async def test_api_methodology_endpoint(self):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
             resp = await client.get("/api/methodology")
             assert resp.status_code == 200
             data = resp.json()

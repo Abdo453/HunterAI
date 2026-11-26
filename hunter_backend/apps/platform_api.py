@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -14,11 +15,16 @@ from django.views.decorators.http import require_GET, require_http_methods
 from pydantic import BaseModel, Field
 from rest_framework.views import APIView
 
-from core.copilot_service import detect_live_providers
+from core.copilot_service import (
+    detect_live_providers,
+    evaluate_action_policy,
+    is_tcp_reachable,
+)
 from core.evidence_store import EvidenceStore
 from core.platform_store import get_platform_store
 from core.run_control import GLOBAL_RUN_CONTROLLER
 from hunter_backend.apps.common import (
+    await_sync,
     django_err,
     django_json,
     err_json,
@@ -28,7 +34,9 @@ from hunter_backend.apps.common import (
     parse_query_bool,
     parse_query_float,
     parse_query_int,
+    split_out_of_scope_exclusions,
     validate_model,
+    validate_scan_target,
 )
 from hunter_backend.runtime import (
     ARTEX_BASE_URL,
@@ -143,7 +151,8 @@ class PlatformContextView(APIView):
 
     def get(self, request: Any) -> Any:
         store = ensure_platform_wiring()
-        return ok_json(store.get_context())
+        ctx = store.get_context()
+        return ok_json({"status": "ok", "context": ctx, **ctx})
 
     def put(self, request: Any) -> Any:
         data, err = parse_json_body(request)
@@ -170,7 +179,7 @@ class PlatformContextView(APIView):
             run_id=updated.get("active_run_id"),
             source="platform",
         )
-        return ok_json(updated)
+        return ok_json({"status": "ok", "context": updated, **updated})
 
 
 @require_GET
@@ -198,7 +207,7 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
     try:
         providers = await asyncio.to_thread(detect_live_providers)
     except Exception:
-        providers = []
+        providers = {}
 
     try:
         from tools.tool_manager import ToolManager
@@ -209,26 +218,57 @@ async def platform_overview_view(request: HttpRequest) -> JsonResponse:
         tools = {}
 
     artex = await probe_artex_health()
+    prov_dict = providers if isinstance(providers, dict) else {}
+    latest_seq = store.latest_seq()
+    services = {
+        "artex_go_core": artex,
+        "ollama": {
+            "online": bool(prov_dict.get("ollama_reachable")),
+            "host": str(prov_dict.get("ollama_host") or ""),
+        },
+        "lm_studio": {
+            "online": bool(prov_dict.get("lm_studio_reachable")),
+            "host": str(prov_dict.get("lm_studio_host") or ""),
+        },
+        "cloud_providers": list(prov_dict.get("cloud") or []),
+    }
+    counts = {
+        "engagements": len(engagements),
+        "runs": len(runs),
+        "active_runs": sum(1 for r in runs if r.get("status") in {"running", "paused"}),
+        "pending_approvals": len(approvals),
+        "unread_notifications": len(notifications),
+        "assets": len(engagements),
+        "findings": 0,
+    }
     return django_json(
         {
+            "status": "ok",
+            "latest_seq": latest_seq,
             "context": ctx,
             "active_engagement": active_eng,
             "active_run": active_run,
             "engagements": engagements,
             "runs": runs,
             "pending_approvals": approvals,
+            "approvals": {
+                "pending": approvals,
+                "pending_count": len(approvals),
+            },
             "unread_notifications": notifications,
             "recent_events": recent_events,
             "providers": providers,
+            "services": services,
+            "counts": counts,
             "tools": tools,
             "artex": artex,
             "stats": {
                 "engagement_count": len(engagements),
                 "run_count": len(runs),
-                "active_run_count": sum(1 for r in runs if r.get("status") in {"running", "paused"}),
+                "active_run_count": counts["active_runs"],
                 "pending_approval_count": len(approvals),
                 "unread_notification_count": len(notifications),
-                "latest_seq": store.latest_seq(),
+                "latest_seq": latest_seq,
             },
         }
     )
@@ -241,7 +281,15 @@ class PlatformEngagementsView(APIView):
         store = ensure_platform_wiring()
         limit = parse_query_int(request.GET.get("limit"), 100)
         items = store.list_engagements(limit=limit)
-        return ok_json({"engagements": items, "count": len(items)})
+        go_online = is_tcp_reachable("127.0.0.1", 7071, timeout=0.05)
+        return ok_json(
+            {
+                "status": "ok",
+                "engagements": items,
+                "count": len(items),
+                "go_core": {"online": go_online},
+            }
+        )
 
     def post(self, request: Any) -> Any:
         data, err = parse_json_body(request)
@@ -250,13 +298,42 @@ class PlatformEngagementsView(APIView):
         req, verr = validate_model(EngagementCreateRequest, data, error_status=422)
         if verr is not None:
             return err_json("Invalid engagement payload", status=422, extra=json.loads(verr.content))
-        store = ensure_platform_wiring()
-        in_scope = req.in_scope if req.in_scope is not None else [req.target]
-        eng = store.upsert_engagement(
-            name=req.name or req.target,
-            target=req.target,
+        target = req.target.strip()
+        in_scope = req.in_scope if req.in_scope is not None else [target]
+        out_of_scope = req.out_of_scope or []
+        ok_tgt, reason_tgt, policy_tgt = validate_scan_target(
+            target,
+            scope=in_scope,
+            out_of_scope=out_of_scope,
+            action_type="ENGAGEMENT_SCOPE",
+        )
+        if not ok_tgt:
+            return err_json(
+                reason_tgt or "Target blocked by ScopeGuard",
+                status=403,
+                extra={"policy": policy_tgt},
+            )
+        host_out_scope, _ = split_out_of_scope_exclusions(out_of_scope)
+        policy_check = evaluate_action_policy(
+            action_type="ENGAGEMENT_SCOPE",
+            target=target,
+            tool_name="scope_guard",
             in_scope=in_scope,
-            out_of_scope=req.out_of_scope or [],
+            out_of_scope=host_out_scope,
+            allow_active_tests=True,
+        )
+        if not policy_check.get("allowed"):
+            return err_json(
+                str(policy_check.get("reason") or "Target blocked by ScopeGuard"),
+                status=403,
+                extra={"policy": policy_check},
+            )
+        store = ensure_platform_wiring()
+        eng = store.upsert_engagement(
+            name=req.name or target,
+            target=target,
+            in_scope=in_scope,
+            out_of_scope=out_of_scope,
             status=req.status,
             metadata=req.metadata or {},
         )
@@ -268,7 +345,7 @@ class PlatformEngagementsView(APIView):
             source="platform",
             payload=eng,
         )
-        return ok_json({"engagement": eng, **eng}, status=201)
+        return ok_json({"status": "ok", "engagement": eng, **eng}, status=201)
 
 
 class PlatformEngagementDetailView(APIView):
@@ -366,7 +443,7 @@ class PlatformRunControlView(APIView):
                 source="platform",
                 payload={"run_id": run_id, "controller_ack": ok},
             )
-            return ok_json({"ok": True, "run": updated, "status": "paused"})
+            return ok_json({"ok": True, "run": updated, "status": "paused", "state": "paused"})
 
         if self.action == "resume":
             ok = GLOBAL_RUN_CONTROLLER.resume(run_id)
@@ -378,9 +455,9 @@ class PlatformRunControlView(APIView):
                 source="platform",
                 payload={"run_id": run_id, "controller_ack": ok},
             )
-            return ok_json({"ok": True, "run": updated, "status": "running"})
+            return ok_json({"ok": True, "run": updated, "status": "running", "state": "running"})
 
-        ok = GLOBAL_RUN_CONTROLLER.stop(run_id, force=True)
+        ok = await_sync(GLOBAL_RUN_CONTROLLER.stop(run_id, force=True))
         updated = store.update_run(run_id, status="stopped") or run
         store.append_event(
             "run.stopped",
@@ -389,7 +466,7 @@ class PlatformRunControlView(APIView):
             source="platform",
             payload={"run_id": run_id, "controller_ack": ok},
         )
-        return ok_json({"ok": True, "run": updated, "status": "stopped"})
+        return ok_json({"ok": True, "run": updated, "status": "stopped", "state": "stopped"})
 
 
 @require_GET
@@ -415,7 +492,8 @@ async def platform_sse_stream_view(request: HttpRequest) -> StreamingHttpRespons
                 seq = ev.get("seq")
                 if seq is not None:
                     last_sent_seq = max(last_sent_seq, int(seq))
-                yield format_sse(str(ev.get("type") or "platform.event"), ev, event_id=seq)
+                ev_type = str(ev.get("event_type") or ev.get("type") or "platform.event")
+                yield format_sse(ev_type, ev, event_id=seq)
 
             if once:
                 yield format_sse("platform.ready", {"seq": last_sent_seq, "once": True})
@@ -439,7 +517,8 @@ async def platform_sse_stream_view(request: HttpRequest) -> StreamingHttpRespons
                     continue
                 if seq is not None:
                     last_sent_seq = int(seq)
-                yield format_sse(str(ev.get("type") or "platform.event"), ev, event_id=seq)
+                ev_type = str(ev.get("event_type") or ev.get("type") or "platform.event")
+                yield format_sse(ev_type, ev, event_id=seq)
         except asyncio.CancelledError:
             return
         finally:
@@ -479,14 +558,61 @@ async def platform_approval_decide_view(
         return verr
     assert req is not None
 
-    decision = req.decision.strip().lower()
-    if decision not in {"approved", "rejected"}:
+    norm = req.decision.strip().lower()
+    if norm in {"approve", "approved", "allow", "allowed"}:
+        decision = "approved"
+    elif norm in {"reject", "rejected", "deny", "denied"}:
+        decision = "rejected"
+    else:
         return django_err("decision must be 'approved' or 'rejected'", status=400)
 
     store = ensure_platform_wiring()
     existing = store.get_approval(approval_id)
     if not existing:
         return django_err(f"Approval {approval_id} not found", status=404)
+    if existing.get("status") != "pending":
+        return django_err(
+            f"Approval {approval_id} is already '{existing.get('status')}'",
+            status=409,
+        )
+
+    if decision == "approved":
+        eng = (
+            store.get_engagement(existing["engagement_id"])
+            if existing.get("engagement_id")
+            else None
+        )
+        in_scope = [str(s).strip() for s in ((eng or {}).get("in_scope") or []) if str(s).strip()]
+        out_of_scope = [str(s).strip() for s in ((eng or {}).get("out_of_scope") or []) if str(s).strip()]
+        policy = evaluate_action_policy(
+            action_type=existing["action_type"],
+            target=existing.get("target") or "",
+            tool_name=existing.get("tool_name") or "",
+            command_args=existing.get("command_args") or "",
+            in_scope=in_scope,
+            out_of_scope=out_of_scope,
+            allow_active_tests=True,
+            rationale=existing.get("rationale") or "",
+        )
+        if not policy.get("allowed"):
+            rejected = store.decide_approval(
+                approval_id,
+                "rejected",
+                decided_by="policy_guard",
+                note=f"Blocked on approval check: {policy.get('reason')}",
+            )
+            store.append_event(
+                "approval.rejected",
+                run_id=existing.get("run_id"),
+                engagement_id=existing.get("engagement_id"),
+                source="policy_guard",
+                payload=rejected or {},
+            )
+            return django_err(
+                str(policy.get("reason") or "Blocked by ScopeGuard"),
+                status=403,
+                extra={"policy": policy, "approval": rejected},
+            )
 
     updated = store.decide_approval(
         approval_id,
@@ -507,9 +633,55 @@ async def platform_approval_decide_view(
 
     execution: Optional[Dict[str, Any]] = None
     if decision == "approved":
-        execution = await execute_approved_action(updated)
+        if updated.get("action_type") == "RUN_TOOL" or (
+            updated.get("tool_name") and updated.get("action_type") not in {"platform_run", "scan", "mission", "pipeline"}
+        ):
+            from core.gateway.policy_engine import PolicyEngine
+            from core.gateway.schemas import ActionProposal
+            from core.gateway.tool_gateway import GovernedToolGateway
+            from core.scope_guard import ScopeGuard
 
-    return django_json({"ok": True, "approval": updated, "execution": execution})
+            eng_id = updated.get("engagement_id")
+            eng = store.get_engagement(eng_id) if eng_id else None
+            sg = ScopeGuard(
+                in_scope=list((eng or {}).get("in_scope") or ([updated["target"]] if updated.get("target") else [])),
+                out_of_scope=list((eng or {}).get("out_of_scope") or []),
+            )
+            gw = GovernedToolGateway(policy_engine=PolicyEngine(scope_guard=sg))
+            proposal = ActionProposal(
+                proposing_agent="ApprovalQueue",
+                target=str(updated.get("target") or ""),
+                tool_name=str(updated.get("tool_name") or "nmap"),
+                command_args=str(updated.get("command_args") or updated.get("target") or ""),
+                action_type="CLI_TOOL",
+                rationale=str(updated.get("rationale") or "Operator approved action"),
+            )
+            gw_res = gw.execute_proposal(proposal)
+            if inspect.isawaitable(gw_res):
+                gw_res = await gw_res
+            execution = {
+                "executed": bool(getattr(gw_res, "success", False)),
+                "blocked": bool(getattr(gw_res, "blocked", False)),
+                "returncode": getattr(gw_res, "returncode", 0),
+                "stdout_excerpt": str(getattr(gw_res, "raw_stdout", "") or "")[:2000],
+                "stderr_excerpt": str(getattr(gw_res, "raw_stderr", "") or "")[:1000],
+                "action_type": updated.get("action_type"),
+                "target": updated.get("target"),
+                "approval_id": approval_id,
+            }
+        else:
+            execution = await execute_approved_action(updated)
+
+    return django_json(
+        {
+            "ok": True,
+            "status": "ok",
+            "decision": decision,
+            "approval": updated,
+            "execution": execution,
+            "executed": bool((execution or {}).get("executed")),
+        }
+    )
 
 
 class PlatformSearchView(APIView):
@@ -579,6 +751,12 @@ class PlatformSearchView(APIView):
                 "conversations": convs,
                 "approvals": approvals,
                 "events": events,
+                "groups": {
+                    "engagements": [{**e, "id": e["engagement_id"]} for e in engs],
+                    "runs": [{**r, "id": r["run_id"]} for r in runs],
+                    "conversations": [{**c, "id": c["conversation_id"]} for c in convs],
+                    "approvals": [{**a, "id": a["approval_id"]} for a in approvals],
+                },
             }
         )
 
@@ -608,7 +786,10 @@ class PlatformNotificationReadView(APIView):
 @require_GET
 async def artex_go_health_view(request: HttpRequest) -> JsonResponse:
     """GET /api/platform/artex/health."""
-    return django_json(await probe_artex_health())
+    res = await probe_artex_health()
+    if "status" not in res:
+        res["status"] = "online" if res.get("online") else "offline"
+    return django_json(res)
 
 
 @require_http_methods(["GET", "POST", "PUT", "DELETE", "PATCH"])

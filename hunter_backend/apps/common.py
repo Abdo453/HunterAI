@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import ipaddress
 import json
 import logging
@@ -15,6 +16,7 @@ import socket
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, TypeVar
 from urllib.parse import urlparse
 
+from asgiref.sync import async_to_sync
 from django.http import JsonResponse
 from pydantic import BaseModel, ValidationError
 from rest_framework.response import Response
@@ -50,11 +52,22 @@ _BLOCKED_SENSITIVE_FILENAMES = {
     "id_rsa",
     "id_ed25519",
     "credentials.json",
+    "authorization_grant.json",
     ".policy_secret",
     ".django_secret",
     "secrets.json",
 }
 _SECRET_MASK_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
+
+
+def await_sync(value: Any) -> Any:
+    """Resolve an awaitable synchronously from sync DRF views without lambda warnings."""
+    if inspect.isawaitable(value):
+        async def _runner() -> Any:
+            return await value
+
+        return async_to_sync(_runner)()
+    return value
 
 
 def ok_json(data: Any, status: int = 200) -> Response:
@@ -209,8 +222,8 @@ def has_windows_ads_or_nul(raw_path: str) -> bool:
 
 def is_blocked_sensitive_path(path: Path) -> bool:
     """Reject access to sensitive secrets, dotfiles (.env*), .git, and key material."""
-    parts = [p.lower() for p in path.parts]
-    name = path.name.lower()
+    parts = [p.lower().rstrip(". ") for p in path.parts]
+    name = path.name.lower().rstrip(". ")
     if name in _BLOCKED_SENSITIVE_FILENAMES or name.startswith(".env"):
         return True
     if ".git" in parts or "data/root_controller" in "/".join(parts):
@@ -230,6 +243,9 @@ def safe_resolve_path(
     raw = (user_path or "").strip()
     if not raw or has_windows_ads_or_nul(raw):
         raise PermissionError("Invalid or unsafe file path")
+    for seg in raw.replace("\\", "/").split("/"):
+        if seg and seg not in {".", ".."} and seg.endswith((".", " ")):
+            raise PermissionError("Trailing dot or space path segment is forbidden")
 
     roots = [Path(r).resolve() for r in allowed_roots]
     candidate_input = Path(raw)
@@ -296,6 +312,68 @@ def _is_forbidden_ip_or_host(host: str) -> Optional[str]:
     return None
 
 
+def _is_loopback_host(host: str) -> bool:
+    clean = (host or "").strip().strip("[]").lower()
+    if clean in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    ip_norm = normalize_ip_literal(clean) or clean
+    try:
+        addr = ipaddress.ip_address(ip_norm)
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+            addr = addr.ipv4_mapped
+        return bool(addr.is_loopback)
+    except ValueError:
+        return False
+
+
+def _is_explicit_lab_loopback(host: str, in_scope_list: List[str]) -> bool:
+    """Allow loopback ONLY when HUNTER_ALLOW_LOCALHOST_SCOPE=1 AND explicitly in scope."""
+    if os.environ.get("HUNTER_ALLOW_LOCALHOST_SCOPE") != "1" or not in_scope_list:
+        return False
+    if not _is_loopback_host(host):
+        return False
+    for entry in in_scope_list:
+        raw_entry = (entry or "").strip()
+        if not raw_entry or raw_entry == "*":
+            continue
+        parsed_entry = urlparse(raw_entry) if "://" in raw_entry else urlparse(f"http://{raw_entry}")
+        entry_host = (parsed_entry.hostname or "").strip().strip("[]").lower()
+        if _is_loopback_host(entry_host):
+            return True
+    return False
+
+
+def split_out_of_scope_exclusions(
+    out_list: Iterable[str],
+) -> Tuple[List[str], List[Tuple[str, str]]]:
+    """Separate host/CIDR out-of-scope rules from URL/path-specific exclusions (e.g. */logout)."""
+    host_rules: List[str] = []
+    path_rules: List[Tuple[str, str]] = []
+    for raw_entry in out_list or []:
+        entry = str(raw_entry or "").strip()
+        if not entry:
+            continue
+        # Preserve CIDR subnets like 10.0.0.0/8 as host/network rules
+        try:
+            ipaddress.ip_network(entry, strict=False)
+            host_rules.append(entry)
+            continue
+        except ValueError:
+            pass
+        if entry.startswith("/"):
+            path_rules.append(("", entry.split("?", 1)[0]))
+            continue
+        if "/" in entry:
+            parsed = urlparse(entry if "://" in entry else f"http://{entry}")
+            e_host = (parsed.hostname or "").strip().strip("[]").lower()
+            e_path = (parsed.path or "").strip()
+            if e_path and e_path != "/":
+                path_rules.append((e_host, e_path))
+                continue
+        host_rules.append(entry)
+    return host_rules, path_rules
+
+
 def validate_http_url_ssrf_and_scope(
     url: str,
     *,
@@ -316,9 +394,28 @@ def validate_http_url_ssrf_and_scope(
             f"Unsupported or unsafe URL scheme {parsed.scheme!r}; only http/https allowed",
             {"status": "BLOCKED_SCHEME"},
         )
+    in_list, out_list = resolve_effective_scope(
+        scope=scope,
+        out_of_scope=out_of_scope,
+        engagement_id=engagement_id,
+    )
     host = parsed.hostname or ""
+    host_out_list, path_exclusions = split_out_of_scope_exclusions(out_list)
+    req_path = (parsed.path or "/").rstrip("/") or "/"
+    for excl_host, excl_path in path_exclusions:
+        if excl_host and excl_host != host.strip().strip("[]").lower():
+            continue
+        norm_excl = excl_path.rstrip("/") or "/"
+        if req_path == norm_excl or req_path.startswith(f"{norm_excl}/"):
+            return (
+                False,
+                f"Target path {parsed.path!r} matches Out-of-Scope rule {excl_path!r}",
+                {"status": "BLOCKED_OUT_OF_SCOPE_PATH"},
+            )
+
+    lab_loopback_ok = _is_explicit_lab_loopback(host, in_list)
     ip_reason = _is_forbidden_ip_or_host(host)
-    if ip_reason:
+    if ip_reason and not lab_loopback_ok:
         return False, ip_reason, {"status": "BLOCKED_SSRF"}
 
     # Best-effort DNS resolution check so external aliases resolving to 127.0.0.1 / 169.254.169.254 are stopped.
@@ -327,7 +424,7 @@ def validate_http_url_ssrf_and_scope(
         for info in infos:
             resolved_ip = info[4][0]
             dns_reason = _is_forbidden_ip_or_host(resolved_ip)
-            if dns_reason:
+            if dns_reason and not (lab_loopback_ok and _is_explicit_lab_loopback(resolved_ip, in_list)):
                 return (
                     False,
                     f"Resolved target IP blocked ({dns_reason})",
@@ -337,18 +434,18 @@ def validate_http_url_ssrf_and_scope(
         # Unresolvable hostnames (e.g. unit-test targets) still pass DNS step to ScopeGuard.
         pass
 
-    in_list, out_list = resolve_effective_scope(
-        scope=scope,
-        out_of_scope=out_of_scope,
-        engagement_id=engagement_id,
-    )
-    sg = ScopeGuard(in_scope=in_list or None, out_of_scope=out_list or None)
+    sg = ScopeGuard(in_scope=in_list or None, out_of_scope=host_out_list or None)
     allowed_sg, reason_sg = sg.is_allowed(raw)
+    policy_target = (
+        f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
+        if action_type in {"repeater_send", "burp_repeater_send", "browser_explore"}
+        else raw
+    )
     policy = evaluate_action_policy(
         action_type=action_type,
-        target=raw,
+        target=policy_target,
         in_scope=in_list or None,
-        out_of_scope=out_list or None,
+        out_of_scope=host_out_list or None,
     )
 
     if not (allowed_sg and policy.get("allowed", False)):
@@ -379,15 +476,15 @@ def validate_scan_target(
             action_type=action_type,
         )
 
-    ip_reason = _is_forbidden_ip_or_host(clean)
-    if ip_reason:
-        return False, ip_reason, {"status": "BLOCKED_SSRF"}
-
     in_list, out_list = resolve_effective_scope(
         scope=scope,
         out_of_scope=out_of_scope,
         engagement_id=engagement_id,
     )
+    ip_reason = _is_forbidden_ip_or_host(clean)
+    if ip_reason and not _is_explicit_lab_loopback(clean, in_list):
+        return False, ip_reason, {"status": "BLOCKED_SSRF"}
+
     policy = check_target_policy(
         clean,
         action_type=action_type,

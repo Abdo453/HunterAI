@@ -33,9 +33,17 @@ async def index_view(request: HttpRequest) -> HttpResponseRedirect | JsonRespons
         return JsonResponse(
             {
                 "service": "hunter-ai-django-asgi",
+                "backend": "django-asgi",
                 "status": "online",
                 "frontend_url": FRONTEND_URL,
                 "section": safe_section or "overview",
+                "routes": {
+                    "overview": "/",
+                    "chat": "/chat",
+                    "command": "/command",
+                    "opencode": "/opencode",
+                    "studio": "/studio",
+                },
                 "endpoints": {
                     "overview": "/api/platform/overview",
                     "csrf": "/api/csrf",
@@ -51,18 +59,48 @@ async def index_view(request: HttpRequest) -> HttpResponseRedirect | JsonRespons
 
 
 @require_GET
-async def opencode_redirect_view(request: HttpRequest) -> HttpResponseRedirect:
-    """Redirect /opencode to Next.js Studio page."""
-    return HttpResponseRedirect(f"{FRONTEND_URL}/studio")
+async def opencode_redirect_view(request: HttpRequest) -> HttpResponseRedirect | JsonResponse:
+    """Redirect /opencode to Next.js Studio page (or return JSON metadata)."""
+    target = f"{FRONTEND_URL}/studio"
+    if _wants_json(request):
+        return JsonResponse(
+            {
+                "service": "hunter-ai-django-asgi",
+                "status": "online",
+                "route": "/opencode",
+                "redirect_to": target,
+            }
+        )
+    return HttpResponseRedirect(target)
 
 
 @require_GET
-async def chat_redirect_view(request: HttpRequest) -> HttpResponseRedirect:
-    """Redirect /chat to Next.js Copilot panel."""
-    return HttpResponseRedirect(f"{FRONTEND_URL}/?copilot=open")
+async def chat_redirect_view(request: HttpRequest) -> HttpResponseRedirect | JsonResponse:
+    """Redirect /chat to Next.js Copilot panel (or return JSON metadata)."""
+    target = f"{FRONTEND_URL}/?copilot=open"
+    if _wants_json(request):
+        return JsonResponse(
+            {
+                "service": "hunter-ai-django-asgi",
+                "status": "online",
+                "route": "/chat",
+                "redirect_to": target,
+            }
+        )
+    return HttpResponseRedirect(target)
 
 
 @require_GET
-async def command_redirect_view(request: HttpRequest) -> HttpResponseRedirect:
-    """Redirect /command to Next.js home command surface."""
-    return HttpResponseRedirect(f"{FRONTEND_URL}/")
+async def command_redirect_view(request: HttpRequest) -> HttpResponseRedirect | JsonResponse:
+    """Redirect /command to Next.js home command surface (or return JSON metadata)."""
+    target = f"{FRONTEND_URL}/"
+    if _wants_json(request):
+        return JsonResponse(
+            {
+                "service": "hunter-ai-django-asgi",
+                "status": "online",
+                "route": "/command",
+                "redirect_to": target,
+            }
+        )
+    return HttpResponseRedirect(target)

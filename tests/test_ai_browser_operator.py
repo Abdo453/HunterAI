@@ -4,7 +4,6 @@ Hermetic offline tests verifying DOM affordance parsing, AI reasoning parser,
 heuristic fallback decisions, sync runners, and Web UI integration.
 """
 import pytest
-from fastapi.testclient import TestClient
 
 from core.browser.ai_browser_operator import (
     AIBrowserOperator,
@@ -13,7 +12,7 @@ from core.browser.ai_browser_operator import (
     run_ai_browser_session_sync,
 )
 from core.browser.active_browser_agent import ActiveBrowserReport
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 
 # ── 1. Data Structure & Parser Tests ──────────────────────────────────────────
@@ -141,22 +140,23 @@ def test_run_ai_browser_session_sync():
 # ── 4. Web UI API Integration Test ─────────────────────────────────────────────
 
 def test_web_ui_browser_ai_endpoint():
-    """Verify POST /api/browser/browse routes to AI Operator when use_ai is True."""
-    client = TestClient(app)
-    response = client.post(
-        "/api/browser/browse",
-        json={
-            "url": "https://test.corp",
-            "use_ai": True,
-            "visible": False,
-            "objective": "Test AI browser web endpoint",
-        },
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "target_url" in data
-    assert "actions_performed" in data
-    assert len(data["actions_performed"]) > 0
+    """Verify POST /api/browser/browse routes to AI Operator under ScopeGuard."""
+    with ASGISyncClient() as client:
+        response = client.post(
+            "/api/browser/browse",
+            json={
+                "url": "https://test.corp",
+                "scope": ["test.corp"],
+                "use_ai": True,
+                "visible": False,
+                "objective": "Test AI browser web endpoint",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "target_url" in data
+        assert "actions_performed" in data
+        assert len(data["actions_performed"]) > 0
 
 
 # ── 5. Elite Browser Capabilities Tests (DOM Taint, Shadow DOM, State Graph, IDOR) ────

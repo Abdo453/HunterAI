@@ -3,10 +3,8 @@ Tests for Unified Skills Matrix and Viewer.
 Hermetic offline tests verifying skill collection across directory, hunter, and kali layers.
 """
 import pytest
-from fastapi.testclient import TestClient
-
 from core.skills.skill_matrix_viewer import SkillMatrixViewer
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 
 def test_skill_matrix_summary_stats():
@@ -49,8 +47,8 @@ def test_get_skill_details():
 
 def test_web_ui_skills_catalog_endpoint():
     """Verify GET /api/skills/catalog returns full skills payload."""
-    client = TestClient(app)
-    response = client.get("/api/skills/catalog")
+    with ASGISyncClient() as client:
+        response = client.get("/api/skills/catalog")
     assert response.status_code == 200
     data = response.json()
     assert "summary" in data

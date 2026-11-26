@@ -6,7 +6,7 @@
 import pytest
 import httpx
 
-from ui.web.app import app
+from hunter_backend.asgi import application
 from core.global_state import GLOBAL_COORDINATOR, GLOBAL_EVIDENCE_STORE
 
 
@@ -34,8 +34,8 @@ async def test_run_events_evidence_findings_flow():
             break
         await asyncio.sleep(0.05)
 
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
 
         # الأحداث
         res = await client.get(f"/api/runs/{run_id}/events")

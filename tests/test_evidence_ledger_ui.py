@@ -32,9 +32,10 @@ def isolated_store_root(tmp_path, monkeypatch):
 
 @pytest.fixture
 def client(isolated_store_root):
-    from fastapi.testclient import TestClient
-    from ui.web.app import app
-    return TestClient(app)
+    from hunter_backend.testing import ASGISyncClient
+
+    with ASGISyncClient() as c:
+        yield c
 
 
 class TestLedgerEndpoint:
@@ -118,17 +119,15 @@ class TestLedgerEndpoint:
 class TestLedgerUIWiring:
     def test_html_elements_exist(self):
         from pathlib import Path
-        html = Path("ui/web/templates/index.html").read_text(encoding="utf-8")
-        assert "switchTab('ledger'" in html
-        assert 'id="tab-ledger"' in html
-        assert 'id="ledger-btn"' in html
-        assert 'id="ledger-state-badge"' in html
-        assert 'id="ledger-summary"' in html
-        assert 'id="ledger-list"' in html
+
+        tsx = Path("frontend/app/findings/page.tsx").read_text(encoding="utf-8")
+        assert "court_verdict" in tsx
+        assert "ledgerEntities" in tsx
+        assert "ledger?.counts" in tsx
 
     def test_js_functions_exist(self):
         from pathlib import Path
-        js = Path("ui/web/static/app.js").read_text(encoding="utf-8")
-        assert "async function loadLedger(" in js
-        assert "function _renderLedger(" in js
-        assert "if(tab === 'ledger') loadLedger();" in js
+
+        tsx = Path("frontend/app/findings/page.tsx").read_text(encoding="utf-8")
+        assert "/api/evidence/ledger" in tsx
+        assert "EvidenceLedgerResponse" in tsx

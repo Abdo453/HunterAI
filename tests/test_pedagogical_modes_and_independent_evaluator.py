@@ -7,7 +7,7 @@ import httpx
 
 from core.learning.pedagogical_modes import PedagogicalMode, PedagogicalSessionManager
 from core.learning.independent_evaluator import IndependentEvaluator
-from ui.web.app import app
+from hunter_backend.asgi import application
 
 
 class TestPedagogicalModesAndIndependentEvaluator:
@@ -84,8 +84,8 @@ class TestPedagogicalModesAndIndependentEvaluator:
 
     @pytest.mark.asyncio
     async def test_rest_api_skill_graph_endpoint(self):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
             res = await client.get("/api/learning/skill_graph")
             assert res.status_code == 200
             data = res.json()
@@ -96,8 +96,8 @@ class TestPedagogicalModesAndIndependentEvaluator:
 
     @pytest.mark.asyncio
     async def test_rest_api_generate_novel_and_evaluate_endpoints(self):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
             # 1. Generate novel scenario
             res_gen = await client.post("/api/learning/scenarios/generate_novel", json={"skill_id": "sqli_boolean_differential"})
             assert res_gen.status_code == 200

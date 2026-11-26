@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from starlette.testclient import TestClient
 
 from core.global_skills import global_skills_status, load_global_skills
 from core.skill_context_injector import SkillContextInjector
 from orchestrator.router import PROMPTS
 from orchestrator.task_classifier import TaskClassifier, TaskType
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -97,10 +96,10 @@ def test_modelfiles_and_router_prompts_use_central_skill_only():
 
 
 def test_opencode_skill_file_endpoint_reads_canonical_and_rejects_traversal():
-    client = TestClient(app)
-    ok = client.get("/api/opencode/skill-file", params={"name": "hunterai-redteam"})
-    assert ok.status_code == 200
-    assert ok.json()["path"] == "skills/hunterai-redteam/SKILL.md"
+    with ASGISyncClient() as client:
+        ok = client.get("/api/opencode/skill-file", params={"name": "hunterai-redteam"})
+        assert ok.status_code == 200
+        assert ok.json()["path"] == "skills/hunterai-redteam/SKILL.md"
 
-    bad = client.get("/api/opencode/skill-file", params={"name": "../AGENTS.md"})
-    assert bad.status_code == 400
+        bad = client.get("/api/opencode/skill-file", params={"name": "../AGENTS.md"})
+        assert bad.status_code == 400

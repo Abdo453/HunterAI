@@ -18,12 +18,13 @@ from core.wordlist_intelligence.cognitive_resolver import (
     get_cognitive_resolver,
 )
 from pentest import build_parser, main
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 
 @pytest.fixture
 def test_client():
-    return TestClient(app)
+    with ASGISyncClient() as client:
+        yield client
 
 
 def test_cognitive_deliberation_ai_llm_categories():

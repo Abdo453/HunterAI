@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import logging
 import os
+import re
+import shlex
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
+from asgiref.sync import async_to_sync
 from django.http import HttpRequest, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_GET, require_http_methods
 from pydantic import BaseModel, Field
@@ -19,9 +24,12 @@ from core.copilot_service import (
     CopilotService,
     collect_live_context,
     detect_live_providers,
+    evaluate_action_policy,
     is_tcp_reachable,
 )
+from core.llm_router import get_llm_router
 from core.platform_store import get_platform_store, new_id
+from core.scope_engine import INVIOLABLE_IPV4_SUBNETS, normalize_ip_literal
 from hunter_backend.apps.common import (
     call_ai,
     django_err,
@@ -34,6 +42,7 @@ from hunter_backend.apps.common import (
     parse_json_body,
     parse_query_int,
     read_env_file,
+    run_command_no_shell,
     validate_model,
     write_env_file,
 )
@@ -47,6 +56,11 @@ from hunter_backend.runtime import (
 logger = logging.getLogger("hunter_backend.apps.copilot_api")
 
 ATTACHMENTS_DIR = DATA_DIR / "copilot_attachments"
+
+
+def _get_attachments_dir() -> Path:
+    env_dir = (os.environ.get("HUNTER_COPILOT_ATTACHMENTS_DIR") or "").strip()
+    return Path(env_dir) if env_dir else ATTACHMENTS_DIR
 
 PROVIDER_ENV_KEYS: Dict[str, str] = {
     "ollama": "",
@@ -183,7 +197,8 @@ class CopilotConversationDetailView(APIView):
 async def copilot_upload_attachment_view(request: HttpRequest) -> JsonResponse:
     """POST /api/copilot/attachments: multipart file or JSON text upload."""
     store = ensure_platform_wiring()
-    ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    att_dir = _get_attachments_dir()
+    att_dir.mkdir(parents=True, exist_ok=True)
     conv_id = (request.GET.get("conversation_id") or request.POST.get("conversation_id") or "").strip() or None
 
     raw_bytes = b""
@@ -213,7 +228,7 @@ async def copilot_upload_attachment_view(request: HttpRequest) -> JsonResponse:
     att_id = new_id("att")
     sha256 = hashlib.sha256(raw_bytes).hexdigest()
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in filename)[:80]
-    storage_path = ATTACHMENTS_DIR / f"{att_id}_{safe_name}"
+    storage_path = att_dir / f"{att_id}_{safe_name}"
     await asyncio.to_thread(storage_path.write_bytes, raw_bytes)
 
     excerpt = raw_bytes[:8192].decode("utf-8", errors="replace")
@@ -259,6 +274,12 @@ async def copilot_chat_stream_view(request: HttpRequest) -> StreamingHttpRespons
                     yield item
                 elif isinstance(item, str):
                     yield item.encode("utf-8")
+                elif isinstance(item, (tuple, list)) and len(item) == 2:
+                    ev_name, payload = item
+                    yield format_sse(
+                        str(ev_name or "message"),
+                        payload if isinstance(payload, dict) else {"content": payload},
+                    )
                 elif isinstance(item, dict):
                     ev_name = str(item.get("event") or item.get("type") or "message")
                     yield format_sse(ev_name, item)
@@ -276,9 +297,122 @@ async def copilot_chat_stream_view(request: HttpRequest) -> StreamingHttpRespons
     return resp
 
 
+_BASH_FENCE_RE = re.compile(r"```(?:bash|sh|shell|zsh)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+_SHELL_META_CHAT_RE = re.compile(r"[;&|`$<>]|&&|\|\||\$\(")
+_FORBIDDEN_CHAT_TOOLS = {"sh", "bash", "zsh", "dash", "cmd", "powershell", "pwsh", "nc", "ncat", "socat"}
+_DOMAIN_TOKEN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
+_LOCAL_EXTS = {".py", ".js", ".ts", ".txt", ".json", ".yaml", ".yml", ".md", ".xml", ".csv", ".log"}
+
+
+def _parse_bool_flag(raw: Any, default: bool = True) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return default
+    return str(raw).strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _extract_chat_commands(text: str) -> List[str]:
+    cmds: List[str] = []
+    for block in _BASH_FENCE_RE.findall(text or ""):
+        for line in block.splitlines():
+            clean = line.strip()
+            if clean and not clean.startswith("#"):
+                cmds.append(clean)
+    return cmds
+
+
+def _resolve_chat_scope(
+    store: Any,
+    target: str,
+    scope: Any,
+    out_of_scope: Any,
+    engagement_id: Optional[str],
+) -> Tuple[str, List[str], List[str]]:
+    in_scope = [str(s).strip() for s in scope if str(s).strip()] if isinstance(scope, list) else []
+    oos = [str(s).strip() for s in out_of_scope if str(s).strip()] if isinstance(out_of_scope, list) else []
+    eff_target = target.strip()
+    eng = store.get_engagement(engagement_id) if engagement_id else None
+    if not eng:
+        active_id = (store.get_context() or {}).get("active_engagement_id")
+        if active_id:
+            eng = store.get_engagement(active_id)
+    if eng:
+        if not in_scope:
+            in_scope = [str(s).strip() for s in (eng.get("in_scope") or []) if str(s).strip()]
+        if not oos:
+            oos = [str(s).strip() for s in (eng.get("out_of_scope") or []) if str(s).strip()]
+        if not eff_target:
+            eff_target = str(eng.get("target") or "").strip()
+    return eff_target, in_scope, oos
+
+
+def _extract_targets_from_tokens(tokens: List[str]) -> List[str]:
+    targets: List[str] = []
+    for raw in tokens[1:]:
+        cand = raw.split("=", 1)[1] if raw.startswith("-") and "=" in raw else ("" if raw.startswith("-") else raw)
+        cand = cand.strip("'\",;)")
+        if not cand:
+            continue
+        if "://" in cand:
+            targets.append(cand)
+            continue
+        host_part = cand.split("/", 1)[0].split(":", 1)[0].lower()
+        if host_part == "localhost":
+            targets.append(cand)
+        elif not (host_part.isdigit() and int(host_part) <= 65535) and normalize_ip_literal(host_part) is not None:
+            targets.append(cand)
+        elif _DOMAIN_TOKEN_RE.fullmatch(host_part) and Path(host_part).suffix.lower() not in _LOCAL_EXTS:
+            targets.append(cand)
+    return targets
+
+
+def _evaluate_chat_command(
+    cmd: str,
+    *,
+    effective_target: str,
+    in_scope: List[str],
+    out_of_scope: List[str],
+) -> Tuple[bool, str, str]:
+    if not in_scope:
+        return False, "BLOCKED_SCOPE", "No authorized target scope configured (empty scope fails closed)."
+    if _SHELL_META_CHAT_RE.search(cmd):
+        return False, "BLOCKED_INVARIANT", "Shell metacharacters are forbidden in executed commands."
+    try:
+        tokens = shlex.split(cmd)
+    except ValueError as exc:
+        return False, "BLOCKED_RISK", f"Malformed command quoting: {exc}"
+    if not tokens:
+        return False, "BLOCKED_RISK", "Empty command."
+    tool_name = Path(tokens[0]).name.lower().removesuffix(".exe")
+    if tool_name in _FORBIDDEN_CHAT_TOOLS:
+        return False, "BLOCKED_INVARIANT", f"Shell tool '{tool_name}' is prohibited."
+    targets = _extract_targets_from_tokens(tokens) or ([effective_target] if effective_target else [""])
+    for tgt in targets:
+        host = (urlparse(tgt).hostname or tgt).strip().lower() if "://" in tgt else tgt.strip().lower().split("/", 1)[0].split(":", 1)[0]
+        ip_obj = normalize_ip_literal(host) if host and not (host.isdigit() and int(host) <= 65535) else None
+        if host in {"169.254.169.254", "metadata.google.internal", "localhost"} or (
+            ip_obj is not None and (str(ip_obj) == "169.254.169.254" or (isinstance(ip_obj, ipaddress.IPv4Address) and ip_obj in INVIOLABLE_IPV4_SUBNETS[1]))
+        ):
+            return False, "BLOCKED_INVARIANT", f"Forbidden internal/metadata target '{host}'."
+        pol = evaluate_action_policy(
+            action_type="CLI_TOOL",
+            target=tgt,
+            tool_name=tool_name,
+            command_args=cmd,
+            in_scope=in_scope,
+            out_of_scope=out_of_scope,
+            allow_active_tests=True,
+            rationale="Requested via /api/chat",
+        )
+        if not pol.get("allowed"):
+            return False, str(pol.get("status") or "BLOCKED_SCOPE"), str(pol.get("reason") or "Blocked by PolicyEngine")
+    return True, "APPROVED", "Verified"
+
+
 @require_http_methods(["POST"])
 async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
-    """POST /api/chat: compatibility AI chat + governed slash command handler."""
+    """POST /api/chat: compatibility AI chat + fail-closed governed bash execution."""
     data, err = parse_json_body(request)
     if err is not None:
         return err
@@ -288,6 +422,9 @@ async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
 
     provider = str(data.get("provider") or "").strip() or None
     model = str(data.get("model") or "").strip() or None
+    allow_exec = _parse_bool_flag(data.get("allow_exec"), True)
+    authorized = _parse_bool_flag(data.get("authorized"), True)
+    target = str(data.get("target") or "").strip()
     engagement_id = data.get("engagement_id")
     run_id = data.get("run_id")
 
@@ -304,12 +441,53 @@ async def legacy_api_chat_view(request: HttpRequest) -> JsonResponse:
         f"Live context keys: {list(ctx.keys())}."
     )
     reply = await call_ai(message, provider=provider, model=model, system_prompt=system)
+
+    commands = _extract_chat_commands(reply)
+    executed_results: List[Dict[str, Any]] = []
+    blocked_results: List[Dict[str, Any]] = []
+    terminal_parts: List[str] = []
+
+    if allow_exec and authorized and commands:
+        eff_target, in_scope, oos = _resolve_chat_scope(
+            store, target, data.get("scope"), data.get("out_of_scope"), engagement_id
+        )
+        for cmd in commands:
+            ok, status, reason = _evaluate_chat_command(
+                cmd, effective_target=eff_target, in_scope=in_scope, out_of_scope=oos
+            )
+            if not ok:
+                blocked_results.append({"command": cmd, "status": status, "reason": reason})
+                terminal_parts.append(f"[!] BLOCKED ({status}): {cmd} — {reason}")
+                continue
+            try:
+                res = await run_command_no_shell(cmd, timeout_s=60.0)
+                executed_results.append(
+                    {
+                        "command": cmd,
+                        "stdout": res.get("stdout", ""),
+                        "stderr": res.get("stderr", ""),
+                        "exit_code": res.get("returncode", 0),
+                    }
+                )
+                terminal_parts.append(f"$ {cmd}\n{res.get('stdout', '')}{res.get('stderr', '')}")
+            except (PermissionError, ValueError) as exc:
+                blocked_results.append({"command": cmd, "status": "BLOCKED_INVARIANT", "reason": str(exc)})
+                terminal_parts.append(f"[!] BLOCKED: {cmd} — {exc}")
+
+    resolved_provider = provider or os.getenv("HUNTER_DEFAULT_PROVIDER", "auto")
+    resolved_model = model or DEFAULT_MODELS.get(resolved_provider, os.getenv("HUNTER_DEFAULT_MODEL", "auto"))
     return django_json(
         {
             "response": reply,
             "reply": reply,
-            "provider": provider or os.getenv("HUNTER_DEFAULT_PROVIDER", "auto"),
-            "model": model or os.getenv("HUNTER_DEFAULT_MODEL", "auto"),
+            "provider": resolved_provider,
+            "model": resolved_model,
+            "model_used": resolved_model,
+            "allow_exec": allow_exec,
+            "executed": executed_results,
+            "commands": executed_results,
+            "blocked": blocked_results,
+            "terminal_output": "\n".join(terminal_parts),
             "context_summary": {
                 "engagement_id": (ctx.get("engagement") or {}).get("engagement_id")
                 if isinstance(ctx.get("engagement"), dict)
@@ -481,7 +659,8 @@ class AiDiagnosticsView(APIView):
         try:
             from core.ai_diagnostics import run_full_ai_diagnostics
 
-            return ok_json(run_full_ai_diagnostics())
+            diag = async_to_sync(run_full_ai_diagnostics)(verbose=False)
+            return ok_json(diag)
         except Exception as exc:
             return ok_json({"ok": False, "error": str(exc)})
 
@@ -490,12 +669,19 @@ class ModelsCatalogView(APIView):
     """GET /api/models/catalog."""
 
     def get(self, request: Any) -> Any:
+        catalog: Dict[str, Any] = {}
+        try:
+            catalog = async_to_sync(get_llm_router().catalog)()
+        except Exception as exc:
+            logger.debug("LLMRouter.catalog failed: %s", exc)
+            catalog = {"policy": "balanced", "choices": [], "local": {"available": False, "models": []}, "cloud": []}
         try:
             providers = detect_live_providers()
         except Exception:
-            providers = []
+            providers = {}
         return ok_json(
             {
+                **catalog,
                 "providers": providers,
                 "default_models": DEFAULT_MODELS,
                 "provider_keys": list(PROVIDER_ENV_KEYS.keys()),

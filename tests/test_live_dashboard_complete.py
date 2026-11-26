@@ -22,54 +22,42 @@ import uvicorn
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 ROUTES_TO_CHECK = [
-    ("/", 200),
-    ("/?section=redteam", 200),
-    ("/?section=editor", 200),
-    ("/?section=chat", 200),
-    ("/?section=radar", 200),
-    ("/opencode", 200),
+    ("/?format=json", 200),
+    ("/api/platform/overview", 200),
+    ("/api/platform/context", 200),
+    ("/api/models/catalog", 200),
+    ("/opencode?format=json", 200),
 ]
 
 REDIRECTS_TO_CHECK = [
-    ("/chat", "/?section=chat"),
-    ("/command", "/?section=overview"),
+    ("/", "http://127.0.0.1:3000/"),
+    ("/chat", "http://127.0.0.1:3000/?copilot=open"),
+    ("/command", "http://127.0.0.1:3000/"),
+    ("/opencode", "http://127.0.0.1:3000/studio"),
 ]
 
-SECTIONS_TO_CHECK = [
-    ("sec-overview", "System Overview Dashboard"),
-    ("sec-agents", "Specialized Agents Management"),
-    ("sec-skills", "Skills Explorer & Dependency Inspector"),
-    ("sec-tools", "Tools Center & Health Check"),
-    ("sec-mcp", "MCP Servers Center"),
-    ("sec-browser", "Interactive Browser Manager"),
-    ("sec-burp", "Burp Suite Integration Monitor"),
-    ("sec-models", "AI Models Manager"),
-    ("sec-targets", "Target & Scope Guard"),
-    ("sec-radar", "Live Target Radar"),
-    ("sec-activity", "Live Activity Center"),
-    ("sec-results", "Results & Vulnerabilities Explorer"),
-    ("sec-diagnostics", "System Diagnostics"),
-    ("sec-settings", "Settings & Security Policies"),
-    ("sec-telemetry", "Attack Surface Graph & Wiretap"),
-    ("sec-redteam", "Red Team Cockpit & Checklists"),
-    ("sec-editor", "Monaco Code Editor & Burp Repeater"),
-    ("sec-chat", "Multi-Model Autonomous Agent Chat"),
+FRONTEND_ROUTES_TO_CHECK = [
+    "app/page.tsx",
+    "app/surface/page.tsx",
+    "app/findings/page.tsx",
+    "app/operations/page.tsx",
+    "app/studio/page.tsx",
+    "app/intercept/page.tsx",
+    "app/arsenal/page.tsx",
+    "app/system/page.tsx",
 ]
 
-SCRIPTS_TO_CHECK = [
-    ("Monaco Self-Hosted Loader", "/static/vendor/monaco/vs/loader.min.js"),
-    ("DOMPurify Local Asset", "/static/vendor/dompurify/purify.min.js"),
-    ("Unified Core JS", "/static/ui-core.js"),
-    ("Platform Hub Client", "/static/platform-client.js"),
-    ("Copilot Drawer JS", "/static/copilot-drawer.js"),
-    ("RedTeam JS Cockpit", "function loadRedTeamCockpit"),
-    ("Checklists Toggle JS", "function toggleChecklistItem"),
-    ("7-Question Gate JS", "function evaluateSevenGate"),
-    ("Lead Board Touch JS", "function touchLeadStatus"),
-    ("Monaco Editor Init JS", "function initCodeEditor"),
-    ("Burp Repeater Send JS", "function sendRepeaterRequest"),
-    ("Unified Chat Stream JS", "function sendUnifiedChatMessage"),
-    ("Auto-Switch Script", "window._defaultSection"),
+FRONTEND_COMPONENTS_TO_CHECK = [
+    "components/AppShell.tsx",
+    "components/Navbar.tsx",
+    "components/CopilotDrawer.tsx",
+    "components/ApprovalsPanel.tsx",
+    "components/LiveConsole.tsx",
+    "components/StatsCards.tsx",
+    "components/FindingsTable.tsx",
+    "components/CommandPalette.tsx",
+    "lib/platform-context.tsx",
+    "public/vendor/monaco/vs/loader.min.js",
 ]
 
 API_ENDPOINTS_TO_CHECK = [
@@ -131,19 +119,18 @@ def _restore_files(snap: dict[Path, Optional[bytes]]) -> None:
 
 def _start_ephemeral_server(db_path: Path):
     import core.platform_store as ps
-    import ui.web.platform_hub as ph
-    from ui.web.app import app
+    import hunter_backend.runtime as rt
+    from hunter_backend.asgi import application
 
     prev_db_env = os.environ.get("HUNTER_PLATFORM_DB_PATH")
     prev_store = ps._GLOBAL_PLATFORM_STORE
-    prev_attached = ph.EVENT_BUS._attached_store
 
     os.environ["HUNTER_PLATFORM_DB_PATH"] = str(db_path)
     ps._GLOBAL_PLATFORM_STORE = None
-    ph.EVENT_BUS._attached_store = None
+    rt.EVENT_BUS._history.clear()
 
     port = _pick_free_port()
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    config = uvicorn.Config(application, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -169,7 +156,7 @@ def _start_ephemeral_server(db_path: Path):
         if ps._GLOBAL_PLATFORM_STORE is not None:
             ps._GLOBAL_PLATFORM_STORE.close()
         ps._GLOBAL_PLATFORM_STORE = prev_store
-        ph.EVENT_BUS._attached_store = prev_attached
+        rt.EVENT_BUS._history.clear()
         if prev_db_env is None:
             os.environ.pop("HUNTER_PLATFORM_DB_PATH", None)
         else:
@@ -209,18 +196,17 @@ def test_live_dashboard_routes_and_redirects(live_client: httpx.Client):
 
 
 def test_live_dashboard_dom_sections_and_js_contracts(live_client: httpx.Client):
-    resp = live_client.get("/")
+    resp = live_client.get("/?format=json")
     assert resp.status_code == 200
-    html = resp.text
+    assert resp.json()["backend"] == "django-asgi"
 
-    for sec_id, label in SECTIONS_TO_CHECK:
-        assert f'id="{sec_id}"' in html, f"Missing section #{sec_id} ({label})"
+    fe_root = _REPO_ROOT / "frontend"
+    for rel in FRONTEND_ROUTES_TO_CHECK + FRONTEND_COMPONENTS_TO_CHECK:
+        assert (fe_root / rel).is_file(), f"Missing unified frontend asset: {rel}"
 
-    for label, needle in SCRIPTS_TO_CHECK:
-        assert needle in html, f"Missing {label} ({needle}) in /"
-
-    assert "cdnjs.cloudflare.com" not in html
-    assert "fonts.googleapis.com" not in html
+    layout_src = (fe_root / "app" / "layout.tsx").read_text(encoding="utf-8")
+    assert "cdnjs.cloudflare.com" not in layout_src
+    assert "fonts.googleapis.com" not in layout_src
 
 
 def test_live_dashboard_control_api_endpoints(live_client: httpx.Client):
@@ -251,18 +237,17 @@ def _run_standalone_cli(base_url: str) -> int:
                 all_passed = False
             print(f"[{'PASS' if ok else 'FAIL'}] {route:25} -> {resp.status_code} ({loc})")
 
-        html = client.get("/").text
-        for sec_id, name in SECTIONS_TO_CHECK:
-            ok = f'id="{sec_id}"' in html
-            if not ok:
-                all_passed = False
-            print(f"[{'PASS' if ok else 'FAIL'}] #{sec_id:18} : {name}")
+        root_info = client.get("/?format=json").json()
+        ok_root = root_info.get("backend") == "django-asgi"
+        if not ok_root:
+            all_passed = False
 
-        for label, needle in SCRIPTS_TO_CHECK:
-            ok = needle in html
+        fe_root = _REPO_ROOT / "frontend"
+        for rel in FRONTEND_ROUTES_TO_CHECK + FRONTEND_COMPONENTS_TO_CHECK:
+            ok = (fe_root / rel).is_file()
             if not ok:
                 all_passed = False
-            print(f"[{'PASS' if ok else 'FAIL'}] {label:28} : present")
+            print(f"[{'PASS' if ok else 'FAIL'}] frontend/{rel}")
 
         for method, ep, payload in API_ENDPOINTS_TO_CHECK:
             resp = client.get(ep) if method == "GET" else client.post(ep, json=payload)

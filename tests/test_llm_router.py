@@ -223,13 +223,15 @@ def test_load_provider_imports_real_adapter():
 # ── web endpoint ─────────────────────────────────────────────────────────────
 
 def test_catalog_endpoint_registered():
-    pytest.importorskip("fastapi")
-    try:
-        from ui.web import app as app_module
-    except Exception as e:  # pragma: no cover - environment dependent
-        pytest.skip(f"web app import failed: {e}")
-    paths = {getattr(r, "path", None) for r in app_module.app.routes}
-    assert "/api/models/catalog" in paths
+    from django.urls import resolve
+    from hunter_backend.testing import ASGISyncClient
+
+    match = resolve("/api/models/catalog")
+    assert match is not None
+    with ASGISyncClient() as client:
+        r = client.get("/api/models/catalog")
+        assert r.status_code == 200
+        assert "choices" in r.json()
 
 
 def test_cloud_refusal_retries_same_provider_reframed_before_local(monkeypatch):

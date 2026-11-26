@@ -118,7 +118,8 @@ def test_general_route_forwards_explicit_on_token(monkeypatch):
 
 
 def test_chat_ui_renders_local_chat_token_deltas():
-    """The Claude-like UI must render ``chat_token`` (local) as well as ``token``."""
-    js = (_REPO_ROOT / "ui" / "web" / "static" / "chat.js").read_text(encoding="utf-8")
-    assert '"chat_token"' in js
-    assert "d.delta ?? d.token" in js
+    """The unified Next.js CopilotDrawer must render streamed ``token`` deltas from Django SSE."""
+    tsx = (_REPO_ROOT / "frontend" / "components" / "CopilotDrawer.tsx").read_text(encoding="utf-8")
+    assert "/api/copilot/chat/stream" in tsx
+    assert 'eventName === "token"' in tsx
+    assert "payload.delta" in tsx

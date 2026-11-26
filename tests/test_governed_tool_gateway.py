@@ -13,7 +13,7 @@ from agents.security_intelligence.scope_guard import ScopeGuard
 from agents.security_intelligence.schemas import ScopeRule, EvidenceType
 from tools.tool_manager import ToolManager, ToolResult
 from core.state.security_state import SecurityState
-from ui.web.app import app
+from hunter_backend.asgi import application
 
 
 @pytest.fixture
@@ -94,8 +94,8 @@ async def test_destructive_proposal_blocked(sample_gateway):
 @pytest.mark.asyncio
 async def test_rest_api_gateway_execute():
     """Test POST /api/gateway/execute endpoint"""
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
         # Safe proposal
         payload = {
             "target": "target.local",

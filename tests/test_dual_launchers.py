@@ -11,15 +11,15 @@ Validates:
 import json
 from pathlib import Path
 import pytest
-from starlette.testclient import TestClient
 
 from pentest import build_parser
-from ui.web.app import app
+from hunter_backend.testing import ASGISyncClient
 
 
 @pytest.fixture
 def test_client():
-    return TestClient(app)
+    with ASGISyncClient() as client:
+        yield client
 
 
 def test_cli_argument_parsing():
@@ -63,12 +63,20 @@ def test_cli_argument_parsing():
 
 
 def test_opencode_web_routes(test_client):
-    """Verifies that OpenCode Studio page and API endpoints return valid data."""
-    # 1. GET /opencode HTML page
-    res_page = test_client.get("/opencode")
-    assert res_page.status_code == 200
-    assert "OpenCode Studio" in res_page.text
-    assert "skillsCountText" in res_page.text
+    """Verifies that OpenCode Studio compatibility redirect and API endpoints return valid data."""
+    # 1. GET /opencode compatibility redirect to Next.js /studio
+    res_page = test_client.get("/opencode", follow_redirects=False)
+    assert res_page.status_code == 302
+    assert res_page.headers.get("location", "").endswith("/studio")
+    res_json = test_client.get("/opencode", params={"format": "json"})
+    assert res_json.status_code == 200
+    assert res_json.json()["redirect_to"].endswith("/studio")
+
+    studio_tsx = (Path(__file__).resolve().parents[1] / "frontend" / "app" / "studio" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "/api/opencode/skills" in studio_tsx
+    assert "/api/opencode/execute" in studio_tsx
 
     # 2. GET /api/opencode/skills
     res_skills = test_client.get("/api/opencode/skills")

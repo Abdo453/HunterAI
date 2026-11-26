@@ -16,9 +16,10 @@ PLAN_ART = "data/readiness/tool_installation_plan.json"
 class TestInstallPlanEndpoint:
     @pytest.fixture
     def client(self):
-        from fastapi.testclient import TestClient
-        from ui.web.app import app
-        return TestClient(app)
+        from hunter_backend.testing import ASGISyncClient
+
+        with ASGISyncClient() as c:
+            yield c
 
     def test_plan_loaded_from_real_artifact(self, client):
         assert os.path.isfile(PLAN_ART), "الـ artifact أمين على الـ repo"
@@ -50,10 +51,9 @@ class TestInstallPlanEndpoint:
 class TestInstallPlanUIWiring:
     def test_html_and_js_wired(self):
         from pathlib import Path
-        html = Path("ui/web/templates/index.html").read_text(encoding="utf-8")
-        js = Path("ui/web/static/app.js").read_text(encoding="utf-8")
-        assert 'id="install-plan-box"' in html
-        assert "async function loadInstallPlan()" in js
-        assert "loadInstallPlan();" in js
-        # لا تنفيذ من المتصفح — رسالة الموافقة الصريحة ظاهرة للمشغّل
-        assert "لا تنفيذ من المتصفح" in js
+
+        sys_tsx = Path("frontend/app/system/page.tsx").read_text(encoding="utf-8")
+        assert "/api/diagnostics/install-plan" in sys_tsx
+        assert "installPlan" in sys_tsx
+        # Read-only display in Next.js System page — never executes package-manager commands from UI
+        assert "/api/diagnostics/install" not in sys_tsx.replace("/api/diagnostics/install-plan", "")

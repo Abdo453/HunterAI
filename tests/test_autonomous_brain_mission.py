@@ -7,7 +7,7 @@ import httpx
 
 from core.brain.autonomous_brain import AutonomousBrain
 from core.planner.schemas import SecurityGoal, GoalType
-from ui.web.app import app
+from hunter_backend.asgi import application
 
 
 @pytest.mark.asyncio
@@ -34,8 +34,8 @@ async def test_autonomous_brain_run_mission():
 @pytest.mark.asyncio
 async def test_rest_api_planner_mission_endpoint():
     """Test POST /api/planner/mission endpoint"""
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    transport = httpx.ASGITransport(app=application)
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
         payload = {
             "title": "Autonomous BOLA Audit",
             "goal_type": "DATA_ISOLATION_CHECK",

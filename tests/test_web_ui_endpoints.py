@@ -1,39 +1,52 @@
 """
-Tests for Modern Cyber Web UI & OmniHunter API Endpoints.
-Verifies FastAPI routing, HTML rendering, Arsenal API, Cognitive Deliberation API, and OmniHunter launcher.
+Tests for Unified Cyber Web UI (Next.js + Django ASGI) & OmniHunter API Endpoints.
+Verifies Django/ASGI routing, Next.js App Router assets, Arsenal API, Cognitive Deliberation API, and OmniHunter launcher.
 """
-import pytest
-from fastapi.testclient import TestClient
+from pathlib import Path
 
-from ui.web.app import app
+import pytest
+
+from hunter_backend.testing import ASGISyncClient
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
 def client():
-    """Provides a synchronous TestClient for testing web endpoints."""
-    with TestClient(app) as test_client:
+    """Provides a synchronous ASGI test client for testing web endpoints."""
+    with ASGISyncClient() as test_client:
         yield test_client
 
 
-# ── 1. HTML Rendering Tests ──────────────────────────────────────────────────
+# ── 1. Unified Next.js Workspace & Compat Route Tests ────────────────────────
 
 def test_index_page_renders_5_pillars(client):
-    """Verify that the home page renders the unified HunterAI workspace shell."""
-    response = client.get("/")
-    assert response.status_code == 200
-    html = response.text
-    assert "HunterAI" in html
-    assert html.count('class="nav-group"') == 4
-    assert "/static/tokens.css" in html
-    assert "/static/ui-core.js" in html
-    assert "/static/copilot-drawer.js" in html
-    assert "/static/vendor/monaco/vs/loader.min.js" in html
-    assert "fonts.googleapis.com" not in html
-    assert "cdnjs.cloudflare.com" not in html
-    assert "Copilot" in html
-    assert "overviewApprovalsList" in html
-    assert "findingsContainer" in html
-    assert "arsenal/synthesize" in html or "ترسانة الأدوات الهجومية" in html
+    """Verify compatibility redirect and unified Next.js frontend routes/self-hosted assets."""
+    r_redir = client.get("/", follow_redirects=False)
+    assert r_redir.status_code == 302
+    r_json = client.get("/?format=json")
+    assert r_json.status_code == 200
+    assert "routes" in r_json.json()
+
+    frontend_dir = _REPO_ROOT / "frontend"
+    for route_file in (
+        "app/page.tsx",
+        "app/surface/page.tsx",
+        "app/findings/page.tsx",
+        "app/operations/page.tsx",
+        "app/studio/page.tsx",
+        "app/intercept/page.tsx",
+        "app/arsenal/page.tsx",
+        "app/system/page.tsx",
+    ):
+        assert (frontend_dir / route_file).is_file(), f"Missing Next.js route {route_file}"
+
+    assert (frontend_dir / "public" / "vendor" / "monaco" / "vs" / "loader.min.js").is_file()
+    layout_tsx = (frontend_dir / "app" / "layout.tsx").read_text(encoding="utf-8")
+    assert "fonts.googleapis.com" not in layout_tsx
+    assert "cdnjs.cloudflare.com" not in layout_tsx
+    copilot_tsx = (frontend_dir / "components" / "CopilotDrawer.tsx").read_text(encoding="utf-8")
+    assert "Copilot" in copilot_tsx
 
 
 # ── 2. Universal Kali Arsenal API Tests ───────────────────────────────────────
@@ -69,10 +82,14 @@ def test_api_arsenal_tool_detail(client):
 
 
 def test_api_arsenal_run_tool(client):
-    """Verify interactive execution of a tool via DynamicToolAgent."""
+    """Verify interactive execution of a tool via DynamicToolAgent (requires explicit scope)."""
+    unscoped = client.post("/api/arsenal/run", json={"tool": "katana", "target": "http://example.com"})
+    assert unscoped.status_code == 403
+
     payload = {
         "tool": "katana",
         "target": "http://example.com",
+        "scope": ["example.com"],
         "force_fallback": True,
         "thinking": True,
     }
@@ -142,6 +159,7 @@ def test_api_enhanced_launch_all_and_status(client):
     """Verify master launch-all and status polling endpoint."""
     payload = {
         "target": "https://enhanced-target.local",
+        "scope": ["enhanced-target.local"],
         "platform": "hackerone",
         "proxy": "http://127.0.0.1:8080",
         "force_fallback": True,
@@ -188,6 +206,7 @@ def test_api_enhanced_browser_explore(client):
     """Verify AI browser exploration API."""
     payload = {
         "target_url": "https://browser-test.local",
+        "scope": ["browser-test.local"],
         "max_pages": 1,
         "headless": True,
     }
@@ -229,6 +248,7 @@ def test_api_enhanced_elite_run(client):
     payload = {
         "skill_name": "http_smuggling",
         "target_url": "https://elite-test.local",
+        "scope": ["elite-test.local"],
     }
     resp = client.post("/api/enhanced/skills/elite-run", json=payload)
     assert resp.status_code == 200

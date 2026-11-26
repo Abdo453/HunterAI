@@ -1,42 +1,45 @@
 """
 Exhaustive Web API & Dual Interface Integration Test Suite.
-Validates the FastAPI application (ui.web.app):
-- Primary Web Control Center UI & Chat (/ and /chat)
-- OpenCode Studio Hub UI (/opencode)
+Validates the Django + ASGI application (``hunter_backend.asgi.application``):
+- Compatibility redirects (/ -> Next.js, /chat -> /?copilot=open, /opencode -> /studio)
 - OpenCode Skills, MCP Status, and Execution Endpoints
 - Cognitive SecLists & Wordlist Intelligence APIs
 - Recon, Arsenal, and Scope Security Verification APIs
 """
 
+from pathlib import Path
+
 import pytest
-from starlette.testclient import TestClient
-from ui.web.app import app
+
+from hunter_backend.testing import ASGISyncClient
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    with ASGISyncClient() as c:
+        yield c
 
 
 def test_master_launcher_1_web_ui(client):
-    """Test Master Launcher 1 UI (/ and /chat) HTML endpoints."""
-    # Main dashboard
-    response = client.get("/")
-    assert response.status_code == 200
-    assert "text/html" in response.headers.get("content-type", "")
+    """Test Master Launcher 1 compatibility redirects & Next.js workspace presence."""
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 302
+    assert (_REPO_ROOT / "frontend" / "app" / "page.tsx").is_file()
 
-    # Chat interface
-    chat_resp = client.get("/chat")
-    assert chat_resp.status_code == 200
-    assert "text/html" in chat_resp.headers.get("content-type", "")
+    chat_resp = client.get("/chat", follow_redirects=False)
+    assert chat_resp.status_code == 302
+    assert "/?copilot=open" in chat_resp.headers.get("location", "")
+    assert (_REPO_ROOT / "frontend" / "components" / "CopilotDrawer.tsx").is_file()
 
 
 def test_master_launcher_2_opencode_studio(client):
-    """Test Master Launcher 2 UI (/opencode) loads correctly."""
-    response = client.get("/opencode")
-    assert response.status_code == 200
-    assert "text/html" in response.headers.get("content-type", "")
-    assert "OpenCode" in response.text
+    """Test Master Launcher 2 compatibility redirect & Studio page source."""
+    response = client.get("/opencode", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers.get("location", "").endswith("/studio")
+    assert (_REPO_ROOT / "frontend" / "app" / "studio" / "page.tsx").is_file()
 
 
 def test_opencode_api_skills_endpoint(client):

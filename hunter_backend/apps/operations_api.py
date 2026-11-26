@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import re
@@ -13,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.http import require_GET, require_http_methods
 from pydantic import BaseModel, Field
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from agents.base_agent import AgentTask
@@ -332,6 +334,10 @@ async def engines_selfcheck_view(request: HttpRequest) -> JsonResponse:
     if verr is not None:
         return verr
     assert req is not None
+    if req.engines is not None and len(req.engines) == 0 and not req.profiles:
+        from engines.selfcheck import SelfCheckReport
+
+        return django_json(SelfCheckReport().to_dict())
     report = await run_selfcheck(engine_names=req.engines, profiles=req.profiles)
     return django_json(report.to_dict())
 
@@ -459,23 +465,40 @@ async def vram_pipeline_execute_view(request: HttpRequest) -> JsonResponse:
     data, err = parse_json_body(request)
     if err is not None:
         return err
-    target = str(data.get("target") or "").strip()
-    if target:
-        ok, reason, policy = validate_scan_target(
-            target,
-            scope=data.get("scope") or data.get("in_scope"),
-            out_of_scope=data.get("out_of_scope"),
-            action_type="vram_pipeline",
-        )
-        if not ok:
-            return django_err(reason, status=403, extra={"policy": policy})
+    target = str(data.get("target_url") or data.get("target") or "").strip()
+    if not target:
+        return django_err("target_url is required", status=400)
+    ok, reason, policy = validate_scan_target(
+        target,
+        scope=data.get("scope") or data.get("in_scope"),
+        out_of_scope=data.get("out_of_scope"),
+        engagement_id=data.get("engagement_id"),
+        action_type="vram_pipeline",
+    )
+    if not ok:
+        return django_err(reason, status=403, extra={"policy": policy})
     try:
         from core.pipeline.vram_sequential_pipeline import vram_pipeline
 
-        res = vram_pipeline.execute(data) if hasattr(vram_pipeline, "execute") else {"status": "queued"}
-        if asyncio.iscoroutine(res):
-            res = await res
-        return django_json({"ok": True, "result": res})
+        res = await vram_pipeline.execute_pipeline(target)
+        res_dict = dataclasses.asdict(res) if dataclasses.is_dataclass(res) else (res if isinstance(res, dict) else {"raw": str(res)})
+        findings_raw = res_dict.get("findings") or []
+        norm_findings: List[Dict[str, Any]] = []
+        for f in findings_raw:
+            fd = dataclasses.asdict(f) if dataclasses.is_dataclass(f) else (dict(f) if isinstance(f, dict) else {"raw": str(f)})
+            if "cwe_id" in fd and "cwe" not in fd:
+                fd["cwe"] = fd["cwe_id"]
+            norm_findings.append(fd)
+        return django_json(
+            {
+                "ok": True,
+                "status": "completed",
+                "target": res_dict.get("target", target),
+                "findings_count": int(res_dict.get("findings_count", len(norm_findings))),
+                "findings": norm_findings,
+                "result": res_dict,
+            }
+        )
     except Exception as exc:
         return django_json({"ok": False, "error": str(exc)}, status=500)
 
@@ -487,10 +510,17 @@ class VramPipelineStatusView(APIView):
         try:
             from core.pipeline.vram_sequential_pipeline import vram_pipeline
 
-            st = getattr(vram_pipeline, "status", lambda: {"active": False})()
-            return ok_json(st if isinstance(st, dict) else {"status": st})
-        except Exception as exc:
-            return ok_json({"active": False, "error": str(exc)})
+            active = getattr(getattr(vram_pipeline, "vram_mgr", None), "active_model", None)
+        except Exception:
+            active = None
+        stages = [
+            {"id": 1, "name": "Recon"},
+            {"id": 2, "name": "Decompile"},
+            {"id": 3, "name": "Hypothesize"},
+            {"id": 4, "name": "Execute"},
+            {"id": 5, "name": "Triage"},
+        ]
+        return ok_json({"active_model_in_vram": active, "pipeline_stages": stages, "status": "ready"})
 
 
 @require_http_methods(["POST"])
@@ -560,18 +590,18 @@ class HunterContractsView(APIView):
 
     def get(self, request: Any) -> Any:
         try:
-            from core.burp_gateway.experiment_contract import ExperimentContract, TriadExperimentContract
+            from hunter_ai.agents.recon_contract_agent import ReconContractAgent
+            from hunter_ai.agents.report_contract_agent import ReportContractAgent
+            from hunter_ai.agents.web_contract_agent import WebContractAgent
+            from hunter_ai.brain.agent_manager import HunterAgentManager
 
-            return ok_json(
-                {
-                    "contracts": [
-                        {"name": "ExperimentContract", "schema": getattr(ExperimentContract, "model_json_schema", lambda: {})()},
-                        {"name": "TriadExperimentContract", "schema": getattr(TriadExperimentContract, "model_json_schema", lambda: {})()},
-                    ]
-                }
-            )
+            mgr = HunterAgentManager()
+            for agent in (ReconContractAgent(), WebContractAgent(), ReportContractAgent()):
+                mgr.register_agent(agent)
+            contracts = [c.to_dict() if hasattr(c, "to_dict") else {"name": getattr(c, "name", str(c))} for c in mgr.list_contracts()]
+            return ok_json({"registered_agents_count": len(contracts), "contracts": contracts})
         except Exception as exc:
-            return ok_json({"contracts": [], "error": str(exc)})
+            return ok_json({"registered_agents_count": 0, "contracts": [], "error": str(exc)})
 
 
 @require_http_methods(["POST"])
@@ -580,25 +610,33 @@ async def hunter_mission_execute_view(request: HttpRequest) -> JsonResponse:
     data, err = parse_json_body(request)
     if err is not None:
         return err
-    target = str(data.get("target") or "").strip()
-    if target:
-        ok, reason, policy = validate_scan_target(
-            target,
-            scope=data.get("scope") or data.get("in_scope"),
-            out_of_scope=data.get("out_of_scope"),
-            action_type="hunter_mission",
-        )
-        if not ok:
-            return django_err(reason, status=403, extra={"policy": policy})
-    job_id = new_id("job")
-    run = await start_platform_run(
-        kind="mission",
-        target=target,
+    target = str(data.get("target_url") or data.get("target") or "").strip()
+    if not target:
+        return django_err("target is required", status=400)
+    ok, reason, policy = validate_scan_target(
+        target,
         scope=data.get("scope") or data.get("in_scope"),
         out_of_scope=data.get("out_of_scope"),
-        mode=str(data.get("mode") or "mission"),
+        engagement_id=data.get("engagement_id"),
+        action_type="hunter_mission",
     )
-    return django_json({"ok": True, "job_id": job_id, "run_id": run["run_id"], "run": run})
+    if not ok:
+        return django_err(reason, status=403, extra={"policy": policy})
+    try:
+        from hunter_ai.agents.recon_contract_agent import ReconContractAgent
+        from hunter_ai.agents.report_contract_agent import ReportContractAgent
+        from hunter_ai.agents.web_contract_agent import WebContractAgent
+        from hunter_ai.brain.agent_manager import HunterAgentManager
+
+        mgr = HunterAgentManager()
+        for agent in (ReconContractAgent(), WebContractAgent(), ReportContractAgent()):
+            mgr.register_agent(agent)
+        mission_res = await mgr.execute_mission(target)
+        job_id = str(data.get("job_id") or mission_res.get("job_id") or new_id("job"))
+        _active_pipelines[job_id] = mission_res
+        return django_json({"ok": True, "status": "completed", "job_id": job_id, "mission": mission_res, **mission_res})
+    except Exception as exc:
+        return django_json({"ok": False, "error": str(exc)}, status=500)
 
 
 class HunterBlackboardView(APIView):
@@ -607,7 +645,24 @@ class HunterBlackboardView(APIView):
     def get(self, request: Any, job_id: str) -> Any:
         store = ensure_platform_wiring()
         events = store.list_events(run_id=job_id, limit=100)
-        return ok_json({"job_id": job_id, "events": events, "state": _active_pipelines.get(job_id, {})})
+        state = _active_pipelines.get(job_id, {})
+        l2_count = int(state.get("findings_count", 0) or 0)
+        try:
+            from hunter_ai.protocol.blackboard import ThreeTierBlackboardMemory
+
+            bb = ThreeTierBlackboardMemory(job_id=job_id)
+            evids = getattr(bb, "list_evidence", lambda: [])()
+            l2_count = max(l2_count, len(evids))
+        except Exception:
+            pass
+        return ok_json(
+            {
+                "job_id": job_id,
+                "level2_evidence_count": l2_count,
+                "events": events,
+                "state": state,
+            }
+        )
 
 
 class HunterAgentMemoryView(APIView):
@@ -615,13 +670,13 @@ class HunterAgentMemoryView(APIView):
 
     def get(self, request: Any, agent_name: str) -> Any:
         try:
-            from core.skill_memory_engine import SkillLearnerEngine
+            from hunter_ai.brain.memory_hierarchy import MemoryHierarchy
 
-            eng = SkillLearnerEngine()
-            mem = getattr(eng, "get_agent_memory", lambda n: {})(agent_name)
-            return ok_json({"agent": agent_name, "memory": mem})
+            mh = MemoryHierarchy()
+            mem = getattr(mh, "get_agent_lessons", lambda n: {})(agent_name)
+            return ok_json({"agent_name": agent_name, "agent": agent_name, "memory": mem})
         except Exception:
-            return ok_json({"agent": agent_name, "memory": {}})
+            return ok_json({"agent_name": agent_name, "agent": agent_name, "memory": {}})
 
 
 @require_http_methods(["POST"])
@@ -731,8 +786,15 @@ async def omni_launch_view(request: HttpRequest) -> JsonResponse:
         mode=str(data.get("mode") or "full"),
     )
     eid = run["engagement_id"] or new_id("eng")
-    _OMNI_RUNS[eid] = {"engagement_id": eid, "run_id": run["run_id"], "target": target, "status": "running", "findings": []}
-    return django_json({"ok": True, "engagement_id": eid, "run_id": run["run_id"], "run": run})
+    _OMNI_RUNS[eid] = {
+        "engagement_id": eid,
+        "run_id": run["run_id"],
+        "target": target,
+        "status": "LAUNCHED",
+        "current_phase": "RECON",
+        "findings": [],
+    }
+    return django_json({"ok": True, "status": "LAUNCHED", "engagement_id": eid, "run_id": run["run_id"], "run": run})
 
 
 class OmniStatusView(APIView):
@@ -744,7 +806,14 @@ class OmniStatusView(APIView):
         eng = store.get_engagement(engagement_id)
         if not item and not eng:
             return err_json(f"Omni run {engagement_id} not found", status=404)
-        return ok_json({"engagement_id": engagement_id, "omni": item, "engagement": eng})
+        return ok_json(
+            {
+                "engagement_id": engagement_id,
+                "current_phase": (item or {}).get("current_phase", "INIT"),
+                "omni": item,
+                "engagement": eng,
+            }
+        )
 
 
 class OmniFindingsView(APIView):
@@ -798,7 +867,8 @@ async def enhanced_omni_launch_all_view(request: HttpRequest) -> JsonResponse:
         "run_id": run["run_id"],
         "target": req.target,
         "platform": req.platform,
-        "status": "running",
+        "status": "LAUNCHED",
+        "current_phase": "RECON",
         "started_at": time.time(),
     }
     return django_json(
@@ -807,7 +877,7 @@ async def enhanced_omni_launch_all_view(request: HttpRequest) -> JsonResponse:
             "mission_id": mission_id,
             "run_id": run["run_id"],
             "target": req.target,
-            "status": "running",
+            "status": "LAUNCHED",
         }
     )
 
@@ -834,20 +904,31 @@ async def enhanced_burp_inspect_view(request: HttpRequest) -> JsonResponse:
     if verr is not None:
         return verr
     assert req is not None
-    if req.burp_file if hasattr(req, "burp_file") else None:
-        pass
     if req.source not in {"live", "pasted"} and "://" not in req.source and not req.content_text:
         try:
             safe_resolve_path(req.source, [DATA_DIR, BASE_DIR])
         except (PermissionError, FileNotFoundError) as exc:
             return django_err(str(exc), status=403)
+    text = req.content_text or ""
+    findings: List[Dict[str, Any]] = []
+    if text:
+        for pat, title, sev in (
+            (r"\bAKIA[0-9A-Z]{16}\b", "Exposed AWS Access Key ID", "High"),
+            (r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}", "JWT Bearer Token in HTTP Traffic", "Info"),
+            (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private Key Material Exposed", "Critical"),
+            (r"(?:SQL syntax|PostgreSQL.*ERROR|mysql_fetch|ORA-\d{5})", "Database Error Disclosure", "Medium"),
+        ):
+            for m in re.finditer(pat, text):
+                findings.append({"title": title, "severity": sev, "match": m.group(0)[:80], "target": req.target})
     return django_json(
         {
             "ok": True,
+            "success": True,
             "source": req.source,
             "target": req.target,
             "min_risk": req.min_risk,
-            "findings": [],
+            "total_findings": len(findings),
+            "findings": findings,
         }
     )
 
@@ -864,7 +945,11 @@ async def enhanced_browser_explore_view(request: HttpRequest) -> JsonResponse:
     assert req is not None
 
     ok, reason, policy = validate_http_url_ssrf_and_scope(
-        req.target_url, action_type="browser_explore"
+        req.target_url,
+        scope=data.get("scope") or data.get("in_scope"),
+        out_of_scope=data.get("out_of_scope"),
+        engagement_id=data.get("engagement_id"),
+        action_type="browser_explore",
     )
     if not ok:
         return django_err(reason, status=403, extra={"policy": policy})
@@ -877,9 +962,11 @@ async def enhanced_browser_explore_view(request: HttpRequest) -> JsonResponse:
             req.target_url,
             proxy=req.proxy,
             headless=req.headless,
-            max_pages=req.max_pages,
+            max_steps=req.max_pages,
         )
-        return django_json({"ok": True, "result": res})
+        res_dict = dataclasses.asdict(res) if dataclasses.is_dataclass(res) else (res if isinstance(res, dict) else {"raw": str(res)})
+        res_dict.setdefault("target", req.target_url)
+        return django_json({"ok": True, "result": res_dict, **res_dict})
     except Exception as exc:
         return django_json({"ok": False, "error": str(exc)}, status=500)
 
@@ -900,17 +987,23 @@ class EnhancedArsenalSynthesizeView(APIView):
                 AIToolCommandSynthesizer,
                 TargetContext,
             )
+            from core.arsenal.kali_catalog import get_tool_definition
 
-            synth = AIToolCommandSynthesizer()
+            tool_def = get_tool_definition(req.tool_name)
+            if not tool_def:
+                return err_json(f"Tool '{req.tool_name}' not found in catalog", status=404)
             ctx = TargetContext(
                 target=req.target,
                 waf_name=req.waf_name,
-                ports=req.ports,
-                tech_stack=req.tech_stack,
+                open_ports=list(req.ports or []),
+                tech_stack=list(req.tech_stack or []),
                 proxy=req.proxy,
             )
-            cmd = synth.synthesize(req.tool_name, ctx)
-            return ok_json({"ok": True, "tool": req.tool_name, "command": cmd})
+            synth = AIToolCommandSynthesizer()
+            cmd_obj = synth.synthesize_sync(tool_def, ctx)
+            cmd_dict = dataclasses.asdict(cmd_obj) if dataclasses.is_dataclass(cmd_obj) else {"synthesized_command": str(cmd_obj)}
+            cmd_str = cmd_dict.get("synthesized_command") or cmd_dict.get("command") or str(cmd_obj)
+            return ok_json({"ok": True, "tool": req.tool_name, "command": cmd_str, "synthesized_command": cmd_str, "waf_evasion_applied": bool(req.waf_name), **cmd_dict})
         except Exception as exc:
             return ok_json({"ok": False, "error": str(exc)})
 
@@ -924,11 +1017,11 @@ class EnhancedSkillsCatalogView(APIView):
         try:
             from core.skills.skill_matrix_viewer import SkillMatrixViewer
 
-            viewer = SkillMatrixViewer()
-            skills = viewer.list_skills(category=category, layer=layer)
-            return ok_json({"skills": skills})
+            stats = SkillMatrixViewer.get_summary_stats()
+            skills = SkillMatrixViewer.list_all_skills(category=category, layer=layer)
+            return ok_json({"skills": skills, "total": len(skills), "stats": stats})
         except Exception as exc:
-            return ok_json({"skills": [], "error": str(exc)})
+            return ok_json({"skills": [], "total": 0, "stats": {}, "error": str(exc)})
 
 
 @require_http_methods(["POST"])
@@ -943,7 +1036,11 @@ async def enhanced_skills_elite_run_view(request: HttpRequest) -> JsonResponse:
     assert req is not None
 
     ok, reason, policy = validate_http_url_ssrf_and_scope(
-        req.target_url, action_type="elite_skill"
+        req.target_url,
+        scope=data.get("scope") or data.get("in_scope"),
+        out_of_scope=data.get("out_of_scope"),
+        engagement_id=data.get("engagement_id"),
+        action_type="elite_skill",
     )
     if not ok:
         return django_err(reason, status=403, extra={"policy": policy})
@@ -953,6 +1050,7 @@ async def enhanced_skills_elite_run_view(request: HttpRequest) -> JsonResponse:
             "skill_name": req.skill_name,
             "target_url": req.target_url,
             "param_name": req.param_name,
+            "verified": False,
             "status": "executed",
         }
     )
@@ -963,11 +1061,19 @@ class EnhancedReportsListView(APIView):
 
     def get(self, request: Any) -> Any:
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-        files = sorted(
-            [p.name for p in REPORTS_DIR.iterdir() if p.is_file()],
-            reverse=True,
-        )
-        return ok_json({"reports": files, "count": len(files)})
+        items: List[Dict[str, Any]] = []
+        for p in sorted(REPORTS_DIR.glob("*.md"), key=lambda x: x.stat().st_mtime, reverse=True):
+            st = p.stat()
+            items.append(
+                {
+                    "filename": p.name,
+                    "path": str(p),
+                    "size_bytes": st.st_size,
+                    "modified": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
+                    "is_master_dossier": "MASTER_DOSSIER" in p.name or "MASTER_MULTI_TARGET" in p.name,
+                }
+            )
+        return ok_json({"reports": items, "count": len(items)})
 
 
 class EnhancedReportDetailView(APIView):
@@ -992,7 +1098,23 @@ class EnhancedSnapshotsListView(APIView):
 
     def get(self, request: Any) -> Any:
         SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-        items = sorted([p.name for p in SNAPSHOTS_DIR.iterdir()], reverse=True)
+        items: List[Dict[str, Any]] = []
+        for p in sorted(SNAPSHOTS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+            try:
+                snap = json.loads(p.read_text(encoding="utf-8"))
+                items.append(
+                    {
+                        "filename": p.name,
+                        "snapshot_id": snap.get("snapshot_id", p.stem),
+                        "target": snap.get("target", "unknown"),
+                        "phase": snap.get("phase", "UNKNOWN"),
+                        "coverage_pct": snap.get("coverage_pct", 0.0),
+                        "findings_count": len(snap.get("confirmed_findings", [])),
+                        "modified": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(p.stat().st_mtime)),
+                    }
+                )
+            except Exception:
+                continue
         return ok_json({"snapshots": items, "count": len(items)})
 
 
@@ -1033,28 +1155,36 @@ class SessionsListView(APIView):
         try:
             from core.session_manager import SessionManager
 
-            sm = SessionManager()
-            sessions = getattr(sm, "list_sessions", lambda: [])()
-            return ok_json({"sessions": sessions})
+            sessions = SessionManager().list_all()
+            return Response(sessions if isinstance(sessions, list) else [])
         except Exception:
             RUNS_DIR.mkdir(parents=True, exist_ok=True)
-            items = sorted([p.name for p in RUNS_DIR.iterdir() if p.is_dir()], reverse=True)
-            return ok_json({"sessions": items})
+            items = [{"id": p.name, "target": p.name, "mode": "scan", "status": "saved"} for p in sorted(RUNS_DIR.iterdir(), reverse=True) if p.is_dir()]
+            return Response(items)
 
 
 class SessionDetailView(APIView):
     """GET /api/session/<sid>."""
 
     def get(self, request: Any, sid: str) -> Any:
-        if not _SAFE_ID_RE.fullmatch(sid):
+        if not _SAFE_ID_RE.fullmatch(sid) or ".." in sid:
             return err_json("Invalid session ID", status=400)
         try:
             from core.session_manager import SessionManager
 
-            sm = SessionManager()
-            info = getattr(sm, "get_session", lambda s: None)(sid)
-            if info:
-                return ok_json({"session_id": sid, "data": info})
+            s = SessionManager().load(sid)
+            if s:
+                return ok_json(
+                    {
+                        "id": s.id,
+                        "session_id": s.id,
+                        "target": s.target,
+                        "mode": s.mode,
+                        "status": s.status,
+                        "created_at": s.created_at,
+                        "findings_count": len(s.findings),
+                    }
+                )
         except Exception:
             pass
         run = ensure_platform_wiring().get_run(sid)
@@ -1063,20 +1193,84 @@ class SessionDetailView(APIView):
         return ok_json({"session_id": sid, "run": run})
 
 
+_ALLOWED_REPORT_FORMATS = {"hackerone", "executive", "md", "markdown", "html", "json", "txt", "sarif", "pdf"}
+
+
 class ReportExportView(APIView):
     """GET /api/report/<sid>/<fmt>."""
 
     def get(self, request: Any, sid: str, fmt: str) -> Any:
-        if not _SAFE_ID_RE.fullmatch(sid) or fmt not in {"json", "md", "markdown", "html", "txt"}:
+        fmt_clean = (fmt or "").strip().lower()
+        if not _SAFE_ID_RE.fullmatch(sid) or ".." in sid or fmt_clean not in _ALLOWED_REPORT_FORMATS:
             return err_json("Invalid report session ID or format", status=400)
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        if fmt_clean == "hackerone":
+            cand = safe_resolve_path(f"{sid}_hackerone.md", [REPORTS_DIR])
+            if not cand.exists():
+                try:
+                    from core.bugbounty_reporter import BugBountyReporter
+                    from core.session_manager import SessionManager
+
+                    s = SessionManager().load(sid)
+                    if s:
+                        BugBountyReporter(output_dir=str(REPORTS_DIR)).generate_hackerone_report(
+                            {
+                                "id": s.id,
+                                "target": s.target,
+                                "findings": [
+                                    {
+                                        "title": f.title,
+                                        "severity": f.severity,
+                                        "cvss_score": f.cvss_score,
+                                        "tool": f.tool,
+                                        "evidence": f.evidence,
+                                        "recommendation": getattr(f, "recommendation", ""),
+                                    }
+                                    for f in s.findings
+                                ],
+                            }
+                        )
+                except Exception:
+                    pass
+            if cand.is_file():
+                return HttpResponse(cand.read_text(encoding="utf-8", errors="replace"), content_type="text/markdown")
+        elif fmt_clean == "executive":
+            cand = safe_resolve_path(f"{sid}_executive.html", [REPORTS_DIR])
+            if cand.is_file():
+                return HttpResponse(cand.read_text(encoding="utf-8", errors="replace"), content_type="text/html")
+
         store = ensure_platform_wiring()
         run = store.get_run(sid)
+        session_obj = None
         if not run:
+            try:
+                from core.session_manager import SessionManager
+
+                session_obj = SessionManager().load(sid)
+            except Exception:
+                session_obj = None
+        if not run and not session_obj:
             return err_json(f"Session {sid} not found", status=404)
-        if fmt == "json":
+        if fmt_clean == "json":
+            if session_obj:
+                return ok_json(
+                    {
+                        "session_id": sid,
+                        "target": session_obj.target,
+                        "findings": [dataclasses.asdict(f) if dataclasses.is_dataclass(f) else dict(vars(f)) for f in session_obj.findings],
+                    }
+                )
             return ok_json({"session_id": sid, "run": run, "events": store.list_events(run_id=sid, limit=200)})
-        body = f"# HunterAI Report ({sid})\nTarget: {run.get('target', '')}\nStatus: {run.get('status', '')}\n"
-        return HttpResponse(body, content_type="text/markdown" if fmt in {"md", "markdown"} else "text/plain")
+        if session_obj:
+            lines = [f"# HunterAI Report ({sid})", f"Target: {session_obj.target}", ""]
+            for f in session_obj.findings:
+                lines.append(f"- [{f.severity}] {f.title}: {str(f.evidence)[:200]}")
+            body = "\n".join(lines) + "\n"
+        else:
+            body = f"# HunterAI Report ({sid})\nTarget: {run.get('target', '')}\nStatus: {run.get('status', '')}\n"
+        ctype = "text/html" if fmt_clean == "html" else ("text/markdown" if fmt_clean in {"md", "markdown"} else "text/plain")
+        return HttpResponse(body, content_type=ctype)
 
 
 class ToolOutputsListView(APIView):

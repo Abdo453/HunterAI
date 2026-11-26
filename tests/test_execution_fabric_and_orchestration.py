@@ -20,7 +20,7 @@ from core.reasoning.semantic_interpreter import SemanticInterpreter
 from core.orchestration.tool_orchestrator import ToolOrchestrator
 from agents.burp_agent.normalization.request_normalizer import RequestNormalizer
 from agents.burp_agent.normalization.response_normalizer import ResponseNormalizer
-from ui.web.app import app
+from hunter_backend.asgi import application
 
 
 class TestExecutionFabricAndOrchestration:
@@ -142,8 +142,8 @@ class TestExecutionFabricAndOrchestration:
 
     @pytest.mark.asyncio
     async def test_rest_api_orchestration_and_repeater_endpoints(self):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:8000") as client:
             # 1. List tools
             res_tools = await client.get("/api/orchestration/tools")
             assert res_tools.status_code == 200
