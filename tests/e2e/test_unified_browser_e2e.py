@@ -171,21 +171,50 @@ def test_02_target_scopeguard_run_launch_and_live_console(
     e2e_stack: E2EStack,
     e2e_page: tuple[Page, PageDiagnostics],
 ) -> None:
-    """Verify UI & API ScopeGuard rejection, lab localhost engagement, SSE console, Pause/Resume/Stop."""
+    """Verify syntax/scheme/metadata rejections, unrestricted explicit target launch, SSE console, Pause/Resume/Stop."""
     page, diag = e2e_page
     _wait_ui_ready(page, f"{e2e_stack.ui_base}/")
 
-    # 1. Pre-flight invalid/loopback target rejection in Navbar UI
+    # 1. Pre-flight syntax, unsafe scheme, and empty target rejections in Navbar UI
     nav_input = page.locator("#scan-target-input")
+    nav_form = page.locator("header form")
     launch_btn = page.locator("header form button[type='submit']")
-    for bad_target in ("127.0.0.1", "169.254.169.254", "evil;id"):
+    alert = page.locator('header [role="alert"]')
+
+    nav_input.fill("")
+    assert launch_btn.is_disabled() is True
+    nav_form.evaluate("form => form.requestSubmit()")
+    alert.wait_for(state="visible", timeout=5000)
+    assert alert.inner_text().strip() != ""
+
+    for bad_target in ("evil;id", "file:///etc/passwd"):
         nav_input.fill(bad_target)
+        assert launch_btn.is_disabled() is False
         launch_btn.click()
-        alert = page.locator('header [role="alert"]')
         alert.wait_for(state="visible", timeout=5000)
         assert alert.inner_text().strip() != ""
 
-    # 1b. Backend SSRF & unscoped/out-of-scope rejection must return 403 even with HUNTER_ALLOW_LOCALHOST_SCOPE=1
+    # 1a. Cloud Metadata SSRF probe in Navbar UI hits backend 403 and renders alert without crashing
+    with diag.allow_expected_console_errors(
+        "Failed to load resource: the server responded with a status of 403",
+        require_at_least_one=True,
+    ):
+        nav_input.fill("http://169.254.169.254/latest/meta-data/")
+        page.wait_for_function(
+            "() => { const b = document.querySelector(\"header form button[type='submit']\"); return Boolean(b && !b.disabled); }",
+            timeout=5000,
+        )
+        with page.expect_response(
+            lambda r: "/api/platform/runs/start" in r.url and r.request.method == "POST",
+            timeout=10000,
+        ) as meta_ui_resp:
+            launch_btn.click()
+        assert meta_ui_resp.value.status == 403
+        alert.wait_for(state="visible", timeout=5000)
+        assert alert.inner_text().strip() != ""
+        page.wait_for_timeout(150)
+
+    # 1b. Backend Cloud Metadata SSRF & unsafe scheme invariants MUST still return 403
     meta_eng_resp = _post_json_with_csrf(
         page,
         e2e_stack.api_base,
@@ -198,46 +227,26 @@ def test_02_target_scopeguard_run_launch_and_live_console(
     )
     assert meta_eng_resp.status == 403
 
-    meta_run_resp = _post_json_with_csrf(
-        page,
-        e2e_stack.api_base,
-        "/api/platform/runs/start",
-        {
-            "kind": "pipeline",
-            "target": "http://169.254.169.254/latest/meta-data/",
-            "mode": "recon",
-        },
-    )
-    assert meta_run_resp.status == 403
+    for blocked_target in (
+        "http://169.254.169.254/latest/meta-data/",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "http://100.100.100.200/latest/meta-data/",
+        "http://0.0.0.0:8000/",
+        "file:///etc/passwd",
+    ):
+        blocked_run_resp = _post_json_with_csrf(
+            page,
+            e2e_stack.api_base,
+            "/api/platform/runs/start",
+            {
+                "kind": "pipeline",
+                "target": blocked_target,
+                "mode": "recon",
+            },
+        )
+        assert blocked_run_resp.status == 403, f"Expected 403 for {blocked_target}, got {blocked_run_resp.status}"
 
-    unscoped_run_resp = _post_json_with_csrf(
-        page,
-        e2e_stack.api_base,
-        "/api/platform/runs/start",
-        {
-            "kind": "pipeline",
-            "target": "https://outofscope.invalid/admin",
-            "mode": "recon",
-            "scope": ["vulnshop.example"],
-        },
-    )
-    assert unscoped_run_resp.status == 403
-
-    # 1c. Explicit local mock vulnerable target works when registered as an in-scope engagement
-    lab_eng_resp = _post_json_with_csrf(
-        page,
-        e2e_stack.api_base,
-        "/api/platform/engagements",
-        {
-            "name": "LocalVulnShopLab",
-            "target": e2e_stack.vuln_base,
-            "in_scope": ["127.0.0.1", f"127.0.0.1:{e2e_stack.vuln_port}"],
-            "set_active": True,
-        },
-    )
-    assert lab_eng_resp.status in (200, 201), lab_eng_resp.text()
-
-    # 2. Register an engagement via /operations UI
+    # 2. Register a workspace/engagement via /operations UI
     _wait_ui_ready(page, f"{e2e_stack.ui_base}/operations")
     page.get_by_placeholder("Project or Program Name").fill("VulnShop E2E")
     page.get_by_placeholder("Primary Target URL").fill("vulnshop.example")
@@ -252,19 +261,6 @@ def test_02_target_scopeguard_run_launch_and_live_console(
         state="visible", timeout=10000
     )
 
-    # Out-of-scope subdomain must be blocked (403)
-    oos_run_resp = _post_json_with_csrf(
-        page,
-        e2e_stack.api_base,
-        "/api/platform/runs/start",
-        {
-            "kind": "pipeline",
-            "target": "https://admin.vulnshop.example/",
-            "mode": "recon",
-        },
-    )
-    assert oos_run_resp.status == 403
-
     # 3. Return to `/`, verify engagement selected & truthful Go Core Offline indicator
     _wait_ui_ready(page, f"{e2e_stack.ui_base}/")
     page.wait_for_function(
@@ -277,10 +273,55 @@ def test_02_target_scopeguard_run_launch_and_live_console(
         page.locator("#engagement-selector").select_option(label="VulnShop E2E (Hub)")
     assert "Offline" in page.locator("aside").first.inner_text()
 
+    # 3b. Explicit operator freedom: .local and local lab 127.0.0.1:<vuln_port> launch directly via Navbar
+    # even while another workspace ('VulnShop E2E') is selected and without prior scope/env overrides
+    for free_target in ("enhanced-target.local", e2e_stack.vuln_base):
+        nav_input.fill(free_target)
+        page.wait_for_function(
+            "() => { const b = document.querySelector(\"header form button[type='submit']\"); return Boolean(b && !b.disabled); }",
+            timeout=5000,
+        )
+        with page.expect_response(
+            lambda r: "/api/platform/runs/start" in r.url and r.request.method == "POST",
+            timeout=10000,
+        ) as free_resp_info:
+            launch_btn.click()
+        assert free_resp_info.value.status in (200, 201), (
+            f"Expected explicit target {free_target} to launch directly, got {free_resp_info.value.status}: {free_resp_info.value.text()}"
+        )
+        free_payload = free_resp_info.value.json()
+        assert free_payload.get("run", {}).get("target") == free_target, free_payload
+        assert alert.count() == 0
+        free_rid = free_payload.get("run_id") or free_payload.get("run", {}).get("run_id")
+        if free_rid:
+            stop_resp = _post_json_with_csrf(
+                page,
+                e2e_stack.api_base,
+                f"/api/platform/runs/{free_rid}/stop",
+                {},
+            )
+            assert stop_resp.status == 200
+
+    # Private RFC1918 lab IP also launches cleanly via API without scope blocking
+    priv_resp = _post_json_with_csrf(
+        page,
+        e2e_stack.api_base,
+        "/api/platform/runs/start",
+        {"kind": "pipeline", "target": "http://192.168.1.50:8080", "mode": "recon"},
+    )
+    assert priv_resp.status in (200, 201), priv_resp.text()
+    priv_rid = priv_resp.json().get("run_id") or priv_resp.json().get("run", {}).get("run_id")
+    if priv_rid:
+        _post_json_with_csrf(page, e2e_stack.api_base, f"/api/platform/runs/{priv_rid}/stop", {})
+
     # 4. Launch mission via Overview Mission Launcher
     mission_form = page.locator("form").filter(has=page.locator("#overview-target"))
     page.locator("#overview-target").fill("app.vulnshop.example")
     assert page.locator("#overview-target").input_value() == "app.vulnshop.example"
+    page.wait_for_function(
+        "() => { const form = document.querySelector('#overview-target')?.closest('form'); const btn = form?.querySelector('button[type=\"submit\"]'); return Boolean(btn && !btn.disabled); }",
+        timeout=5000,
+    )
     with page.expect_response(
         lambda r: "/api/platform/runs/start" in r.url and r.request.method == "POST",
         timeout=10000,
@@ -537,20 +578,20 @@ def test_04_copilot_drawer_prompt_isolation_and_approvals(
     ref_btn.click()
     page.wait_for_url("**/operations**", timeout=10000)
 
-    # Re-open Copilot if closed after navigation and verify PolicyEngine block on unscoped 127.0.0.1:8080
+    # Re-open Copilot if closed after navigation and verify Cloud Metadata SSRF is ALWAYS blocked by PolicyEngine
     if not copilot.is_visible():
         page.keyboard.press("Control+j")
     copilot.wait_for(state="visible", timeout=8000)
-    copilot.locator("textarea").fill("Run nuclei scan on http://127.0.0.1:8080")
+    copilot.locator("textarea").fill("Run nuclei scan on http://169.254.169.254/latest/meta-data/")
     copilot.locator('button[aria-label="Send"]').click()
     copilot.locator("text=Blocked by PolicyEngine").wait_for(state="visible", timeout=15000)
 
-    # Queue scoped approval #1 (to be rejected later) and #2 (newest first, to be approved without go-install)
+    # Queue approval #1 (to be rejected later) and #2 (explicit local lab target permitted under default unrestricted mode)
     copilot.locator("textarea").fill("Run nuclei scan on https://vulnshop.example")
     copilot.locator('button[aria-label="Send"]').click()
     copilot.locator("text=Approval Request Created").first.wait_for(state="visible", timeout=15000)
 
-    copilot.locator("textarea").fill("Run whatweb scan on https://vulnshop.example")
+    copilot.locator("textarea").fill(f"Run whatweb scan on {e2e_stack.vuln_base}")
     copilot.locator('button[aria-label="Send"]').click()
     page.wait_for_function(
         "() => Array.from(document.querySelectorAll('aside[aria-labelledby=\"copilot-drawer-title\"] button')).filter(b => b.innerText.includes('Approval Request Created')).length >= 2",
@@ -587,6 +628,31 @@ def test_04_copilot_drawer_prompt_isolation_and_approvals(
     assert "approved" in panel.inner_text().lower()
     assert "rejected" in panel.inner_text().lower()
     save_verification_screenshot(page, "06_approvals_gate_completed.png")
+
+    # Verify /api/platform/approvals/<id>/decide STILL enforces 403 on Cloud Metadata SSRF
+    from core.platform_store import PlatformStore
+
+    db_store = PlatformStore(e2e_stack.db_path)
+    try:
+        ssrf_apr = db_store.create_approval(
+            action_type="RUN_TOOL",
+            target="http://169.254.169.254/latest/meta-data/",
+            tool_name="whatweb",
+            command_args="http://169.254.169.254/latest/meta-data/",
+            rationale="E2E negative SSRF approval decide check",
+        )
+        ssrf_decide_resp = _post_json_with_csrf(
+            page,
+            e2e_stack.api_base,
+            f"/api/platform/approvals/{ssrf_apr['approval_id']}/decide",
+            {"decision": "approved"},
+        )
+        assert ssrf_decide_resp.status == 403
+        persisted_ssrf = db_store.get_approval(ssrf_apr["approval_id"])
+        assert persisted_ssrf is not None and persisted_ssrf["status"] == "rejected"
+    finally:
+        db_store.close()
+
     diag.assert_clean()
 
 
@@ -597,28 +663,42 @@ def test_05_studio_intercept_operations_arsenal_system_and_palette(
     """Verify Studio Monaco + .env 403 + Repeater/Audit, Intercept, Operations, Arsenal, System, Ctrl+K."""
     page, diag = e2e_page
 
-    # 1. Verify .env returns 403 directly on /api/editor/file
+    # 1. Verify .env and path traversal return 403 directly on /api/editor/file
     env_resp = page.request.get(f"{e2e_stack.api_base}/api/editor/file?path=.env")
     assert env_resp.status == 403
+    trav_resp = page.request.get(f"{e2e_stack.api_base}/api/editor/file?path=../.env")
+    assert trav_resp.status == 403
 
-    # 1b. Verify Repeater rejects metadata IP (169.254.169.254) and unscoped targets with 403
-    rep_meta = _post_json_with_csrf(
+    # 1b. Verify Repeater rejects Cloud Metadata SSRF & unsafe schemes with 403,
+    #     while explicit 127.0.0.1:<vuln_port> succeeds 200 OK regardless of mismatched scope
+    for bad_rep_url in (
+        "http://169.254.169.254/latest/meta-data/",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "file:///etc/passwd",
+    ):
+        rep_meta = _post_json_with_csrf(
+            page,
+            e2e_stack.api_base,
+            "/api/burp/repeater/send",
+            {"url": bad_rep_url, "method": "GET"},
+        )
+        assert rep_meta.status == 403, (bad_rep_url, rep_meta.status)
+
+    rep_free = _post_json_with_csrf(
         page,
         e2e_stack.api_base,
         "/api/burp/repeater/send",
-        {"url": "http://169.254.169.254/latest/meta-data/", "method": "GET"},
+        {
+            "url": f"{e2e_stack.vuln_base}/api/orders?id=1001",
+            "method": "GET",
+            "scope": ["other-workspace.example"],
+        },
     )
-    assert rep_meta.status == 403
+    assert rep_free.status == 200, rep_free.text()
+    assert rep_free.json().get("status_code") == 200
+    assert "alice" in rep_free.json().get("body", "")
 
-    rep_oos = _post_json_with_csrf(
-        page,
-        e2e_stack.api_base,
-        "/api/burp/repeater/send",
-        {"url": "https://outofscope.invalid/secret", "method": "GET", "scope": ["vulnshop.example"]},
-    )
-    assert rep_oos.status == 403
-
-    # Register & activate local mock vulnerable target for Repeater E2E
+    # Register & activate StudioLabTarget workspace (exercised by Ctrl+K Command Palette search below)
     _wait_ui_ready(page, f"{e2e_stack.ui_base}/")
     lab_eng = _post_json_with_csrf(
         page,

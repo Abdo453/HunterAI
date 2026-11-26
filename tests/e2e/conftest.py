@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -48,6 +49,10 @@ _STRIPPED_ENV_KEYS = (
     "OPENROUTER_MODEL",
     "HUNTER_DEFAULT_PROVIDER",
     "HUNTER_DEFAULT_MODEL",
+    "HUNTER_UNRESTRICTED",
+    "HUNTER_WEB_UNRESTRICTED",
+    "HUNTER_ALLOW_LOCALHOST_SCOPE",
+    "HUNTER_ALLOW_PRIVATE_LAB_SCOPE",
 )
 
 
@@ -255,6 +260,32 @@ class PageDiagnostics:
     external_requests: List[str] = field(default_factory=list)
     allowed_error_substrings: List[str] = field(default_factory=list)
 
+    @contextmanager
+    def allow_expected_console_errors(
+        self,
+        *substrings: str,
+        require_at_least_one: bool = False,
+    ) -> Generator[None, None, None]:
+        """Allow matching console.error entries ONLY within this scoped block."""
+        start_idx = len(self.console_errors)
+        try:
+            yield
+        finally:
+            tail = self.console_errors[start_idx:]
+            kept_tail: List[str] = []
+            matched = 0
+            for msg in tail:
+                if any(tok in msg for tok in substrings):
+                    matched += 1
+                else:
+                    kept_tail.append(msg)
+            self.console_errors[start_idx:] = kept_tail
+            if require_at_least_one:
+                assert matched > 0, (
+                    f"Expected at least one browser console.error matching {substrings!r}, "
+                    f"saw {tail!r}"
+                )
+
     def assert_clean(self) -> None:
         assert self.page_errors == [], f"Uncaught pageerror(s): {self.page_errors}"
         filtered_console = [
@@ -304,8 +335,6 @@ def e2e_stack(tmp_path_factory: pytest.TempPathFactory) -> Generator[E2EStack, N
 
     env.update(
         {
-            "HUNTER_UNRESTRICTED": "0",
-            "HUNTER_ALLOW_LOCALHOST_SCOPE": "1",
             "HUNTER_PIPELINE_PHASE_DELAY_S": "5.0",
             "HUNTER_PLATFORM_DB_PATH": str(db_path),
             "HUNTER_COPILOT_ATTACHMENTS_DIR": str(attachments_dir),
@@ -363,6 +392,18 @@ def e2e_stack(tmp_path_factory: pytest.TempPathFactory) -> Generator[E2EStack, N
             log_path=uvicorn_log,
             label="Django ASGI (uvicorn)",
         )
+
+        next_cache_dir = FRONTEND_DIR / ".next"
+        if next_cache_dir.exists():
+            source_mtimes = [
+                p.stat().st_mtime
+                for root_name in ("app", "components", "lib")
+                for p in (FRONTEND_DIR / root_name).rglob("*")
+                if p.is_file()
+            ]
+            newest_src = max(source_mtimes, default=0.0)
+            if (next_cache_dir / "BUILD_ID").exists() or newest_src > next_cache_dir.stat().st_mtime:
+                shutil.rmtree(next_cache_dir, ignore_errors=True)
 
         npm_bin = "npm.cmd" if sys.platform.startswith("win") else shutil.which("npm") or "npm"
         with next_log.open("wb") as nlog:
