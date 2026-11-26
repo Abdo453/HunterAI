@@ -1,0 +1,49 @@
+HunterAI (PentestAI-Unified)
+Third-Party Software Provenance and License Notice
+==================================================
+
+This repository includes provenance records and license notices for upstream
+open-source reference codebases audited during platform unification. Both
+upstream repositories are pinned locally under `/external/` as read-only
+reference checkouts and are strictly excluded from Git tracking, Docker build
+contexts, Python packaging, pytest discovery, and skill registries.
+
+-------------------------------------------------------------------------------
+1. PentesterFlow/agent
+-------------------------------------------------------------------------------
+Repository:    https://github.com/PentesterFlow/agent
+Version:       v0.3.0
+Pinned Commit: 0759d873a07350a70283c9751f7d136905f777c7
+License:       Apache License, Version 2.0
+License Text:  THIRD_PARTY_LICENSES/PENTESTERFLOW_APACHE2.txt
+Local Ref:     /external/pentesterflow-agent/ (gitignored, not distributed)
+
+Attribution:
+Licensed under the Apache License, Version 2.0. You may obtain a copy of the
+License in `THIRD_PARTY_LICENSES/PENTESTERFLOW_APACHE2.txt` or at
+http://www.apache.org/licenses/LICENSE-2.0. Any design patterns or modules
+adopted or adapted from PentesterFlow/agent must retain Apache-2.0 attribution
+and clearly record modifications.
+
+-------------------------------------------------------------------------------
+2. vxcontrol/pentagi
+-------------------------------------------------------------------------------
+Repository:    https://github.com/vxcontrol/pentagi
+Copyright:     Copyright (c) 2025 PentAGI Development Team
+Pinned Commit: cffed9485aa1cca70762cd08a57ac62a80406258
+License:       MIT License
+License Text:  THIRD_PARTY_LICENSES/PENTAGI_MIT.txt
+Local Ref:     /external/pentagi/ (gitignored, not distributed)
+
+Attribution:
+Licensed under the MIT License. See `THIRD_PARTY_LICENSES/PENTAGI_MIT.txt` for
+the complete copyright notice and permission terms.
+
+EXPLICIT LICENSE COMPLIANCE POLICY — AGPL-3.0 BAN:
+The upstream module `github.com/vxcontrol/cloud` (licensed under AGPL-3.0) and
+any other AGPL-3.0 code or dependency are STRICTLY BANNED from HunterAI.
+- Zero Go or Python source files outside `/external/` may import, vendor, link,
+  or depend on `github.com/vxcontrol/cloud`.
+- Zero source files outside `/external/` may import `external.pentesterflow` or
+  `external.pentagi`.
+- Compliance is continuously enforced by `tests/test_external_isolation.py`.

@@ -22,6 +22,10 @@ venv.bak/
 .env.local
 .env.*.local
 
+# Local runtime secrets & settings (never commit)
+data/root_controller/.django_secret
+data/control_settings.json
+
 # Testing & Coverage
 .pytest_cache/
 .coverage
@@ -88,6 +92,9 @@ Thumbs.db
 # OpenCode skills integration — cloned external libraries (never commit)
 skills_library/
 tmp_skills_install.log
+
+# External upstream reference codebases (local intake/audit only — never commit)
+/external/
 
 # Local scratch artifacts
 .tmp_*

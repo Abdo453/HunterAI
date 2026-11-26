@@ -70,11 +70,12 @@ include = [
     "cli*",
     "skills*",
 ]
-exclude = ["tests*", "data*", "artifacts*", "reports*", "logs*", "benchmarks*", "evaluation*"]
+exclude = ["tests*", "data*", "artifacts*", "reports*", "logs*", "benchmarks*", "evaluation*", "external*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+norecursedirs = ["external", "skills_library", "node_modules", ".next", ".git"]
 markers = [
     "slow: اختبارات بطيئة أو تتطلب شبكة",
     "integration: اختبارات تكامل حقيقية",

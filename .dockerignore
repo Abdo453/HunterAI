@@ -1,0 +1,30 @@
+# External upstream reference codebases (local intake/audit only — never ship in images)
+/external/
+
+# VCS & local skill intake archives
+.git/
+skills_library/
+
+# Frontend build & dependency caches
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Runtime data, logs, artifacts & local secrets
+data/
+.env
+*.env
+logs/
+artifacts/
+snapshots/
+task_logs/
+
+# Python caches
+__pycache__/
+.pytest_cache/
+
+# Go & local binaries / databases
+backend/bin/
+*.exe
+*.sqlite*
+*.db
