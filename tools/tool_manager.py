@@ -1,7 +1,84 @@
 """Tool Manager — مدير الأدوات الذكي مع caching"""
-import asyncio, shutil, hashlib, time, re
+import asyncio, os, shutil, hashlib, subprocess, sys, time, re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
+
+_HTTPX_PROBE_CACHE: Dict[str, bool] = {}
+
+
+def is_projectdiscovery_httpx(binary_path: str) -> bool:
+    """Return True if *binary_path* is ProjectDiscovery's Go ``httpx`` CLI.
+
+    Python's ``httpx`` package installs a Click-based ``httpx`` / ``httpx.exe``
+    script in ``Scripts/`` or ``bin/`` whose flags conflict with
+    ProjectDiscovery's ``httpx`` (failing ``-version`` with exit code 2 and
+    ``Usage: httpx [OPTIONS] URL``).
+    """
+    if not binary_path:
+        return False
+    norm = os.path.normcase(os.path.abspath(binary_path))
+    cached = _HTTPX_PROBE_CACHE.get(norm)
+    if cached is not None:
+        return cached
+
+    is_pd = False
+    try:
+        proc = subprocess.run(
+            [binary_path, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        combined = f"{proc.stdout or ''}\n{proc.stderr or ''}".lower()
+        if (
+            "usage: httpx [options] url" in combined
+            or "no such option" in combined
+        ):
+            is_pd = False
+        elif proc.returncode == 0 and (
+            "projectdiscovery" in combined
+            or "current version" in combined
+            or "httpx" in combined
+        ):
+            is_pd = True
+    except Exception:
+        is_pd = False
+
+    _HTTPX_PROBE_CACHE[norm] = is_pd
+    return is_pd
+
+
+def resolve_projectdiscovery_httpx() -> Optional[str]:
+    """Locate ProjectDiscovery's ``httpx`` (or ``httpx-toolkit``), skipping Python's CLI."""
+    toolkit = shutil.which("httpx-toolkit")
+    if toolkit:
+        return toolkit
+
+    is_win = sys.platform == "win32" or os.name == "nt"
+    cand_names = ["httpx.exe", "httpx", "httpx.cmd", "httpx.bat"] if is_win else ["httpx"]
+
+    search_dirs: List[str] = []
+    gopath = os.environ.get("GOPATH")
+    if gopath:
+        search_dirs.append(os.path.join(gopath, "bin"))
+    search_dirs.append(os.path.expanduser(os.path.join("~", "go", "bin")))
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if entry:
+            search_dirs.append(entry)
+
+    seen: set[str] = set()
+    for base_dir in search_dirs:
+        for name in cand_names:
+            full = os.path.join(base_dir, name)
+            norm = os.path.normcase(os.path.abspath(full))
+            if norm in seen:
+                continue
+            seen.add(norm)
+            if os.path.isfile(full) and (is_win or os.access(full, os.X_OK)):
+                if is_projectdiscovery_httpx(full):
+                    return full
+    return None
 
 
 @dataclass
@@ -221,11 +298,10 @@ class ToolManager:
 
         c = cmd.lower().strip()
         if c in ("httpx", "httpx-toolkit"):
-            if shutil.which("httpx-toolkit"):
-                return "httpx-toolkit"
-            go_httpx = _find_in_go_bin("httpx")
-            if go_httpx:
-                return go_httpx
+            pd_httpx = resolve_projectdiscovery_httpx()
+            if pd_httpx:
+                return pd_httpx
+            return cmd
 
         # فحص مجلد Go الافتراضي لجميع أدوات Go (Kali & Windows)
         go_bin = _find_in_go_bin(cmd)
@@ -236,9 +312,11 @@ class ToolManager:
 
     def is_available(self, cmd: str) -> bool:
         if cmd not in self._avail:
-            import os
-            resolved = self.resolve_binary(cmd)
-            self._avail[cmd] = shutil.which(resolved) is not None or os.path.exists(resolved)
+            if cmd.lower().strip() in ("httpx", "httpx-toolkit"):
+                self._avail[cmd] = resolve_projectdiscovery_httpx() is not None
+            else:
+                resolved = self.resolve_binary(cmd)
+                self._avail[cmd] = shutil.which(resolved) is not None or os.path.exists(resolved)
         return self._avail[cmd]
 
     async def auto_install_if_missing(self, tool: str) -> bool:

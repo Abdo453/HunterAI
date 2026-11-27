@@ -454,7 +454,11 @@ def capture(url: str, method: str, headers: list[tuple[str, str]],
 def try_screenshot(url: str, outdir: str) -> str | None:
     """Best-effort screenshot via httpx. Returns 'screenshot.png' on success,
     None otherwise — never fatal (evidence is still valid without it)."""
-    bin_name = "httpx-toolkit" if shutil.which("httpx-toolkit") else ("httpx" if shutil.which("httpx") else None)
+    try:
+        from tools.tool_manager import resolve_projectdiscovery_httpx
+        bin_name = resolve_projectdiscovery_httpx()
+    except Exception:
+        bin_name = "httpx-toolkit" if shutil.which("httpx-toolkit") else None
     if not bin_name:
         return None
     try:

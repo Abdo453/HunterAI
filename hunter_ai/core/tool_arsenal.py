@@ -124,9 +124,14 @@ def collect_tool_names() -> Dict[str, List[str]]:
 
 def list_tools() -> List[Dict[str, Any]]:
     """Return list of tools with availability status."""
+    from tools.tool_manager import resolve_projectdiscovery_httpx
+
     result: List[Dict[str, Any]] = []
     for name, sources in collect_tool_names().items():
-        path = shutil.which(name)
+        if name in ("httpx", "httpx-toolkit"):
+            path = resolve_projectdiscovery_httpx()
+        else:
+            path = shutil.which(name)
         result.append({
             "name": name,
             "status": "INSTALLED" if path else "MISSING",

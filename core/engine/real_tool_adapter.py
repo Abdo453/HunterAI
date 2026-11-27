@@ -93,12 +93,12 @@ class RealToolAdapter:
     def resolve_binary(self, tool_name: str) -> str:
         """Resolves tool path defensively, prioritizing Kali toolkits and ~/go/bin."""
         t = tool_name.strip()
-        if t in ("httpx", "httpx-toolkit"):
-            if shutil.which("httpx-toolkit"):
-                return "httpx-toolkit"
-            go_httpx = Path.home() / "go" / "bin" / "httpx"
-            if go_httpx.is_file() and os.access(go_httpx, os.X_OK):
-                return str(go_httpx)
+        if t.lower() in ("httpx", "httpx-toolkit"):
+            from tools.tool_manager import resolve_projectdiscovery_httpx
+            pd_httpx = resolve_projectdiscovery_httpx()
+            if pd_httpx:
+                return pd_httpx
+            return t
         go_bin = Path.home() / "go" / "bin" / t
         if go_bin.is_file() and os.access(go_bin, os.X_OK):
             return str(go_bin)
@@ -108,6 +108,9 @@ class RealToolAdapter:
         """Checks if tool executable is found in PATH or configured directory."""
         if self.force_fallback:
             return False
+        if tool_name.strip().lower() in ("httpx", "httpx-toolkit"):
+            from tools.tool_manager import resolve_projectdiscovery_httpx
+            return resolve_projectdiscovery_httpx() is not None
         resolved = self.resolve_binary(tool_name)
         if self.tools_dir and (self.tools_dir / resolved).exists():
             return True
