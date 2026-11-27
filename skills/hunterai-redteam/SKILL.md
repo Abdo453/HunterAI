@@ -31,9 +31,9 @@ Preserve mixed requests and complete unaffected work when one operation is unava
 
 ## Core capability routing
 
-> **Important for agent & OpenCode clients:** `hunterai-redteam` is the **only** registered agent `skill` ID. Never call the `skill` tool with `web`, `web-api-browser`, or any reference/category name. To load a domain reference, call the file `read` tool using the **exact full path** below (never shortened names like `web.md`). Category names (`recon`, `web`, `analysis`, `browser`, `burp`, `cognitive`, `web3`, `reporting`) are CLI filters for `python pentest.py skills --category <category>`.
+> **Routing note:** `hunterai-redteam` is the single project-level agent skill entry point; the entries below are reference documents, not separate agent skills. Read them as files using the exact path in the table (do not shorten filenames such as `web.md`). Category names (`recon`, `web`, `analysis`, `browser`, `burp`, `cognitive`, `web3`, `reporting`) are CLI filters for `python pentest.py skills --category <category>`.
 
-| Work | Exact Reference Path (use `read`) |
+| Work | Exact Reference Path |
 | --- | --- |
 | LLM, jailbreak, guardrail, prompt-injection, RAG, model, or AI application red teaming | [`skills/hunterai-redteam/references/ai-jailbreak-redteam.md`](references/ai-jailbreak-redteam.md) |
 | Deployed agents, MCP, tools, memory, delegation, and skill/plugin boundaries | [`skills/hunterai-redteam/references/agent-mcp.md`](references/agent-mcp.md) |

@@ -1,6 +1,6 @@
 {
   "schema": "hunterai-active-skills/1",
-  "generated_at": "2026-11-27T07:59:53.628750+00:00",
+  "generated_at": "2026-11-27T08:10:32.430338+00:00",
   "count": 1,
   "primary": "hunterai-redteam",
   "skills": [
@@ -15,7 +15,7 @@
         "references/mobile-reverse-engineering.md": "4bb6b850352dc36b546a17192b0262de561876f7c8e9c2bb4978f731457ab0bb",
         "references/tooling-evidence.md": "5919acc282de2acae79f77876af6a985e07cb06551278eb982c20ee3a78c259d",
         "references/web-api-browser.md": "0961afe71978e7d06dff94f8efabd1e33e4c25c7371bce93adc005cde878385a",
-        "SKILL.md": "f50b3ccce9f5d6dc7bf0182c13763aa5e25f8a72a7fdd697a330823423add4af"
+        "SKILL.md": "7eeb541544397310071bcc04abc82bc8dbf225be132813f5b7c2992a88cec781"
       },
       "kind": "project_primary",
       "routes": [
