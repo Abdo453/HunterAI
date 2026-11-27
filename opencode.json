@@ -9,13 +9,13 @@
     "hunter-arsenal": {
       "type": "local",
       "command": ["python", "pentest.py", "mcp-serve"],
-      "enabled": true,
+      "enabled": false,
       "timeout": 60000
     },
     "filesystem": {
       "type": "local",
       "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem@2025.3.28", "."],
-      "enabled": true,
+      "enabled": false,
       "timeout": 60000
     },
     "context7": {

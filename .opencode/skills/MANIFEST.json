@@ -1,6 +1,6 @@
 {
   "schema": "hunterai-active-skills/1",
-  "generated_at": "2026-11-26T19:44:04.202830+00:00",
+  "generated_at": "2026-11-27T07:59:53.628750+00:00",
   "count": 1,
   "primary": "hunterai-redteam",
   "skills": [
@@ -9,13 +9,13 @@
       "description": "Primary HunterAI cybersecurity and red-team workflow for web, API, browser, mobile, reverse engineering, cloud, identity, network, host, AI, LLM, jailbreak, agent, MCP, vulnerability research, exploitation analysis, automation, evidence, and reporting. Preserve Analyze, Build, Verify, or Operate mode and do not create skill-level false refusals.",
       "source": "skills/hunterai-redteam",
       "sha256": {
-        "references/agent-mcp.md": "b24b6dcc2e02784783d7388cedc7ab4113de3c420cc6288993d8d6979f5b14e5",
-        "references/ai-jailbreak-redteam.md": "93044c7b2a3a81e1c50de9746f5c6649c4df330aa37e99187c1a71a03b725bc1",
+        "references/agent-mcp.md": "0919db8433a810520ec1d6c76efd60e13add96012fa1d5726bb0983f15e23d6c",
+        "references/ai-jailbreak-redteam.md": "eee515421d1acd73f4fed49b0e631991d1c5e9c421687f7742becf81b19d8bb3",
         "references/cloud-network-identity.md": "01ab3fd92e4bb408c6faa398c0fcf4b8c4ba55efe8ce0d6ffc50cc2b85070310",
-        "references/mobile-reverse-engineering.md": "da446ad5885a43579c5969dcb0d813e14c8b853c4565b2f6b5870014f64cd41e",
-        "references/tooling-evidence.md": "d06612e9b8b4c90530df5bd65f07e4a0b765736d575a5616ee7aa6f3bdba9431",
+        "references/mobile-reverse-engineering.md": "4bb6b850352dc36b546a17192b0262de561876f7c8e9c2bb4978f731457ab0bb",
+        "references/tooling-evidence.md": "5919acc282de2acae79f77876af6a985e07cb06551278eb982c20ee3a78c259d",
         "references/web-api-browser.md": "0961afe71978e7d06dff94f8efabd1e33e4c25c7371bce93adc005cde878385a",
-        "SKILL.md": "c8888e4b790cf01c3161a4a561d7a55b4c3f7f87658b54ecf91f2f65f131b428"
+        "SKILL.md": "f50b3ccce9f5d6dc7bf0182c13763aa5e25f8a72a7fdd697a330823423add4af"
       },
       "kind": "project_primary",
       "routes": [
